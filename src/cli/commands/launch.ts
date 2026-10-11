@@ -112,7 +112,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Toolchains', Object.entries(generated.toolchains).filter(([, d]) => d.on).map(([name, d]) => name + ' (' + d.reason + ')').join(', ') || 'Node only (nothing else used by this project)'],
     ...(generated.databases.length
-      ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; see hostAccess.forwards)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])
+      ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; use Postgres or SQLite for local work)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])
       : [['Databases', 'none needed (databases.<name>.enabled = true adds one)']]),
     ['Desktop', generated.personalization],
     ['Claude', generated.profile.staged.length ? generated.profile.staged.join(', ') + (generated.profile.credentials ? '  (INCLUDING YOUR LOGIN)' : '') : 'no settings copied'],

@@ -8,7 +8,9 @@ file, keeping its comments, and only when the result is valid.
 
 `sandbox config init` creates `~/.agent-sandbox/config.json` with every setting and its default (see
 [config.example.json](../config.example.json)). Keep only what you change. VS Code shows docs and autocomplete from
-its JSON Schema. `sandbox config show` prints the effective config.
+its JSON Schema (`sandbox config schema` prints the setting that turns it on). `sandbox config show` prints your
+settings with the defaults filled in. Comments and trailing commas are allowed in the file. Use another file with
+`--config <file>` or `AGENT_SANDBOX_CONFIG`.
 
 Commonly changed:
 
@@ -24,6 +26,10 @@ Commonly changed:
 | `provisioning.git.access` | `full`, `readonly` or `none` |
 | `secrets.allow`, `secrets.patterns` | let named variables through, or strip more |
 | `toolchains.environment` | extra environment variables (e.g. registry mirrors) |
+| `toolchains.msvc.acceptLicense` | `true` to allow installing MSVC (see [toolchains](toolchains.md#msvc)) |
+| `toolchains.rust.host`, `.targetDir`, `.crates` | Rust target (`auto`, msvc or gnu), where builds go, and binaries to install with cargo |
+| `toolchains.cli.gh`, `.zstd`, `.openssl` | small command-line tools |
+| `toolchains.mesa.enabled`, `.vulkan` | software OpenGL / Vulkan when there is no GPU |
 | `harnesses` | agents and how to install them |
 
 ## Paths
@@ -45,9 +51,16 @@ days), `accounts\`, `sync\`.
 ## Project settings
 
 A project can carry a `.sandbox-config.json` (see the [example](../.sandbox-config.example.json)) for its agent,
-toolchains and versions, databases, git mode, extra folders and setup scripts. A repo can ship this file, so you
-approve it the first time and whenever it changes. Risky settings are flagged, and it can never change storage,
-executables, secrets handling or anything outside a safe list.
+toolchains and versions, databases, git mode, extra folders and setup scripts. Check one without starting anything:
+`sandbox config check`.
+
+A repo can ship this file, so it is treated as untrusted:
+
+- You approve it the first time, and again whenever it changes (the approval is tied to the file's exact contents).
+- Read/write folders are flagged in the approval prompt.
+- It can only make protections **stricter**: read-only, git `readonly`/`none`, the LAN block, protected client, and
+  turning off network, clipboard, microphone, camera, printers, vGPU and login copying. Looser values are ignored.
+- It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.
 
 ## Accounts
 

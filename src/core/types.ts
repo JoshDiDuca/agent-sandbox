@@ -45,7 +45,6 @@ export interface HostProbe {
 /** A database the sandbox runs, and why ("compose.yaml: a compose service runs Postgres"). */
 export interface DatabasePlan { database: 'postgres' | 'mysql' | 'sqlserver' | 'mongodb' | 'redis' | 'dynamodb'; reasons: string[]; version: string; port: number; adminPort?: number }
 
-/** databases: the plan to use instead of scanning the workspace (tests). */
 /** databases / pcLanguages: use these instead of scanning (tests). */
 export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[]; pcLanguages?: import('./detect-toolchains.js').AutoToolchain[] }
 export interface Generated {

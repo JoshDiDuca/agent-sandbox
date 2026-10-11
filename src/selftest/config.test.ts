@@ -2,8 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseCli as parseArgs } from '../cli/args.js';
-import { loadConfig } from '../core/config.js';
-import { ensureDir } from '../core/util.js';
+import _ from 'lodash';
+import { DEFAULTS, loadConfig } from '../core/config.js';
+import { ensureDir, readJsonc } from '../core/util.js';
 import { autoGuestWorkspace } from '../core/workspace.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
@@ -18,6 +19,7 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   check(custom.config.sandbox.headless && custom.config.toolchains.rust.enabled === false && custom.config.toolchains.python.enabled === 'auto', 'a config file only needs the keys it changes (deep merge over defaults)');
   check(await rejects(() => loadConfig(path.join(temp, 'missing.json')), 'Config file not found'), 'an explicit --config that does not exist is an error');
   check(loadConfig(path.join(t.packageRoot, 'config.example.json')).config.defaultHarness === 'claude', 'config.example.json is valid');
+  check(_.isEqual(_.omit(readJsonc<object>(path.join(t.packageRoot, 'config.example.json')), '$schema'), DEFAULTS), 'config.example.json lists exactly the built-in defaults');
   ensureDir(path.join(temp, 'rel-folder'));
   const relRun = await f.run({}, { ...custom.config, storage: f.baseConfig.storage });
   check(relRun.config.mappings.some((m) => m.host === path.join(temp, 'rel-folder')), 'relative mappings in the user config resolve against the config file\'s folder');
@@ -77,7 +79,15 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   check(await bad('{\n  // a comment\n  "readOnly": tru\n}', 'line 3') && await bad({ _comment: 'old style' }, '_comment is not allowed'), 'broken JSON is reported with line and column; unknown keys are rejected');
   f.writeLocal(dirC, '// comments and trailing commas are fine\n{\n  "readOnly": true, /* inline */\n}\n');
   check((await f.run({ cwd: dirC, trustConfig: true })).config.readOnly === true, '.sandbox-config.json may contain comments and trailing commas');
-  f.writeLocal(dirC, { claudeProfile: { copyCredentials: true }, network: { blockPrivateRanges: false }, provisioning: { git: { access: 'full' } } });
-  check(await rejects(() => f.run({ cwd: dirC }), 'copies your Claude LOGIN') && await rejects(() => f.run({ cwd: dirC }), 'turns OFF the LAN block') && await rejects(() => f.run({ cwd: dirC }), 'commit and push'), 'risky settings are called out before approval');
+  // A project can only tighten protections: loosening values are listed, then ignored.
+  const loosen = { claudeProfile: { copyCredentials: true }, network: { blockPrivateRanges: false }, provisioning: { git: { access: 'full' } }, sandbox: { vGpu: true, clipboard: true, networking: true, protectedClient: false }, readOnly: false };
+  f.writeLocal(dirC, loosen);
+  check(await rejects(() => f.run({ cwd: dirC }), 'only used if it is stricter'), 'settings a project may only tighten are called out before approval');
+  const strict = { ...f.baseConfig, readOnly: true, network: { blockPrivateRanges: true }, provisioning: { ...f.baseConfig.provisioning, git: { ...f.baseConfig.provisioning.git, access: 'readonly' as const } }, sandbox: { ...f.baseConfig.sandbox, vGpu: false, clipboard: false, networking: false, protectedClient: true } };
+  const kept = (await f.run({ cwd: dirC, trustConfig: true }, strict)).config;
+  check(kept.readOnly && kept.network.blockPrivateRanges && kept.provisioning.git.access === 'readonly' && !kept.sandbox.vGpu && !kept.sandbox.clipboard && !kept.sandbox.networking && kept.sandbox.protectedClient && !kept.claudeProfile.copyCredentials, 'a project file can never loosen network, git, read-only, GPU, clipboard or login settings');
+  f.writeLocal(dirC, { readOnly: true, network: { blockPrivateRanges: true }, provisioning: { git: { access: 'none' } }, sandbox: { networking: false, clipboard: false } });
+  const tightened = (await f.run({ cwd: dirC, trustConfig: true })).config;
+  check(tightened.readOnly && tightened.provisioning.git.access === 'none' && !tightened.sandbox.networking && !tightened.sandbox.clipboard, 'a project file can still make things stricter');
   fs.rmSync(path.join(dirC, '.sandbox-config.json'));
 };

@@ -70,6 +70,7 @@ export const exec = async (ctx: Context): Promise<number> => {
 /** `sandbox db`: runs the sandbox's own `sbx-db`, which knows this project's database versions and ports. */
 export const db = async (ctx: Context): Promise<number> => {
   const [action = 'list', name] = ctx.options.positionals;
+  if (!['list', 'start', 'stop'].includes(action)) fail('Unknown db action "' + action + '".', 'Use: sandbox db  (list)  or  sandbox db start|stop <postgres|mysql|mongodb|redis|dynamodb>');
   if (action !== 'list' && !name) fail('Which database?', 'Usage: sandbox db ' + action + ' <postgres|mysql|mongodb|redis|dynamodb>');
   requireRunning('Start one with: sandbox start --database <name>');
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
