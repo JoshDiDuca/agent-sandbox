@@ -9,7 +9,8 @@
 `sandbox` with no arguments opens a menu:
 
 1. **Repeat last**: the last command you ran, typed or from the menu
-2. Start the default agent, or pick another (shows which are already installed)
+2. Start the default agent, **several agents at once** (pick projects, then agents for each, then which one this
+   terminal attaches to; it builds a `--session` command line), or pick another agent (shows which are installed)
 3. Start a sandbox without an agent
 4. Sandbox, sessions, accounts, data, diagnostics, configuration
 5. **Settings**: every setting with its value and description, changed and saved from the menu. It first asks which
@@ -41,6 +42,8 @@ Options:
 | `--database <name>` | also start this database, e.g. `--database postgres,redis` (repeatable) |
 | `--script <file>` | run a `.ps1`/`.mjs`/`.cmd` inside before the agent (repeatable) |
 | `--no-agent`, `--trust-config`, `--no-local-config` | no agent, approve the project file, ignore the project file |
+| `--session <agent>@<folder>` | several sessions at once (repeatable), e.g. `--session claude@C:\code\api --session codex@C:\code\api --session claude@C:\code\web`; one sandbox maps every folder, each session gets its own tab inside, `-t` attaches the first |
+| `--yes` | when this folder is not in the running sandbox and adding it needs a restart, restart without asking |
 
 Anything else goes to the agent: `sandbox claude --continue`. If an agent has a flag with the same name as ours, use
 `--sbx-<flag>` for ours or put the agent's flags after `--`.
@@ -49,17 +52,44 @@ Anything else goes to the agent: `sandbox claude --continue`. If an agent has a 
 
 | | |
 |---|---|
-| `sandbox attach [id]` | show a session in this terminal (`Ctrl+]` detaches) |
-| `sandbox sessions` | sessions and who is attached |
-| `sandbox status` | what the sandbox is doing |
-| `sandbox db [start\|stop <name>]` | list, start or stop databases in the running sandbox (`sbx-db` inside) |
-| `sandbox exec -- <cmd>` | run a command inside and print its output (`--timeout`, `--workspace`) |
-| `sandbox restart` | restart agents in place; they resume their conversation |
-| `sandbox stop` | shut down (history syncs back) |
+| `sandbox attach [id]` | show a session in this terminal (`Ctrl+]` detaches); without an id it offers the sessions, this folder's project first |
+| `sandbox sessions` | sessions, their project and who is attached (`*` = this folder's project) |
+| `sandbox status` | the whole sandbox: the machine, then every project (its folders, setup, databases, sessions, repo-guard findings), this folder's marked |
+| `sandbox db [start\|stop <name>]` | list, start or stop this folder's project's databases (`sbx-db` inside) |
+| `sandbox exec -- <cmd>` | run a command in this folder inside the sandbox, with its project's tools (`--timeout`, `--workspace`) |
+| `sandbox restart` | restart this folder's project's agents in place; they resume their conversation (`--all`: every project's) |
+| `sandbox stop` | shut down (history syncs back); asks first when other projects' sessions would end (`--yes` skips) |
 | `sandbox show` / `hide` | show or hide the window (`sbx-show`, `sbx-hide`); hidden, it keeps running |
 
-Sessions can be shown in the sandbox and in your terminal at the same time. Closing a tab never stops a session; only
-the agent exiting does.
+Sessions can be shown in the sandbox and in your terminal at the same time, by any number of terminals. Closing a tab
+or a terminal never stops a session; only the agent exiting does.
+
+## Several projects
+
+Every command above works from any project's folder and acts on that project. From a folder the running sandbox does
+not have yet, `sandbox claude` (any agent, `start`, `exec`, `db`) adds it without a restart when it can:
+
+1. inside a **project root** (`projects.roots`, mapped at every start): at once, also for folders created after the
+   start;
+2. on Windows 11 24H2+ with the updated Windows Sandbox: `wsb share` (untested; any error falls back to 3);
+3. otherwise you are offered a **restart** that maps it too. It lists the sessions that will end, keeps your files,
+   tools, databases and logins, and can reopen those sessions (continuing their conversations). `--yes` skips the
+   question; without a terminal it is never done without `--yes`.
+
+The project is then set up on demand (its toolchains, versions, databases and its `.sandbox-config.json`, approved as
+at a launch) and its sessions run with its own folder and environment. Inside the sandbox, `sbx-shell <project>` opens
+a terminal in a project with its tools.
+
+| `sandbox projects ...` | |
+|---|---|
+| (nothing) / `list` | the projects you have started, whether they are mapped at the start, and which are in the running sandbox |
+| `choose` | tick the projects mapped at every start (turns `projects.all` on; the rest are excluded) |
+| `all on\|off` | map every known project at every start (`projects.all`) |
+| `exclude <folder>` / `include <folder>` | leave one out of `all` / take it back |
+| `add <folder>` / `remove <folder>` | add a folder to your projects / forget it (its files are never touched) |
+| `roots [list\|add\|remove <folder>]` | folders whose subfolders are projects, mapped at every start |
+
+Changes to what is mapped apply from the next start.
 
 ## Data and maintenance
 

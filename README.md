@@ -52,6 +52,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 | **Databases** | PostgreSQL, MySQL, MongoDB, Redis and DynamoDB Local with a web UI, started when the project uses them, or any time with `--database` / `sandbox db` |
 | **Agents** | Claude Code, Codex, Gemini, opencode, Qwen, Crush, Copilot, Kilo, Amp, Cline, Continue, Kimi, Aider, DeepSeek agents |
 | **Smart** | Detects what the project needs from its files, respects version files, installs in parallel and reuses everything |
+| **Several projects** | `sandbox claude` from another project joins the running sandbox: its own folder, tools, versions, databases and environment, set up on demand. Start several agents at once (`--session claude@A --session codex@B`, or the menu) and attach to any of them from any terminal |
 | **Agent commands** (Beta) | `sandbox agent-commands on`: typing `claude`, `codex` ... in any folder starts it in a hidden sandbox and attaches your terminal |
 | **Feels like home** | Your desktop look, Claude settings, MCP servers and conversation history come along; history syncs back |
 
@@ -62,7 +63,8 @@ The first start downloads what the project needs (a few minutes, once). After th
 | `sandbox` | the interactive menu: repeat your last command, start agents, every option, and all settings |
 | `sandbox <agent>`, `claude-sandbox` | start an agent; `-t` for this terminal, `--headless` for no window |
 | `sandbox start` | the sandbox without an agent |
-| `sandbox attach` / `sessions` / `status` | work with a running sandbox |
+| `sandbox attach` / `sessions` / `status` | work with a running sandbox (this folder's project first) |
+| `sandbox projects` | the projects a sandbox can open without a restart: roots, `all`, exclude |
 | `sandbox db [start\|stop <name>]` | list, start or stop databases (`sbx-db` inside) |
 | `sandbox exec -- <cmd>` | run a command inside |
 | `sandbox agent-commands on\|off` | (Beta) make the agents installed on this PC start in a sandbox |
@@ -72,6 +74,15 @@ The first start downloads what the project needs (a few minutes, once). After th
 | `sandbox setup` / `doctor` / `repair` | check this PC, see what will be installed, fix common problems |
 
 All commands and options: [docs/commands.md](docs/commands.md)
+
+## Known gaps
+
+Adding a folder to a RUNNING sandbox needs Windows 11 24H2+ with the updated Windows Sandbox (`wsb share`, untested).
+On older Windows: folders inside a mapped project root (`sandbox projects roots add <folder>`) open instantly;
+anything else offers a restart (your files, tools, databases and logins are kept; the sessions can be reopened).
+
+To get `wsb`: Settings > Windows Update, turn on "Get the latest updates as soon as they're available" (or use the
+Windows 11 Installation Assistant), then update Windows Sandbox from the Microsoft Store. Check with `wsb --version`.
 
 ## Documentation
 

@@ -49,7 +49,35 @@ boot. Tools that resolve real paths may print the `C:\Mirror` form; history sync
 exists in the sandbox is left alone.
 
 Under `storage.root`: `data\<name>` (tools, databases, logins, logs), `launches\` (one per start; cleaned after 7
-days), `accounts\`, `sync\`.
+days), `accounts\`, `sync\`, `known-projects.json` (the folders you started projects in) and `run\projects.json` (the
+running sandbox's projects). The last two are host-only: the sandbox cannot read or change them.
+
+## Several projects in one sandbox
+
+Only one Windows Sandbox runs at a time, and it fixes its mapped folders when it starts. Starting an agent from another
+project while it runs adds that project to it (see [commands](commands.md#several-projects)): its folder, its
+`.sandbox-config.json`, versions, toolchains and databases (set up on demand; tools already installed cost nothing) and
+its own environment for its sessions. These settings, in **your** config only (a project file can never set them,
+because they map folders of your PC), decide which folders are already there:
+
+| Setting | Default | |
+|---|---|---|
+| `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart |
+| `projects.all` | `false` | also map every project you have started before, at every start (`sandbox projects choose` / `all on`) |
+| `projects.exclude` | none | projects left out of `all` |
+| `projects.askToAddRoot` | `true` | when you start a project whose parent is not a root, ask once whether to add it (answers are saved: yes adds it, no is remembered in `projects.declinedRoots`, never turns this off) |
+| `projects.wsbShare` | `true` | on Windows 11 24H2+ with the updated Windows Sandbox, add other folders live with `wsb share` (untested; otherwise a restart is offered) |
+
+Other projects appear under `C:\Projects`. Machine-wide protections were fixed when the sandbox started: a project
+that needs a stricter one (git access, network, the LAN block, read-only, ...) cannot join and says so; one that asks
+for less simply gets the sandbox's stricter value. Every agent in the sandbox can see every mapped project
+([security](security.md#several-projects)). Each mapped folder passes the same checks as a launch folder (no drives,
+your profile, system or tool folders).
+
+Adding a folder to a RUNNING sandbox needs Windows 11 24H2+ with the updated Windows Sandbox (`wsb share`, untested).
+On older Windows: folders inside a project root open instantly; anything else offers a restart. To get `wsb`:
+Settings > Windows Update ("Get the latest updates as soon as they're available") or the Windows 11 Installation
+Assistant, then update Windows Sandbox from the Microsoft Store; check with `wsb --version`.
 
 ## Project settings
 
