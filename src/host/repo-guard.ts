@@ -11,7 +11,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { dirExists, fileExists, isLink, tryReadJson, writeJson } from '../core/util.js';
+import { z } from 'zod';
+import { readValid, writeFileAtomic, writeJsonAtomic } from '../shared/rundir.js';
+import { assertTestWritable } from './test-guard.js';
+import { dirExists, fileExists, isLink } from '../core/util.js';
 
 /** Config keys that make git run a program, or load more config. */
 const DANGEROUS_KEY = /^(fsmonitor|hookspath|sshcommand|pager|editor|askpass|program|gpgprogram|textconv|command|cmd|clean|smudge|process|driver|helper|uploadpack|receivepack|path|attributesfile|excludesfile|worktree|worktreeconfig|gitproxy|proxycommand|sendemailvalidate|tool)\s*=/i;
@@ -35,7 +38,18 @@ const COMMANDS = new RegExp('^(' + [
 export interface RepoSnapshot { gitDir: boolean; config: string[]; hooks: Record<string, string>; redirects: string[]; commands: Record<string, string> }
 export interface RepoFinding { kind: 'hook' | 'config' | 'git' | 'command'; detail: string }
 
-const hash = (file: string): string => (isLink(file) ? 'link' : crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
+/** SHA-256 in small chunks: a sandbox can plant a multi-gigabyte "node.exe" to exhaust this PC's memory. */
+const hash = (file: string): string => {
+  if (isLink(file)) return 'link';
+  const sum = crypto.createHash('sha256');
+  const buffer = Buffer.alloc(1 << 20);
+  let fd: number;
+  // A file that cannot be read (locked by a program in the sandbox) never matches the snapshot, so it is dealt with.
+  try { fd = fs.openSync(file, 'r'); } catch { return 'unreadable-' + crypto.randomBytes(4).toString('hex'); }
+  try { for (let n = fs.readSync(fd, buffer, 0, buffer.length, null); n > 0; n = fs.readSync(fd, buffer, 0, buffer.length, null)) sum.update(buffer.subarray(0, n)); } finally { fs.closeSync(fd); }
+  return sum.digest('hex');
+};
+const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
 const plainGitDir = (workspace: string): string | null => {
   const dir = path.join(workspace, '.git');
   return dirExists(dir) && !isLink(dir) ? dir : null;
@@ -48,7 +62,7 @@ const filesIn = (dir: string, accept: (name: string) => boolean): Record<string,
 
 const configLines = (dir: string): string[] => {
   const file = path.join(dir, 'config');
-  return fileExists(file) && !isLink(file) ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : [];
+  return fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_CONFIG_BYTES ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : [];
 };
 
 export const snapshotRepo = (workspace: string): RepoSnapshot => {
@@ -68,7 +82,9 @@ const quarantine = (from: string, names: string[], into: string, kind: RepoFindi
   const target = path.join(into, 'agent-sandbox-quarantine', String(Date.now()));
   fs.mkdirSync(target, { recursive: true });
   return names.map((name) => {
-    fs.renameSync(path.join(from, name), path.join(target, name));
+    try { fs.renameSync(path.join(from, name), path.join(target, name)); } catch (e) {
+      return { kind, detail: name + ' (could not be moved: ' + (e as NodeJS.ErrnoException).code + '; delete it yourself before running anything here)' };
+    }
     return { kind, detail: name + ' (moved to ' + target + ')' };
   });
 };
@@ -91,7 +107,11 @@ const disableConfig = (dir: string, before: string[]): RepoFinding[] => {
     findings.push({ kind: 'config', detail: line.trim() });
     return MARK + line.trim();
   });
-  if (findings.length) fs.writeFileSync(path.join(dir, 'config'), fixed.join('\n'), 'utf8');
+  if (findings.length) writeFileAtomic(path.join(dir, 'config'), fixed.join('\n'));
+  const file = path.join(dir, 'config');
+  // A link or a huge file is not read at all, so say so instead of letting it pass as "nothing found".
+  const unchecked = isLink(file) ? '.git/config is a link' : lines.length === 0 && fileExists(file) && fs.statSync(file).size > MAX_CONFIG_BYTES ? '.git/config is over 4 MB' : null;
+  if (unchecked) findings.push({ kind: 'git', detail: unchecked + ', so it cannot be checked. Do not run git in this folder until you have looked at it.' });
   return findings;
 };
 
@@ -100,6 +120,7 @@ const disableConfig = (dir: string, before: string[]): RepoFinding[] => {
  * Returns what was found (and fixed). Never touches what was already there before the sandbox ran.
  */
 export const guardRepo = (workspace: string, before: RepoSnapshot): RepoFinding[] => {
+  assertTestWritable(workspace);
   const findings: RepoFinding[] = [];
   const commandsNow = filesIn(workspace, (n) => COMMANDS.test(n));
   findings.push(...quarantine(workspace, Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]), workspace, 'command'));
@@ -124,15 +145,23 @@ const syncDir = (dataPath: string): string => path.join(path.dirname(path.dirnam
 const snapshotFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo.json');
 const findingsFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo-findings.json');
 
-export const saveRepoSnapshot = (dataPath: string, workspace: string): void => writeJson(snapshotFile(dataPath), { workspace, snapshot: snapshotRepo(workspace) });
+const Finding = z.object({ kind: z.enum(['hook', 'config', 'git', 'command']), detail: z.string().max(4096), at: z.string().max(64).optional() });
+const Saved = z.object({
+  workspace: z.string().max(1024).refine((p) => path.isAbsolute(p)),
+  snapshot: z.object({ gitDir: z.boolean(), config: z.array(z.string()), hooks: z.record(z.string(), z.string()), redirects: z.array(z.string()), commands: z.record(z.string(), z.string()) }),
+});
 
-/** Re-checks the workspace of the current/last launch; findings are kept in a host-only file for `status`. */
+export const saveRepoSnapshot = (dataPath: string, workspace: string): void => writeJsonAtomic(snapshotFile(dataPath), { workspace, snapshot: snapshotRepo(workspace) });
+
+/** Re-checks the workspace of the current/last launch; findings are kept in a host-only file for `status`. Returns the new ones. */
 export const checkRepo = (dataPath: string): RepoFinding[] => {
-  const saved = tryReadJson<{ workspace: string; snapshot: RepoSnapshot }>(snapshotFile(dataPath));
-  if (!saved?.snapshot?.commands) return [];
-  const findings = guardRepo(saved.workspace, saved.snapshot);
-  if (findings.length) writeJson(findingsFile(dataPath), [...repoFindings(dataPath), ...findings.map((f) => ({ ...f, at: new Date().toISOString() }))]);
+  const saved = readValid(Saved, snapshotFile(dataPath));
+  if (!saved) return [];
+  const old = repoFindings(dataPath);
+  // A finding that cannot be fixed (a file locked in the sandbox) is reported once, not every minute.
+  const findings = guardRepo(saved.workspace, saved.snapshot).filter((f) => !old.some((o) => o.kind === f.kind && o.detail === f.detail));
+  if (findings.length) writeJsonAtomic(findingsFile(dataPath), [...old, ...findings.map((f) => ({ ...f, at: new Date().toISOString() }))]);
   return findings;
 };
 
-export const repoFindings = (dataPath: string): (RepoFinding & { at?: string })[] => tryReadJson<(RepoFinding & { at?: string })[]>(findingsFile(dataPath)) ?? [];
+export const repoFindings = (dataPath: string): (RepoFinding & { at?: string })[] => readValid(z.array(Finding).max(10000), findingsFile(dataPath)) ?? [];

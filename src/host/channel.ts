@@ -7,6 +7,7 @@ import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
 import { insideSandbox } from './platform.js';
 import { safeRemove } from '../shared/safe-remove.js';
+import { assertTestWritable, refuseInSelfTest } from './test-guard.js';
 import { connect, DETACH_KEY, queryViewers, runTerminalClient, type Endpoint, type Viewers } from '../shared/pty-client.js';
 import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
@@ -54,6 +55,9 @@ export const waitForReady = (dataPath: string, launchId: string | null, isAlive:
 };
 
 export const sendRequest = (dataPath: string, request: GuestRequest): void => {
+  assertTestWritable(dataPath);
+  // Asking the sandbox to power off is the one request with an effect outside it, so the self-test never sends it.
+  if (request.kind === 'exec' && /shutdown/i.test(request.command[0] ?? '')) refuseInSelfTest('shut down Windows Sandbox');
   assertNoLinks(dataPath, runPaths(dataPath).requests);
   writeJsonAtomic(runPaths(dataPath).request(request.id), request);
 };
@@ -61,7 +65,7 @@ export const sendRequest = (dataPath: string, request: GuestRequest): void => {
 export const waitForResponse = (dataPath: string, requestId: string, isAlive: () => boolean, timeoutMs: number): Promise<GuestResponse> =>
   until(timeoutMs, isAlive, () => {
     const response = readResponse(dataPath, requestId);
-    if (response && !isLink(runPaths(dataPath).responses)) fs.rmSync(runPaths(dataPath).response(requestId), { force: true });
+    if (response) try { assertNoLinks(dataPath, runPaths(dataPath).responses); fs.rmSync(runPaths(dataPath).response(requestId), { force: true }); } catch { /* a planted link: the answer is read, nothing is deleted */ }
     return response;
   }, 'The sandbox did not answer (its session daemon may have stopped).');
 
