@@ -22,7 +22,7 @@ export const attach = async (ctx: Context): Promise<number> => {
 
 type Listed = SessionStatus & { viewers?: Viewers | null };
 
-const viewerText = (v: Viewers | null | undefined): string => (v === undefined ? '-' : v === null ? '?' : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox');
+const viewerText = (v: Viewers | null | undefined): string => (v === undefined ? '-' : v === null ? 'unknown (older session)' : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox');
 // harness, cwd and times are written by the sandbox: printed through safeText.
 const sessionRow = (s: Listed): string[] => [s.id, safeText(s.harness), s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), safeText(s.cwd), safeText(new Date(s.startedAt).toLocaleTimeString())];
 

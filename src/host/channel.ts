@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
+import { insideSandbox } from './platform.js';
 import { connect, DETACH_KEY, queryViewers, runTerminalClient, type Endpoint, type Viewers } from '../shared/pty-client.js';
 import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
@@ -122,7 +123,8 @@ export const pickSession = (dataPath: string, sessionId?: string): SessionStatus
 
 /** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
 const hostEndpoint = (session: SessionStatus): Endpoint | null => {
-  const addresses = session.attach?.addresses.filter((a: string) => isSandboxAddress(a)) ?? [];
+  // Inside the sandbox every session is on loopback; on the PC only addresses on its Hyper-V network are trusted.
+  const addresses = insideSandbox() ? ['127.0.0.1'] : session.attach?.addresses.filter((a: string) => isSandboxAddress(a)) ?? [];
   return session.attach && addresses.length ? { ...session.attach, addresses } : null;
 };
 

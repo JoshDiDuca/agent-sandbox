@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -48,8 +49,16 @@ export const probeHost = (config: Config, harnessName: string): HostProbe => {
 
 const SANDBOX_PROCESSES = ['WindowsSandboxClient.exe', 'WindowsSandboxRemoteSession.exe', 'WindowsSandbox.exe'];
 
+/**
+ * Running INSIDE a Windows Sandbox this tool started (its launch folder and data folder are mapped in): then the CLI
+ * talks to the sandbox it is in, through C:\\AgentData and loopback, instead of looking for one on a PC.
+ */
+export const insideSandbox = (): boolean => isWin && !process.env.AGENT_SANDBOX_HOST_ONLY && fs.existsSync('C:\\AgentLaunch\\session.json') && fs.existsSync('C:\\AgentData\\run');
+export const GUEST_DATA_DIR = 'C:\\AgentData';
+
 export const isSandboxRunning = (): boolean => {
   if (!isWin) return false;
+  if (insideSandbox()) return true;
   const result = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true });
   const out = (result.stdout ?? '').toLowerCase();
   return SANDBOX_PROCESSES.some((image: string) => out.includes('"' + image.toLowerCase() + '"'));

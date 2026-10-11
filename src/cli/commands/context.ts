@@ -6,7 +6,7 @@ import type { CliOptions } from '../args.js';
 import type { LoadedConfig } from '../../core/types.js';
 import { loadConfig, userDir } from '../../core/config.js';
 import { expandPath, fail, isInsideOrEqual } from '../../core/util.js';
-import { isSandboxRunning } from '../../host/platform.js';
+import { GUEST_DATA_DIR, insideSandbox, isSandboxRunning } from '../../host/platform.js';
 
 export interface Context { packageRoot: string; entry: string; options: CliOptions; loaded: LoadedConfig; storageRoot: string; dataPath: string }
 
@@ -28,7 +28,8 @@ export const createContext = (packageRoot: string, entry: string, options: CliOp
   refreshSchemas(packageRoot);
   const loaded = loadConfig(options.config);
   const storageRoot = expandPath(loaded.config.storage.root, loaded.base);
-  return { packageRoot, entry, options, loaded, storageRoot, dataPath: path.join(storageRoot, 'data', loaded.config.storage.dataName) };
+  // Inside a sandbox, the sandbox's own data folder is the one to talk to.
+  return { packageRoot, entry, options, loaded, storageRoot, dataPath: insideSandbox() ? GUEST_DATA_DIR : path.join(storageRoot, 'data', loaded.config.storage.dataName) };
 };
 
 /** Prints rows as aligned columns (the last column is not padded). */
