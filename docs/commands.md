@@ -88,13 +88,16 @@ the agent exiting does.
 | `sandbox account list` | Claude accounts |
 | `sandbox account save <name> [--from-host]` | save the sandbox's (or this PC's) login |
 | `sandbox account use <name>` / `default <name>` / `remove <name>` | switch now (Claude restarts and continues) / for new sandboxes / delete |
-| `sandbox config show` / `path` / `init` / `schema` | your settings with defaults filled in / the file / create it / editor schemas |
+| `sandbox config` | short summary: settings file, default agent, storage |
+| `sandbox config show` / `path` / `init` / `schema` | all settings with defaults filled in as JSON / the file / create it / editor schemas |
 | `sandbox config check [--workspace <dir>]` | check a project's `.sandbox-config.json` and list what it changes, without starting anything |
 | `sandbox host-claude` (or `claude-host`) | Claude on this PC, **not** sandboxed, with its own profile (`--personal` uses your normal one) |
 
 `sandbox --version` (or `-v`) prints the version. Inside a sandbox, commands that control it from outside (`launch`,
 `attach`, `exec`, `stop`, `show`, `hide`, `restart`) say so and do nothing; `sandbox db` runs `sbx-db` right there.
 
-Every command also takes `--config <file>` to use another settings file. The environment variables `AGENT_SANDBOX_CONFIG`
+Every command also takes `--config <file>` (before or after the command) to use another settings file. Colours are off
+with `NO_COLOR`, `TERM=dumb` or piped output (`FORCE_COLOR=1` forces them). Unknown agents, accounts, databases and
+malformed `--node`/`--python` versions are rejected up front with the valid values. The environment variables `AGENT_SANDBOX_CONFIG`
 (settings file) and `AGENT_SANDBOX_HOME` (folder for settings and history, default `~/.agent-sandbox`) do the same.
 Commands that print data take `--json`.
