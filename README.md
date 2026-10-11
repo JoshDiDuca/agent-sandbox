@@ -23,7 +23,8 @@ irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/do
 
 It checks your PC, offers to turn on Windows Sandbox, and installs everything. It uses your Node.js 20+ if you have it,
 otherwise a private copy just for this tool. Nothing is installed system-wide.
-Needs Windows 10/11 **Pro, Enterprise or Education**. [Other ways to install](docs/install.md)
+Needs Windows 10/11 **Pro, Enterprise or Education**. Already have Node.js 20+? `npm install -g windows-development-sandbox`
+works too. [Other ways to install](docs/install.md)
 
 ## Use
 
@@ -48,7 +49,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 |---|---|
 | **Safe by default** | The agent sees only your project folder. Credentials are stripped before anything is copied in, your LAN is blocked, and nothing the sandbox writes can run on your PC. |
 | **Languages** | Node, Python, Rust, C/C++ (GCC or MSVC), .NET (incl. .NET Framework targeting), Go, Java, Ruby, PHP, Deno, Bun, PowerShell 7, with pnpm, yarn, Volta, uv, pyenv, Maven, Gradle, Composer, gh ... |
-| **Databases** | PostgreSQL, MySQL, MongoDB, Redis and DynamoDB Local with a web UI, started only when the project uses them |
+| **Databases** | PostgreSQL, MySQL, MongoDB, Redis and DynamoDB Local with a web UI, started when the project uses them, or any time with `--database` / `sandbox db` |
 | **Agents** | Claude Code, Codex, Gemini, opencode, Qwen, Crush, Copilot, Kilo, Amp, Cline, Continue, Kimi, Aider, DeepSeek agents |
 | **Smart** | Detects what the project needs from its files, respects version files, installs in parallel and reuses everything |
 | **Feels like home** | Your desktop look, Claude settings, MCP servers and conversation history come along; history syncs back |
@@ -61,7 +62,9 @@ The first start downloads what the project needs (a few minutes, once). After th
 | `sandbox <agent>`, `claude-sandbox` | start an agent; `-t` for this terminal, `--headless` for no window |
 | `sandbox start` | the sandbox without an agent |
 | `sandbox attach` / `sessions` / `status` | work with a running sandbox |
+| `sandbox db [start\|stop <name>]` | list, start or stop databases (`sbx-db` inside) |
 | `sandbox exec -- <cmd>` | run a command inside |
+| `sandbox --version` | the installed version |
 | `sandbox stop` / `hide` / `show` | shut down, hide or show the window |
 | `sandbox data` / `data clean` | what's stored and how big, and freeing space |
 | `sandbox setup` / `doctor` / `repair` | check this PC, see what will be installed, fix common problems |

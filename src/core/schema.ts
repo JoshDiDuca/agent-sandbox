@@ -176,7 +176,7 @@ const Databases = z.strictObject({
     admin: z.boolean().describe('Run dynamodb-admin next to DynamoDB Local.'),
   }),
   sqlserver: z.strictObject({
-    enabled: dbEnabled('SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a hint to reach the one on this PC through hostAccess.forwards'),
+    enabled: dbEnabled('SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a note to use Postgres or SQLite for local work'),
   }),
 });
 const Secrets = z.strictObject({
@@ -272,6 +272,3 @@ export const jsonSchemas = (): Record<string, object> => {
     'sandbox-config.schema.json': toSchema(LocalOverrides, 'windows-development-sandbox project config (.sandbox-config.json)'),
   };
 };
-
-export type ConfigT = z.output<typeof Config>;
-export type OverridesT = z.output<typeof LocalOverrides>;

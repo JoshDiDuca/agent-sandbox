@@ -46,7 +46,10 @@ export const printJson = (ctx: Context, value: unknown): boolean => {
 
 export const sandboxAlive = (): boolean => isSandboxRunning();
 
-export const requireRunning = (hint = ''): void => { if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with sandbox claude.'); };
+/** For commands that control the sandbox from your PC: inside the sandbox they make no sense. */
+export const requireOnPc = (what: string): void => { if (insideSandbox()) fail('You are inside the sandbox already, so "sandbox ' + what + '" has nothing to control.', 'Run it from a terminal on your PC.'); };
+
+export const requireRunning =(hint = ''): void => { if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with sandbox claude.'); };
 
 /** Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist there). */
 export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorkspace: string): string => {

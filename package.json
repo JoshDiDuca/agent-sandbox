@@ -37,7 +37,8 @@
     "hooks",
     "config.example.json",
     ".sandbox-config.example.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node scripts/schemas.mjs",

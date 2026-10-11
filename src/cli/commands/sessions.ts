@@ -1,19 +1,22 @@
 // Working with a running sandbox: attach, sessions, status, exec, restart, stop, show/hide.
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import _ from 'lodash';
 import type { SessionStatus } from '../../core/types.js';
 import { activeAccount } from '../../host/accounts.js';
 import { execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
 import type { Viewers } from '../../shared/pty-client.js';
-import { isSandboxRunning } from '../../host/platform.js';
+import { insideSandbox, isSandboxRunning } from '../../host/platform.js';
 import { repoFindings } from '../../host/repo-guard.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { listSessions, readSandboxStatus } from '../../shared/rundir.js';
 import { watcherRunning } from '../../sync/watcher.js';
 import { errMsg, fail, safeText, sleep } from '../../core/util.js';
-import { currentGuestDir, printJson, requireRunning, sandboxAlive, table, type Context } from './context.js';
+import { currentGuestDir, printJson, requireOnPc, requireRunning, sandboxAlive, table, type Context } from './context.js';
 import { attachHere } from './launch.js';
 
 export const attach = async (ctx: Context): Promise<number> => {
+  requireOnPc('attach');
   requireRunning('Start one with: sandbox claude --terminal');
   await waitForReady(ctx.dataPath, null, sandboxAlive);
   const id = ctx.options.positionals[0];
@@ -56,6 +59,7 @@ export const status = async (ctx: Context): Promise<number> => {
 export const exec = async (ctx: Context): Promise<number> => {
   const command = [...ctx.options.positionals, ...ctx.options.passthrough];
   if (command.length === 0) fail('No command given.', 'Usage: sandbox exec [--timeout <s>] -- <command> [args...]');
+  requireOnPc('exec');
   requireRunning();
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   const result = await execInSandbox(ctx.dataPath, command, currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace), ctx.options.timeout, sandboxAlive);
@@ -70,7 +74,10 @@ export const exec = async (ctx: Context): Promise<number> => {
 /** `sandbox db`: runs the sandbox's own `sbx-db`, which knows this project's database versions and ports. */
 export const db = async (ctx: Context): Promise<number> => {
   const [action = 'list', name] = ctx.options.positionals;
+  if (!['list', 'start', 'stop'].includes(action)) fail('Unknown db action "' + action + '".', 'Use: sandbox db  (list)  or  sandbox db start|stop <postgres|mysql|mongodb|redis|dynamodb>');
   if (action !== 'list' && !name) fail('Which database?', 'Usage: sandbox db ' + action + ' <postgres|mysql|mongodb|redis|dynamodb>');
+  // Already inside the sandbox: run the database tool here instead of asking the sandbox from outside.
+  if (insideSandbox()) return spawnSync(process.execPath, [path.join(ctx.packageRoot, 'dist', 'runtime', 'db.js'), action, ...(name ? [name] : [])], { stdio: 'inherit', windowsHide: true }).status ?? 1;
   requireRunning('Start one with: sandbox start --database <name>');
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   // Starting can download the database the first time.
@@ -82,12 +89,14 @@ export const db = async (ctx: Context): Promise<number> => {
 };
 
 export const restart = async (ctx: Context): Promise<number> => {
+  requireOnPc('restart');
   requireRunning();
   console.log((await restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive)).message);
   return 0;
 };
 
 export const stop = async (ctx: Context): Promise<number> => {
+  requireOnPc('stop');
   if (!isSandboxRunning()) { console.log('No Windows Sandbox is running.'); return 0; }
   const sandbox = readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
   await execInSandbox(ctx.dataPath, ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive);
@@ -96,12 +105,14 @@ export const stop = async (ctx: Context): Promise<number> => {
 };
 
 export const show = (ctx: Context): number => {
+  requireOnPc('show');
   requireRunning();
   if (!showSandboxWindow(ctx.storageRoot)) fail('Could not find the Windows Sandbox window.', 'It may still be starting; try again in a few seconds.');
   return 0;
 };
 
 export const hide = async (ctx: Context): Promise<number> => {
+  requireOnPc('hide');
   requireRunning();
   if (!(await hideSandboxWindow(ctx.storageRoot, 5))) fail('Could not find a visible Windows Sandbox window.', 'It may already be hidden (sbx-show brings it back).');
   console.log('Sandbox window hidden. Bring it back with: sbx-show');

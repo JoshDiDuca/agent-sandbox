@@ -113,7 +113,7 @@ const SECTION_TITLES: Record<string, string> = {
 /** Browses one level of settings; sections open, leaves are edited. */
 const browse = async (schema: Schema, key: string[], file: string): Promise<void> => {
   for (;;) {
-    const config = loadConfig().config;
+    const config = loadConfig(fs.existsSync(file) ? file : undefined).config;
     const entries = Object.entries(unwrap(schema).shape ?? {}).filter(([name]) => !HIDDEN.has(name));
     const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     const pickName = await select<string>({

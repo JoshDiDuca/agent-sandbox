@@ -40,7 +40,7 @@ export const assertSafeWorkspace = (workspace: string, packageRoot: string, stor
     if (isInsideOrEqual(dir, workspace)) fail(workspace + ' cannot be the workspace: it is inside ' + label + ' (' + dir + '), so the agent could change the code that runs on this PC.', dir === packageRoot ? 'Developing windows-development-sandbox itself? Install it as a copy instead of a link: run `npm run install:global` in the repository, then sandbox claude works there.' : 'Run sandbox claude from a project folder somewhere else.');
     if (isInsideOrEqual(workspace, dir)) fail(workspace + ' cannot be the workspace: it contains ' + label + ' (' + dir + '), which the agent must not be able to change.', 'Run sandbox claude from a project folder that does not contain it.');
   }
-  for (const name of ['WINDIR', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {
+  for (const name of ['WINDIR', 'SystemRoot', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {
     const dir = process.env[name];
     if (dir && isInsideOrEqual(dir, workspace)) fail('A system folder cannot be the workspace: ' + workspace, 'Run sandbox claude from a project folder.');
   }
