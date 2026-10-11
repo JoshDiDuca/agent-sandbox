@@ -20,9 +20,15 @@ jobs:
         # desktop, so a failure here is reported but does not fail the build.
         continue-on-error: true
         run: node dist/bin/agent-sandbox.js self-test
+      - name: Check install.ps1 parses in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile("$PWD/scripts/install.ps1", [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
       - name: Package
         run: npm pack --silent
       - uses: actions/upload-artifact@v4
         with:
-          name: agent-sandbox-package
-          path: agent-sandbox-*.tgz
+          name: windows-development-sandbox-package
+          path: windows-development-sandbox-*.tgz

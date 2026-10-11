@@ -1,9 +1,11 @@
 name: Release
 
 # Push a version tag (npm run release:patch does it for you). This builds, packs and publishes:
-#  - a GitHub Release with agent-sandbox-x.y.z.tgz and agent-sandbox.tgz, so this always installs the newest one:
-#      npm install -g https://github.com/<owner>/<repo>/releases/latest/download/agent-sandbox.tgz
-#  - a GitHub Package (npm.pkg.github.com) named @<owner>/agent-sandbox
+#  - a GitHub Release with windows-development-sandbox-x.y.z.tgz, windows-development-sandbox.tgz and install.ps1, so
+#    these always install the newest one:
+#      irm https://github.com/<owner>/<repo>/releases/latest/download/install.ps1 | iex
+#      npm install -g https://github.com/<owner>/<repo>/releases/latest/download/windows-development-sandbox.tgz
+#  - a GitHub Package (npm.pkg.github.com) named @<owner>/windows-development-sandbox
 #  - npm (registry.npmjs.org) too, if the repository has an NPM_TOKEN secret
 on:
   push:
@@ -39,20 +41,26 @@ jobs:
         shell: pwsh
         run: |
           npm pack --silent | Out-Null
-          $file = (Get-ChildItem agent-sandbox-*.tgz | Select-Object -First 1).Name
-          Copy-Item $file agent-sandbox.tgz
+          $file = (Get-ChildItem windows-development-sandbox-*.tgz | Select-Object -First 1).Name
+          Copy-Item $file windows-development-sandbox.tgz
+          Copy-Item scripts/install.ps1 install.ps1
           "file=$file" >> $env:GITHUB_OUTPUT
       - name: GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ steps.pack.outputs.file }}
-            agent-sandbox.tgz
+            windows-development-sandbox.tgz
+            install.ps1
           generate_release_notes: true
           body: |
-            Install or update:
+            Install or update (in a normal PowerShell; it checks your PC and installs Node.js if needed):
             ```
-            npm install -g https://github.com/${{ github.repository }}/releases/latest/download/agent-sandbox.tgz
+            irm https://github.com/${{ github.repository }}/releases/latest/download/install.ps1 | iex
+            ```
+            Or, with Node.js 20+ already installed:
+            ```
+            npm install -g https://github.com/${{ github.repository }}/releases/latest/download/windows-development-sandbox.tgz
             ```
       - name: Publish to GitHub Packages
         shell: pwsh
@@ -61,7 +69,7 @@ jobs:
         run: |
           # GitHub Packages only accepts names scoped to the repository owner (lower-case).
           $scope = '${{ github.repository_owner }}'.ToLower()
-          npm pkg set "name=@$scope/agent-sandbox" "publishConfig.registry=https://npm.pkg.github.com" "repository.url=https://github.com/${{ github.repository }}.git"
+          npm pkg set "name=@$scope/windows-development-sandbox" "publishConfig.registry=https://npm.pkg.github.com" "repository.url=https://github.com/${{ github.repository }}.git"
           "@${scope}:registry=https://npm.pkg.github.com`n//npm.pkg.github.com/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc
           npm publish --ignore-scripts
       - name: Publish to npm

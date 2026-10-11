@@ -10,6 +10,7 @@ import { helperTests } from './helpers.test.js';
 import { hostTests } from './host.test.js';
 import { daemonTests, gitGuardTests, liveTestsAvailable } from './live.test.js';
 import { securityTests } from './security.test.js';
+import { setupTests } from './setup.test.js';
 import { syncTests } from './sync.test.js';
 
 export const selfTest = async (packageRoot: string): Promise<number> => {
@@ -24,6 +25,7 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     await securityTests(t, f);
     helperTests(t);
     detectTests(t);
+    setupTests(t);
     hostTests(t);
     if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
     else console.log('SKIP  live tests (need Windows with the .NET Framework compiler)');

@@ -28,6 +28,7 @@ const HANDLERS: Record<string, Handler> = {
   clean: commands.clean,
   config: commands.config,
   doctor: commands.doctor,
+  setup: commands.setup,
   'host-claude': commands.claudeHost,
   _watch: commands.watcher,
 };

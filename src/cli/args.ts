@@ -62,6 +62,7 @@ export const buildProgram = (record: (name: string, cmd: Command) => void): Comm
   add('logs', 'print the newest sandbox log', (c) => c.option('-f, --follow', 'keep printing new lines'));
   add('clean', 'delete old launch folders, logs and leftovers', (c) => c.option('--days <n>', 'launch folders older than this many days', positiveNumber, 7));
   add('config', 'show | path | init | schema', (c) => c.argument('[action]'));
+  add('setup', 'check this PC can run Windows Sandbox and offer to turn it on');
   add('doctor', 'check this PC and show what will be copied or downloaded', (c) => c.option('--harness <name>', 'agent to check'));
   add('host-claude', 'Claude on this PC (NOT sandboxed) with a separate profile', (c) => c.option('--personal', 'use your normal Claude profile').argument('[claudeArgs...]').allowUnknownOption().allowExcessArguments());
   add('self-test', 'run the built-in tests');
