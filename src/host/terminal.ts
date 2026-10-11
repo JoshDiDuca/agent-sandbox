@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { githubAsset, installArchive } from '../shared/download.js';
 import { safeRemove } from '../shared/safe-remove.js';
+import { assertTestWritable } from './test-guard.js';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../core/util.js';
 
@@ -57,6 +58,7 @@ export const withPwshProfile = (settings: z.output<typeof TerminalSettings>, vis
  */
 export const syncPwshProfile = (dataPath: string, allowed: boolean): void => {
   const file = path.join(terminalDir(dataPath), 'settings', 'settings.json');
+  assertTestWritable(file);
   assertNoLinks(dataPath, file);
   if (!fileExists(file) || fs.statSync(file).size > MAX_SETTINGS_BYTES) return;
   const visible = allowed && fileExists(path.join(dataPath, 'tools', 'pwsh', 'pwsh.exe'));
@@ -82,6 +84,7 @@ export const ensureTerminal = async (dataPath: string, refresh: boolean, options
 const installTerminal = async (dataPath: string, refresh: boolean): Promise<{ exe: string | null; message: string }> => {
   const exe = terminalExe(dataPath);
   const dir = terminalDir(dataPath);
+  assertTestWritable(dir);
   const settings = path.join(dir, 'settings');
   // installArchive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also when
   // the download fails). One still parked from an interrupted earlier run is the one to keep.

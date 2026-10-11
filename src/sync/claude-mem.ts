@@ -9,6 +9,7 @@ import path from 'node:path';
 import _ from 'lodash';
 import { dirExists, homeDir, isLink } from '../core/util.js';
 import { safeRemove } from '../shared/safe-remove.js';
+import { assertTestWritable } from '../host/test-guard.js';
 import type { SyncState } from './history.js';
 
 const SKIP_IN = /(^logs$|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
@@ -31,7 +32,7 @@ const stampOf = (dir: string): number => _.max(databaseFiles(dir).map((f) => fs.
 const mirrorIn = (hostDir: string, store: string): void => {
   const incoming = store + '.incoming';
   safeRemove(incoming, path.dirname(store));
-  fs.cpSync(hostDir, incoming, { recursive: true, filter: (src: string) => src === hostDir || !SKIP_IN.test(path.basename(src)) });
+  fs.cpSync(hostDir, incoming, { recursive: true, filter: (src: string) => src === hostDir || (!SKIP_IN.test(path.basename(src)) && !isLink(src)) });
   safeRemove(store, path.dirname(store));
   fs.renameSync(incoming, store);
 };
@@ -60,6 +61,7 @@ const parkHostDatabases = (hostDir: string): void => {
  * overwritten is kept as `<dir>.conflict-<time>` first, so nothing is ever lost.
  */
 export const syncClaudeMem = (hostDir: string, store: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
+  assertTestWritable(direction === 'in' ? store : hostDir);
   if (isLink(store)) throw new Error('Refusing to sync claude-mem: ' + store + ' is a link.');
   const hostStamp = stampOf(hostDir);
   const guestStamp = stampOf(store);

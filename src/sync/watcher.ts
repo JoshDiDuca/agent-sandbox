@@ -4,6 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from '../core/types.js';
+import { writeFileAtomic } from '../shared/rundir.js';
+import { refuseInSelfTest } from '../host/test-guard.js';
 import { assertNoLinks, errMsg, sleep } from '../core/util.js';
 import { hostClaudeDir } from '../host/claude-profile.js';
 import { checkRepo } from '../host/repo-guard.js';
@@ -61,7 +63,8 @@ export const syncBack = (dataPath: string, final: boolean): SyncSummary => {
 const hostRunDir = (dataPath: string): string => path.join(storageOf(dataPath), 'run');
 const watcherPidFile = (dataPath: string): string => path.join(hostRunDir(dataPath), 'watcher-' + path.basename(dataPath) + '.pid');
 const watcherLog = (dataPath: string): string => path.join(storageOf(dataPath), 'logs', 'host-sync-' + path.basename(dataPath) + '.log');
-const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// Signal 0 only asks whether the process exists. pid 0 would mean "my own process group", so it never counts.
+const alive = (pid: number): boolean => { if (!Number.isInteger(pid) || pid <= 0) return false; try { process.kill(pid, 0); return true; } catch { return false; } };
 
 export const watcherRunning = (dataPath: string): boolean => {
   try { return alive(Number(fs.readFileSync(watcherPidFile(dataPath), 'utf8'))); } catch { return false; }
@@ -69,10 +72,11 @@ export const watcherRunning = (dataPath: string): boolean => {
 
 /** Body of the detached watcher process (`agent-sandbox _watch`). */
 export const watch = async (dataPath: string): Promise<void> => {
+  refuseInSelfTest('start the background sync');
   if (watcherRunning(dataPath)) return;
   fs.mkdirSync(hostRunDir(dataPath), { recursive: true });
   fs.mkdirSync(path.dirname(watcherLog(dataPath)), { recursive: true });
-  fs.writeFileSync(watcherPidFile(dataPath), String(process.pid));
+  writeFileAtomic(watcherPidFile(dataPath), String(process.pid));
   const note = (message: string): void => { try { fs.appendFileSync(watcherLog(dataPath), new Date().toISOString() + ' ' + message + '\n'); } catch { /* ignore */ } };
   const sync = (final: boolean): void => {
     try {

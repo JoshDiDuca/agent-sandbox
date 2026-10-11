@@ -14,6 +14,15 @@ export const guestWorkspaceAliases = (guestWorkspace: string): string[] => {
   return real.toLowerCase() === guestWorkspace.toLowerCase() ? [guestWorkspace] : [real, guestWorkspace];
 };
 
+const DEVICE_NAME = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+/**
+ * A file or folder name that is safe to recreate on this PC. The sandbox can create names Windows would treat as devices
+ * (CON.jsonl opens the console), as streams (a:b), or that end in a dot or space (silently renamed); none of them are copied.
+ */
+export const isSafeFileName = (name: string): boolean =>
+  name !== '' && name.length <= 200 && name !== '.' && name !== '..' && !/[<>:"|?*/\\\x00-\x1f]/.test(name) && !/[. ]$/.test(name) && !DEVICE_NAME.test(name);
+
 const jsonEscaped = (p: string): string => JSON.stringify(p).slice(1, -1);
 const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const forward = (p: string): string => p.replace(/\\/g, '/');

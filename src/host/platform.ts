@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import type { Config, HostProbe } from '../core/types.js';
 import { SYSTEM } from '../shared/system.js';
+import { refuseInSelfTest } from './test-guard.js';
 import { dirExists, ensureDir, fail, fileExists, findOnPath, homeDir, isWin, realPath } from '../core/util.js';
 
 const findHarnessExe = (config: Config, harnessName: string): HostProbe['harnessExe'] => {
@@ -72,18 +73,27 @@ export const assertCanLaunch = (): void => {
   if (isSandboxRunning()) fail('A Windows Sandbox is already running (Windows allows one at a time).', 'Attach to it with sandbox claude -t, show it with sbx-show, or shut it down with sandbox stop.');
 };
 
+/** cmd.exe expands %VAR% and ^ even inside quotes, and a quote ends them: such a path could run something else. */
+export const assertCmdSafePath = (file: string): void => {
+  if (/[%"^\r\n]/.test(file)) fail('The storage folder path has a character that cannot be started safely: ' + file, 'Set storage.root to a folder without % " ^ in its path.');
+};
+
 export const startSandbox = (wsbPath: string): void => {
+  refuseInSelfTest('start Windows Sandbox');
+  assertCmdSafePath(wsbPath);
   const result = spawnSync(SYSTEM.cmd(), ['/d', '/c', 'start', '""', '"' + wsbPath + '"'], { stdio: 'inherit', windowsVerbatimArguments: true });
   if (result.error) throw result.error;
 };
 
 /** Runs a detached copy of this CLI (used for the background history/claude-mem sync watcher). */
 export const spawnDetached = (entry: string, args: string[]): void => {
+  refuseInSelfTest('start background programs');
   // cwd = the install folder: the caller's folder is the workspace, which the sandbox can write.
   spawn(process.execPath, [entry, ...args], { cwd: path.dirname(entry), detached: true, stdio: 'ignore', windowsHide: true }).unref();
 };
 
 export const hostClaude = (storageRoot: string, personal: boolean, args: string[]): number => {
+  refuseInSelfTest('run Claude Code on this PC');
   const exe = findOnPath(['claude.exe', 'claude.cmd']);
   if (!exe) fail('Claude Code is not installed on this PC (no claude.exe or claude.cmd on PATH).', 'Install it: npm install -g @anthropic-ai/claude-code');
   const env: NodeJS.ProcessEnv = { ...process.env };

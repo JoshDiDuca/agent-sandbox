@@ -1,5 +1,6 @@
 // `sandbox setup`: checks this PC can run Windows Sandbox and offers to turn the feature on.
 import fs from 'node:fs';
+import { refuseInSelfTest } from '../../host/test-guard.js';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -144,6 +145,7 @@ const print = (checks: Check[]): void => table(checks.map((c) => [LABEL[c.status
 
 /** Runs the enable command in an elevated PowerShell (Windows asks for permission); true if it worked. */
 const enableFeature = (): boolean => {
+  refuseInSelfTest('turn on Windows features');
   const inner = "'-NoProfile','-Command','" + ENABLE_COMMAND + " | Out-Null'";
   const outer = "try { $p = Start-Process -FilePath '" + SYSTEM.powershell() + "' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList " + inner + '; exit $p.ExitCode } catch { exit 1 }';
   return spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', outer], { stdio: 'inherit' }).status === 0;

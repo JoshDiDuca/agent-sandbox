@@ -12,8 +12,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { guestWorkspaceAliases, projectFolderName, translatePaths } from '../shared/paths.js';
-import { dirExists, ensureDir, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../core/util.js';
+import { z } from 'zod';
+import { guestWorkspaceAliases, isSafeFileName, projectFolderName, translatePaths } from '../shared/paths.js';
+import { readValid, writeJsonAtomic } from '../shared/rundir.js';
+import { assertTestWritable } from '../host/test-guard.js';
+import { dirExists, ensureDir, fileExists, isLink, removeLink } from '../core/util.js';
 
 export { projectFolderName, translatePaths };
 
@@ -22,12 +25,14 @@ const DATA_FILE = /\.(jsonl?|txt|md)$/i;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 /** Host-only record of the last launch: which folders map to each other and what syncs (from the effective config). */
-export interface SyncState {
-  hostClaudeDir: string; hostWorkspace: string; guestWorkspace: string;
-  syncHistory?: boolean; syncClaudeMem?: boolean;
+const AbsolutePath = z.string().max(1024).refine((p) => path.isAbsolute(p), 'must be an absolute path');
+const SyncStateSchema = z.object({
+  hostClaudeDir: AbsolutePath, hostWorkspace: AbsolutePath, guestWorkspace: z.string().max(1024),
+  syncHistory: z.boolean().optional(), syncClaudeMem: z.boolean().optional(),
   /** Newest claude-mem database time on each side right after the last sync (detects edits on both sides). */
-  memHostStamp?: number; memGuestStamp?: number;
-}
+  memHostStamp: z.number().optional(), memGuestStamp: z.number().optional(),
+});
+export type SyncState = z.output<typeof SyncStateSchema>;
 export interface SyncPaths { hostClaudeDir: string; guestClaudeDir: string; hostWorkspace: string; guestWorkspace: string }
 type Filter = (name: string) => boolean;
 interface CopyOptions { transform?: (text: string) => string; accept?: Filter; skipDirs?: RegExp }
@@ -53,6 +58,7 @@ const copyNewer = (from: string, to: string, options: CopyOptions = {}): number 
   if (!dirExists(from) || isLink(from) || isLink(to)) return 0;
   const accept = options.accept ?? anyFile;
   return _.sumBy(fs.readdirSync(from, { withFileTypes: true }), (entry: fs.Dirent): number => {
+    if (!isSafeFileName(entry.name)) return 0;
     const source = path.join(from, entry.name);
     const destination = path.join(to, entry.name);
     if (entry.isDirectory()) return options.skipDirs?.test(entry.name) ? 0 : copyNewer(source, destination, options);
@@ -74,15 +80,17 @@ const copyNewer = (from: string, to: string, options: CopyOptions = {}): number 
 
 const readLines = (file: string): string[] =>
   fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_FILE_BYTES ? fs.readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '') : [];
+const isJsonObject = (line: string): boolean => { try { const v: unknown = JSON.parse(line); return typeof v === 'object' && v !== null && !Array.isArray(v); } catch { return false; } };
 const lineTime = (line: string): number => { try { return Number((JSON.parse(line) as { timestamp?: number }).timestamp) || 0; } catch { return 0; } };
 
 /** Brings this PC's history into the sandbox state (run before the sandbox starts). Returns files copied. */
 export const syncHistoryIn = (p: SyncPaths): number => {
+  assertTestWritable(p.guestClaudeDir);
   const hostProject = projectFolderName(p.hostWorkspace);
   const guestProject = projectFolderName(p.guestWorkspace);
   const transform = (t: string): string => translatePaths(t, p.hostWorkspace, p.guestWorkspace);
   const hostProjects = path.join(p.hostClaudeDir, 'projects');
-  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => name !== guestProject || hostProject === guestProject) : [];
+  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => isSafeFileName(name) && (name !== guestProject || hostProject === guestProject)) : [];
   const projects = _.sumBy(names, (name) => name === hostProject
     ? copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', guestProject), { transform })
     : copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', name)));
@@ -99,13 +107,14 @@ export const syncHistoryIn = (p: SyncPaths): number => {
 
 /** Copies new sandbox history back to this PC (safe while the sandbox runs: transcripts are append-only). */
 export const syncHistoryOut = (p: SyncPaths): number => {
+  assertTestWritable(p.hostClaudeDir);
   const hostProject = projectFolderName(p.hostWorkspace);
   // A mirrored workspace on F: really lives at C:\Mirror\F\...; tools that resolve real paths record that one.
   const guestNames = guestWorkspaceAliases(p.guestWorkspace);
   const guestProjects = new Set(guestNames.map(projectFolderName));
   const transform = (t: string): string => guestNames.reduce((out, guest) => translatePaths(out, guest, p.hostWorkspace), t);
   const guestProjectsDir = path.join(p.guestClaudeDir, 'projects');
-  const names = dirExists(guestProjectsDir) && !isLink(guestProjectsDir) ? fs.readdirSync(guestProjectsDir) : [];
+  const names = dirExists(guestProjectsDir) && !isLink(guestProjectsDir) ? fs.readdirSync(guestProjectsDir).filter(isSafeFileName) : [];
   const projects = _.sumBy(names, (name) => guestProjects.has(name)
     ? copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: transcript, skipDirs: NO_MEMORY, transform })
     : copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
@@ -114,7 +123,8 @@ export const syncHistoryOut = (p: SyncPaths): number => {
 
   const hostFile = path.join(p.hostClaudeDir, 'history.jsonl');
   const known = new Set(readLines(hostFile));
-  const missing = readLines(path.join(p.guestClaudeDir, 'history.jsonl')).map(transform).filter((l) => !known.has(l));
+  // Only prompt-history entries (one JSON object per line) come back, whatever else the sandbox wrote in that file.
+  const missing = readLines(path.join(p.guestClaudeDir, 'history.jsonl')).filter(isJsonObject).map(transform).filter((l) => !known.has(l));
   if (missing.length) { ensureDir(p.hostClaudeDir); fs.appendFileSync(hostFile, missing.join('\n') + '\n', 'utf8'); }
   return projects + sessions + missing.length;
 };
@@ -124,5 +134,6 @@ export const syncHistoryOut = (p: SyncPaths): number => {
  * never live in the data folder the sandbox can write (a forged copy could redirect writes anywhere on this PC).
  */
 export const syncStatePath = (dataPath: string): string => path.join(path.dirname(path.dirname(dataPath)), 'sync', path.basename(dataPath) + '.json');
-export const readSyncState = (dataPath: string): SyncState | null => tryReadJson<SyncState>(syncStatePath(dataPath));
-export const writeSyncState = (dataPath: string, state: SyncState): void => writeJson(syncStatePath(dataPath), state);
+/** A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next launch). */
+export const readSyncState = (dataPath: string): SyncState | null => readValid(SyncStateSchema, syncStatePath(dataPath));
+export const writeSyncState = (dataPath: string, state: SyncState): void => writeJsonAtomic(syncStatePath(dataPath), state);

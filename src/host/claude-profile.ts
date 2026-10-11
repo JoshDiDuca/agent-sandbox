@@ -2,15 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ClaudeProfileConfig, ProfileResult } from '../core/types.js';
 import { stripMcpServers, stripSettings, type SecretsConfig } from './secrets.js';
-import { dirExists, ensureDir, fileExists, homeDir, readJson, writeJson } from '../core/util.js';
+import { dirExists, ensureDir, fileExists, homeDir, isLink, readJson, writeJson } from '../core/util.js';
 
 const MAX_BYTES = 250 * 1024 * 1024;
 
+/** Real files only: a link inside ~/.claude (even a loop or a dead one) is neither followed nor counted nor copied. */
 const directorySize = (dir: string): number => {
   let total = 0;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    total += entry.isDirectory() ? directorySize(full) : fs.statSync(full).size;
+    if (entry.isDirectory()) total += directorySize(full); else if (entry.isFile()) total += fs.statSync(full).size;
   }
   return total;
 };
@@ -66,7 +67,7 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
       else fs.copyFileSync(source, destination);
     } else if (dirExists(source)) {
       if (directorySize(source) > MAX_BYTES) { result.skipped.push(name + ' (over 250 MB)'); continue; }
-      fs.cpSync(source, destination, { recursive: true, force: true });
+      fs.cpSync(source, destination, { recursive: true, force: true, filter: (from: string) => from === source || !isLink(from) });
     } else {
       result.skipped.push(name + ' (not found)');
       continue;

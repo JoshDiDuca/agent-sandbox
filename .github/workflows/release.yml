@@ -36,11 +36,15 @@ jobs:
       - name: Version to release
         id: version
         shell: pwsh
+        env:
+          # Through env, not inlined into the script: a crafted tag name cannot become PowerShell code.
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $tag = "v$version"
-          if ('${{ github.ref_type }}' -eq 'tag') {
-            if ('${{ github.ref_name }}' -ne $tag) { throw "Tag ${{ github.ref_name }} does not match package.json version $version" }
+          if ($env:REF_TYPE -eq 'tag') {
+            if ($env:REF_NAME -ne $tag) { throw "Tag $env:REF_NAME does not match package.json version $version" }
             $release = 'true'
           } else {
             # A branch push or a manual run releases only a version that has no tag yet.

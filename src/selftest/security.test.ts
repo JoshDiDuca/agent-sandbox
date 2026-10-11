@@ -17,7 +17,14 @@ import { gitDenyRules } from '../guest/gitrules.js';
 import { encodeFrame, FrameReader, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
 import { safeId } from '../shared/rundir.js';
 import { GuestRequest, SessionStatus } from '../shared/schema.js';
-import { syncHistoryIn } from '../sync/history.js';
+import { readSyncState, syncHistoryIn, syncHistoryOut, syncStatePath } from '../sync/history.js';
+import { syncClaudeMem } from '../sync/claude-mem.js';
+import { watch } from '../sync/watcher.js';
+import { assertCmdSafePath, hostClaude, spawnDetached, startSandbox } from '../host/platform.js';
+import { hideSandboxWindow, showSandboxWindow } from '../host/window.js';
+import { ensureTerminal, syncPwshProfile } from '../host/terminal.js';
+import { isSafeFileName } from '../shared/paths.js';
+import { writeJsonAtomic } from '../shared/rundir.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
 
@@ -154,4 +161,63 @@ export const securityTests = async (t: Harness, f: Fixtures): Promise<void> => {
 
   check(safeText('ok \x1b[31mred\x1b[0m \x1b]52;c;ZXZpbA==\x07\x1b]0;title\x07\x1b[2J\x07end') === 'ok \x1b[31mred\x1b[0m end', 'sandbox text printed on this PC keeps colours but loses every other escape sequence');
   check(await rejects(() => assertSafeMapping(path.join(t.packageRoot, 'dist'), t.packageRoot, at('storage')), 'overlaps') && await rejects(() => assertSafeMapping(at('storage', 'data'), t.packageRoot, at('storage')), 'overlaps'), 'extra mappings may not reach agent-sandbox\'s own folders');
+
+  t.section('names, state files and deletes (hostile sandbox)');
+  check(['CON.jsonl', 'nul', 'aux.json', 'COM1.txt', 'a:b', 'x.jsonl.', 'x ', '..', 'a\\b', 'LPT3'].every((n) => !isSafeFileName(n)) && ['C--Workspace-app', 'a.jsonl', '.credentials.json', 'console.jsonl'].every(isSafeFileName), 'device names, streams and trailing dots are not valid names to copy into this PC');
+  check(await rejects(() => saveAccount(at('acct-storage'), at('acct-storage', 'data', 'd'), 'index', { claudeDir: victim, globalStateFile: victim }), 'Invalid account name') && await rejects(() => saveAccount(at('acct-storage'), at('acct-storage', 'data', 'd'), 'con', { claudeDir: victim, globalStateFile: victim }), 'Invalid account name'), 'an account cannot be called index or a device name (it would overwrite the index or open a device)');
+  check(removeRefusal('\\\\?\\C:\\Users\\someone\\x', '\\\\?\\C:\\Users\\someone') !== null && removeRefusal('C:\\Windows\\Temp\\x', 'C:\\Windows\\Temp') !== null && removeRefusal('C:\\Program Files\\x\\y', 'C:\\Program Files\\x') !== null, 'deletes refuse \\\\?\\ paths and anything inside Windows or Program Files');
+  const hist = { hostClaudeDir: at('hist-host'), guestClaudeDir: at('hist-guest'), hostWorkspace: 'D:\\Code\\my-app', guestWorkspace: 'C:\\Workspace\\my-app' };
+  write(path.join(hist.guestClaudeDir, 'history.jsonl'), 'not json\n[1,2]\n{"display":"ok","timestamp":2}\n"text"\n');
+  syncHistoryOut(hist);
+  check(fs.readFileSync(path.join(hist.hostClaudeDir, 'history.jsonl'), 'utf8') === '{"display":"ok","timestamp":2}\n', 'only JSON prompt-history entries come back from the sandbox, nothing else it wrote in that file');
+  const stateData = at('state-storage', 'data', 'd');
+  write(syncStatePath(stateData), JSON.stringify({ hostClaudeDir: 'relative\\.claude', hostWorkspace: 'D:\\x', guestWorkspace: 'C:\\x' }));
+  check(readSyncState(stateData) === null, 'a sync state that points at a relative folder is ignored');
+  write(syncStatePath(stateData), JSON.stringify({ hostClaudeDir: at('c'), hostWorkspace: 'D:\\x', guestWorkspace: 'C:\\x', syncHistory: true }));
+  check(readSyncState(stateData)?.syncHistory === true, 'a valid sync state is read');
+  const repo4 = at('repo4');
+  write(path.join(repo4, '.git', 'config'), '[core]\n');
+  const before4 = snapshotRepo(repo4);
+  fs.appendFileSync(path.join(repo4, '.git', 'config'), '#'.repeat(5 * 1024 * 1024));
+  check(guardRepo(repo4, before4).some((x) => x.kind === 'git' && x.detail.includes('over 4 MB')), 'a git config too big to check is reported instead of passing');
+  const atomicFile = at('atomic', 'state.json');
+  writeJsonAtomic(atomicFile, { a: 1 });
+  writeJsonAtomic(atomicFile, { a: 2 });
+  check(JSON.parse(fs.readFileSync(atomicFile, 'utf8')).a === 2 && fs.readdirSync(path.dirname(atomicFile)).length === 1, 'state files are replaced whole, with no temp files left behind');
+  check(await rejects(() => assertCmdSafePath('C:\\a\\%TEMP%\\agent.wsb'), 'cannot be started safely') && await rejects(() => assertCmdSafePath('C:\\a"&calc&"\\agent.wsb'), 'cannot be started safely'), 'a launch path that cmd.exe would expand is refused');
+
+  t.section('the self-test never acts on this PC');
+  const previous = process.env.AGENT_SANDBOX_SELFTEST;
+  process.env.AGENT_SANDBOX_SELFTEST = '1';
+  try {
+    const real = path.join(os.homedir(), 'agent-sandbox-selftest-guard-probe');
+    const sync = { ...hist, hostClaudeDir: real };
+    const blocked: [string, () => unknown][] = [
+      ['start Windows Sandbox', () => startSandbox(at('storage', 'agent.wsb'))],
+      ['start the background watcher process', () => spawnDetached(path.join(t.packageRoot, 'dist', 'bin', 'sandbox.js'), ['_watch'])],
+      ['run Claude Code on this PC', () => hostClaude(at('storage'), false, ['--version'])],
+      ['hide windows', () => hideSandboxWindow(at('storage'), 1)],
+      ['show windows', () => showSandboxWindow(at('storage'))],
+      ['shut down Windows Sandbox', () => sendRequest(data, { kind: 'exec', id: 'sd', command: ['C:\\Windows\\System32\\shutdown.exe', '/s'], cwd: 'C:\\', timeoutSeconds: 5, createdAt: '' })],
+      ['start the background sync', () => watch(at('storage', 'data', 'w'))],
+      ['write Windows Terminal settings', () => syncPwshProfile(path.join(os.homedir(), 'agent-sandbox-selftest-guard-probe'), true)],
+      ['download Windows Terminal into a profile', () => ensureTerminal(path.join(os.homedir(), 'agent-sandbox-selftest-guard-probe'), true)],
+      ['sync history into the real profile', () => syncHistoryOut(sync)],
+      ['sync history into the sandbox state in a profile', () => syncHistoryIn({ ...hist, guestClaudeDir: real })],
+      ['sync claude-mem into the real profile', () => syncClaudeMem(real, at('mem-store'), { hostClaudeDir: real, hostWorkspace: 'D:\\x', guestWorkspace: 'C:\\x' }, 'out')],
+      ['write a state file in a profile', () => writeJsonAtomic(path.join(real, 'x.json'), {})],
+      ['delete in a profile', () => safeRemove(path.join(real, 'x'), os.homedir())],
+      ['save a login into a profile', () => saveAccount(real, at('acct-storage', 'data', 'd'), 'work', { claudeDir: path.dirname(write(at('guard-login', '.credentials.json'), '{"claudeAiOauth":{}}')), globalStateFile: at('guard-login', '.claude.json') })],
+    ];
+    for (const [what, action] of blocked) {
+      let message = '';
+      try { await action(); } catch (e) { message = e instanceof Error ? e.message : String(e); }
+      check(/self-test/i.test(message), 'self-test mode refuses to ' + what + (message ? '' : ' (it did not refuse)'));
+    }
+    check(!fs.existsSync(real), 'nothing was created in the profile folder');
+    writeJsonAtomic(at('guard-ok', 'x.json'), { fine: true });
+    check(fs.existsSync(at('guard-ok', 'x.json')), 'the temp folder stays writable for the tests');
+  } finally {
+    if (previous === undefined) delete process.env.AGENT_SANDBOX_SELFTEST; else process.env.AGENT_SANDBOX_SELFTEST = previous;
+  }
 };
