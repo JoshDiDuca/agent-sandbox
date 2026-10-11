@@ -10,7 +10,7 @@ import path from 'node:path';
 import type { Suite } from './suite.js';
 
 const SANDBOX_ONLY_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT', 'NVM_HOME', 'NVM_SYMLINK', 'BASH_ENV', 'CLAUDE_CODE_GIT_BASH_PATH', 'AGENT_GIT_ACCESS', 'AGENT_REAL_GIT', 'AGENT_SANDBOX_CONFIG'];
-const PARALLEL = 4;
+const PARALLEL = 2;
 
 interface Command {
   /** The binary in dist/bin. */

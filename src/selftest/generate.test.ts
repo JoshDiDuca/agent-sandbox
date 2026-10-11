@@ -2,6 +2,7 @@
 // session.json, the staged Claude profile, and the values read from this PC (git identity, free RAM).
 import fs from 'node:fs';
 import path from 'node:path';
+import { LocalOverrides } from '../core/schema.js';
 import { gitIdentity } from '../host/launch/stage.js';
 import { buildWsb, resolveMemoryMb } from '../host/launch/wsb.js';
 import type { Suite } from './suite.js';
@@ -49,6 +50,8 @@ export const generateSuite: Suite = {
       'session.json carries the id, paths, agent arguments, host tools, versions and git access',
     );
     t.matches(session.hostTools.nodeVersion ?? '', /^\d+\.\d+\.\d+$/, 'session.json: the host Node version is a plain version');
+    t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for cpucap.ps1 (default 80 %)');
+    t.check(!LocalOverrides.safeParse({ sandbox: { cpuLimit: 'none' } }).success, "a project's .sandbox-config.json cannot lift your CPU cap (sandbox.cpuLimit is yours only)");
 
     t.section('what is copied from this PC');
     const staged = path.join(gen.launchPath, 'claude-profile');
@@ -59,7 +62,11 @@ export const generateSuite: Suite = {
     t.equal(gitIdentity(gitconfig), '[user]\n\tname = Josh\n\temail = j@x.io\n', 'only name/email from ~/.gitconfig reach the sandbox (no credential helpers or token URLs)');
     t.equal(gitIdentity('[core]\n\tname = x\n'), '', 'a name outside [user] is not an identity');
     const auto = { ...f.baseConfig.sandbox, memoryMb: 'auto' as const };
-    t.equal(resolveMemoryMb(auto, 40000 * 1048576), 31744, "memory 'auto' follows free RAM minus the reserve");
-    await t.throws(() => resolveMemoryMb(auto, 9000 * 1048576), 'Not enough free RAM', "memory 'auto' refuses when too little RAM is free");
+    const MB = 1048576;
+    const pcRam = 64 * 1024 * MB;
+    t.equal(resolveMemoryMb(auto, 40000 * MB, pcRam), 31744, "memory 'auto' follows free RAM minus the reserve");
+    await t.throws(() => resolveMemoryMb(auto, 9000 * MB, pcRam), 'Not enough free RAM', "memory 'auto' refuses when too little RAM is free");
+    t.equal(resolveMemoryMb({ ...auto, maxMemoryPercent: 80 }, 30000 * MB, 32 * 1024 * MB), 21504, "memory 'auto' never takes more than maxMemoryPercent of the PC's RAM");
+    t.equal(resolveMemoryMb({ ...auto, maxMemoryPercent: 50 }, 60000 * MB, pcRam), 32768, "memory 'auto' is capped at half the PC's RAM with maxMemoryPercent 50 (free RAM and maxMemoryMb still apply)");
   },
 };

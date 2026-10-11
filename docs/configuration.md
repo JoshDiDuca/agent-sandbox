@@ -21,6 +21,8 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
+| `sandbox.cpuLimit` | most of your PC's CPU the sandbox may use, in percent (default `80`; `"none"` = all of it). Your setting only: a project file cannot change it |
+| `sandbox.maxMemoryPercent`, `.maxMemoryMb`, `.reserveHostMb` | `memoryMb: "auto"` = free RAM minus `reserveHostMb` (8 GB), at most `maxMemoryPercent` (80) of your RAM and `maxMemoryMb` |
 | `attach.auto` | starting an agent attaches this terminal automatically (like `-t`) |
 | `agentCommands.enabled` | **(Beta)** typing `claude`, `codex` ... on this PC starts the agent in a hidden sandbox and attaches (default off) |
 | `agentCommands.agents` | `"auto"` = every agent installed on this PC, or a list such as `["claude", "codex"]` |
@@ -120,3 +122,11 @@ for that folder and attaches your terminal, exactly like `sandbox claude -t --he
 - `sandbox agent-commands off` removes the commands and that PATH entry again. `status` shows what is forwarded.
 - Agents installed later are picked up the next time you launch. An agent on the machine-wide PATH, not yours, is not
   overridden. Beta: it may have rough edges; it is off by default.
+
+## CPU, RAM and GPU
+
+Windows Sandbox has no CPU setting and would use every processor, so the sandbox caps itself: before anything starts,
+its first window joins a Windows job object with a hard CPU-rate cap (`sandbox.cpuLimit`, default 80 %), and
+everything this tool starts in it inherits that (agents, installs, builds, its terminal tabs). Programs started from the
+sandbox's own Start menu are not covered. RAM is fixed when the sandbox starts (`memoryMb`, or "auto" within the limits
+above). The GPU cannot be limited: Windows Sandbox only has it on or off (`sandbox.vGpu`, off by default).

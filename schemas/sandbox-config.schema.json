@@ -94,6 +94,12 @@
           "maximum": 9007199254740991,
           "description": "Upper limit for memoryMb \"auto\"."
         },
+        "maxMemoryPercent": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 100,
+          "description": "memoryMb \"auto\" never takes more than this share of this PC's total RAM (percent)."
+        },
         "reserveHostMb": {
           "type": "integer",
           "minimum": 0,

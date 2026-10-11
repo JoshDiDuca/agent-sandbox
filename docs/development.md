@@ -32,7 +32,7 @@ node dist/bin/agent-sandbox.js self-test nope         # prints the list of suite
 - Live suites (`live-*.test.ts`, helpers in `live.ts`) start the real daemon, ptyhost and git shim. They never sleep for a
   fixed time: they poll until the condition holds, with long deadlines, and print the viewer's screen and the daemon log
   when a check fails. Keep it that way; a flaky test is a bug in the test or the product.
-- Slowest suites: `host-sim` (every command as its own Node process, four at a time), then the live ones.
+- Slowest suites: `host-sim` (every command as its own Node process, two at a time), then the live ones.
 
 CI builds on Node 22 and on the official Node 22.0.0 zip (the oldest Node users run it on, so dependencies must not
 need newer), and runs the self-test as information only. Releases and `npm run publish:npm` run no tests.

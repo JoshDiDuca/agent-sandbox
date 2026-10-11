@@ -11,7 +11,7 @@ export const DEFAULTS: Config = {
   guestWorkspace: 'auto',
   readOnly: false,
   mappings: [],
-  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
+  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, maxMemoryPercent: 80, cpuLimit: 80, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default' },
   network: { blockPrivateRanges: true },
   provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },

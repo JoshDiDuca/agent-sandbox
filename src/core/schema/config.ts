@@ -48,7 +48,7 @@ export const LocalOverrides = z.strictObject({
   readOnly: z.boolean().describe('Map this project read-only.'),
   mappings: z.array(Mapping).describe('Extra folders (relative to this file).'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
-  sandbox: Sandbox.partial(),
+  sandbox: Sandbox.omit({ cpuLimit: true }).partial(),
   network: z.strictObject({ blockPrivateRanges: z.boolean() }).partial(),
   provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true }).extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() }).partial(),
   downloads: Downloads.partial(),
