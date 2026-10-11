@@ -109,7 +109,7 @@ Changes to what is mapped apply from the next start.
 | `sandbox doctor` | what will be copied from this PC or downloaded |
 | `sandbox repair` | find and fix stale state, interrupted downloads, half-installed tools, broken caches |
 | `sandbox generate` | dry run: what a launch would do, without starting anything |
-| `sandbox self-test` | the built-in tests |
+| `sandbox self-test [suite...]` | the built-in tests (only inside a Windows Sandbox); name suites to run just those |
 
 ## Accounts and config
 

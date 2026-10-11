@@ -1,63 +1,139 @@
-// `agent-sandbox self-test`: offline logic and security tests, plus live tests of the session daemon, ptyhost and
-// the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11).
+// `agent-sandbox self-test [suite...]`: offline logic and security tests, plus live tests of the session daemon, ptyhost
+// and the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11).
 // They start real processes (the guest runtime, the daemon, csc, git), so they only run on a throwaway machine.
+//
+// Each area is one suite in its own *.test.ts file; the list below is the order they run in. Give suite names (or a
+// comma-separated list) to run only those: `sandbox self-test config`, `npm test -- live-daemon`.
 import os from 'node:os';
+import path from 'node:path';
 import { errMsg } from '../core/util.js';
-import { configTests } from './config.test.js';
-import { cliTests } from './cli.test.js';
-import { agentCommandTests } from './agent-commands.test.js';
-import { dataTests } from './data.test.js';
-import { detectTests } from './detect.test.js';
-import { mirrorTests } from './mirror.test.js';
-import { projectTests } from './projects.test.js';
 import { createFixtures } from './fixtures.js';
-import { guestTests } from './guest.test.js';
-import { createHarness } from './harness.js';
-import { helperTests } from './helpers.test.js';
-import { hostTests } from './host.test.js';
-import { daemonTests, gitGuardTests, liveTestsAvailable } from './live.test.js';
-import { multiProjectDaemonTests } from './live-projects.test.js';
-import { securityTests } from './security.test.js';
-import { setupTests } from './setup.test.js';
-import { syncTests } from './sync.test.js';
+import { createHarness, type RunningHarness } from './harness.js';
+import { liveTestsAvailable } from './live.js';
+import type { Suite } from './suite.js';
+import { accountsSuite } from './accounts.test.js';
+import { agentCommandsSuite } from './agent-commands.test.js';
+import { channelSuite } from './channel.test.js';
+import { cliSuite } from './cli.test.js';
+import { cmdlineSuite } from './cmdline.test.js';
+import { configSuite } from './config.test.js';
+import { dataSuite } from './data.test.js';
+import { detectSuite } from './detect.test.js';
+import { generateSuite } from './generate.test.js';
+import { gitAccessSuite } from './git-access.test.js';
+import { guestBootSuite } from './guest-boot.test.js';
+import { hostileInputSuite } from './hostile-input.test.js';
+import { hostSimSuite } from './host-sim.test.js';
+import { linksSuite } from './links.test.js';
+import { liveDaemonSuite } from './live-daemon.test.js';
+import { liveGitSuite } from './live-git.test.js';
+import { liveProjectsSuite } from './live-projects.test.js';
+import { localConfigSuite } from './local-config.test.js';
+import { mirrorSuite } from './mirror.test.js';
+import { networkSuite } from './network.test.js';
+import { personalizationSuite } from './personalization.test.js';
+import { projectsSuite } from './projects.test.js';
+import { repairSuite } from './repair.test.js';
+import { repoGuardSuite } from './repo-guard.test.js';
+import { secretsSuite } from './secrets.test.js';
+import { setupSuite } from './setup.test.js';
+import { syncSuite } from './sync.test.js';
+import { testGuardSuite } from './test-guard.test.js';
+import { toolchainsSuite } from './toolchains.test.js';
+import { workspaceSuite } from './workspace.test.js';
+
+/** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
+export const SUITES: Suite[] = [
+  // settings and project files
+  configSuite, workspaceSuite, localConfigSuite,
+  // the generated sandbox and the guest that boots it
+  generateSuite, guestBootSuite, mirrorSuite, projectsSuite,
+  // syncing with this PC
+  syncSuite, accountsSuite,
+  // an untrusted sandbox: what the host refuses to do with what it finds
+  linksSuite, channelSuite, gitAccessSuite, repoGuardSuite, secretsSuite, hostileInputSuite, testGuardSuite,
+  // pure helpers and the command line
+  toolchainsSuite, detectSuite, networkSuite, personalizationSuite, cmdlineSuite, setupSuite, dataSuite, repairSuite, cliSuite, agentCommandsSuite,
+  // every command as its own process
+  hostSimSuite,
+  // real processes
+  liveDaemonSuite, liveProjectsSuite, liveGitSuite,
+];
 
 /** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */
 export const onThrowawayMachine = (): boolean => os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
 
-export const selfTest = async (packageRoot: string): Promise<number> => {
+interface Result { suite: Suite; checks: number; failed: number; seconds: number; note?: string }
+
+const withDeadline = async <T>(work: Promise<T>, ms: number, what: string): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(what + ' did not finish within ' + Math.round(ms / 1000) + ' s')), ms); });
+  try { return await Promise.race([work, deadline]); } finally { clearTimeout(timer); }
+};
+
+const runSuite = async (suite: Suite, t: RunningHarness, f: ReturnType<typeof createFixtures>): Promise<Result> => {
+  const checksBefore = t.checks();
+  const failedBefore = t.failures();
+  const started = Date.now();
+  let note: string | undefined;
+  if (suite.live && !liveTestsAvailable()) {
+    t.section(suite.name);
+    t.skip(suite.title + ' (needs Windows with the .NET Framework compiler)');
+    note = 'skipped';
+  } else {
+    try {
+      await withDeadline(Promise.resolve(suite.run(t, f)), suite.timeoutMs ?? 120000, 'suite "' + suite.name + '"');
+    } catch (e) {
+      t.check(false, 'suite "' + suite.name + '" stopped with an unexpected error', errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : ''));
+    }
+  }
+  return { suite, checks: t.checks() - checksBefore, failed: t.failures() - failedBefore, seconds: (Date.now() - started) / 1000, note };
+};
+
+const printSummary = (results: Result[]): void => {
+  const width = Math.max(...results.map((r) => r.suite.name.length));
+  console.log('\n\x1b[36m-- summary\x1b[0m');
+  for (const r of results) {
+    const state = r.note ?? (r.failed ? r.failed + ' FAILED' : 'ok');
+    console.log('  ' + r.suite.name.padEnd(width) + '  ' + String(r.checks).padStart(4) + ' checks  ' + r.seconds.toFixed(1).padStart(6) + ' s  ' + state);
+  }
+  const total = results.reduce((sum, r) => sum + r.checks, 0);
+  console.log('  ' + 'total'.padEnd(width) + '  ' + String(total).padStart(4) + ' checks  ' + results.reduce((sum, r) => sum + r.seconds, 0).toFixed(1).padStart(6) + ' s');
+};
+
+/** Resolves "a,b" / ["a", "b"] to suites; throws with the list of valid names for an unknown one. */
+export const pickSuites = (names: string[]): Suite[] => {
+  const wanted = names.flatMap((n) => n.split(',')).map((n) => n.trim()).filter(Boolean);
+  if (wanted.length === 0) return SUITES;
+  const unknown = wanted.filter((name) => !SUITES.some((s) => s.name === name));
+  if (unknown.length) throw new Error('No test suite called ' + unknown.join(', ') + '. Suites: ' + SUITES.map((s) => s.name).join(', '));
+  return SUITES.filter((s) => wanted.includes(s.name));
+};
+
+export const selfTest = async (packageRoot: string, suiteNames: string[] = []): Promise<number> => {
   if (!onThrowawayMachine()) {
     console.error('The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox\'s terminal.');
     return 1;
   }
+  let chosen: Suite[];
+  try { chosen = pickSuites(suiteNames); } catch (e) { console.error(errMsg(e)); return 1; }
   // Defence in depth (shared/test-guard.ts): with this set, host code refuses outward actions and writes outside temp.
   process.env.AGENT_SANDBOX_SELFTEST = '1';
   const t = createHarness(packageRoot);
   const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR };
-  process.env.AGENT_SANDBOX_HOME = t.temp + '\\user-home';
+  process.env.AGENT_SANDBOX_HOME = path.join(t.temp, 'user-home');
+  const results: Result[] = [];
   try {
     const f = createFixtures(t);
-    await configTests(t, f);
-    const launchPath = await guestTests(t, f);
-    await syncTests(t, f);
-    await mirrorTests(t, f);
-    await projectTests(t, f);
-    await securityTests(t, f);
-    helperTests(t);
-    detectTests(t);
-    setupTests(t);
-    hostTests(t);
-    dataTests(t);
-    cliTests(t);
-    agentCommandTests(t);
-    if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await multiProjectDaemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
-    else console.log('SKIP  live tests (need Windows with the .NET Framework compiler)');
+    for (const suite of chosen) results.push(await runSuite(suite, t, f));
   } catch (e) {
-    t.check(false, 'unexpected error: ' + errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : ''));
+    t.check(false, 'unexpected error: ' + errMsg(e), e instanceof Error ? e.stack : undefined);
   } finally {
     if (saved.home === undefined) delete process.env.AGENT_SANDBOX_HOME; else process.env.AGENT_SANDBOX_HOME = saved.home;
-    process.env.WINDIR = saved.windir;
+    if (saved.windir === undefined) delete process.env.WINDIR; else process.env.WINDIR = saved.windir;
     t.dispose();
   }
+  if (results.length > 1) printSummary(results);
   const failures = t.failures();
   console.log(failures === 0 ? '\nALL TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
   return failures === 0 ? 0 : 1;

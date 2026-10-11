@@ -7,8 +7,32 @@ npm run install:global    # install this checkout globally as a COPY
 ```
 
 The self-test refuses to run on a normal PC: it only runs inside a Windows Sandbox (run `sandbox start`, then `npm test`
-in it) or on GitHub Actions, because the live tests create files, links and processes. The live tests can flake under
-load; run them once more before assuming a real failure. `sandbox self-test` is the same thing.
+in it) or on GitHub Actions, because the live tests create files, links and processes. `sandbox self-test` is the same
+thing. While it runs, `AGENT_SANDBOX_SELFTEST=1` makes host code refuse outward actions and any write or delete outside
+the test's temp folder (`src/shared/test-guard.ts`, `src/host/test-guard.ts`); the `test-guard` suite checks that.
+
+## Tests
+
+`npm test` runs every suite and ends with `ALL TESTS PASSED` (or `N TEST(S) FAILED`). Run part of it:
+
+```powershell
+npm test -- config                                    # one suite (builds first)
+node dist/bin/agent-sandbox.js self-test cli,sync     # several, without building
+node dist/bin/agent-sandbox.js self-test nope         # prints the list of suite names
+```
+
+- One file per area in `src/selftest/`, named `<area>.test.ts`, exporting a `Suite` (`suite.ts`). `index.ts` lists the
+  suites in run order. A suite that throws or hangs (default 2 minutes, `timeoutMs`) fails alone; the rest still run.
+- `harness.ts`: `t.equal(actual, expected, name)` (failures show both), `t.includes`, `t.excludes`, `t.matches`,
+  `t.throws(fn, 'text' | /regex/, name)` (message and fix hint), `t.check(ok, name, detail)`, `t.waitFor(read, ms)`,
+  `t.touch(file)` (make a change clearly newer instead of sleeping), temp helpers `t.at`, `t.dir`, `t.write`,
+  `t.writeJson`, `t.readJson`.
+- `fixtures.ts`: a fake PC (Node, Claude Code, a profile, workspaces) with `f.makeConfig()`, `f.run()`, `f.launch()`
+  (resolve + generate), `f.runGuest()` and `f.runBin()` (a built command as its own process).
+- Live suites (`live-*.test.ts`, helpers in `live.ts`) start the real daemon, ptyhost and git shim. They never sleep for a
+  fixed time: they poll until the condition holds, with long deadlines, and print the viewer's screen and the daemon log
+  when a check fails. Keep it that way; a flaky test is a bug in the test or the product.
+- Slowest suites: `host-sim` (every command as its own Node process, two at a time), then the live ones.
 
 CI builds on Node 22 and on the official Node 22.0.0 zip (the oldest Node users run it on, so dependencies must not
 need newer), and runs the self-test as information only. Releases and `npm run publish:npm` run no tests.

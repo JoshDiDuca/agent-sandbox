@@ -19,8 +19,17 @@ npm test          # must end with ALL TESTS PASSED
 `npm run build` runs tsc, bundles the sandbox-side code and regenerates `schemas/*.json`. Commit the schemas when
 setting descriptions change.
 
-The live tests drive ConPTY and real file links, so they can fail under heavy load. Run them again before assuming a
-real failure.
+To run one area while you work, give the suite name (several allowed, or comma separated). `npm test` builds first;
+the second form skips the build:
+
+```powershell
+npm test -- config
+node dist/bin/agent-sandbox.js self-test cli,workspace
+```
+
+Each `src/selftest/*.test.ts` file is one suite (listed in order in `src/selftest/index.ts`; a wrong name prints the
+list). The live tests drive ConPTY and real processes: they poll with long deadlines instead of sleeping, so a failure
+is real, and it prints the screen and daemon log it saw. See [docs/development.md](docs/development.md#tests).
 
 Developing this tool with an agent inside its own sandbox? Install a copy (`npm run install:global`), never a link.
 See [docs/development.md](docs/development.md).
