@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { z } from 'zod';
 import { fail, tryReadJson } from '../core/util.js';
+import { c } from './colors.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';
 
 export interface CliOptions {
@@ -46,7 +47,9 @@ export const buildProgram = (record: (name: string, cmd: Command) => void): Comm
     .description('A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.')
     .version(packageVersion(), '-v, --version', 'show the version')
     .enablePositionalOptions()
-    .showHelpAfterError('(run with --help for usage)')
+    .showHelpAfterError('  Fix:  run the command with --help to see how to use it.')
+    .configureOutput({ outputError: (text, write) => write(c.red('Error: ') + text.replace(/^error: /, '').replace(/^./, (ch) => ch.toUpperCase())) })
+    .addHelpText('after', '\nPut --config <file> before or after the command to use another settings file.\nExamples:\n  sandbox                       the menu\n  sandbox claude -t             start Claude and attach this terminal\n  sandbox data clean logs       delete the saved logs\n  sandbox exec -- npm test      run a command in the running sandbox')
     .exitOverride();
   for (const spec of COMMANDS) {
     const cmd = program.command(spec.name, { hidden: spec.hidden }).description(spec.summary).option('--config <file>', 'config file (default: ~/.agent-sandbox/config.json)');

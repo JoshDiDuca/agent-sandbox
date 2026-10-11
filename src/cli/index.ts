@@ -6,6 +6,7 @@ import { commandSpec } from './manifest.js';
 import { c } from './colors.js';
 import { recordHistory } from './history.js';
 import { menu } from './menu.js';
+import { validateOptions } from './validate.js';
 import { loadConfig } from '../core/config.js';
 import * as commands from './commands/index.js';
 import { UserError, errMsg, fail } from '../core/util.js';
@@ -44,13 +45,27 @@ const HANDLERS: Record<string, Handler> = {
 export interface Preset { harness?: string; command?: string }
 
 /** Runs an argv from the menu exactly as if it had been typed, reporting errors instead of throwing. */
-const runFromMenu = (argv: string[]): Promise<number> => main(argv).catch((e: unknown) => report(e));
+const runFromMenu = (config: string | undefined) => (argv: string[]): Promise<number> => main(withConfig(argv, config)).catch((e: unknown) => report(e));
+
+/** `--config <file>` right after the command name (where every command accepts it); argv unchanged without a config. */
+export const withConfig = (argv: string[], config: string | undefined): string[] => (config && argv.length ? [argv[0], '--config', config, ...argv.slice(1)] : argv);
+
+/** `sandbox --config f.json status` works like `sandbox status --config f.json`: a leading --config moves behind the command. */
+export const hoistConfig = (argv: string[]): string[] => {
+  const eq = argv[0]?.startsWith('--config=');
+  if (argv[0] !== '--config' && !eq) return argv;
+  const value = eq ? argv[0].slice('--config='.length) : argv[1];
+  const rest = argv.slice(eq ? 1 : 2);
+  if (value === undefined || value === '') return argv;
+  return rest.length ? withConfig(rest, value) : ['menu', '--config', value];
+};
 
 /**
  * CLI entry. `preset` lets wrapper binaries fix the command/agent (sandbox claude = launch --harness claude). No arguments
  * opens the menu; `sandbox <agent> [agent args]` starts that agent.
  */
-export const main = async (argv: string[], preset: Preset = {}): Promise<number> => {
+export const main = async (rawArgv: string[], preset: Preset = {}): Promise<number> => {
+  const argv = preset.command || preset.harness ? rawArgv : hoistConfig(rawArgv);
   const isAgent = (name: string | undefined): name is string => {
     if (!name || name.startsWith('-') || commandSpec(name)) return false;
     const at = argv.indexOf('--config');
@@ -62,16 +77,23 @@ export const main = async (argv: string[], preset: Preset = {}): Promise<number>
   }
   const options = parseCli(preset.command ? [preset.command, ...argv] : argv, Boolean(preset.harness));
   if (preset.harness) options.harness = preset.harness;
-  recordHistory(preset.harness ? ['launch', '--harness', preset.harness, ...argv] : preset.command ? [preset.command, ...argv] : argv);
-  if (options.command === 'menu') return menu(commands.createContext(packageRoot, entry, options), runFromMenu);
+  const typed = preset.harness ? ['launch', '--harness', preset.harness, ...argv] : preset.command ? [preset.command, ...argv] : argv;
+  if (options.command === 'menu') return menu(commands.createContext(packageRoot, entry, options), runFromMenu(options.config));
   // Loaded only when asked for: normal commands never load test code.
   if (options.command === 'self-test') return (await import('../selftest/index.js')).selfTest(packageRoot);
   // repair must run even when the config file is broken (createContext would refuse it).
-  if (options.command === 'repair') return commands.repairCommand(packageRoot, entry, options);
+  if (options.command === 'repair') { recordHistory(withoutConfig(typed)); return commands.repairCommand(packageRoot, entry, options); }
   const handler = HANDLERS[options.command];
   if (!handler) return fail('Unknown command "' + options.command + '".', 'Run sandbox --help for the list of commands, or sandbox for the menu.');
-  return (await handler(commands.createContext(packageRoot, entry, options))) ?? 0;
+  const ctx = commands.createContext(packageRoot, entry, options);
+  validateOptions(ctx);
+  // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
+  recordHistory(withoutConfig(typed));
+  return (await handler(ctx)) ?? 0;
 };
+
+/** argv without `--config <file>` / `--config=<file>`. */
+export const withoutConfig = (argv: string[]): string[] => argv.filter((a, i) => a !== '--config' && argv[i - 1] !== '--config' && !a.startsWith('--config='));
 
 /** Prints a problem the way a user can act on it: what happened, how to fix it; stack traces only for real bugs. */
 export const report = (e: unknown): number => {
