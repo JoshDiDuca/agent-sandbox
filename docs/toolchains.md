@@ -25,7 +25,7 @@ config always win.
 | PHP | PHP with common extensions, Composer | `.php-version` |
 | Deno, Bun | single binaries | |
 | PowerShell 7 | portable `pwsh` (`powershell` stays 5.1), a Windows Terminal profile | `#Requires -Version 7` or `pwsh ...` in a `.ps1` |
-| CLI tools (`toolchains.cli`) | `gh` (only with git access `full`; `auto` = a `.github` folder), `zstd` (off unless `true`), `openssl` (on, from Git for Windows) | |
+| CLI tools (`toolchains.cli`) | `gh` (only with git access `full`; `auto` = a `.github` folder), `zstd` (off unless `true`), `openssl` (on: a small `openssl.exe` launcher for Git for Windows' own, so programs that start it without a shell, like Rust's `Command::new("openssl")`, find it) | |
 | VS Code | portable, `code .`; settings and extensions are kept | |
 | Mesa 3D (opt-in) | software OpenGL 4.5, and with `mesa.vulkan` software Vulkan 1.4 (lavapipe) | |
 
