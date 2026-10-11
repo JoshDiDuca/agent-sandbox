@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
 import { download, githubAsset } from '../../shared/download.js';
-import { dataDir, dryRun, errMsg, exec, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, warn } from '../env.js';
+import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, warn } from '../env.js';
 import { ensureCompiled } from '../ptyhost.js';
 import { arch, tool, type ToolEnv } from './common.js';
 
@@ -16,7 +16,7 @@ const installPortableGit = async (root: string): Promise<void> => {
   const sfx = tool(asset.name);
   log('Downloading ' + asset.name + ' ...');
   await download(asset.url, sfx, asset.sha256);
-  exec(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
+  await execAsync(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
   fs.rmSync(sfx, { force: true });
 };
 

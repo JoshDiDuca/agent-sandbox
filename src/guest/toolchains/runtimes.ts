@@ -26,8 +26,11 @@ export const setupDeno = async (env: ToolEnv): Promise<void> => {
   Object.assign(env.vars, { DENO_DIR: tool('deno-cache'), DENO_INSTALL_ROOT: tool('deno'), DENO_NO_UPDATE_CHECK: '1' });
 };
 
+/** Where uv keeps its cache, Pythons and tools (persistent). */
+export const uvVars = (): Record<string, string> => ({ UV_CACHE_DIR: tool('uv-cache'), UV_PYTHON_INSTALL_DIR: tool('uv-python'), UV_TOOL_DIR: tool('uv-tools'), UV_TOOL_BIN_DIR: tool('uv-bin') });
+
 export const setupUv = async (env: ToolEnv): Promise<void> => {
   await setupSingleExe(env, 'uv', 'astral-sh/uv', arch === 'arm64' ? /^uv-aarch64-pc-windows-msvc\.zip$/ : /^uv-x86_64-pc-windows-msvc\.zip$/, 'uv.exe', tool('uv'));
-  Object.assign(env.vars, { UV_CACHE_DIR: tool('uv-cache'), UV_PYTHON_INSTALL_DIR: tool('uv-python'), UV_TOOL_DIR: tool('uv-tools'), UV_TOOL_BIN_DIR: tool('uv-bin') });
+  Object.assign(env.vars, uvVars());
   env.prepend.push(tool('uv-bin'));
 };

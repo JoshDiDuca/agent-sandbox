@@ -126,6 +126,38 @@ const Toolchains = z.strictObject({
   vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
   environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'letters, digits and _ only'), z.string()).describe('Extra environment variables for the agent and every terminal, e.g. registry mirrors: {"NPM_CONFIG_REGISTRY": "https://...", "PIP_INDEX_URL": "https://..."}.'),
 });
+const Port = z.number().int().min(1024).max(65535);
+const dbEnabled = (name: string) => Enabled.describe(name + ': true, false, or "auto" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings).');
+const Databases = z.strictObject({
+  postgres: z.strictObject({
+    enabled: dbEnabled('PostgreSQL (with psql, pg_dump). User postgres, no password, localhost only'),
+    version: z.string().min(1).describe('"latest" or a major version such as "16". A compose file pinning postgres:<major> wins.'),
+    port: Port.describe('Port inside the sandbox.'),
+  }),
+  mysql: z.strictObject({
+    enabled: dbEnabled('MySQL-compatible database (MariaDB). User root, no password, localhost only'),
+    version: z.string().min(1).describe('"lts" (newest MariaDB LTS) or a MariaDB series such as "11.4".'),
+    port: Port.describe('Port inside the sandbox.'),
+  }),
+  mongodb: z.strictObject({
+    enabled: dbEnabled('MongoDB with mongosh, localhost only'),
+    version: z.string().min(1).describe('"latest" or a version prefix such as "8.0".'),
+    port: Port.describe('Port inside the sandbox.'),
+  }),
+  redis: z.strictObject({
+    enabled: dbEnabled('Redis (community Windows build), localhost only'),
+    port: Port.describe('Port inside the sandbox.'),
+  }),
+  dynamodb: z.strictObject({
+    enabled: dbEnabled('DynamoDB Local (Amazon\'s official emulator, on the Java toolchain) with dynamodb-admin, a web UI to browse and edit tables'),
+    port: Port.describe('DynamoDB endpoint port inside the sandbox (http://localhost:<port>).'),
+    adminPort: Port.describe('dynamodb-admin web UI port (open http://localhost:<adminPort> in the sandbox\'s browser).'),
+    admin: z.boolean().describe('Run dynamodb-admin next to DynamoDB Local.'),
+  }),
+  sqlserver: z.strictObject({
+    enabled: dbEnabled('SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a hint to reach the one on this PC through hostAccess.forwards'),
+  }),
+});
 const Secrets = z.strictObject({
   strip: z.boolean().describe('Remove credentials from everything copied into the sandbox (your Claude settings.json "env" and credential helpers, MCP servers\' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys.'),
   allow: Strings.describe('Variable names that may go in anyway; * matches anything, e.g. ["AWS_REGION", "AWS_PROFILE", "MY_APP_*"].'),
@@ -162,6 +194,7 @@ export const Config = z.strictObject({
   network: z.strictObject({ blockPrivateRanges: z.boolean().describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.') }),
   provisioning: Provisioning,
   toolchains: Toolchains,
+  databases: Databases.describe('Databases running inside the sandbox. Data persists in C:\\AgentData\\databases; each one starts at boot.'),
   attach: Attach,
   secrets: Secrets,
   personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
@@ -189,6 +222,7 @@ export const LocalOverrides = z.strictObject({
     ..._.mapValues(_.omit(Toolchains.shape, 'environment'), (shape) => shape.partial()),
     environment: Toolchains.shape.environment,
   }).partial(),
+  databases: z.strictObject(_.mapValues(Databases.shape, (shape) => shape.partial())).partial(),
   attach: Attach.partial(),
   personalization: toggle('Copy your desktop look into the sandbox.').partial(),
   claudeProfile: ClaudeProfile.pick({ enabled: true, include: true, overwrite: true, copyCredentials: true, syncHistory: true, syncClaudeMem: true }).partial(),

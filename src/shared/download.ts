@@ -3,7 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { SYSTEM } from './system.js';
 
 const USER_AGENT = 'agent-sandbox';
@@ -27,12 +29,33 @@ export const fetchRetry = async (url: string, init: RequestInit = {}, attempts =
 export const fetchJson = async <T>(url: string): Promise<T> => await (await fetchRetry(url, { headers: { Accept: 'application/json' } }, 2, 20000)).json() as T;
 export const fetchText = async (url: string): Promise<string> => await (await fetchRetry(url)).text();
 
-export const download = async (url: string, destination: string, expectedSha256?: string | null): Promise<void> => {
+/** Expected checksums of a download; any that are given must match. */
+export interface Checksums { sha256?: string | null; sha512?: string | null }
+
+/**
+ * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
+ * event loop stays free so other toolchains keep downloading meanwhile. A mismatch deletes the file.
+ */
+export const download = async (url: string, destination: string, expected: string | null | Checksums = null): Promise<void> => {
+  const sums: Checksums = typeof expected === 'string' || expected === null ? { sha256: expected } : expected;
   const response = await fetchRetry(url, {}, 3, 20 * 60 * 1000);
+  if (!response.body) throw new Error('Empty response for ' + url);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
-  if (expectedSha256 && sha256File(destination) !== expectedSha256.toLowerCase()) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
+  const hashes = { sha256: crypto.createHash('sha256'), sha512: crypto.createHash('sha512') };
+  const tap = new Transform({ transform(chunk: Buffer, _encoding, done) { hashes.sha256.update(chunk); hashes.sha512.update(chunk); done(null, chunk); } });
+  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), tap, fs.createWriteStream(destination));
+  for (const kind of ['sha256', 'sha512'] as const) {
+    const want = sums[kind]?.trim().toLowerCase();
+    if (want && hashes[kind].digest('hex') !== want) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
+  }
 };
+
+/** Runs a program without blocking the event loop (parallel downloads keep going); resolves with its exit code. */
+export const spawnAsync = (file: string, args: string[], options: import('node:child_process').SpawnOptions = {}): Promise<number> => new Promise((resolve, reject) => {
+  const child = spawn(file, args, { stdio: 'ignore', windowsHide: true, ...options });
+  child.once('error', reject);
+  child.once('close', (code) => resolve(code ?? -1));
+});
 
 export const sha256File = (file: string): string => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
@@ -47,7 +70,13 @@ const toAsset = (asset: GithubRelease['assets'][number]): ReleaseAsset => ({ url
  * `searchOlder`, falls back to the newest stable release that still ships a matching asset (projects drop assets).
  */
 export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = false): Promise<ReleaseAsset> => {
-  const latest = await fetchJson<GithubRelease>('https://api.github.com/repos/' + repo + '/releases/latest');
+  let latest: GithubRelease;
+  try { latest = await fetchJson<GithubRelease>('https://api.github.com/repos/' + repo + '/releases/latest'); } catch (e) {
+    // The API allows 60 requests an hour per IP without a token; a first boot alone makes a dozen. The release page has
+    // the same assets and digests and no such limit.
+    if (!/HTTP (403|429)/.test(e instanceof Error ? e.message : '')) throw e;
+    return githubAssetFromPage(repo, pattern);
+  }
   const hit = latest.assets.find((a) => pattern.test(a.name));
   if (hit) return toAsset(hit);
   if (searchOlder) {
@@ -60,16 +89,36 @@ export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = f
   throw new Error('No asset matching ' + pattern + ' in the ' + (searchOlder ? 'stable' : 'latest') + ' ' + repo + ' release(s)');
 };
 
-/** Extracts .zip / .nupkg / .tar.gz with the tar.exe that ships with Windows, falling back to Expand-Archive. */
-export const extractArchive = (archive: string, destination: string): void => {
+/**
+ * Extracts .zip / .nupkg / .7z / .tar.gz with the tar.exe that ships with Windows, falling back to Expand-Archive.
+ * `members` limits it to those paths inside the archive (e.g. skip pgAdmin in the PostgreSQL zip).
+ */
+/** The latest release's assets from github.com itself (no API rate limit): each download link, then its sha256. */
+export const parseReleasePage = (html: string): ReleaseAsset[] => {
+  const links = [...html.matchAll(/href="(\/[^"]+\/releases\/download\/[^"]+)"/g)];
+  return links.map((link, i) => {
+    const digest = /sha256:([0-9a-f]{64})/.exec(html.slice(link.index, links[i + 1]?.index ?? html.length))?.[1] ?? null;
+    return { url: 'https://github.com' + link[1], name: decodeURIComponent(link[1].split('/').pop()!), sha256: digest };
+  });
+};
+
+const githubAssetFromPage = async (repo: string, pattern: RegExp): Promise<ReleaseAsset> => {
+  const latest = await fetchRetry('https://github.com/' + repo + '/releases/latest', {}, 2, 20000);
+  const tag = decodeURIComponent(latest.url.split('/releases/tag/')[1] ?? '');
+  if (!tag) throw new Error('Could not find the latest release of ' + repo);
+  const hit = parseReleasePage(await fetchText('https://github.com/' + repo + '/releases/expanded_assets/' + encodeURIComponent(tag))).find((a) => pattern.test(a.name));
+  return hit ?? Promise.reject(new Error('No asset matching ' + pattern + ' in ' + repo + ' ' + tag));
+};
+
+export const extractArchive = async (archive: string, destination: string, members: string[] = []): Promise<void> => {
   fs.mkdirSync(destination, { recursive: true });
-  let result = spawnSync(SYSTEM.tar(), ['-xf', archive, '-C', destination], { stdio: 'ignore', windowsHide: true });
-  if (result.status !== 0 && /\.(zip|nupkg)$/i.test(archive)) {
+  let status = await spawnAsync(SYSTEM.tar(), ['-xf', archive, '-C', destination, ...members]);
+  if (status !== 0 && /\.(zip|nupkg)$/i.test(archive)) {
     const zip = archive.endsWith('.zip') ? archive : archive + '.zip';
     if (zip !== archive) fs.copyFileSync(archive, zip);
-    result = spawnSync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destination.replace(/'/g, "''") + "' -Force"], { stdio: 'ignore', windowsHide: true });
+    status = await spawnAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destination.replace(/'/g, "''") + "' -Force"]);
   }
-  if (result.status !== 0) throw new Error('Could not extract ' + archive);
+  if (status !== 0) throw new Error('Could not extract ' + archive);
 };
 
 export const findFile = (root: string, name: string, maxDepth = 4): string | null => {
@@ -84,14 +133,13 @@ export const findFile = (root: string, name: string, maxDepth = 4): string | nul
  * Downloads + extracts into `destination` atomically (staging folder, then rename). With `locate`, only the folder holding
  * that file is kept (`up` folders above it, e.g. locate ruby.exe with up 1 keeps the folder around bin).
  */
-export const installArchive = async (url: string, destination: string, options: { sha256?: string | null; sha512?: string | null; locate?: string; up?: number; fileName?: string } = {}): Promise<void> => {
+export const installArchive = async (url: string, destination: string, options: { sha256?: string | null; sha512?: string | null; locate?: string; up?: number; fileName?: string; members?: string[] } = {}): Promise<void> => {
   const work = destination + '.staging-' + crypto.randomBytes(3).toString('hex');
   try {
     const archive = path.join(work, options.fileName ?? path.basename(new URL(url).pathname));
-    await download(url, archive, options.sha256);
-    if (options.sha512 && crypto.createHash('sha512').update(fs.readFileSync(archive)).digest('hex') !== options.sha512.trim().toLowerCase()) throw new Error('Checksum mismatch for ' + url);
+    await download(url, archive, { sha256: options.sha256, sha512: options.sha512 });
     const extracted = path.join(work, 'x');
-    extractArchive(archive, extracted);
+    await extractArchive(archive, extracted, options.members);
     let root = extracted;
     if (options.locate) {
       const found = findFile(extracted, options.locate);

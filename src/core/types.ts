@@ -38,10 +38,14 @@ export interface HostProbe {
   nvmNode?: boolean;
 }
 
-export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number }
+/** A database the sandbox runs, and why ("compose.yaml: a compose service runs Postgres"). */
+export interface DatabasePlan { database: 'postgres' | 'mysql' | 'sqlserver' | 'mongodb' | 'redis' | 'dynamodb'; reasons: string[]; version: string; port: number; adminPort?: number }
+
+/** databases: the plan to use instead of scanning the workspace (tests). */
+export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[] }
 export interface Generated {
   wsbPath: string; launchPath: string; launchId: string; sessionPath: string; memoryMb: number;
-  mappings: ResolvedMapping[]; profile: ProfileResult;
+  mappings: ResolvedMapping[]; profile: ProfileResult; databases: DatabasePlan[];
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult { hostDir: string | null; staged: string[]; skipped: string[]; credentials: boolean; secretsRemoved: string[] }
@@ -51,7 +55,7 @@ export interface GuestSession {
   launchId: string; project: string; workspace: string; workspaceHost: string;
   harnessName: string; harness: Harness | null; harnessArguments: string[];
   persistAgentState: boolean; networking: boolean; headless: boolean;
-  network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; versions: ToolVersions;
+  network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; databases: DatabasePlan[]; versions: ToolVersions;
   attach: Config['attach']; hooks: Config['hooks'];
   /** nodeVersion: this PC's Node (e.g. 22.11.0), found under nvm\v<version> when nvm is mapped, else under node. */
   hostTools: { node: boolean; nodeVersion: string | null; harnessExecutable: string | null; git: boolean; nvm: boolean };

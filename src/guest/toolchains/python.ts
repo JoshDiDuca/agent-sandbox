@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains, ToolVersions } from '../../core/types.js';
 import { fetchJson, installArchive } from '../../shared/download.js';
-import { dryRun, exec, exists, log, mkdirp } from '../env.js';
+import { dryRun, execAsync, exists, log, mkdirp } from '../env.js';
 import { resolveCached, tool, type ToolEnv } from './common.js';
 import { pickPackageVersion } from './versions.js';
 
@@ -20,7 +20,7 @@ const installPython = async (pkg: Package, spec: string): Promise<string> => {
     log('Downloading ' + pkg + ' ' + version + ' ...');
     await installArchive('https://api.nuget.org/v3-flatcontainer/' + pkg + '/' + version + '/' + pkg + '.' + version + '.nupkg', dir, { locate: 'python.exe', fileName: pkg + '.' + version + '.zip' });
   }
-  if (!exists(path.join(dir, 'Scripts', 'pip.exe')) && !exists(path.join(dir, 'Scripts', 'pip2.exe'))) exec(exe, ['-m', 'ensurepip', '--default-pip'], { stdio: 'ignore' });
+  if (!exists(path.join(dir, 'Scripts', 'pip.exe')) && !exists(path.join(dir, 'Scripts', 'pip2.exe'))) await execAsync(exe, ['-m', 'ensurepip', '--default-pip'], { stdio: 'ignore' });
   return dir;
 };
 

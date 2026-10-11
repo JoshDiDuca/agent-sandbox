@@ -42,6 +42,19 @@ const setupJdk = async (env: ToolEnv, config: Toolchains['java']): Promise<void>
   env.summary.push('java: ' + release + ' (Temurin, from ' + source + ')');
 };
 
+/**
+ * A JDK for tools that run on Java (DynamoDB Local): the newest one already installed, else the newest LTS. Returns its
+ * folder; the agent's Java on PATH stays whatever toolchains.java says.
+ */
+export const ensureJdk = async (): Promise<string> => {
+  const root = tool('java');
+  const installed = exists(root) ? fs.readdirSync(root).filter((d) => exists(path.join(root, d, 'bin', 'java.exe'))).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) : [];
+  if (installed.length) return path.join(root, installed[0]);
+  const scratch: ToolEnv = { vars: {}, prepend: [], append: [], summary: [] };
+  await setupJdk(scratch, { enabled: true, version: 'lts', maven: false, gradle: false });
+  return scratch.vars.JAVA_HOME;
+};
+
 const setupMaven = async (env: ToolEnv): Promise<void> => {
   const version = await resolveCached('maven:3', async () => {
     const versions = [...(await fetchText(MAVEN + 'maven-metadata.xml')).matchAll(/<version>([^<]+)<\/version>/g)].map((m) => m[1]);

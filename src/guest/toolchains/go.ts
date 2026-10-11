@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { fetchJson, installArchive } from '../../shared/download.js';
-import { dryRun, exec, exists, log } from '../env.js';
+import { dryRun, execAsync, exists, log } from '../env.js';
 import { arch, installOnce, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
 import { pickGoRelease, type GoRelease } from './versions.js';
 
@@ -29,5 +29,5 @@ export const setupGo = async (env: ToolEnv, config: Toolchains['go']): Promise<v
   env.prepend.push(path.join(root, 'bin'), vars.GOBIN);
   const go = path.join(root, 'bin', 'go.exe');
   env.summary.push('go: ' + versionOf(go, ['version']));
-  installOnce(env, 'go', config.tools, (pkg) => exec(go, ['install', pkg.includes('@') ? pkg : pkg + '@latest'], { env: { ...process.env, ...vars } }));
+  await installOnce(env, 'go', config.tools, (pkg) => execAsync(go, ['install', pkg.includes('@') ? pkg : pkg + '@latest'], { env: { ...process.env, ...vars } }));
 };

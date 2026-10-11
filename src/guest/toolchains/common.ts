@@ -2,7 +2,7 @@
 // boot downloads; later boots only put things on PATH.
 import fs from 'node:fs';
 import path from 'node:path';
-import { errMsg, execOutput, exists, log, setSandboxStatus, toolsDir, warn, workspace } from '../env.js';
+import { errMsg, execOutput, exists, log, toolsDir, warn, workspace } from '../env.js';
 import { projectUses, specFromVersionFile } from './versions.js';
 
 /** What the toolchains contribute to the agent's environment. */
@@ -42,7 +42,6 @@ export const resolveCached = async (key: string, resolve: () => Promise<string>)
 
 /** Runs one installer; a failure is reported and skipped so it never blocks the other toolchains. */
 export const step = async (name: string, env: ToolEnv, work: () => Promise<void>): Promise<void> => {
-  setSandboxStatus('provisioning', 'Setting up ' + name);
   try { await work(); } catch (e) { warn(name + ' setup failed (continuing without it): ' + errMsg(e)); env.summary.push(name + ': FAILED'); }
 };
 
@@ -99,12 +98,12 @@ const installed = (): Record<string, string> => { try { return JSON.parse(fs.rea
  * Installs each package that is not installed yet (remembered in tools\installed-packages.json under `group`, e.g.
  * "npm@22.11.0"). One failing package is reported and skipped; it is tried again next boot.
  */
-export const installOnce = (env: ToolEnv, group: string, packages: string[], install: (pkg: string) => void): void => {
+export const installOnce = async (env: ToolEnv, group: string, packages: string[], install: (pkg: string) => void | Promise<void>): Promise<void> => {
   const todo = packages.filter((p) => !installed()[group + ':' + p]);
   for (const pkg of todo) {
     try {
       log('Installing ' + pkg + ' (' + group + ') ...');
-      install(pkg);
+      await install(pkg);
       fs.writeFileSync(installedFile(), JSON.stringify({ ...installed(), [group + ':' + pkg]: new Date().toISOString() }, null, 2));
     } catch (e) { warn(group + ' package ' + pkg + ' failed: ' + errMsg(e)); }
   }

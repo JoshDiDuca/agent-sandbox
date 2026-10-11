@@ -2,11 +2,10 @@
 // tools need. Gems and Composer's global packages live in persistent storage.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import type { Toolchains } from '../../core/types.js';
-import { download, fetchJson, fetchText, installArchive } from '../../shared/download.js';
+import { download, fetchJson, fetchText, installArchive, spawnAsync } from '../../shared/download.js';
 import { SYSTEM } from '../../shared/system.js';
-import { dryRun, exec, execOutput, exists, log, mkdirp } from '../env.js';
+import { dryRun, execAsync, execOutput, exists, log, mkdirp } from '../env.js';
 import { installOnce, resolveCached, tool, versionFromFiles, versionOf, type ToolEnv } from './common.js';
 import { pickPackageVersion } from './versions.js';
 
@@ -34,7 +33,7 @@ export const setupVcRuntime = async (env: ToolEnv): Promise<void> => {
     if (!/O=Microsoft Corporation/.test(signer)) { fs.rmSync(installer, { force: true }); throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)'); }
     log('Installing the Visual C++ runtime ...');
     // 1638: a newer version is already installed; 3010: installed, a restart would finish it (not needed for the DLLs).
-    const code = spawnSync(installer, ['/install', '/quiet', '/norestart'], { windowsHide: true, stdio: 'ignore' }).status;
+    const code = await spawnAsync(installer, ['/install', '/quiet', '/norestart']);
     if (![0, 1638, 3010].includes(code ?? -1) || !exists(path.join(system32, 'vcruntime140.dll'))) throw new Error('the Visual C++ runtime installer failed (exit ' + code + ')');
   }
   env.summary.push('vc++ runtime: installed');
@@ -73,7 +72,7 @@ export const setupRuby = async (env: ToolEnv, config: Toolchains['ruby']): Promi
   env.prepend.push(path.join(home, 'bin'), path.join(gems, 'bin'));
   env.summary.push('ruby: ' + versionOf(path.join(home, 'bin', 'ruby.exe')) + ' (from ' + wantedSpec.source + '; gems with C extensions need MSYS2, not included)');
   const gem = path.join(home, 'bin', 'gem.cmd');
-  installOnce(env, 'gem@' + version, config.gems, (pkg) => exec(SYSTEM.cmd(), ['/d', '/c', gem, 'install', pkg, '--no-document'], { env: { ...process.env, GEM_HOME: gems } }));
+  await installOnce(env, 'gem@' + version, config.gems, (pkg) => execAsync(SYSTEM.cmd(), ['/d', '/c', gem, 'install', pkg, '--no-document'], { env: { ...process.env, GEM_HOME: gems } }));
 };
 
 // ---- PHP -------------------------------------------------------------------------------------------------------------

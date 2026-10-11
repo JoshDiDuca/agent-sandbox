@@ -90,6 +90,9 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
     ['Node', run.versions.node.spec + ' (' + run.versions.node.source + ')   Python: ' + run.versions.python.spec + ' (' + run.versions.python.source + ')'],
     ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
+    ...(generated.databases.length
+      ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; see hostAccess.forwards)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])
+      : [['Databases', 'none needed (databases.<name>.enabled = true adds one)']]),
     ['Desktop', generated.personalization],
     ['Claude', generated.profile.staged.length ? generated.profile.staged.join(', ') + (generated.profile.credentials ? '  (INCLUDING YOUR LOGIN)' : '') : 'no settings copied'],
     ['Secrets', !config.secrets.strip ? 'NOT stripped (secrets.strip is off)' : generated.profile.secretsRemoved.length ? 'kept on this PC: ' + generated.profile.secretsRemoved.join(', ') + '  (secrets.allow lets one through)' : 'none found in what is copied'],

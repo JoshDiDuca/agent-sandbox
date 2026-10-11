@@ -574,6 +574,175 @@
       },
       "additionalProperties": false
     },
+    "databases": {
+      "type": "object",
+      "properties": {
+        "postgres": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "PostgreSQL (with psql, pg_dump). User postgres, no password, localhost only: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"latest\" or a major version such as \"16\". A compose file pinning postgres:<major> wins."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Port inside the sandbox."
+            }
+          },
+          "additionalProperties": false
+        },
+        "mysql": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "MySQL-compatible database (MariaDB). User root, no password, localhost only: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"lts\" (newest MariaDB LTS) or a MariaDB series such as \"11.4\"."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Port inside the sandbox."
+            }
+          },
+          "additionalProperties": false
+        },
+        "mongodb": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "MongoDB with mongosh, localhost only: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"latest\" or a version prefix such as \"8.0\"."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Port inside the sandbox."
+            }
+          },
+          "additionalProperties": false
+        },
+        "redis": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Redis (community Windows build), localhost only: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Port inside the sandbox."
+            }
+          },
+          "additionalProperties": false
+        },
+        "dynamodb": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "DynamoDB Local (Amazon's official emulator, on the Java toolchain) with dynamodb-admin, a web UI to browse and edit tables: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "DynamoDB endpoint port inside the sandbox (http://localhost:<port>)."
+            },
+            "adminPort": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "dynamodb-admin web UI port (open http://localhost:<adminPort> in the sandbox's browser)."
+            },
+            "admin": {
+              "type": "boolean",
+              "description": "Run dynamodb-admin next to DynamoDB Local."
+            }
+          },
+          "additionalProperties": false
+        },
+        "sqlserver": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a hint to reach the one on this PC through hostAccess.forwards: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "attach": {
       "type": "object",
       "properties": {

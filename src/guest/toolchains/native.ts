@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { download, fetchJson, githubAsset, installArchive } from '../../shared/download.js';
 import { SYSTEM } from '../../shared/system.js';
-import { dryRun, errMsg, exec, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
+import { dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
 import { arch, installOnce, tool, versionOf, type ToolEnv } from './common.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */
@@ -65,20 +65,21 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
     const init = tool('rust', 'rustup-init.exe');
     log('Downloading rustup ...');
     await download('https://static.rust-lang.org/rustup/dist/' + (arch === 'arm64' ? 'aarch64' : 'x86_64') + '-pc-windows-msvc/rustup-init.exe', init);
-    exec(init, ['-y', '--no-modify-path', '--profile', 'default', '--default-host', config.host, '--default-toolchain', config.toolchain], rustEnv);
+    await execAsync(init, ['-y', '--no-modify-path', '--profile', 'default', '--default-host', config.host, '--default-toolchain', config.toolchain], rustEnv);
   } else {
-    exec(rustup, ['default', config.toolchain], { ...rustEnv, stdio: 'ignore' });
-    if (refresh) exec(rustup, ['update'], rustEnv);
+    await execAsync(rustup, ['default', config.toolchain], { ...rustEnv, stdio: 'ignore' });
+    if (refresh) await execAsync(rustup, ['update'], rustEnv);
   }
   Object.assign(env.vars, { RUSTUP_HOME, CARGO_HOME });
   env.prepend.push(path.join(CARGO_HOME, 'bin'));
   env.summary.push('rust: ' + versionOf(path.join(CARGO_HOME, 'bin', 'rustc.exe'), ['--version'], rustEnv) + ' [' + config.host + ']');
   const toolchainKey = 'rustup@' + config.toolchain;
-  installOnce(env, toolchainKey + ' components', config.components, (c) => exec(rustup, ['component', 'add', c], rustEnv));
-  installOnce(env, toolchainKey + ' targets', config.targets, (t) => exec(rustup, ['target', 'add', t], rustEnv));
-  // cargo install builds with the GNU linker from the C/C++ toolchain, which is on the agent's PATH, not ours yet.
-  const cargoEnv = { env: { ...rustEnv.env, ...env.vars, PATH: [path.join(CARGO_HOME, 'bin'), ...env.prepend, process.env.PATH ?? '', ...env.append].join(path.delimiter) } };
-  installOnce(env, 'cargo', config.crates, (c) => exec(path.join(CARGO_HOME, 'bin', 'cargo.exe'), ['install', '--locked', c], cargoEnv));
+  await installOnce(env, toolchainKey + ' components', config.components, (c) => execAsync(rustup, ['component', 'add', c], rustEnv));
+  await installOnce(env, toolchainKey + ' targets', config.targets, (t) => execAsync(rustup, ['target', 'add', t], rustEnv));
+  // cargo install links with MinGW's gcc (the C/C++ step runs first), which is on the agent's PATH, not ours yet.
+  const mingw = tool('mingw', 'mingw64', 'bin');
+  const cargoEnv = { env: { ...rustEnv.env, CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: path.join(mingw, 'gcc.exe'), PATH: [path.join(CARGO_HOME, 'bin'), mingw, process.env.PATH ?? ''].join(path.delimiter) } };
+  await installOnce(env, 'cargo', config.crates, (c) => execAsync(path.join(CARGO_HOME, 'bin', 'cargo.exe'), ['install', '--locked', c], cargoEnv));
 };
 
 /** .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker. */
@@ -96,7 +97,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   for (const [key, args] of installs.filter(([k]) => !done[k])) {
     if (!exists(script) || refresh) await download('https://dot.net/v1/dotnet-install.ps1', script);
     log('Installing .NET SDK (' + key + ') ...');
-    exec(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
+    await execAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
     done[key] = true;
     fs.writeFileSync(marker, JSON.stringify(done, null, 2));
   }
@@ -106,10 +107,10 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   env.summary.push('dotnet: ' + execOutput(path.join(root, 'dotnet.exe'), ['--list-sdks']).split(/\r?\n/).map((l) => l.split(' ')[0]).filter(Boolean).join(', '));
   const dotnet = path.join(root, 'dotnet.exe');
   const dotnetEnv = { env: { ...process.env, ...env.vars, PATH: root + path.delimiter + (process.env.PATH ?? '') } };
-  installOnce(env, 'dotnet workload', config.workloads, (w) => exec(dotnet, ['workload', 'install', w, '--skip-manifest-update'], dotnetEnv));
-  installOnce(env, 'dotnet tool', config.tools, (t) => exec(dotnet, ['tool', 'install', '--global', t], dotnetEnv));
+  await installOnce(env, 'dotnet workload', config.workloads, (w) => execAsync(dotnet, ['workload', 'install', w, '--skip-manifest-update'], dotnetEnv));
+  await installOnce(env, 'dotnet tool', config.tools, (t) => execAsync(dotnet, ['tool', 'install', '--global', t], dotnetEnv));
   await setupFrameworkReferences(env, config.frameworkTargets);
-  if (config.netfx35) setupNetFx35(env);
+  if (config.netfx35) await setupNetFx35(env);
 };
 
 /**
@@ -142,11 +143,11 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
 };
 
 /** .NET Framework 3.5 is a Windows feature the sandbox image lacks; DISM fetches it from Windows Update on every boot. */
-const setupNetFx35 = (env: ToolEnv): void => {
+const setupNetFx35 = async (env: ToolEnv): Promise<void> => {
   if (execOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v3.5', '/v', 'Install']).includes('0x1')) { env.summary.push('.NET Framework 3.5: on'); return; }
   log('Enabling .NET Framework 3.5 (downloads from Windows Update, a few minutes) ...');
   try {
-    exec(SYSTEM.dism(), ['/Online', '/Enable-Feature', '/FeatureName:NetFx3', '/All', '/NoRestart', '/Quiet'], { stdio: 'ignore' });
+    await execAsync(SYSTEM.dism(), ['/Online', '/Enable-Feature', '/FeatureName:NetFx3', '/All', '/NoRestart', '/Quiet'], { stdio: 'ignore' });
     env.summary.push('.NET Framework 3.5: on');
   } catch (e) { warn('.NET Framework 3.5 could not be enabled: ' + errMsg(e)); env.summary.push('.NET Framework 3.5: FAILED'); }
 };

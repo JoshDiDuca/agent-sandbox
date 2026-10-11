@@ -1,7 +1,8 @@
 // Shared state for the guest scripts (main, daemon, view): fixed paths, the session description, logging, status.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
+import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
+import { spawnAsync } from '../shared/download.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { SYSTEM } from '../shared/system.js';
@@ -49,6 +50,12 @@ export const exec = (file: string, args: string[], options: SpawnSyncOptions = {
   const result = spawnSync(file, args, { stdio: 'inherit', windowsHide: true, ...options });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(path.basename(file) + ' ' + args.slice(0, 3).join(' ') + ' failed with exit code ' + result.status);
+};
+
+/** exec without blocking: other toolchains keep downloading while this one runs an installer. */
+export const execAsync = async (file: string, args: string[], options: SpawnOptions = {}): Promise<void> => {
+  const code = await spawnAsync(file, args, { stdio: 'inherit', ...options });
+  if (code !== 0) throw new Error(path.basename(file) + ' ' + args.slice(0, 3).join(' ') + ' failed with exit code ' + code);
 };
 
 export const execOutput = (file: string, args: string[], options: SpawnSyncOptions = {}): string => {

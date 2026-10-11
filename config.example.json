@@ -116,6 +116,36 @@
     },
     "environment": {}
   },
+  "databases": {
+    "postgres": {
+      "enabled": "auto",
+      "version": "latest",
+      "port": 5432
+    },
+    "mysql": {
+      "enabled": "auto",
+      "version": "lts",
+      "port": 3306
+    },
+    "mongodb": {
+      "enabled": "auto",
+      "version": "latest",
+      "port": 27017
+    },
+    "redis": {
+      "enabled": "auto",
+      "port": 6379
+    },
+    "dynamodb": {
+      "enabled": "auto",
+      "port": 8000,
+      "adminPort": 8001,
+      "admin": true
+    },
+    "sqlserver": {
+      "enabled": "auto"
+    }
+  },
   "attach": {
     "enabled": true,
     "reuseSession": true

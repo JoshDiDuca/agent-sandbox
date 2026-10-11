@@ -7,6 +7,7 @@ import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
 import { assertSafeMapping } from '../core/workspace.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
+import { planDatabases } from './project-scan.js';
 import { dirExists, ensureDir, fail, fileExists, homeDir, writeJson, xmlEscape } from '../core/util.js';
 
 export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools' } as const;
@@ -123,6 +124,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   const identity = fileExists(gitconfig) ? gitIdentity(fs.readFileSync(gitconfig, 'utf8')) : '';
   if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
+  const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
 
   const session: GuestSession = {
     launchId,
@@ -138,6 +140,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     network: config.network,
     provisioning: config.provisioning,
     toolchains: config.toolchains,
+    databases,
     versions: o.run.versions,
     attach: config.attach,
     hooks: config.hooks,
@@ -152,5 +155,5 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases };
 };

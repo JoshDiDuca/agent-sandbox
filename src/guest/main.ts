@@ -53,7 +53,7 @@ const main = async (): Promise<void> => {
 
   const gitAccess = session.provisioning.git.access ?? 'full';
   step(3, 'Toolchains (Git, nvm/Node, Python, Rust, .NET, Bun, uv)');
-  const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh });
+  const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [] });
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
   for (const line of tools.summary) log('  ' + line);

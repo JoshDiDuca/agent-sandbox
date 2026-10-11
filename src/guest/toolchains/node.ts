@@ -2,10 +2,10 @@
 // the sandbox's own disk (C:\nvm\nodejs), because a symlink inside a mapped folder would point at the host's paths.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import type { Toolchains, ToolVersions } from '../../core/types.js';
 import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
-import { copyNode, dryRun, errMsg, exec, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
+import { copyNode, dryRun, errMsg, execAsync, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
 import { arch, installOnce, resolveCached, tool, type ToolEnv } from './common.js';
 import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
 
@@ -27,10 +27,15 @@ const resolveNode = (spec: string): Promise<string> => resolveCached('node:' + s
   return pickNodeVersion(releases, spec) ?? Promise.reject(new Error('No Node.js release matches "' + spec + '"'));
 });
 
-const nvm = (args: string[]): string => {
-  const result = spawnSync(path.join(NVM_HOME, 'nvm.exe'), args, { encoding: 'utf8', windowsHide: true, env: { ...process.env, NVM_HOME, NVM_SYMLINK } });
-  return (result.stdout ?? '') + (result.stderr ?? '');
-};
+/** nvm, without blocking the event loop (`nvm install` downloads). Resolves with its output. */
+const nvm = (args: string[]): Promise<string> => new Promise((resolve) => {
+  const child = spawn(path.join(NVM_HOME, 'nvm.exe'), args, { windowsHide: true, env: { ...process.env, NVM_HOME, NVM_SYMLINK } });
+  let out = '';
+  child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+  child.stderr.on('data', (d: Buffer) => { out += d.toString(); });
+  child.once('error', (e) => resolve(out + e.message));
+  child.once('close', () => resolve(out));
+});
 
 /** nvm itself: copied from the host's nvm when there is one, else the portable build. */
 const ensureNvm = async (): Promise<void> => {
@@ -48,18 +53,18 @@ const ensureNvm = async (): Promise<void> => {
 };
 
 /** A Node version: from the host's nvm when it has it (fast, offline), else `nvm install`. */
-const installNodeVersion = (version: string): void => {
+const installNodeVersion = async (version: string): Promise<void> => {
   const dir = path.join(NVM_HOME, 'v' + version);
   const fromHost = path.join(HOST_NVM, 'v' + version);
   if (exists(path.join(dir, 'node.exe'))) return;
   if (exists(path.join(fromHost, 'node.exe'))) { log('Copying Node ' + version + ' from this PC\'s nvm (without global packages) ...'); copyNode(fromHost, dir); return; }
   log('nvm install ' + version + ' ...');
-  const out = nvm(['install', version]);
+  const out = await nvm(['install', version]);
   if (!exists(path.join(dir, 'node.exe'))) throw new Error('nvm install ' + version + ' failed: ' + out.trim().split('\n').slice(-2).join(' '));
 };
 
-const activate = (version: string): void => {
-  nvm(['use', version]);
+const activate = async (version: string): Promise<void> => {
+  await nvm(['use', version]);
   if (exists(path.join(NVM_SYMLINK, 'node.exe'))) return;
   fs.rmSync(NVM_SYMLINK, { recursive: true, force: true });
   fs.symlinkSync(path.join(NVM_HOME, 'v' + version), NVM_SYMLINK, 'junction');
@@ -71,34 +76,34 @@ export const setupNode = async (env: ToolEnv, versions: ToolVersions, config: To
   fs.writeFileSync(path.join(NVM_HOME, 'settings.txt'), ['root: ' + NVM_HOME, 'path: ' + NVM_SYMLINK, 'arch: ' + (arch === 'arm64' ? 'arm64' : '64'), 'proxy: none', ''].join('\r\n'));
   mkdirp(localDir);
   for (const extra of versions.nodeExtra) {
-    try { installNodeVersion(await resolveNode(extra)); } catch (e) { warn('Extra Node ' + extra + ': ' + errMsg(e)); }
+    try { await installNodeVersion(await resolveNode(extra)); } catch (e) { warn('Extra Node ' + extra + ': ' + errMsg(e)); }
   }
   const main = await resolveNode(versions.node.spec);
-  installNodeVersion(main);
+  await installNodeVersion(main);
   // A few more of this PC's versions (copied, never downloaded) so `nvm use` works offline; capped to keep boot fast.
   for (const version of pickSpreadVersions(hostNvmVersions(), main, HOST_VERSIONS_MAX).slice(1)) {
-    try { installNodeVersion(version); } catch (e) { warn('Node ' + version + ' from this PC: ' + errMsg(e)); }
+    try { await installNodeVersion(version); } catch (e) { warn('Node ' + version + ' from this PC: ' + errMsg(e)); }
   }
-  activate(main);
+  await activate(main);
   Object.assign(env.vars, { NVM_HOME, NVM_SYMLINK });
   env.prepend.push(NVM_HOME, NVM_SYMLINK);
   env.summary.push('node: ' + main + ' (from ' + versions.node.source + ', switch with nvm use)');
-  packageManagers(env, config, main);
+  await packageManagers(env, config, main);
 };
 
 /** Global npm packages (per Node version, like nvm keeps them) and pnpm/yarn through corepack. */
-const packageManagers = (env: ToolEnv, config: Toolchains['node'], version: string): void => {
+const packageManagers = async (env: ToolEnv, config: Toolchains['node'], version: string): Promise<void> => {
   const dir = path.join(NVM_HOME, 'v' + version);
   const nodeEnv = { ...process.env, PATH: dir + path.delimiter + (process.env.PATH ?? '') };
-  const npm = (args: string[]): void => exec(path.join(dir, 'node.exe'), [path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), ...args], { env: nodeEnv, stdio: 'ignore' });
+  const npm = (args: string[]): Promise<void> => execAsync(path.join(dir, 'node.exe'), [path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), ...args], { env: nodeEnv, stdio: 'ignore' });
   const corepackJs = path.join(dir, 'node_modules', 'corepack', 'dist', 'corepack.js');
   // Versions copied from this PC come without their global packages, corepack included, and Node 25+ dropped it.
   const extra = config.corepack && !exists(corepackJs) ? ['corepack'] : [];
-  installOnce(env, 'npm@' + version, [...extra, ...config.globalPackages], (pkg) => npm(['install', '--global', pkg, '--no-fund', '--no-audit']));
+  await installOnce(env, 'npm@' + version, [...extra, ...config.globalPackages], (pkg) => npm(['install', '--global', pkg, '--no-fund', '--no-audit']));
   if (!config.corepack) return;
   Object.assign(env.vars, { COREPACK_HOME: tool('corepack'), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' });
   try {
-    exec(path.join(dir, 'node.exe'), [corepackJs, 'enable', '--install-directory', mkdirp(tool('bin')), 'pnpm', 'yarn'], { env: nodeEnv, stdio: 'ignore' });
+    await execAsync(path.join(dir, 'node.exe'), [corepackJs, 'enable', '--install-directory', mkdirp(tool('bin')), 'pnpm', 'yarn'], { env: nodeEnv, stdio: 'ignore' });
     env.summary.push('pnpm, yarn: via corepack (package.json "packageManager" picks the version)');
   } catch (e) { warn('corepack enable failed: ' + errMsg(e)); }
 };
