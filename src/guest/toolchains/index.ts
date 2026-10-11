@@ -8,6 +8,7 @@ import { DATABASE_NAMES, setupDatabase } from './databases.js';
 import { setupGit } from './git.js';
 import { setupGo } from './go.js';
 import { setupJava } from './java.js';
+import { setupPyenv, setupVolta, wantsPyenv, wantsVolta } from './managers.js';
 import { setupNode } from './node.js';
 import { setupPython } from './python.js';
 import { setupCpp, setupDotnet, setupMesa, setupRust } from './native.js';
@@ -37,8 +38,11 @@ const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOptions): 
   const java = wanted(config.java.enabled, 'java');
   return [
     { name: 'Git', on: o.gitEnabled, run: (env) => setupGit(env, o.hostGit, o.refresh, o.gitAccess) },
+    // Before Node: with package.json pins, Volta's node/npm/pnpm/yarn come first on PATH.
+    { name: 'Volta', on: wantsVolta(config.node.volta), run: (env) => setupVolta(env) },
     { name: 'Node ' + versions.node.spec, on: true, run: (env) => setupNode(env, versions, config.node) },
     { name: 'Python', on: wanted(config.python.enabled, 'python'), run: (env) => setupPython(env, config.python, versions) },
+    { name: 'pyenv-win', on: wanted(config.python.enabled, 'python') && wantsPyenv(config.python.pyenv), run: (env) => setupPyenv(env) },
     { name: 'C/C++', on: wanted(config.cpp.enabled, 'cpp') || wanted(config.rust.enabled, 'rust'), run: (env) => setupCpp(env, config.cpp) },
     { name: 'Rust', on: wanted(config.rust.enabled, 'rust'), after: ['C/C++'], run: (env) => setupRust(env, config.rust, o.refresh) },
     { name: '.NET', on: wanted(config.dotnet.enabled, 'dotnet'), run: (env) => setupDotnet(env, config.dotnet, o.refresh) },

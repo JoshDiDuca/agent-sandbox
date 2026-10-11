@@ -41,6 +41,8 @@ export const probeHost = (config: Config, harnessName: string): HostProbe => {
     nvmDir,
     hostNodeVersion: process.version,
     nvmNode,
+    volta: Boolean(process.env.VOLTA_HOME),
+    pyenv: Boolean(process.env.PYENV ?? process.env.PYENV_ROOT ?? process.env.PYENV_HOME),
   };
 };
 

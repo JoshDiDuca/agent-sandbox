@@ -16,8 +16,8 @@ export const DEFAULTS: Config = {
   network: { blockPrivateRanges: true },
   provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },
   toolchains: {
-    node: { version: 'host', extraVersions: [], corepack: true, globalPackages: [] },
-    python: { enabled: true, version: '3', python2: true, tools: [] },
+    node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },
+    python: { enabled: true, version: '3', python2: true, pyenv: 'auto', tools: [] },
     rust: { enabled: true, toolchain: 'stable', host: 'x86_64-pc-windows-gnu', components: [], targets: [], crates: [] },
     cpp: { enabled: true, flexBison: true },
     dotnet: { enabled: true, channels: ['LTS'], tools: [], workloads: [], frameworkTargets: ['net48', 'net472'], netfx35: false },

@@ -42,12 +42,14 @@
       "version": "host",
       "extraVersions": [],
       "corepack": true,
+      "volta": "auto",
       "globalPackages": []
     },
     "python": {
       "enabled": true,
       "version": "3",
       "python2": true,
+      "pyenv": "auto",
       "tools": []
     },
     "rust": {

@@ -144,7 +144,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     versions: o.run.versions,
     attach: config.attach,
     hooks: config.hooks,
-    hostTools: { node: Boolean(o.probe.nodeDir), nodeVersion: o.probe.nodeDir || o.probe.nvmNode ? o.probe.hostNodeVersion.replace(/^v/, '') : null, harnessExecutable: o.probe.harnessExe?.file ?? null, git: Boolean(o.probe.gitDir), nvm: Boolean(o.probe.nvmDir) },
+    hostTools: { node: Boolean(o.probe.nodeDir), nodeVersion: o.probe.nodeDir || o.probe.nvmNode ? o.probe.hostNodeVersion.replace(/^v/, '') : null, harnessExecutable: o.probe.harnessExe?.file ?? null, git: Boolean(o.probe.gitDir), nvm: Boolean(o.probe.nvmDir), volta: Boolean(o.probe.volta), pyenv: Boolean(o.probe.pyenv) },
     claudeProfile: { overwrite: config.claudeProfile.overwrite, items: profile.staged, credentials: profile.credentials, hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile), syncClaudeMem: config.claudeProfile.syncClaudeMem },
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
   };

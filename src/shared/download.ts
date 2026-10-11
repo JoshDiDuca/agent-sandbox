@@ -102,10 +102,15 @@ export const parseReleasePage = (html: string): ReleaseAsset[] => {
   });
 };
 
-const githubAssetFromPage = async (repo: string, pattern: RegExp): Promise<ReleaseAsset> => {
+/** The latest release's tag, from github.com's own redirect (no API, no rate limit). */
+export const latestGithubTag = async (repo: string): Promise<string> => {
   const latest = await fetchRetry('https://github.com/' + repo + '/releases/latest', {}, 2, 20000);
   const tag = decodeURIComponent(latest.url.split('/releases/tag/')[1] ?? '');
-  if (!tag) throw new Error('Could not find the latest release of ' + repo);
+  return tag || Promise.reject(new Error('Could not find the latest release of ' + repo));
+};
+
+const githubAssetFromPage = async (repo: string, pattern: RegExp): Promise<ReleaseAsset> => {
+  const tag = await latestGithubTag(repo);
   const hit = parseReleasePage(await fetchText('https://github.com/' + repo + '/releases/expanded_assets/' + encodeURIComponent(tag))).find((a) => pattern.test(a.name));
   return hit ?? Promise.reject(new Error('No asset matching ' + pattern + ' in ' + repo + ' ' + tag));
 };

@@ -72,12 +72,14 @@ const Toolchains = z.strictObject({
     version: z.string().min(1).describe('Default Node version for nvm. "host" = the Node on this PC. A project\'s .nvmrc / .node-version wins.'),
     extraVersions: Strings.describe('More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC\'s nvm, not counted towards that limit.'),
     corepack: z.boolean().describe('pnpm and yarn through corepack (a project\'s "packageManager" in package.json picks the version).'),
+    volta: Enabled.describe('Volta: true, false, or "auto" = when the project\'s package.json has "volta" pins or this PC uses Volta. With pins, Volta\'s node/npm/yarn/pnpm come first on PATH.'),
     globalPackages: Packages('npm packages installed globally into the default Node version', '["typescript", "npm-check-updates"]'),
   }),
   python: z.strictObject({
     enabled: enabled('Python 3 (CPython with pip).', 'pyproject.toml, requirements.txt, setup.py, Pipfile or .python-version'),
     version: z.string().min(1).describe('Python 3 version prefix, e.g. "3" or "3.12". A project\'s .python-version wins.'),
     python2: z.boolean().describe('Also install Python 2.7 as python2 / pip2.'),
+    pyenv: Enabled.describe('pyenv-win (pyenv install / local / global): true, false, or "auto" = when this PC uses pyenv. .python-version is honoured either way, and `uv python install` always works.'),
     tools: Packages('Python command-line tools installed with `uv tool install` (needs uv)', '["poetry", "ruff", "pre-commit"]'),
   }),
   rust: z.strictObject({

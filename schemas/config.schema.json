@@ -218,6 +218,18 @@
               "type": "boolean",
               "description": "pnpm and yarn through corepack (a project's \"packageManager\" in package.json picks the version)."
             },
+            "volta": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Volta: true, false, or \"auto\" = when the project's package.json has \"volta\" pins or this PC uses Volta. With pins, Volta's node/npm/yarn/pnpm come first on PATH."
+            },
             "globalPackages": {
               "type": "array",
               "items": {
@@ -251,6 +263,18 @@
             "python2": {
               "type": "boolean",
               "description": "Also install Python 2.7 as python2 / pip2."
+            },
+            "pyenv": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "pyenv-win (pyenv install / local / global): true, false, or \"auto\" = when this PC uses pyenv. .python-version is honoured either way, and `uv python install` always works."
             },
             "tools": {
               "type": "array",

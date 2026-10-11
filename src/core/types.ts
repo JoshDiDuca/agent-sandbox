@@ -36,6 +36,8 @@ export interface HostProbe {
   gitDir: string | null; nvmDir: string | null; hostNodeVersion: string;
   /** This PC's Node is one of nvm's versions, so it comes in with nvm and nodeDir stays unmapped. */
   nvmNode?: boolean;
+  /** This PC has Volta / pyenv-win (VOLTA_HOME / PYENV set). */
+  volta?: boolean; pyenv?: boolean;
 }
 
 /** A database the sandbox runs, and why ("compose.yaml: a compose service runs Postgres"). */
@@ -58,7 +60,8 @@ export interface GuestSession {
   network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; databases: DatabasePlan[]; versions: ToolVersions;
   attach: Config['attach']; hooks: Config['hooks'];
   /** nodeVersion: this PC's Node (e.g. 22.11.0), found under nvm\v<version> when nvm is mapped, else under node. */
-  hostTools: { node: boolean; nodeVersion: string | null; harnessExecutable: string | null; git: boolean; nvm: boolean };
+  /** volta / pyenv: this PC uses them (their "auto" settings turn them on in the sandbox too). */
+  hostTools: { node: boolean; nodeVersion: string | null; harnessExecutable: string | null; git: boolean; nvm: boolean; volta?: boolean; pyenv?: boolean };
   claudeProfile: { overwrite: boolean; items: string[]; credentials: boolean; hostConfigDir: string | null; syncClaudeMem: boolean };
   personalization: boolean;
 }
