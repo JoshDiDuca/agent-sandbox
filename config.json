@@ -1,7 +1,10 @@
 {
   "version": 2,
-  "defaultProject": "mw2-agent",
+  "_comment": "Tool-wide defaults. Run the tool from any folder: that folder is the sandbox workspace. A folder can override these with its own .sandbox-config.json (see .sandbox-config.example.json).",
   "defaultHarness": "claude",
+  "guestWorkspace": "C:\\Workspace",
+  "readOnly": false,
+  "mappings": [],
   "sandbox": {
     "memoryMb": "auto",
     "maxMemoryMb": 32768,
@@ -16,14 +19,11 @@
   },
   "storage": {
     "root": "F:\\AgentSandbox",
-    "persistAgentState": true
+    "persistAgentState": true,
+    "dataName": "mw2-agent"
   },
   "network": {
-    "blockPrivateRanges": true,
-    "publicDns": [
-      "1.1.1.1",
-      "8.8.8.8"
-    ]
+    "blockPrivateRanges": true
   },
   "provisioning": {
     "copyFromHost": true,
@@ -41,27 +41,19 @@
       "launchAgentInTerminal": false
     }
   },
-  "projects": {
-    "mw2-agent": {
-      "workspace": "F:\\AgentProjects\\mw2-agent",
-      "createWorkspace": true,
-      "guestWorkspace": "C:\\Workspace",
-      "readOnly": false,
-      "mappings": [
-        {
-          "host": "F:\\SteamLibrary\\steamapps\\common\\Call of Duty Modern Warfare 2",
-          "guest": "C:\\GameSources\\MW2",
-          "readOnly": true,
-          "optional": true
-        },
-        {
-          "host": "C:\\Steam\\Medal of Honor Allied Assault Warchest",
-          "guest": "C:\\GameSources\\MoHAA",
-          "readOnly": true,
-          "optional": true
-        }
-      ]
-    }
+  "claudeProfile": {
+    "enabled": true,
+    "hostDir": "auto",
+    "include": [
+      "settings.json",
+      "CLAUDE.md",
+      "commands",
+      "agents",
+      "skills"
+    ],
+    "globalStateFile": "auto",
+    "copyCredentials": false,
+    "overwrite": true
   },
   "harnesses": {
     "claude": {

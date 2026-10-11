@@ -25,31 +25,24 @@ function copyDirectory(source/*: string*/, destination/*: string*/)/*: void*/ {
 }
 
 export function generateSandbox(options/*: GenerateOptions*/)/*: Generated*/ {
-  const { projectRoot, config, base, projectName, harnessName } = options;
-  const project = config.projects[projectName];
-  if (!project) fail('Unknown project: ' + projectName);
+  const { projectRoot, config, base, dataName, harnessName, workspaceHost } = options;
   const harness = harnessName === 'none' ? null : config.harnesses[harnessName];
   if (harnessName !== 'none' && !harness) fail('Unknown harness: ' + harnessName);
-
-  const workspaceHost = options.workspaceOverride ? path.resolve(options.workspaceOverride) : expandPath(project.workspace, base);
-  if (!dirExists(workspaceHost)) {
-    if (options.workspaceOverride || !project.createWorkspace) fail('Workspace folder does not exist: ' + workspaceHost);
-    ensureDir(workspaceHost);
-  }
+  if (!dirExists(workspaceHost)) fail('Workspace folder does not exist: ' + workspaceHost);
   if (isRootPath(workspaceHost) || isUserProfile(workspaceHost)) fail('Refusing to map a drive root or your whole user profile as the workspace: ' + workspaceHost);
 
   const storageRoot = expandPath(config.storage.root, base);
   const launchPath = path.join(storageRoot, 'launches', Date.now() + '-' + crypto.randomBytes(3).toString('hex'));
-  const dataPath = path.join(storageRoot, 'data', projectName);
+  const dataPath = path.join(storageRoot, 'data', dataName);
   ensureDir(launchPath);
   ensureDir(dataPath);
 
   const mappings/*: ResolvedMapping[]*/ = [
     { host: launchPath, guest: 'C:\\AgentLaunch', readOnly: true },
     { host: dataPath, guest: 'C:\\AgentData', readOnly: false },
-    { host: workspaceHost, guest: project.guestWorkspace, readOnly: Boolean(project.readOnly) },
+    { host: workspaceHost, guest: config.guestWorkspace, readOnly: Boolean(config.readOnly) },
   ];
-  for (const m of project.mappings ?? []) {
+  for (const m of config.mappings) {
     const host = expandPath(m.host, base);
     if (!dirExists(host)) {
       if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
@@ -71,8 +64,8 @@ export function generateSandbox(options/*: GenerateOptions*/)/*: Generated*/ {
 
   const session = {
     version: 2,
-    project: projectName,
-    workspace: project.guestWorkspace,
+    project: path.basename(workspaceHost) || dataName,
+    workspace: config.guestWorkspace,
     harnessName,
     harness,
     harnessArguments: options.harnessArgs,
@@ -99,8 +92,8 @@ export function generateSandbox(options/*: GenerateOptions*/)/*: Generated*/ {
   ensureDir(extraHooks);
   options.scripts.forEach((script/*: string*/, index/*: number*/) => {
     const source = path.resolve(script);
-    if (!fs.existsSync(source)) fail('--script file not found: ' + source);
-    fs.copyFileSync(source, path.join(extraHooks, '90-cli-' + index + '-' + path.basename(source)));
+    if (!fs.existsSync(source)) fail('Script file not found: ' + source);
+    fs.copyFileSync(source, path.join(extraHooks, '90-extra-' + index + '-' + path.basename(source)));
   });
 
   const memoryMb = resolveMemoryMb(options);

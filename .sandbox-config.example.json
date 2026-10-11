@@ -1,0 +1,23 @@
+{
+  "_comment": "Copy this to <your project>/.sandbox-config.json. Every key is optional. Relative paths are relative to this file. The first time (and whenever the file changes) you are asked to approve it.",
+  "harness": "claude",
+  "sandbox": {
+    "memoryMb": "auto",
+    "networking": true
+  },
+  "mappings": [
+    {
+      "host": "F:\\SteamLibrary\\steamapps\\common\\Call of Duty Modern Warfare 2",
+      "guest": "C:\\GameSources\\MW2",
+      "readOnly": true,
+      "optional": true
+    },
+    {
+      "host": "C:\\Steam\\Medal of Honor Allied Assault Warchest",
+      "guest": "C:\\GameSources\\MoHAA",
+      "readOnly": true,
+      "optional": true
+    }
+  ],
+  "scripts": []
+}
