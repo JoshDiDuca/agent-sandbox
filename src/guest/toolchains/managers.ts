@@ -46,7 +46,9 @@ export const setupVolta = async (env: ToolEnv): Promise<void> => {
     try { await execAsync(volta, ['install', toolName + '@' + version], { env: { ...process.env, ...vars }, cwd: workspace, stdio: 'ignore' }); }
     catch (e) { warn('Volta could not install ' + toolName + '@' + version + ': ' + errMsg(e)); }
   }
-  env.summary.push('volta: ' + versionOf(volta) + (Object.keys(pins).length ? ' (pins from package.json: ' + Object.entries(pins).map(([k, v]) => k + '@' + v).join(', ') + ')' : ' (no pins in this project; nvm\'s node is the default)'));
+  const pinned = Object.entries(pins).map(([k, v]) => k + '@' + v);
+  const note = pinned.length ? ' (pins from package.json: ' + pinned.join(', ') + ')' : ' (no pins in this project; nvm\'s node is the default)';
+  env.summary.push('volta: ' + versionOf(volta) + note);
 };
 
 /**
