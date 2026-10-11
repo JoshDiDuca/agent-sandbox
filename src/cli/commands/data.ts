@@ -88,10 +88,29 @@ export const collectDataEntries = (dataPath: string, storageRoot: string): DataE
 
 const AREA_LABEL: Record<DataArea, string> = { tools: 'Toolchains', databases: 'Databases', state: 'Agent state', logs: 'Logs', data: 'Other', host: 'On this PC' };
 
+export interface DiskUsage { drive: string; totalBytes: number; freeBytes: number; usedBytes: number; holdsStorage: boolean }
+
+/** Every local drive's size and free space, and which one holds the sandbox storage. */
+export const diskUsage = (storageRoot: string): DiskUsage[] => {
+  const storageDrive = path.parse(path.resolve(storageRoot)).root.toUpperCase();
+  return 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((letter) => letter + ':\\').flatMap((drive): DiskUsage[] => {
+    try {
+      const s = fs.statfsSync(drive);
+      const totalBytes = s.blocks * s.bsize;
+      if (!totalBytes) return [];
+      return [{ drive, totalBytes, freeBytes: s.bavail * s.bsize, usedBytes: totalBytes - s.bfree * s.bsize, holdsStorage: drive.toUpperCase() === storageDrive }];
+    } catch { return []; }
+  });
+};
+
 export const dataInfo = (ctx: Context): number => {
   const entries = collectDataEntries(ctx.dataPath, ctx.storageRoot);
   const total = _.sumBy(entries, 'bytes');
-  if (printJson(ctx, { dataPath: ctx.dataPath, storageRoot: ctx.storageRoot, totalBytes: total, entries })) return 0;
+  const disks = diskUsage(ctx.storageRoot);
+  if (printJson(ctx, { dataPath: ctx.dataPath, storageRoot: ctx.storageRoot, totalBytes: total, entries, disks })) return 0;
+  console.log('Disks\n');
+  table([['DRIVE', 'USED', 'FREE', 'SIZE', ''], ...disks.map((d) => [d.drive, humanBytes(d.usedBytes) + ' (' + Math.round((d.usedBytes / d.totalBytes) * 100) + '%)', humanBytes(d.freeBytes), humanBytes(d.totalBytes), d.holdsStorage ? '<- sandbox storage (' + humanBytes(total) + ' of it)' : ''])]);
+  console.log('');
   console.log('Persistent data for the sandbox: ' + ctx.dataPath + ' (C:\\AgentData inside)\n');
   if (!entries.length) { console.log('Nothing stored yet. Toolchains, databases and agent logins appear here after the first start.'); return 0; }
   const rows = _.flatMap(_.groupBy(entries, 'area'), (group, area) => [
