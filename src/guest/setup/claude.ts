@@ -53,6 +53,8 @@ export const syncClaudeProfile = (): void => {
     const to = path.join(claudeDir, name);
     if (!exists(from)) continue;
     if ((KEEP_SANDBOX_COPY.includes(name) || !profile.overwrite) && exists(to)) { log('Claude settings: kept the sandbox\'s ' + name); continue; }
+    // Folders (skills, commands, plugins) are mirrored: what was removed on this PC goes here too.
+    if (fs.statSync(from).isDirectory()) fs.rmSync(to, { recursive: true, force: true });
     fs.cpSync(from, to, { recursive: true, force: true });
     log('Claude settings: copied ' + name + ' from this PC');
   }
@@ -76,10 +78,32 @@ export const restoreClaudeMem = (): void => {
   log('claude-mem data restored from persistent storage.');
 };
 
-/** Copies the live claude-mem folder back to persistent storage (staging folder + swap, never a half copy). */
+/** Size + mtime of every SQLite database and -wal file under `dir`: when these have not moved, nothing was written. */
+const databaseFingerprint = (dir: string): string => {
+  const parts: string[] = [];
+  const walk = (folder: string): void => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const full = path.join(folder, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && /\.(db|sqlite3?)(-wal)?$/i.test(entry.name)) { const s = fs.statSync(full); parts.push(full + ':' + s.size + ':' + s.mtimeMs); }
+    }
+  };
+  walk(dir);
+  return parts.sort().join('|');
+};
+
+/** The databases as of the last save by this process (null: not saved yet, so the first save always copies). */
+let lastSaved: string | null = null;
+
+/**
+ * Copies the live claude-mem folder back to persistent storage (staging folder + swap, never a half copy). Called from
+ * the daemon tick: when no database changed since the last save it does nothing (no copy of the whole folder).
+ */
 export const saveClaudeMem = (): void => {
   if (!claudeMemEnabled() || !exists(claudeMemPaths.local)) return;
   const { store, local } = claudeMemPaths;
+  const fingerprint = databaseFingerprint(local);
+  if (fingerprint === lastSaved && exists(store)) return;
   const incoming = store + '.incoming';
   const previous = store + '.previous';
   fs.rmSync(incoming, { recursive: true, force: true });
@@ -90,4 +114,5 @@ export const saveClaudeMem = (): void => {
   if (exists(store)) fs.renameSync(store, previous);
   try { fs.renameSync(incoming, store); } catch (e) { if (exists(previous)) fs.renameSync(previous, store); throw e; }
   fs.rmSync(previous, { recursive: true, force: true });
+  lastSaved = fingerprint;
 };

@@ -89,9 +89,14 @@ export const assertNoLinks = (root: string, target: string): void => {
   }
 };
 
-/** PowerShell arguments for a script passed encoded (no quoting issues, no progress-bar noise on stderr). */
+/**
+ * PowerShell arguments for a script passed encoded (no quoting issues, no progress-bar noise on stderr). Output is
+ * UTF-8: Windows PowerShell 5.1 otherwise writes redirected stdout in the OEM code page, mangling non-ASCII (regional
+ * date formats, wallpaper paths). UTF8Encoding($false): no byte-order mark in front of the output.
+ */
 const powerShellArgs = (script: string): string[] => {
-  const encoded = Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" + script, 'utf16le').toString('base64');
+  const prelude = "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false\n$ProgressPreference = 'SilentlyContinue'\n";
+  const encoded = Buffer.from(prelude + script, 'utf16le').toString('base64');
   return ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded];
 };
 

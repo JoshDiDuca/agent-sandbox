@@ -72,7 +72,8 @@ export const capturePersonalization = (launchPath: string): string => {
   try {
     const { status, stdout } = runPowerShell(CAPTURE_SCRIPT(VALUES), true);
     if (status !== 0) return 'skipped (registry read failed)';
-    const parsed = JSON.parse(stdout.trim()) as { values: RegValue[] | RegValue | null; wallpaper?: string };
+    // runPowerShell has PowerShell write UTF-8 (non-ASCII date formats and wallpaper paths survive); a BOM is tolerated.
+    const parsed = JSON.parse(stdout.replace(/^﻿/, '').trim()) as { values: RegValue[] | RegValue | null; wallpaper?: string };
     const values = parsed.values === null ? [] : Array.isArray(parsed.values) ? parsed.values : [parsed.values];
     const dir = path.join(launchPath, 'personalize');
     ensureDir(dir);

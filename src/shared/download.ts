@@ -1,5 +1,5 @@
 // Download/extract helpers shared by the host (Windows Terminal pre-download) and the guest (toolchains).
-// Node built-ins only, because this file is copied into the sandbox.
+// Node built-ins only, so it stays small in both bundles (the CLI and the guest runtime).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -8,7 +8,20 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { SYSTEM } from './system.js';
 
-const USER_AGENT = 'agent-sandbox';
+const USER_AGENT = 'windows-development-sandbox';
+
+/**
+ * A fresh `<destination>.staging-<hex>` folder next to `destination`: fill it, then moveIntoPlace. An interrupted copy
+ * or extraction leaves only the staging folder (cleanup/repair remove those), never a half-filled destination.
+ */
+export const stagingFolder = (destination: string): string => destination + '.staging-' + crypto.randomBytes(3).toString('hex');
+
+/** Replaces `destination` with the finished `work` folder (a folder rename: the destination is never half there). */
+export const moveIntoPlace = (work: string, destination: string): void => {
+  fs.rmSync(destination, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.renameSync(work, destination);
+};
 
 /** fetch with retries (the sandbox network can take a few seconds to come up) and a timeout per attempt. */
 export const fetchRetry = async (url: string, init: RequestInit = {}, attempts = 5, timeoutMs = 60000): Promise<Response> => {
@@ -41,13 +54,14 @@ export const download = async (url: string, destination: string, expected: strin
   const response = await fetchRetry(url, {}, 3, 20 * 60 * 1000);
   if (!response.body) throw new Error('Empty response for ' + url);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  const hashes = { sha256: crypto.createHash('sha256'), sha512: crypto.createHash('sha512') };
-  const tap = new Transform({ transform(chunk: Buffer, _encoding, done) { hashes.sha256.update(chunk); hashes.sha512.update(chunk); done(null, chunk); } });
-  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), tap, fs.createWriteStream(destination));
-  for (const kind of ['sha256', 'sha512'] as const) {
+  // Only the hashes that will be checked (sha512 of a 330 MB archive is not free).
+  const checks = (['sha256', 'sha512'] as const).flatMap((kind) => {
     const want = sums[kind]?.trim().toLowerCase();
-    if (want && hashes[kind].digest('hex') !== want) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
-  }
+    return want ? [{ want, hash: crypto.createHash(kind) }] : [];
+  });
+  const tap = new Transform({ transform(chunk: Buffer, _encoding, done) { for (const c of checks) c.hash.update(chunk); done(null, chunk); } });
+  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), tap, fs.createWriteStream(destination));
+  if (checks.some((c) => c.hash.digest('hex') !== c.want)) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
 };
 
 /** Runs a program without blocking the event loop (parallel downloads keep going); resolves with its exit code. */
@@ -56,8 +70,6 @@ export const spawnAsync = (file: string, args: string[], options: import('node:c
   child.once('error', reject);
   child.once('close', (code) => resolve(code ?? -1));
 });
-
-export const sha256File = (file: string): string => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 export interface ReleaseAsset { url: string; name: string; sha256: string | null }
 
@@ -75,7 +87,7 @@ export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = f
     // The API allows 60 requests an hour per IP without a token; a first boot alone makes a dozen. The release page has
     // the same assets and digests and no such limit.
     if (!/HTTP (403|429)/.test(e instanceof Error ? e.message : '')) throw e;
-    return githubAssetFromPage(repo, pattern);
+    return githubAssetFromPage(repo, pattern, searchOlder);
   }
   const hit = latest.assets.find((a) => pattern.test(a.name));
   if (hit) return toAsset(hit);
@@ -89,11 +101,7 @@ export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = f
   throw new Error('No asset matching ' + pattern + ' in the ' + (searchOlder ? 'stable' : 'latest') + ' ' + repo + ' release(s)');
 };
 
-/**
- * Extracts .zip / .nupkg / .7z / .tar.gz with the tar.exe that ships with Windows, falling back to Expand-Archive.
- * `members` limits it to those paths inside the archive (e.g. skip pgAdmin in the PostgreSQL zip).
- */
-/** The latest release's assets from github.com itself (no API rate limit): each download link, then its sha256. */
+/** A release's assets from github.com's expanded_assets page (no API rate limit): each download link, then its sha256. */
 export const parseReleasePage = (html: string): ReleaseAsset[] => {
   const links = [...html.matchAll(/href="(\/[^"]+\/releases\/download\/[^"]+)"/g)];
   return links.map((link, i) => {
@@ -109,12 +117,37 @@ export const latestGithubTag = async (repo: string): Promise<string> => {
   return tag || Promise.reject(new Error('Could not find the latest release of ' + repo));
 };
 
-const githubAssetFromPage = async (repo: string, pattern: RegExp): Promise<ReleaseAsset> => {
-  const tag = await latestGithubTag(repo);
-  const hit = parseReleasePage(await fetchText('https://github.com/' + repo + '/releases/expanded_assets/' + encodeURIComponent(tag))).find((a) => pattern.test(a.name));
-  return hit ?? Promise.reject(new Error('No asset matching ' + pattern + ' in ' + repo + ' ' + tag));
+/** Release tags in the order github.com's /<repo>/releases page lists them (newest first), without duplicates. */
+export const parseReleaseTags = (html: string, repo: string): string[] => {
+  const escaped = repo.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  const tags = [...html.matchAll(new RegExp('href="/' + escaped + '/releases/tag/([^"?#]+)"', 'gi'))].map((m) => decodeURIComponent(m[1]));
+  return [...new Set(tags)];
 };
 
+/** How many releases the rate-limit fallback looks through for `searchOlder` (one page request each). */
+const OLDER_RELEASES = 10;
+
+const githubAssetFromPage = async (repo: string, pattern: RegExp, searchOlder: boolean): Promise<ReleaseAsset> => {
+  const assetsOf = async (tag: string): Promise<ReleaseAsset | undefined> =>
+    parseReleasePage(await fetchText('https://github.com/' + repo + '/releases/expanded_assets/' + encodeURIComponent(tag))).find((a) => pattern.test(a.name));
+  const latest = await latestGithubTag(repo);
+  const hit = await assetsOf(latest);
+  if (hit) return hit;
+  // nvm-windows' portable zip and winlibs' builds only exist in older releases: walk the release list like the API path does.
+  if (searchOlder) {
+    const older = parseReleaseTags(await fetchText('https://github.com/' + repo + '/releases'), repo).filter((t) => t !== latest);
+    for (const tag of older.slice(0, OLDER_RELEASES)) {
+      const found = await assetsOf(tag);
+      if (found) return found;
+    }
+  }
+  throw new Error('No asset matching ' + pattern + ' in ' + repo + ' ' + latest + (searchOlder ? ' or the releases before it' : ''));
+};
+
+/**
+ * Extracts .zip / .nupkg / .7z / .tar.gz with the tar.exe that ships with Windows, falling back to Expand-Archive.
+ * `members` limits it to those paths inside the archive (e.g. skip pgAdmin in the PostgreSQL zip).
+ */
 export const extractArchive = async (archive: string, destination: string, members: string[] = []): Promise<void> => {
   fs.mkdirSync(destination, { recursive: true });
   let status = await spawnAsync(SYSTEM.tar(), ['-xf', archive, '-C', destination, ...members]);
@@ -139,7 +172,7 @@ export const findFile = (root: string, name: string, maxDepth = 4): string | nul
  * that file is kept (`up` folders above it, e.g. locate ruby.exe with up 1 keeps the folder around bin).
  */
 export const installArchive = async (url: string, destination: string, options: { sha256?: string | null; sha512?: string | null; locate?: string; up?: number; fileName?: string; members?: string[] } = {}): Promise<void> => {
-  const work = destination + '.staging-' + crypto.randomBytes(3).toString('hex');
+  const work = stagingFolder(destination);
   try {
     const archive = path.join(work, options.fileName ?? path.basename(new URL(url).pathname));
     await download(url, archive, { sha256: options.sha256, sha512: options.sha512 });
@@ -152,9 +185,7 @@ export const installArchive = async (url: string, destination: string, options: 
       root = path.dirname(found);
       for (let i = 0; i < (options.up ?? 0) && path.dirname(root).startsWith(extracted); i++) root = path.dirname(root);
     }
-    fs.rmSync(destination, { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.renameSync(root, destination);
+    moveIntoPlace(root, destination);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

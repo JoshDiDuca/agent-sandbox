@@ -51,6 +51,10 @@ export const parseDefaultGateways = (routePrint: string): string[] => {
   }
   return found;
 };
+/** The IPv4 servers in a dns.getServers() list ('8.8.8.8', '8.8.8.8:1053', '[::1]:53'); IPv6 ones are dropped. */
+export const ipv4DnsServers = (servers: string[]): string[] => servers.map((s: string) => s.replace(/:\d+$/, '')).filter(isIPv4);
+
+/** Fallback only: the "DNS Servers" label is English, so this finds nothing on localised Windows (dns.getServers() does). */
 export const parseDnsServers = (ipconfigAll: string): string[] => {
   const found: string[] = [];
   let inDns = false;

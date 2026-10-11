@@ -1,7 +1,8 @@
 // Guest firewall: block the host's LAN (keeping DNS/DHCP to the gateway) and let the host reach session ports.
+import dns from 'node:dns';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { buildFirewallCommands, parseDefaultGateways, parseDnsServers } from '../../shared/netrules.js';
+import { buildFirewallCommands, ipv4DnsServers, parseDefaultGateways, parseDnsServers } from '../../shared/netrules.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, isWin, log, session, warn } from '../env.js';
 
@@ -16,8 +17,11 @@ const discoverExemptIps = (): string[] => {
   if (process.env.AGENT_TEST_EXEMPT) return process.env.AGENT_TEST_EXEMPT.split(',');
   if (!isWin) return [];
   const route = spawnSync(SYSTEM.route(), ['print', '-4'], { encoding: 'utf8', windowsHide: true });
-  const config = spawnSync(SYSTEM.ipconfig(), ['/all'], { encoding: 'utf8', windowsHide: true });
-  return [...parseDefaultGateways(route.stdout ?? ''), ...parseDnsServers(config.stdout ?? '')];
+  // The resolver's own list works on every Windows language; `ipconfig /all` (English labels only) is the fallback.
+  let servers: string[] = [];
+  try { servers = ipv4DnsServers(dns.getServers()); } catch { /* fall back below */ }
+  if (!servers.length) servers = parseDnsServers(spawnSync(SYSTEM.ipconfig(), ['/all'], { encoding: 'utf8', windowsHide: true }).stdout ?? '');
+  return [...parseDefaultGateways(route.stdout ?? ''), ...servers];
 };
 
 const internetWorks = async (): Promise<boolean> => {

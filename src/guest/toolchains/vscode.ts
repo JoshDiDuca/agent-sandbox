@@ -26,13 +26,17 @@ export const setupVscode = async (env: ToolEnv, refresh: boolean): Promise<void>
   if (!exists(exe) || refresh) {
     const release = await fetchJson<Release>('https://update.code.visualstudio.com/api/update/win32-' + (arch === 'arm64' ? 'arm64' : 'x64') + '-archive/stable/latest');
     log('Downloading VS Code ' + release.productVersion + ' (~150 MB once) ...');
-    // Keep settings/extensions across a refresh: move the portable data folder aside and back.
+    // Keep settings/extensions across a refresh: move the portable data folder aside and back, also when the install
+    // fails (finally). A folder still parked from an interrupted earlier run is the one to keep.
     const keep = path.join(root, 'data');
     const parked = root + '-data';
     if (exists(keep)) { fs.rmSync(parked, { recursive: true, force: true }); fs.renameSync(keep, parked); }
-    await installArchive(release.url, root, { sha256: release.sha256hash, locate: 'Code.exe', fileName: 'vscode.zip' });
-    if (exists(parked)) fs.renameSync(parked, keep);
-    fs.writeFileSync(path.join(root, VERSION_MARKER), release.productVersion);
+    try {
+      await installArchive(release.url, root, { sha256: release.sha256hash, locate: 'Code.exe', fileName: 'vscode.zip' });
+      fs.writeFileSync(path.join(root, VERSION_MARKER), release.productVersion);
+    } finally {
+      if (exists(parked)) { mkdirp(root); fs.rmSync(keep, { recursive: true, force: true }); fs.renameSync(parked, keep); }
+    }
   }
   mkdirp(path.join(root, 'data'));
   env.prepend.push(path.join(root, 'bin'));

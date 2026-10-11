@@ -1,11 +1,14 @@
 // Small pure helpers: version picking, .reg generation, firewall maths, storage cleanup.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { pruneStorage } from '../host/cleanup.js';
 import { toRegFile } from '../host/personalize.js';
 import { javaMajorFrom, pickGoRelease, pickNodeVersion, pickPackageVersion, pickSpreadVersions, projectUses, specFromVersionFile } from '../guest/toolchains/versions.js';
-import { buildFirewallCommands, cidrToRange, parseDefaultGateways, parseDnsServers, subtractIps } from '../shared/netrules.js';
-import { ensureDir } from '../core/util.js';
+import { parseReleaseTags } from '../shared/download.js';
+import { buildFirewallCommands, cidrToRange, ipv4DnsServers, parseDefaultGateways, parseDnsServers, subtractIps } from '../shared/netrules.js';
+import { ensureDir, isWin } from '../core/util.js';
 import type { Harness } from './harness.js';
 
 export const helperTests = (t: Harness): void => {
@@ -27,6 +30,32 @@ export const helperTests = (t: Harness): void => {
   const gw = 172 * 16777216 + 28 * 65536 + 1;
   check(subtractIps([[s172, e172]], ['172.28.0.1']).every(([s, e]) => gw < s || gw > e) && !buildFirewallCommands(['8.8.8.8']).join().includes('8.8.8.8'), 'firewall maths: private block minus the gateway; public addresses ignored');
   check(parseDefaultGateways('  0.0.0.0          0.0.0.0     172.28.80.1   172.28.85.200     5\n').join() === '172.28.80.1' && parseDnsServers('   DNS Servers . . . : 172.28.80.1\n                       8.8.8.8\n   NetBIOS : x\n').join() === '172.28.80.1,8.8.8.8', 'parses gateway and DNS servers');
+
+  check(ipv4DnsServers(['172.28.80.1', '8.8.8.8:1053', '[::1]:53', 'fe80::1']).join() === '172.28.80.1,8.8.8.8', 'DNS servers from the resolver (any Windows language): IPv4 only, ports dropped');
+  check(parseReleaseTags('<a href="/coreybutler/nvm-windows/releases/tag/1.2.2">x</a><a href="/coreybutler/nvm-windows/releases/tag/1.2.2">y</a><a href="/other/repo/releases/tag/9">z</a><a href="/coreybutler/nvm-windows/releases/tag/1.1.12">w</a>', 'coreybutler/nvm-windows').join() === '1.2.2,1.1.12', 'GitHub release list page: this repo\'s tags in order, once each');
+
+  t.section('cmd quoting (npm agents)');
+  // ptyhost.ts loads env.ts, which reads session.json: import it in a child with a throwaway launch/data folder.
+  const quoteDir = path.join(t.temp, 'quote');
+  write(path.join(quoteDir, 'launch', 'session.json'), '{}');
+  const agentCmd = write(path.join(quoteDir, 'agent.cmd'), '@"' + process.execPath + '" -e "console.log(JSON.stringify(process.argv.slice(1)))" %*\r\n');
+  // Odd quote counts flip cmd's quote state for every later argument: those come after them on purpose.
+  const tricky = ['https://x?a=1&b=2', '50% off', 'a|b<c>d', 'x^y', 'say "hi" & go', 'plain', '%PATH%', 'a"b&c', 'q"x|y^z"w', 'e"5%', 'k&v', '100%'];
+  const probe = spawnSync(process.execPath, ['--input-type=module', '-e', [
+    'const m = await import(process.argv[1]); const [cmd, tricky] = JSON.parse(process.argv[2]);',
+    'console.log(JSON.stringify({ normal: m.commandLine("C:\\\\W\\\\cmd.exe", ["/d", "/c", "C:\\\\a\\\\agent.cmd", "--model", "big one", "plain", ""]), direct: m.commandLine("C:\\\\a\\\\agent.exe", ["a&b", "50%"]),',
+    '  url: m.cmdArgs(["https://x?a=1&b=2"]), pct: m.cmdArgs(["50%"]), live: m.commandLine("cmd.exe", ["/d", "/c", cmd, ...tricky]).slice(8) }));',
+  ].join('\n'), pathToFileURL(path.join(t.packageRoot, 'dist', 'guest', 'ptyhost.js')).href, JSON.stringify([agentCmd, tricky])], {
+    encoding: 'utf8', env: { ...process.env, AGENT_LAUNCH_DIR: path.join(quoteDir, 'launch'), AGENT_DATA_DIR: path.join(quoteDir, 'data') },
+  });
+  const quoting = ((): Record<string, string> => { try { return JSON.parse(probe.stdout) as Record<string, string>; } catch { return {}; } })();
+  check(quoting.normal === 'C:\\W\\cmd.exe /d /c C:\\a\\agent.cmd --model "big one" plain ""' && quoting.direct === 'C:\\a\\agent.exe a&b 50%', 'command lines: ordinary arguments quoted as before; a program started directly gets & and % unchanged' + (quoting.normal ? '' : ' (' + (probe.stderr || probe.stdout).trim().slice(0, 300) + ')'));
+  check(quoting.url === '"https://x?a=1&b=2"' && quoting.pct === '"50"%""', 'cmd /c arguments: & | < > ^ quoted, % split out so no %name% expands');
+  // (Agents live under C:\AgentData\tools; a temp folder with spaces would also need cmd's quote rules, so skip there.)
+  if (isWin && quoting.live && !/\s/.test(agentCmd)) {
+    const echoed = spawnSync(process.env.ComSpec ?? 'cmd.exe', [quoting.live], { encoding: 'utf8', windowsVerbatimArguments: true, windowsHide: true });
+    check(echoed.stdout.trim() === JSON.stringify(tricky), 'cmd /d /c <agent>.cmd passes &, |, <, >, ^, % and quotes through to the agent unchanged (got ' + echoed.stdout.trim() + ')');
+  }
 
   t.section('cleanup');
   const store = path.join(t.temp, 'prune');

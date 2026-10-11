@@ -8,7 +8,10 @@ import { assertNoLinks, errMsg, fileExists, writeJson } from '../core/util.js';
 export const terminalDir = (dataPath: string): string => path.join(dataPath, 'tools', 'terminal');
 export const terminalExe = (dataPath: string): string => path.join(terminalDir(dataPath), 'WindowsTerminal.exe');
 
-/** Sandbox-friendly defaults; only written if the user has no settings yet, so edits made inside the sandbox stick. */
+/**
+ * Sandbox-friendly defaults; only written when there is no settings.json yet (first download), so edits made inside
+ * the sandbox stick, also across a refresh (which keeps the settings folder).
+ */
 const SETTINGS = {
   $schema: 'https://aka.ms/terminal-profiles-schema',
   theme: 'dark',
@@ -22,15 +25,28 @@ const SETTINGS = {
 
 export const ensureTerminal = async (dataPath: string, refresh: boolean): Promise<{ exe: string | null; message: string }> => {
   const exe = terminalExe(dataPath);
-  assertNoLinks(dataPath, terminalDir(dataPath));
+  const dir = terminalDir(dataPath);
+  const settings = path.join(dir, 'settings');
+  // installArchive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also when
+  // the download fails). One still parked from an interrupted earlier run is the one to keep.
+  const parked = path.join(dataPath, 'tools', 'terminal-settings.parked');
+  assertNoLinks(dataPath, settings);
+  assertNoLinks(dataPath, parked);
   if (fileExists(exe) && !refresh) return { exe, message: 'cached' };
   try {
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-    const asset = await githubAsset('microsoft/terminal', new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'));
-    await installArchive(asset.url, terminalDir(dataPath), { sha256: asset.sha256, locate: 'WindowsTerminal.exe', fileName: asset.name });
-    fs.writeFileSync(path.join(terminalDir(dataPath), '.portable'), '');
-    writeJson(path.join(terminalDir(dataPath), 'settings', 'settings.json'), SETTINGS);
-    return { exe, message: 'downloaded ' + asset.name };
+    if (fs.existsSync(settings)) { fs.rmSync(parked, { recursive: true, force: true }); fs.renameSync(settings, parked); }
+    try {
+      const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+      const asset = await githubAsset('microsoft/terminal', new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'));
+      await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'WindowsTerminal.exe', fileName: asset.name });
+      fs.writeFileSync(path.join(dir, '.portable'), '');
+      return { exe, message: 'downloaded ' + asset.name };
+    } finally {
+      if (fs.existsSync(parked)) { fs.mkdirSync(dir, { recursive: true }); fs.rmSync(settings, { recursive: true, force: true }); fs.renameSync(parked, settings); }
+      const settingsFile = path.join(settings, 'settings.json');
+      assertNoLinks(dataPath, settingsFile);
+      if (fileExists(path.join(dir, '.portable')) && !fs.existsSync(settingsFile)) writeJson(settingsFile, SETTINGS);
+    }
   } catch (e) {
     return { exe: null, message: 'download failed, the sandbox will use a plain PowerShell window (' + errMsg(e) + ')' };
   }

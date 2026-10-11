@@ -24,7 +24,8 @@ Write-Host 'Agent sandbox bootstrap started.' -ForegroundColor Cyan
 $transcript = Join-Path $logsDir ('bootstrap-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 Start-Transcript -Path $transcript | Out-Null
 $transcriptStopped = $false
-$session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw | ConvertFrom-Json
+# -Encoding UTF8: Windows PowerShell 5.1 otherwise reads it in the ANSI code page (non-ASCII paths and names break).
+$session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $hostVersion = [string]$session.hostTools.nodeVersion
 
 function Set-Status([string]$Phase, [string]$Message) {
@@ -64,7 +65,7 @@ function Test-Node {
 
 function Find-CachedRunner {
     # This PC's version first (nvm will want it anyway), else whichever version the last boot used.
-    $last = if (Test-Path -LiteralPath $runnerFile) { (Get-Content -LiteralPath $runnerFile -Raw).Trim() } else { '' }
+    $last = if (Test-Path -LiteralPath $runnerFile) { (Get-Content -LiteralPath $runnerFile -Raw -Encoding UTF8).Trim() } else { '' }
     foreach ($version in @($hostVersion, $last)) {
         if ($version -notmatch '^\d+\.\d+\.\d+$') { continue }
         Set-Runner $version
@@ -203,7 +204,7 @@ try {
     $code = $LASTEXITCODE
     if ($code -ne 0) {
         # main.js reports its own failures; this catches it dying before it could (e.g. a broken Node).
-        $current = Get-Content -LiteralPath (Join-Path $runDir 'sandbox.json') -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
+        $current = Get-Content -LiteralPath (Join-Path $runDir 'sandbox.json') -Raw -Encoding UTF8 -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
         if ($null -eq $current -or $current.phase -ne 'failed') { Set-Status 'failed' ("The sandbox runner stopped (exit code $code). See C:\AgentData\logs.") }
         Write-Host "The sandbox runner stopped with exit code $code. Logs: $logsDir" -ForegroundColor Red
     }

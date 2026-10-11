@@ -50,7 +50,7 @@ const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOptions): 
     { name: 'Java', on: java, run: (env) => setupJava(env, config.java) },
     { name: 'Ruby', on: wanted(config.ruby.enabled, 'ruby'), run: (env) => setupRuby(env, config.ruby) },
     // PHP installs the Visual C++ runtime itself: one installer at a time.
-    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled, run: (env) => setupVcRuntime(env) },
+    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled, run: async (env) => { await setupVcRuntime(env); } },
     { name: 'PHP', on: wanted(config.php.enabled, 'php'), after: ['Visual C++ runtime'], run: (env) => setupPhp(env, config.php) },
     { name: 'Deno', on: wanted(config.deno.enabled, 'deno'), run: (env) => setupDeno(env) },
     { name: 'Bun', on: config.bun.enabled, run: (env) => setupBun(env) },

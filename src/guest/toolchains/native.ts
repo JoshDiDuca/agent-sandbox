@@ -2,8 +2,10 @@
 // targeting), and Mesa for running OpenGL programs without a GPU.
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
 import type { Toolchains } from '../../core/types.js';
 import { download, fetchJson, githubAsset, installArchive } from '../../shared/download.js';
+import { readJsonFile, writeJsonAtomic } from '../../shared/rundir.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
 import { arch, installOnce, tool, versionOf, type ToolEnv } from './common.js';
@@ -82,13 +84,18 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
   await installOnce(env, 'cargo', config.crates, (c) => execAsync(path.join(CARGO_HOME, 'bin', 'cargo.exe'), ['install', '--locked', c], cargoEnv));
 };
 
+/** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
+const DotnetMarker = z.record(z.string(), z.boolean());
+
 /** .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker. */
 export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], refresh: boolean): Promise<void> => {
   const root = tool('dotnet');
   const marker = path.join(root, '.agent-sandbox-installed.json');
   const script = tool('dotnet-install.ps1');
   if (dryRun) { log('(dry run) would provision .NET SDK channels ' + config.channels.join(', ')); return; }
-  const done: Record<string, boolean> = exists(marker) && !refresh ? JSON.parse(fs.readFileSync(marker, 'utf8')) as Record<string, boolean> : {};
+  // A corrupt or hand-edited marker just means "nothing recorded yet" (the installs are idempotent).
+  const recorded = DotnetMarker.safeParse(exists(marker) && !refresh ? readJsonFile<unknown>(marker) : {});
+  const done: Record<string, boolean> = recorded.success ? recorded.data : {};
   const globalJson = path.join(workspace, 'global.json');
   const installs: [string, string[]][] = [
     ...config.channels.map((c): [string, string[]] => ['channel:' + c, ['-Channel', c]]),
@@ -99,7 +106,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
     log('Installing .NET SDK (' + key + ') ...');
     await execAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
     done[key] = true;
-    fs.writeFileSync(marker, JSON.stringify(done, null, 2));
+    writeJsonAtomic(marker, done);
   }
   const home = mkdirp(tool('dotnet-home'));
   Object.assign(env.vars, { DOTNET_ROOT: root, DOTNET_CLI_HOME: home, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', NUGET_PACKAGES: tool('nuget', 'packages') });

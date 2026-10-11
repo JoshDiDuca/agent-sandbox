@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
-import { spawnAsync } from '../shared/download.js';
+import { moveIntoPlace, spawnAsync, stagingFolder } from '../shared/download.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { SYSTEM } from '../shared/system.js';
@@ -81,8 +81,13 @@ export const robocopy = (from: string, to: string, files: string[] = []): void =
 /**
  * A Node install without its global packages (nvm keeps those per version: often tens of thousands of small files,
  * which is what made copying from this PC slow). Same file list as Copy-NodeFromHost in sandbox/bootstrap.ps1.
+ * Copied into a staging folder and renamed into place: node.exe alone (an interrupted copy) must not look like a full install.
  */
 export const copyNode = (from: string, to: string): void => {
-  robocopy(from, to, ['node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd']);
-  robocopy(path.join(from, 'node_modules', 'npm'), path.join(to, 'node_modules', 'npm'));
+  const work = stagingFolder(to);
+  try {
+    robocopy(from, work, ['node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd']);
+    robocopy(path.join(from, 'node_modules', 'npm'), path.join(work, 'node_modules', 'npm'));
+    moveIntoPlace(work, to);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
 };

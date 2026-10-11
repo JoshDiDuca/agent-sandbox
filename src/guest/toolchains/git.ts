@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
-import { download, githubAsset } from '../../shared/download.js';
+import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
 import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, warn } from '../env.js';
 import { ensureCompiled } from '../ptyhost.js';
 import { arch, tool, type ToolEnv } from './common.js';
@@ -68,8 +68,15 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
   if (exists(root) && !exists(bash)) { log('Replacing the old MinGit (no bash) with full Git for Windows.'); fs.rmSync(root, { recursive: true, force: true }); }
   if (!exists(bash) || refresh) {
     if (dryRun) { log('(dry run) would provision Git for Windows' + (hostCopy ? ' from this PC' : '') + ' (access: ' + access + ')'); return; }
-    if (hostCopy && exists(path.join(hostGit, 'bin', 'bash.exe'))) { log('Copying Git for Windows from this PC ...'); robocopy(hostGit, root); }
-    else await installPortableGit(root);
+    // Into a staging folder, then renamed: an interrupted copy/extraction must not leave a tools\git that has bash.exe
+    // (so looks installed) but is missing the rest.
+    const work = stagingFolder(root);
+    try {
+      if (hostCopy && exists(path.join(hostGit, 'bin', 'bash.exe'))) { log('Copying Git for Windows from this PC ...'); robocopy(hostGit, work); }
+      else await installPortableGit(work);
+      if (!exists(path.join(work, 'bin', 'bash.exe'))) throw new Error('bash.exe missing after installing Git');
+      moveIntoPlace(work, root);
+    } finally { fs.rmSync(work, { recursive: true, force: true }); }
   }
   if (!exists(bash)) throw new Error('bash.exe missing after installing Git');
   pointAtOwnCertificates(root);

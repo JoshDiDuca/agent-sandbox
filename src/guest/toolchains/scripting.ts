@@ -21,12 +21,14 @@ const VC_REDIST = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
 
 /**
  * vcruntime140.dll & co. A real installer (it writes to System32), so it runs on every boot; the installer itself is
- * kept in persistent storage and only run when Microsoft's signature on it checks out.
+ * kept in persistent storage and only run when Microsoft's signature on it checks out. Resolves true when this call
+ * ran the installer. Only the "Visual C++ runtime" step reports it (`summary`); PHP calls it again just to be sure.
  */
-export const setupVcRuntime = async (env: ToolEnv): Promise<void> => {
-  if (dryRun) { log('(dry run) would install the Visual C++ runtime'); return; }
+export const setupVcRuntime = async (env: ToolEnv, summary = true): Promise<boolean> => {
+  if (dryRun) { log('(dry run) would install the Visual C++ runtime'); return false; }
   const system32 = path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32');
-  if (!exists(path.join(system32, 'vcruntime140.dll')) || !exists(path.join(system32, 'msvcp140.dll'))) {
+  const missing = !exists(path.join(system32, 'vcruntime140.dll')) || !exists(path.join(system32, 'msvcp140.dll'));
+  if (missing) {
     const installer = tool('vcredist', 'vc_redist.x64.exe');
     if (!exists(installer)) { log('Downloading the Visual C++ runtime ...'); await download(VC_REDIST, installer); }
     const signer = execOutput(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "$s = Get-AuthenticodeSignature -LiteralPath '" + installer.replace(/'/g, "''") + "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }"]);
@@ -36,7 +38,8 @@ export const setupVcRuntime = async (env: ToolEnv): Promise<void> => {
     const code = await spawnAsync(installer, ['/install', '/quiet', '/norestart']);
     if (![0, 1638, 3010].includes(code ?? -1) || !exists(path.join(system32, 'vcruntime140.dll'))) throw new Error('the Visual C++ runtime installer failed (exit ' + code + ')');
   }
-  env.summary.push('vc++ runtime: installed');
+  if (summary) env.summary.push('vc++ runtime: installed');
+  return missing;
 };
 
 // ---- Ruby ------------------------------------------------------------------------------------------------------------
@@ -96,14 +99,15 @@ const writePhpIni = (home: string): void => {
   if (exists(ini) || !exists(path.join(home, 'php.ini-development'))) return;
   let text = fs.readFileSync(path.join(home, 'php.ini-development'), 'utf8')
     .replace(/^;\s*extension_dir\s*=\s*"ext"/m, 'extension_dir = "' + path.join(home, 'ext') + '"');
-  for (const ext of PHP_EXTENSIONS.filter((e) => exists(path.join(home, 'ext', 'php_' + e + '.dll')))) text = text.replace(new RegExp('^;(extension=' + ext + ')\s*$', 'm'), '$1');
+  for (const ext of PHP_EXTENSIONS.filter((e) => exists(path.join(home, 'ext', 'php_' + e + '.dll')))) text = text.replace(new RegExp('^;(extension=' + ext + ')\\s*$', 'm'), '$1');
   fs.writeFileSync(ini, text);
 };
 
 export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise<void> => {
   const wantedSpec = versionFromFiles(['.php-version']) ?? { spec: config.version, source: 'config' };
   if (dryRun) { log('(dry run) would provision PHP ' + wantedSpec.spec + (config.composer ? ' + Composer' : '')); return; }
-  await setupVcRuntime(env);
+  // No summary line of its own: the Visual C++ runtime step (which runs first) already reports it.
+  await setupVcRuntime(env, false);
   const version = await resolveCached('php:' + wantedSpec.spec, async () => (await phpBuild(wantedSpec.spec)).version);
   const home = tool('php', version);
   if (!exists(path.join(home, 'php.exe'))) {
