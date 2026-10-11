@@ -10,8 +10,7 @@ import { setupBun, setupUv } from './runtimes.js';
 import { setupVscode } from './vscode.js';
 
 export type { ToolEnv } from './common.js';
-export { pickNodeVersion } from './node.js';
-export { pickPackageVersion } from './python.js';
+export { pickNodeVersion, pickPackageVersion } from './versions.js';
 
 export interface ToolchainOptions { gitEnabled: boolean; gitAccess: GitAccess; hostGit: boolean; refresh: boolean }
 

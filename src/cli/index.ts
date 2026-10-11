@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url';
 import { CommanderError } from 'commander';
 import { parseCli } from './args.js';
 import * as commands from './commands/index.js';
-import { selfTest } from '../selftest/index.js';
 import { UserError, errMsg, fail } from '../core/util.js';
 
 /** The package folder (this file is dist/cli/index.js). */
@@ -40,7 +39,8 @@ const dim = (s: string): string => '\x1b[2m' + s + '\x1b[0m';
 export const main = async (argv: string[], preset: { harness?: string; command?: string } = {}): Promise<number> => {
   const options = parseCli(preset.command ? [preset.command, ...argv] : argv, Boolean(preset.harness));
   if (preset.harness) options.harness = preset.harness;
-  if (options.command === 'self-test') return selfTest(packageRoot);
+  // Loaded only when asked for: normal commands never load test code.
+  if (options.command === 'self-test') return (await import('../selftest/index.js')).selfTest(packageRoot);
   const handler = HANDLERS[options.command];
   if (!handler) return fail('Unknown command "' + options.command + '".', 'Run agent-sandbox --help for the list of commands.');
   return (await handler(commands.createContext(packageRoot, entry, options))) ?? 0;

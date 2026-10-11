@@ -10,7 +10,7 @@ import { assertNoLinks, ensureDir, safeText } from '../core/util.js';
 import { assertSafeMapping } from '../core/workspace.js';
 import { sandboxGlobalState } from '../host/claude-profile.js';
 import { gitDecision } from '../guest/gitguard.js';
-import { gitDenyRules } from '../guest/setup/policy.js';
+import { gitDenyRules } from '../guest/gitrules.js';
 import { encodeFrame, FrameReader, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
 import { safeId } from '../shared/rundir.js';
 import { GuestRequest, SessionStatus } from '../shared/schema.js';

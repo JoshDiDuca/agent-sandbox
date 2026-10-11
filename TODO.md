@@ -21,6 +21,10 @@ and asked that whoever picks it up deletes it afterwards (`git rm TODO.md` in yo
    GitHub Release (agent-sandbox.tgz stable URL) + GitHub Packages (@joshdiduca/agent-sandbox) on v* tags.
 
 ## Gotchas learned the hard way
+- Host code must never import a guest module with side effects (guest/env.ts reads C:\AgentLaunch\session.json on
+  load). That crashed every command on the user's PC while all tests passed inside the sandbox. Pure helpers live in
+  side-effect-free files (guest/toolchains/versions.ts, guest/gitrules.ts); selftest/host.test.ts runs every command
+  with the sandbox-only folders/variables removed. Run `npm test` and keep that test green.
 - Never spawn system programs by bare name on the host: use `SYSTEM.*` (src/shared/system.ts). cwd is the workspace.
 - Anything the guest can write (data folder, workspace) is hostile: `assertNoLinks`, host-only state in
   <storage>\sync|run|accounts, zod-validate everything read from run/.

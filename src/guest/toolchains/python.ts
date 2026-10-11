@@ -5,15 +5,9 @@ import type { Toolchains, ToolVersions } from '../../core/types.js';
 import { fetchJson, installArchive } from '../../shared/download.js';
 import { dryRun, exec, exists, log, mkdirp } from '../env.js';
 import { resolveCached, tool, type ToolEnv } from './common.js';
+import { pickPackageVersion } from './versions.js';
 
 type Package = 'python' | 'python2';
-
-/** Newest stable version matching a prefix spec ("3" -> 3.13.1, "3.12" -> 3.12.10). */
-export const pickPackageVersion = (all: string[], spec: string): string | null => {
-  const s = spec.trim().replace(/^python-?/i, '');
-  const stable = all.filter((v) => /^\d+(\.\d+)*$/.test(v)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-  return stable.find((v) => v === s || v.startsWith(s + '.')) ?? null;
-};
 
 const installPython = async (pkg: Package, spec: string): Promise<string> => {
   const version = await resolveCached(pkg + ':' + spec, async () => {

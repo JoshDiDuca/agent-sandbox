@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pruneStorage } from '../host/cleanup.js';
 import { toRegFile } from '../host/personalize.js';
-import { pickNodeVersion, pickPackageVersion } from '../guest/toolchains/index.js';
+import { pickNodeVersion, pickPackageVersion } from '../guest/toolchains/versions.js';
 import { buildFirewallCommands, cidrToRange, parseDefaultGateways, parseDnsServers, subtractIps } from '../shared/netrules.js';
 import { ensureDir } from '../core/util.js';
 import type { Harness } from './harness.js';

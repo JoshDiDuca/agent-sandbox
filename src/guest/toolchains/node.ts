@@ -7,22 +7,12 @@ import type { ToolVersions } from '../../core/types.js';
 import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
 import { dryRun, errMsg, exists, hostToolsDir, localDir, log, mkdirp, robocopy, warn } from '../env.js';
 import { arch, resolveCached, tool, type ToolEnv } from './common.js';
+import { pickNodeVersion, type NodeRelease } from './versions.js';
 
-interface NodeRelease { version: string; lts: string | false }
 
 const NVM_HOME = tool('nvm');
 const NVM_SYMLINK = path.join(localDir, 'nodejs');
 const HOST_NVM = path.join(hostToolsDir, 'nvm');
-
-/** Turns an .nvmrc-style spec (20, v20.11.1, lts/*, lts/iron, node, latest) into an exact version like 20.11.1. */
-export const pickNodeVersion = (releases: NodeRelease[], spec: string): string | null => {
-  const s = spec.trim().toLowerCase().replace(/^v/, '');
-  const hit = ['node', 'latest', 'current', 'stable'].includes(s) ? releases[0]
-    : s === 'lts' || s === 'lts/*' ? releases.find((r) => r.lts)
-    : s.startsWith('lts/') ? releases.find((r) => typeof r.lts === 'string' && r.lts.toLowerCase() === s.slice(4))
-    : releases.find((r) => r.version === 'v' + s || r.version.startsWith('v' + s + '.'));
-  return hit ? hit.version.slice(1) : null;
-};
 
 const resolveNode = (spec: string): Promise<string> => resolveCached('node:' + spec, async () => {
   const exact = spec.replace(/^v/, '');
