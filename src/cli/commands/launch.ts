@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
+import { syncAgentCommands } from './agent-commands.js';
 import { askYesNo } from '../../core/prompt.js';
 import { resolveRun } from '../../core/workspace.js';
 import { c } from '../colors.js';
@@ -90,6 +91,8 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   // attach.auto: an agent started from an interactive terminal attaches it, as with -t.
   if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY) options.terminal = true;
   if (!generateOnly) requireOnPc('launch');
+  // agentCommands (Beta) follows the config: a setting changed in the file takes effect here too. Never blocks a launch.
+  if (!generateOnly) { try { syncAgentCommands(ctx, loaded.config); } catch (e) { console.warn('Agent commands (Beta): ' + errMsg(e)); } }
   if (!generateOnly && isSandboxRunning()) {
     if (!options.noAgent) return launchIntoRunning(ctx);
     // Only one Windows Sandbox can run: "start" on a running one brings its window up instead.

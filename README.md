@@ -52,6 +52,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 | **Databases** | PostgreSQL, MySQL, MongoDB, Redis and DynamoDB Local with a web UI, started when the project uses them, or any time with `--database` / `sandbox db` |
 | **Agents** | Claude Code, Codex, Gemini, opencode, Qwen, Crush, Copilot, Kilo, Amp, Cline, Continue, Kimi, Aider, DeepSeek agents |
 | **Smart** | Detects what the project needs from its files, respects version files, installs in parallel and reuses everything |
+| **Agent commands** (Beta) | `sandbox agent-commands on`: typing `claude`, `codex` ... in any folder starts it in a hidden sandbox and attaches your terminal |
 | **Feels like home** | Your desktop look, Claude settings, MCP servers and conversation history come along; history syncs back |
 
 ## Commands
@@ -64,6 +65,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 | `sandbox attach` / `sessions` / `status` | work with a running sandbox |
 | `sandbox db [start\|stop <name>]` | list, start or stop databases (`sbx-db` inside) |
 | `sandbox exec -- <cmd>` | run a command inside |
+| `sandbox agent-commands on\|off` | (Beta) make the agents installed on this PC start in a sandbox |
 | `sandbox --version` | the installed version |
 | `sandbox stop` / `hide` / `show` | shut down, hide or show the window |
 | `sandbox data` / `data clean` | what's stored and how big, and freeing space |

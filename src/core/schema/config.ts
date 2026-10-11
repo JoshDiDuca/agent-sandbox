@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Name, SchemaRef, Strings, toggle } from './common.js';
 import { Databases } from './databases.js';
 import { Harness } from './harness.js';
-import { Attach, ClaudeProfile, Secrets } from './profile.js';
+import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
 import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
 
@@ -27,6 +27,7 @@ export const Config = z.strictObject({
   toolchains: Toolchains,
   databases: Databases.describe('Databases running inside the sandbox. Data persists in C:\\AgentData\\databases; each one starts at boot.'),
   attach: Attach,
+  agentCommands: AgentCommands,
   secrets: Secrets,
   personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
   claudeProfile: ClaudeProfile,

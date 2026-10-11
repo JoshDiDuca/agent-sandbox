@@ -33,6 +33,8 @@ export const cliTests = (t: Harness): void => {
   const set = editConfigText(original, ['attach', 'auto'], true);
   const nested = 'text' in set ? editConfigText(set.text, ['databases', 'postgres', 'port'], 6543) : set;
   const reset = 'text' in nested ? editConfigText(nested.text, ['sandbox', 'headless'], undefined) : nested;
+  const missing = editConfigText('{ "storage": { "root": "C:\\\\x" } }', ['agentCommands', 'enabled'], undefined);
+  check('text' in missing && missing.text.includes('"root"'), 'removing a setting the file does not have changes nothing (no crash)');
   const invalid = editConfigText(original, ['sandbox', 'memoryMb'], 12);
   check('text' in reset && reset.text.includes('// my notes stay') && reset.text.includes('"auto": true') && reset.text.includes('"port": 6543') && !reset.text.includes('headless') && 'problems' in invalid && invalid.problems.join().includes('memoryMb'),
     'settings screen: changes keep the file\'s comments, nested keys are created, reset removes a key, invalid values are not saved');

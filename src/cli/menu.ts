@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { checkbox, confirm, input, select, Separator } from '@inquirer/prompts';
 import { humanBytes } from '../core/disk.js';
-import { fail } from '../core/util.js';
+import { errMsg, fail } from '../core/util.js';
 import { listAccounts } from '../host/accounts.js';
 import { runningSessions } from '../host/channel.js';
 import { isSandboxRunning } from '../host/platform.js';
@@ -14,10 +14,17 @@ import { cleanTargetOf, collectDataEntries } from './commands/data/collect.js';
 import { c, clearScreen, pageSizeFor, shorten, shortenMiddle, termWidth } from './colors.js';
 import { commandLine, readHistory } from './history.js';
 import { settingsMenu } from './settings/index.js';
+import { syncAgentCommands } from './commands/agent-commands.js';
+import { loadConfig } from '../core/config.js';
 import { COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
 import { validNodeSpec, validPythonSpec } from './validate.js';
 
 // ---- the screen ------------------------------------------------------------------------------------------------------
+
+/** The settings screen may have switched agentCommands (Beta): apply it now, from the saved file. */
+const applyAgentCommands = (ctx: Context): void => {
+  try { syncAgentCommands(ctx, loadConfig(ctx.loaded.configPath ?? undefined).config); } catch (e) { console.warn('Agent commands (Beta): ' + errMsg(e)); }
+};
 
 /** Waits for one key, so the output of a command stays on screen until you have read it. Ctrl+C leaves. */
 const pressAnyKey = (message: string): Promise<void> => new Promise((resolve) => {
@@ -218,7 +225,7 @@ export const menu = async (ctx: Context, run: (argv: string[]) => Promise<number
   try {
     for (let pick = await mainMenu(ctx); ;) {
       if (pick.kind === 'exit') return 0;
-      if (pick.kind === 'group' && pick.group === '@settings') { await settingsMenu(ctx.loaded.configPath); pick = await mainMenu(ctx); }
+      if (pick.kind === 'group' && pick.group === '@settings') { await settingsMenu(ctx.loaded.configPath); applyAgentCommands(ctx); pick = await mainMenu(ctx); }
       else if (pick.kind === 'group') pick = pick.group === '' ? await mainMenu(ctx) : pick.group === '@agents' ? await pickAgent(ctx) : await groupMenu(pick.group);
       else {
         // Ctrl+C while answering the questions of one command goes back to the menu; on the menu itself it leaves.

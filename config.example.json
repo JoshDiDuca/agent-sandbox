@@ -173,6 +173,10 @@
     "auto": false,
     "autoHide": false
   },
+  "agentCommands": {
+    "enabled": false,
+    "agents": "auto"
+  },
   "secrets": {
     "strip": true,
     "allow": [],

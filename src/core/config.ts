@@ -47,6 +47,7 @@ export const DEFAULTS: Config = {
     sqlserver: { enabled: 'auto' },
   },
   attach: { enabled: true, reuseSession: true, auto: false, autoHide: false },
+  agentCommands: { enabled: false, agents: 'auto' },
   secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
   claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },

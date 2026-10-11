@@ -1,6 +1,6 @@
 // What is copied from this PC, and how the terminal attaches.
 import { z } from 'zod';
-import { Strings } from './common.js';
+import { Name, Strings } from './common.js';
 
 export const Secrets = z.strictObject({
   strip: z.boolean().describe('Remove credentials from everything copied into the sandbox (your Claude settings.json "env" and credential helpers, MCP servers\' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys.'),
@@ -13,6 +13,10 @@ export const Attach = z.strictObject({
   reuseSession: z.boolean().describe('sandbox claude -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
   auto: z.boolean().describe('Starting an agent attaches this terminal automatically, as if you passed -t (only in an interactive terminal).'),
   autoHide: z.boolean().describe('Hide the Windows Sandbox window whenever this terminal attaches; it keeps running (sandbox show brings it back).'),
+});
+export const AgentCommands = z.strictObject({
+  enabled: z.boolean().describe('(Beta) Typing an agent\'s own command on this PC (claude, codex, ...) starts it in a hidden sandbox for the folder you are in and attaches that terminal. Adds one folder to the start of YOUR PATH; off removes it. SANDBOX_AGENT_DIRECT=1 runs the real agent instead.'),
+  agents: z.union([z.literal('auto'), z.array(Name)]).describe('"auto" = every agent installed on this PC, or a list of agent names, e.g. ["claude", "codex"].'),
 });
 export const ClaudeProfile = z.strictObject({
   enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),

@@ -24,6 +24,7 @@ const HANDLERS: Record<string, Handler> = {
   sessions: commands.sessions,
   status: commands.status,
   exec: commands.exec,
+  'agent-commands': commands.agentCommandsCommand,
   db: commands.db,
   restart: commands.restart,
   stop: commands.stop,

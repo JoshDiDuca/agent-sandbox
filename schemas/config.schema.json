@@ -915,6 +915,32 @@
       },
       "additionalProperties": false
     },
+    "agentCommands": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "(Beta) Typing an agent's own command on this PC (claude, codex, ...) starts it in a hidden sandbox for the folder you are in and attaches that terminal. Adds one folder to the start of YOUR PATH; off removes it. SANDBOX_AGENT_DIRECT=1 runs the real agent instead."
+        },
+        "agents": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "auto"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            }
+          ],
+          "description": "\"auto\" = every agent installed on this PC, or a list of agent names, e.g. [\"claude\", \"codex\"]."
+        }
+      },
+      "additionalProperties": false
+    },
     "secrets": {
       "type": "object",
       "properties": {

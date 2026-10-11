@@ -16,7 +16,8 @@ export const fileValue = (text: string, key: string[]): unknown => _.get(parse(t
  * the problems that make the result invalid.
  */
 export const editConfigText = (text: string, key: string[], value: unknown, target: SettingsTarget = 'user'): { text: string } | { problems: string[] } => {
-  const edits = modify(text || '{}', key, value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } });
+  // Removing a setting the file does not have changes nothing (jsonc-parser throws on it).
+  const edits = value === undefined && fileValue(text || '{}', key) === undefined ? [] : modify(text || '{}', key, value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } });
   const next = applyEdits(text || '{}', edits);
   const parsed = target === 'project' ? LocalOverrides.safeParse(parse(next) ?? {}) : Config.safeParse(mergeConfig(DEFAULTS, parse(next) ?? {}));
   return parsed.success ? { text: next.endsWith('\n') ? next : next + '\n' } : { problems: describeIssues(parsed.error) };

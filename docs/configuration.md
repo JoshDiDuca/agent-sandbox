@@ -22,6 +22,8 @@ Commonly changed:
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
 | `attach.auto` | starting an agent attaches this terminal automatically (like `-t`) |
+| `agentCommands.enabled` | **(Beta)** typing `claude`, `codex` ... on this PC starts the agent in a hidden sandbox and attaches (default off) |
+| `agentCommands.agents` | `"auto"` = every agent installed on this PC, or a list such as `["claude", "codex"]` |
 | `attach.autoHide` | the sandbox window hides whenever this terminal attaches (`sandbox show` brings it back) |
 | `provisioning.git.access` | `full`, `readonly` or `none` |
 | `secrets.allow`, `secrets.patterns` | let named variables through, or strip more |
@@ -77,3 +79,16 @@ sandbox account use work               # switch now: Claude restarts and continu
 
 `.ps1`, `.mjs` or `.cmd` files in `~/.agent-sandbox/hooks/pre-provision`, `pre-agent` or `post-agent` run inside the
 sandbox at that point, in name order. Use them for real installers, which must run again each boot.
+
+## Agent commands (Beta)
+
+`sandbox agent-commands on` (or `agentCommands.enabled` in the settings screen) makes the agents installed on this PC
+start in the sandbox: type `claude` (or `codex`, `gemini` ...) in any project folder and it starts in a hidden sandbox
+for that folder and attaches your terminal, exactly like `sandbox claude -t --headless`. Arguments go to the agent.
+
+- It finds the agents on your PATH and writes a small forwarding command for each into `<storage>\agent-commands`, then
+  puts that one folder first on **your** PATH (nothing else in PATH changes). Open a new terminal afterwards.
+- `set SANDBOX_AGENT_DIRECT=1` (PowerShell: `$env:SANDBOX_AGENT_DIRECT=1`) runs the real agent on this PC instead.
+- `sandbox agent-commands off` removes the commands and that PATH entry again. `status` shows what is forwarded.
+- Agents installed later are picked up the next time you launch. An agent on the machine-wide PATH, not yours, is not
+  overridden. Beta: it may have rough edges; it is off by default.

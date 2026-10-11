@@ -59,6 +59,11 @@ installer (`install.ps1`) similarly refuses a release package with no listed SHA
 
 `ssh` comes with Git, but no keys are copied in and your LAN is blocked, so deploys stay on your PC.
 
+## Agent commands (Beta)
+
+Off by default. When on, it adds one folder (inside this tool's storage) to the start of your own PATH, holding only
+forwarding commands it wrote; `off` removes them and the entry. A repo's `.sandbox-config.json` cannot turn it on.
+
 ## Git access
 
 `provisioning.git.access`, settable per project:

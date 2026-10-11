@@ -19,7 +19,7 @@ export { editConfigText } from './edit.js';
 
 /** Titles of the top-level sections in the menu. A test makes sure every section of the schema has one. */
 export const SECTION_TITLES: Record<string, string> = {
-  toolchains: 'Languages and tools', databases: 'Databases', sandbox: 'The sandbox machine (memory, window, GPU, network)', attach: 'Attaching (auto attach, auto hide)',
+  toolchains: 'Languages and tools', databases: 'Databases', sandbox: 'The sandbox machine (memory, window, GPU, network)', attach: 'Attaching (auto attach, auto hide)', agentCommands: 'Agent commands: claude, codex ... start in a sandbox (Beta)',
   provisioning: 'Provisioning and git', downloads: 'Downloads (checksums)', secrets: 'Secrets', claudeProfile: 'Your Claude settings and history', storage: 'Storage',
   network: 'Network', hooks: 'Hooks', personalization: 'Desktop look',
 };

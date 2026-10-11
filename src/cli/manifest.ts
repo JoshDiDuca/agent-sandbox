@@ -98,6 +98,7 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'repair', summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)', group: 'Health', args: [], options: [] },
   { name: 'self-test', summary: 'run the built-in tests', group: 'Health', args: [], options: [] },
   { name: 'config', summary: 'show or create your settings file, or check a project\'s .sandbox-config.json', group: 'Config', args: [{ name: 'action', description: 'what to do', required: false, choices: ['show', 'path', 'init', 'schema', 'check'] }], options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')] },
+  { name: 'agent-commands', summary: '(Beta) make claude, codex ... on this PC start in a hidden sandbox and attach', group: 'Agents', args: [{ name: 'action', description: 'on, off or status', required: false, choices: ['status', 'on', 'off'] }], options: [] },
   { name: 'host-claude', summary: 'run Claude on this PC, NOT sandboxed, with its own profile', group: 'Agents', args: [], options: [bool('--personal', 'use your normal Claude profile')], passthrough: 'agent', interactive: true },
   { name: 'menu', summary: 'the interactive menu (what `sandbox` opens with no arguments)', group: 'Config', args: [], options: [], hidden: true, interactive: true },
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },

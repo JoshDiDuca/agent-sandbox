@@ -5,6 +5,7 @@ import os from 'node:os';
 import { errMsg } from '../core/util.js';
 import { configTests } from './config.test.js';
 import { cliTests } from './cli.test.js';
+import { agentCommandTests } from './agent-commands.test.js';
 import { dataTests } from './data.test.js';
 import { detectTests } from './detect.test.js';
 import { mirrorTests } from './mirror.test.js';
@@ -44,6 +45,7 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     hostTests(t);
     dataTests(t);
     cliTests(t);
+    agentCommandTests(t);
     if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
     else console.log('SKIP  live tests (need Windows with the .NET Framework compiler)');
   } catch (e) {

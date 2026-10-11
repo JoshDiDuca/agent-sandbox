@@ -5,6 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import type { Config, HostProbe } from '../core/types.js';
 import { SYSTEM } from '../shared/system.js';
 import { refuseInSelfTest } from './test-guard.js';
+import { commandsDir, realAgent } from './agent-commands.js';
 import { dirExists, ensureDir, fail, fileExists, findOnPath, homeDir, isWin, realPath } from '../core/util.js';
 
 const findHarnessExe = (config: Config, harnessName: string): HostProbe['harnessExe'] => {
@@ -94,7 +95,8 @@ export const spawnDetached = (entry: string, args: string[]): void => {
 
 export const hostClaude = (storageRoot: string, personal: boolean, args: string[]): number => {
   refuseInSelfTest('run Claude Code on this PC');
-  const exe = findOnPath(['claude.exe', 'claude.cmd']);
+  // Never this tool's own forwarding command (agentCommands), which would start a sandbox instead.
+  const exe = realAgent('claude', commandsDir(storageRoot));
   if (!exe) fail('Claude Code is not installed on this PC (no claude.exe or claude.cmd on PATH).', 'Install it: npm install -g @anthropic-ai/claude-code');
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (!personal) {
