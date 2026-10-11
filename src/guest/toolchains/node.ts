@@ -27,9 +27,13 @@ const resolveNode = (spec: string): Promise<string> => resolveCached('node:' + s
   return pickNodeVersion(releases, spec) ?? Promise.reject(new Error('No Node.js release matches "' + spec + '"'));
 });
 
+/** nvm unpacks here and then moves the version into NVM_HOME: a move from the sandbox's own disk into a mapped folder
+ *  fails silently, so it must be on the same (mapped) disk. */
+const NVM_TEMP = path.join(NVM_HOME, '.tmp');
+
 /** nvm, without blocking the event loop (`nvm install` downloads). Resolves with its output. */
 const nvm = (args: string[]): Promise<string> => new Promise((resolve) => {
-  const child = spawn(path.join(NVM_HOME, 'nvm.exe'), args, { windowsHide: true, env: { ...process.env, NVM_HOME, NVM_SYMLINK } });
+  const child = spawn(path.join(NVM_HOME, 'nvm.exe'), args, { windowsHide: true, env: { ...process.env, NVM_HOME, NVM_SYMLINK, TEMP: NVM_TEMP, TMP: NVM_TEMP } });
   let out = '';
   child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
   child.stderr.on('data', (d: Buffer) => { out += d.toString(); });
@@ -59,7 +63,9 @@ const installNodeVersion = async (version: string): Promise<void> => {
   if (exists(path.join(dir, 'node.exe'))) return;
   if (exists(path.join(fromHost, 'node.exe'))) { log('Copying Node ' + version + ' from this PC\'s nvm (without global packages) ...'); copyNode(fromHost, dir); return; }
   log('nvm install ' + version + ' ...');
+  mkdirp(NVM_TEMP);
   const out = await nvm(['install', version]);
+  fs.rmSync(NVM_TEMP, { recursive: true, force: true });
   if (!exists(path.join(dir, 'node.exe'))) throw new Error('nvm install ' + version + ' failed: ' + out.trim().split('\n').slice(-2).join(' '));
 };
 
