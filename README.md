@@ -23,7 +23,8 @@ irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install
 
 It checks your PC, offers to turn on Windows Sandbox, and installs everything. It uses your Node.js 20+ if you have it,
 otherwise a private copy just for this tool. Nothing is installed system-wide.
-Needs Windows 10/11 **Pro, Enterprise or Education**. [Other ways to install](docs/install.md)
+Needs Windows 10/11 **Pro, Enterprise or Education**. Already have Node.js 20+? `npm install -g windows-development-sandbox`
+works too. [Other ways to install](docs/install.md)
 
 ## Use
 

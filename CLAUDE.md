@@ -38,6 +38,10 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
 - `npm run build` = tsc + esbuild bundle + schema generation. Commit changed `schemas/*.json`.
 - `npm test` must end with the text `ALL TESTS PASSED`: gate on that text, not on the exit code. The live tests (ConPTY,
   daemon, git shim) can flake under load, so run once more before assuming a real failure.
+- The self-test refuses to run outside a Windows Sandbox or GitHub Actions (`onThrowawayMachine` in
+  `src/selftest/index.ts`). Never run it on a real PC.
+- Inside a sandbox, commands that control the sandbox from outside (`launch`, `attach`, `exec`, `stop` ...) fail with a
+  clear message (`requireOnPc`); `db` runs `dist/runtime/db.js` directly.
 - Tests use only temp folders they create. Never the real `~/.agent-sandbox`, registry, PATH, profile or global git config.
 - Arrow functions, lodash where it shortens code, zod for every shape read from disk. Keep the compact style.
 - Messages are short, plain English with no jargon. Errors the user can act on use `fail(message, fix)`.

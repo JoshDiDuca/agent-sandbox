@@ -15,7 +15,7 @@ import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
 import { askYesNo, resolveRun } from '../../core/workspace.js';
-import { currentGuestDir, sandboxAlive, table, type Context } from './context.js';
+import { currentGuestDir, requireOnPc, sandboxAlive, table, type Context } from './context.js';
 
 /** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
 export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
@@ -86,6 +86,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   const { options, loaded, packageRoot, dataPath, storageRoot } = ctx;
   // attach.auto: an agent started from an interactive terminal attaches it, as with -t.
   if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY) options.terminal = true;
+  if (!generateOnly) requireOnPc('launch');
   if (!generateOnly && isSandboxRunning()) {
     if (!options.noAgent) return launchIntoRunning(ctx);
     // Only one Windows Sandbox can run: "start" on a running one brings its window up instead.

@@ -6,6 +6,10 @@ npm test                  # offline, security and live ConPTY/daemon/git tests; 
 npm run install:global    # install this checkout globally as a COPY
 ```
 
+The self-test refuses to run on a normal PC: it only runs inside a Windows Sandbox (run `sandbox start`, then `npm test`
+in it) or on GitHub Actions, because the live tests create files, links and processes. The live tests can flake under
+load; run them once more before assuming a real failure.
+
 To work on this tool with an agent in its own sandbox, install it as a copy (`npm run install:global`), not with
 `npm install -g .`. A linked install would let the sandboxed agent edit the code your PC runs. With a copy, the
 agent's changes only reach your PC when you review them and install again.

@@ -864,7 +864,7 @@
                   "const": "auto"
                 }
               ],
-              "description": "SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a hint to reach the one on this PC through hostAccess.forwards: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
+              "description": "SQL Server. It cannot run inside Windows Sandbox; when a project needs it you get a note to use Postgres or SQLite for local work: true, false, or \"auto\" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings)."
             }
           },
           "additionalProperties": false

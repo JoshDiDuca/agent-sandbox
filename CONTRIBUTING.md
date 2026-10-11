@@ -13,6 +13,9 @@ npm ci            # installs and builds
 npm test          # must end with ALL TESTS PASSED
 ```
 
+`npm test` only runs inside a Windows Sandbox or on GitHub Actions (it refuses on a normal PC). Use
+`sandbox start` and run it there; `npm run build` works anywhere.
+
 `npm run build` runs tsc, bundles the sandbox-side code and regenerates `schemas/*.json`. Commit the schemas when
 setting descriptions change.
 
