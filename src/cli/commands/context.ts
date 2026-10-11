@@ -1,15 +1,31 @@
 // What every command receives, plus the small helpers they share.
+import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import type { CliOptions } from '../args.js';
 import type { LoadedConfig } from '../../core/types.js';
-import { loadConfig } from '../../core/config.js';
+import { loadConfig, userDir } from '../../core/config.js';
 import { expandPath, fail, isInsideOrEqual } from '../../core/util.js';
 import { isSandboxRunning } from '../../host/platform.js';
 
 export interface Context { packageRoot: string; entry: string; options: CliOptions; loaded: LoadedConfig; storageRoot: string; dataPath: string }
 
+/** Keeps ~/.agent-sandbox/*.schema.json in step with the installed version (local schema paths editors trust). */
+const refreshSchemas = (packageRoot: string): void => {
+  const source = path.join(packageRoot, 'schemas');
+  if (!fs.existsSync(source)) return;
+  try {
+    fs.mkdirSync(userDir(), { recursive: true });
+    for (const name of fs.readdirSync(source)) {
+      const target = path.join(userDir(), name);
+      const text = fs.readFileSync(path.join(source, name), 'utf8');
+      if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== text) fs.writeFileSync(target, text, 'utf8');
+    }
+  } catch { /* editor help only; never block a command over it */ }
+};
+
 export const createContext = (packageRoot: string, entry: string, options: CliOptions): Context => {
+  refreshSchemas(packageRoot);
   const loaded = loadConfig(options.config);
   const storageRoot = expandPath(loaded.config.storage.root, loaded.base);
   return { packageRoot, entry, options, loaded, storageRoot, dataPath: path.join(storageRoot, 'data', loaded.config.storage.dataName) };
@@ -29,11 +45,11 @@ export const printJson = (ctx: Context, value: unknown): boolean => {
 
 export const sandboxAlive = (): boolean => isSandboxRunning();
 
-export const requireRunning = (hint = ''): void => { if (!isSandboxRunning()) fail('No Windows Sandbox is running.' + (hint ? ' ' + hint : '')); };
+export const requireRunning = (hint = ''): void => { if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with claude-sbx.'); };
 
 /** Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist there). */
 export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorkspace: string): string => {
-  if (!isInsideOrEqual(workspaceHost, hostDir)) fail('The running sandbox maps ' + workspaceHost + ', and Windows Sandbox cannot add folders while running. Run from inside that folder, or close the sandbox and launch again from ' + hostDir + '.');
+  if (!isInsideOrEqual(workspaceHost, hostDir)) fail('The running sandbox works on ' + workspaceHost + ', and Windows Sandbox cannot add folders while it runs.', 'Run from inside that folder, or stop the sandbox (agent-sandbox stop) and launch again from ' + hostDir + '.');
   const rel = path.relative(workspaceHost, hostDir);
   return rel ? path.win32.join(guestWorkspace, rel) : guestWorkspace;
 };

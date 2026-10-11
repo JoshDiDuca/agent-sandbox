@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { SYSTEM } from '../../shared/system.js';
 import { dryRun, exec, exists, isWin, launchDir, log, mkdirp, powershell, session, toolsDir } from '../env.js';
 
 const psQuote = (s: string): string => "'" + s.replace(/'/g, "''") + "'";
@@ -11,7 +12,7 @@ const psQuote = (s: string): string => "'" + s.replace(/'/g, "''") + "'";
 export const applyPersonalization = (): void => {
   const dir = path.join(launchDir, 'personalize');
   if (!session.personalization || !exists(dir) || dryRun || !isWin) return;
-  exec('reg.exe', ['import', path.join(dir, 'personalize.reg')], { stdio: 'ignore' });
+  exec(SYSTEM.reg(), ['import', path.join(dir, 'personalize.reg')], { stdio: 'ignore' });
   const wallpaper = fs.readdirSync(dir).find((f) => f.startsWith('wallpaper'));
   const local = wallpaper ? path.join(mkdirp(path.join(os.homedir(), 'Pictures')), wallpaper) : null;
   if (wallpaper && local) fs.copyFileSync(path.join(dir, wallpaper), local);

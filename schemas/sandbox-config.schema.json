@@ -1,0 +1,375 @@
+{
+  "title": "agent-sandbox project config (.sandbox-config.json)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path or URL of the JSON Schema for editor autocomplete and docs."
+    },
+    "harness": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Agent for this project."
+    },
+    "guestWorkspace": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Where the workspace appears inside the sandbox. \"auto\" = C:\\Workspace\\<folder name>."
+    },
+    "readOnly": {
+      "type": "boolean",
+      "description": "Map this project read-only."
+    },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Folder on this PC (relative paths are relative to the config file)."
+          },
+          "guest": {
+            "type": "string",
+            "description": "Where it appears inside the sandbox, e.g. C:\\Assets."
+          },
+          "readOnly": {
+            "type": "boolean",
+            "description": "true = the agent can only read it."
+          },
+          "optional": {
+            "description": "true = skip it quietly when the host folder does not exist.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "host",
+          "guest",
+          "readOnly"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Extra folders (relative to this file)."
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent."
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "memoryMb": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "auto"
+            },
+            {
+              "type": "integer",
+              "minimum": 2048,
+              "maximum": 9007199254740991
+            }
+          ],
+          "description": "Sandbox RAM in MB (>= 2048), or \"auto\": free RAM minus reserveHostMb, capped at maxMemoryMb."
+        },
+        "maxMemoryMb": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Upper limit for memoryMb \"auto\"."
+        },
+        "reserveHostMb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "RAM always left for this PC when memoryMb is \"auto\"."
+        },
+        "vGpu": {
+          "type": "boolean",
+          "description": "Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface."
+        },
+        "networking": {
+          "type": "boolean",
+          "description": "Internet access. false is the only hard network isolation Windows Sandbox offers."
+        },
+        "clipboard": {
+          "type": "boolean",
+          "description": "Shared clipboard between this PC and the sandbox."
+        },
+        "audioInput": {
+          "type": "boolean",
+          "description": "Microphone access."
+        },
+        "videoInput": {
+          "type": "boolean",
+          "description": "Camera access."
+        },
+        "printerRedirection": {
+          "type": "boolean",
+          "description": "Printers from this PC."
+        },
+        "protectedClient": {
+          "type": "boolean",
+          "description": "Run the sandbox window in Protected Client mode (recommended)."
+        },
+        "headless": {
+          "type": "boolean",
+          "description": "Hide the sandbox window (sbx-show brings it back). A headless sandbox shuts down when its last session ends."
+        }
+      },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "blockPrivateRanges": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provisioning": {
+      "type": "object",
+      "properties": {
+        "copyFromHost": {
+          "type": "boolean",
+          "description": "Copy Node, Git, nvm and the agent from this PC when they are installed here."
+        },
+        "fallbackToInstall": {
+          "type": "boolean",
+          "description": "Download anything that cannot be copied from this PC."
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Re-copy / re-download everything on the next launch."
+        },
+        "git": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Provide Git for Windows (and Git Bash, which Claude Code needs)."
+            },
+            "access": {
+              "type": "string",
+              "enum": [
+                "full",
+                "readonly",
+                "none"
+              ],
+              "description": "full: normal git. readonly: status/log/diff/show/blame only (no commit, push, checkout, ...). none: no git at all; .git is hidden from the agent."
+            }
+          },
+          "additionalProperties": false
+        },
+        "terminal": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Windows Terminal as the sandbox window."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "toolchains": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Default Node version for nvm. \"host\" = the Node on this PC. A project's .nvmrc / .node-version wins."
+            },
+            "extraVersions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "More Node versions to install (switch with nvm use)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "python": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Python 3 (CPython with pip)."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Python 3 version prefix, e.g. \"3\" or \"3.12\". A project's .python-version wins."
+            },
+            "python2": {
+              "type": "boolean",
+              "description": "Also install Python 2.7 as python2 / pip2."
+            }
+          },
+          "additionalProperties": false
+        },
+        "rust": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Rust via rustup (cargo, rustc)."
+            },
+            "toolchain": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Default toolchain, e.g. \"stable\". rust-toolchain.toml in a project wins."
+            },
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Host triple. The GNU host needs no Visual Studio; MinGW (cpp) is its linker."
+            }
+          },
+          "additionalProperties": false
+        },
+        "cpp": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "MinGW-w64 GCC: gcc, g++, mingw32-make."
+            }
+          },
+          "additionalProperties": false
+        },
+        "dotnet": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": ".NET SDK (C#)."
+            },
+            "channels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "SDK channels, e.g. [\"LTS\", \"8.0\"]. A project's global.json is installed too."
+            }
+          },
+          "additionalProperties": false
+        },
+        "bun": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Bun runtime."
+            }
+          },
+          "additionalProperties": false
+        },
+        "uv": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "uv (Python package manager)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "vscode": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "attach": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Allow attaching from the host terminal."
+        }
+      },
+      "additionalProperties": false
+    },
+    "personalization": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Copy your desktop look into the sandbox."
+        }
+      },
+      "additionalProperties": false
+    },
+    "claudeProfile": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Copy selected Claude settings from this PC into the sandbox."
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "description": "Files and folders copied from it."
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "Refresh these settings from this PC on every launch."
+        },
+        "copyCredentials": {
+          "type": "boolean",
+          "description": "Copy your Claude LOGIN into the sandbox. Prefer agent-sandbox account instead."
+        },
+        "syncHistory": {
+          "type": "boolean",
+          "description": "Bring all conversation history in, and sync new history back (path-translated)."
+        },
+        "syncClaudeMem": {
+          "type": "boolean",
+          "description": "Bring claude-mem data in, and its database back when the sandbox closes."
+        }
+      },
+      "additionalProperties": false
+    },
+    "hooks": {
+      "type": "object",
+      "properties": {
+        "failFast": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

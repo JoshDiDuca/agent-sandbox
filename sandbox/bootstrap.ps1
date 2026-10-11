@@ -23,7 +23,7 @@ $transcriptStopped = $false
 $session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw | ConvertFrom-Json
 
 function Set-Status([string]$Phase, [string]$Message) {
-    # Same shape as SandboxStatus in src/types.ts; written atomically so the host never reads half a file.
+    # Same shape as SandboxStatus in src/shared/schema.ts; written atomically so the host never reads half a file.
     $status = [ordered]@{ launchId = $session.launchId; phase = $Phase; message = $Message; updatedAt = (Get-Date).ToUniversalTime().ToString('o'); workspaceHost = $session.workspaceHost; guestWorkspace = $session.workspace; headless = [bool]$session.headless }
     $file = Join-Path $runDir 'sandbox.json'
     [IO.File]::WriteAllText("$file.tmp", ($status | ConvertTo-Json -Compress))
@@ -129,7 +129,14 @@ try {
     Stop-Transcript | Out-Null
     $transcriptStopped = $true
     & $nodeExe (Join-Path $launchDir 'runtime\main.js')
-    Write-Host "Sandbox runner finished (exit code $LASTEXITCODE). This window stays open in $($session.workspace)."
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+        # main.js reports its own failures; this catches it dying before it could (e.g. a broken Node).
+        $current = Get-Content -LiteralPath (Join-Path $runDir 'sandbox.json') -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($null -eq $current -or $current.phase -ne 'failed') { Set-Status 'failed' ("The sandbox runner stopped (exit code $code). See C:\AgentData\logs.") }
+        Write-Host "The sandbox runner stopped with exit code $code. Logs: $logsDir" -ForegroundColor Red
+    }
+    Write-Host "This window stays open in $($session.workspace)."
 }
 catch {
     $report = ($_ | Format-List * -Force | Out-String) + "`r`n" + $_.ScriptStackTrace

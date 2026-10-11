@@ -8,7 +8,7 @@ const BEGIN = '<!-- agent-sandbox:begin (generated every boot, do not edit) -->'
 const END = '<!-- agent-sandbox:end -->';
 
 /** Deliberately tiny: it is loaded into every conversation. */
-export const sandboxGuide = (toolSummary: string[]): string => [
+export const sandboxGuide = (toolSummary: string[], lan: 'blocked' | 'open' | 'offline' = 'blocked'): string => [
   BEGIN,
   '## Sandbox manifest — you are in a DISPOSABLE Windows Sandbox',
   'Wiped on close: everything except the paths below (installers, winget/choco, C:\\Users, Program Files, registry).',
@@ -18,7 +18,7 @@ export const sandboxGuide = (toolSummary: string[]): string => [
   '- RO: `' + launchDir + '` (this boot\'s scripts) · lost on close: everything else, incl. `C:\\nvm` (Node symlink)',
   '- Tools: ' + toolSummary.join(' · '),
   '- Persistent installs: `npm i -g` (per nvm version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`. Real installers must re-run each boot via a hook (ask the user).',
-  '- Network: internet yes, host LAN blocked' + (session.networking ? '' : ' (networking OFF)') + '. Other sessions may share this workspace; the user may be typing from the host.',
+  '- Network: ' + (lan === 'offline' ? 'OFF' : lan === 'blocked' ? 'internet yes, host LAN blocked' : 'internet yes, host LAN NOT blocked this time') + '. Other sessions may share this workspace; the user may be typing from the host.',
   END,
 ].join('\n');
 
@@ -40,8 +40,8 @@ export const upsertGuide = (file: string, guide: string): void => {
  */
 export const managedClaudeMd = (): string => path.join(process.env.AGENT_MANAGED_DIR ?? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'ClaudeCode'), 'CLAUDE.md');
 
-export const writeGuides = (toolSummary: string[]): string => {
-  const guide = sandboxGuide(toolSummary);
+export const writeGuides = (toolSummary: string[], lan: 'blocked' | 'open' | 'offline'): string => {
+  const guide = sandboxGuide(toolSummary, lan);
   const managed = managedClaudeMd();
   fs.mkdirSync(path.dirname(managed), { recursive: true });
   fs.writeFileSync(managed, guide + '\n', 'utf8');

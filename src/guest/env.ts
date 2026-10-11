@@ -4,9 +4,12 @@ import path from 'node:path';
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
+import { SYSTEM } from '../shared/system.js';
 
 export const isWin = process.platform === 'win32';
 export const dryRun = process.env.AGENT_DRY_RUN === '1';
+/** Real provisioning, but nothing machine-wide (environment variables): for end-to-end tests outside a sandbox. */
+export const testMode = process.env.AGENT_SANDBOX_TEST === '1';
 export const launchDir = process.env.AGENT_LAUNCH_DIR ?? 'C:\\AgentLaunch';
 export const dataDir = process.env.AGENT_DATA_DIR ?? 'C:\\AgentData';
 export const hostToolsDir = process.env.AGENT_HOST_TOOLS_DIR ?? 'C:\\HostTools';
@@ -32,7 +35,12 @@ export const exists = (p: string): boolean => fs.existsSync(p);
 export const mkdirp = (p: string): string => { fs.mkdirSync(p, { recursive: true }); return p; };
 export const logPath = logFile;
 
+/** Best-effort: progress reporting must never be what breaks the boot. */
 export const setSandboxStatus = (phase: SandboxStatus['phase'], message: string): void => {
+  try { writeJsonAtomicChecked(phase, message); } catch (e) { warn('Could not update sandbox status: ' + errMsg(e)); }
+};
+
+const writeJsonAtomicChecked = (phase: SandboxStatus['phase'], message: string): void => {
   writeJsonAtomic(run.sandbox, { launchId: session.launchId, phase, message, updatedAt: now(), workspaceHost: session.workspaceHost, guestWorkspace: workspace, headless: session.headless } satisfies SandboxStatus);
 };
 
@@ -48,11 +56,11 @@ export const execOutput = (file: string, args: string[], options: SpawnSyncOptio
   return result.status === 0 ? String(result.stdout ?? '').trim() : '';
 };
 
-export const powershell = (script: string): void => exec('powershell.exe', ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+export const powershell = (script: string): void => exec(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
 
 /** Copies a folder with robocopy (fast, restartable); robocopy exit codes below 8 mean success. */
 export const robocopy = (from: string, to: string): void => {
   if (!isWin) { fs.cpSync(from, to, { recursive: true }); return; }
-  const result = spawnSync('robocopy.exe', [from, to, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'], { stdio: 'ignore', windowsHide: true });
+  const result = spawnSync(SYSTEM.robocopy(), [from, to, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'], { stdio: 'ignore', windowsHide: true });
   if ((result.status ?? 16) >= 8) throw new Error('robocopy ' + from + ' -> ' + to + ' failed (exit ' + result.status + ')');
 };

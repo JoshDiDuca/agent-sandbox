@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { SYSTEM } from '../shared/system.js';
 import { parse as parseJsoncText, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 export const isWin = process.platform === 'win32';
@@ -54,10 +55,12 @@ export const isInsideOrEqual = (parent: string, child: string): boolean => {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
 
-const RESERVED_GUEST = /^C:\\(?:Windows|Program Files|Program Files \(x86\)|ProgramData|Users|AgentLaunch|AgentData|HostTools|nvm)(?:\\|$)/i;
-export const assertGuestPath = (value: string): void => {
-  if (!/^C:\\/.test(value) || value.includes('..') || value === 'C:\\' || RESERVED_GUEST.test(value)) fail('Invalid or reserved guest path: ' + value);
-};
+/**
+ * Text that came from the sandbox, made safe to print: control characters and escape sequences are removed except
+ * plain colours (SGR), so nothing written by the sandbox can drive your terminal (titles, clipboard, cursor tricks).
+ */
+export const safeText = (text: string): string =>
+  text.replace(/\x1b\[[0-9;]*m|\x1b(\[[0-9;?]*[ -\/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[@-Z\\-_])|[\x00-\x08\x0b-\x1f\x7f]/g, (m) => (/^\x1b\[[0-9;]*m$/.test(m) ? m : ''));
 
 export const findOnPath = (names: string[]): string | null => {
   const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter((d: string) => d !== '');
@@ -94,14 +97,14 @@ const powerShellArgs = (script: string): string[] => {
 
 /** Runs a PowerShell script and returns its exit code (and stdout when `capture`). */
 export const runPowerShell = (script: string, capture = false): { status: number; stdout: string } => {
-  const result = spawnSync('powershell.exe', powerShellArgs(script), { stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', encoding: 'utf8', windowsHide: true });
+  const result = spawnSync(SYSTEM.powershell(), powerShellArgs(script), { stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', encoding: 'utf8', windowsHide: true });
   if (result.error) throw result.error;
   return { status: result.status ?? 1, stdout: result.stdout ?? '' };
 };
 
 /** Async variant (does not block the event loop), resolving with stdout. */
 export const runPowerShellAsync = (script: string): Promise<string> => new Promise((resolve, reject) => {
-  const child = spawn('powershell.exe', powerShellArgs(script), { stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true });
+  const child = spawn(SYSTEM.powershell(), powerShellArgs(script), { stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true });
   let out = '';
   child.stdout.on('data', (d: Buffer) => { out += d.toString('utf8'); });
   child.on('error', reject);

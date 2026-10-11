@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Harness } from '../../core/types.js';
+import { SYSTEM } from '../../shared/system.js';
 import { dryRun, exec, exists, hostToolsDir, isWin, log, mkdirp, session, toolsDir, warn } from '../env.js';
 
 const harnessPaths = (name: string, harness: Harness) => {
@@ -21,10 +22,10 @@ const installViaNpm = (name: string, harness: Harness, dir: string, env: NodeJS.
 };
 
 /** Copies the agent from this PC when it was mapped in (primary agent only), otherwise installs it with npm. */
-export const provisionHarness = (name: string, harness: Harness, env: NodeJS.ProcessEnv): void => {
+export const provisionHarness = (name: string, harness: Harness, env: NodeJS.ProcessEnv, refresh = session.provisioning.refresh): void => {
   const p = harnessPaths(name, harness);
   const cached = (p.exe !== null && exists(p.exe)) || (p.cmd !== null && exists(p.cmd));
-  if (cached && !session.provisioning.refresh) { log(name + ' already cached in persistent storage.'); return; }
+  if (cached && !refresh) { log(name + ' already cached in persistent storage.'); return; }
   mkdirp(p.dir);
   if (session.provisioning.copyFromHost && harness.hostExecutable && name === session.harnessName) {
     const source = path.join(hostToolsDir, 'agents', name, harness.hostExecutable);
@@ -39,7 +40,7 @@ export const provisionHarness = (name: string, harness: Harness, env: NodeJS.Pro
 export const resolveLaunch = (name: string, harness: Harness): { file: string; args: string[] } => {
   const p = harnessPaths(name, harness);
   if (p.exe && exists(p.exe)) return { file: p.exe, args: [] };
-  if (p.cmd && exists(p.cmd)) return isWin ? { file: 'cmd.exe', args: ['/d', '/c', p.cmd] } : { file: p.cmd, args: [] };
+  if (p.cmd && exists(p.cmd)) return isWin ? { file: SYSTEM.cmd(), args: ['/d', '/c', p.cmd] } : { file: p.cmd, args: [] };
   if (dryRun) return { file: p.exe ?? p.cmd ?? name, args: [] };
   throw new Error('Cannot find an executable for ' + name + ' after provisioning.');
 };

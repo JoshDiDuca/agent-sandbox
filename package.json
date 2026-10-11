@@ -27,13 +27,14 @@
   "files": [
     "dist",
     "sandbox",
+    "schemas",
     "hooks",
     "config.example.json",
     ".sandbox-config.example.json",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node scripts/schemas.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "rebuild": "npm run clean && npm run build",
     "test": "npm run build && node dist/bin/agent-sandbox.js self-test",

@@ -24,7 +24,7 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
 
 /** Applies validated overrides. Mappings with the same guest folder replace the configured ones. */
 export const applyOverrides = (config: Config, ov: Overrides): Config => {
-  const { harness, mappings, scripts: _scripts, ...rest } = ov;
+  const { harness, mappings, scripts: _scripts, $schema: _schema, ...rest } = ov;
   const next = mergeConfig(config, rest);
   if (harness) next.defaultHarness = harness;
   if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
@@ -36,7 +36,7 @@ const flatten = (value: unknown, prefix = ''): string[] =>
 
 /** Human-readable list of what a local config changes, with risky items flagged. */
 export const describeOverrides = (ov: Overrides): string[] => {
-  const { harness, mappings = [], scripts = [], ...sections } = ov;
+  const { harness, mappings = [], scripts = [], $schema: _schema, ...sections } = ov;
   const lines = [
     ...(harness ? ['agent = ' + harness] : []),
     ...mappings.map((m) => (m.readOnly ? 'read-only' : 'READ/WRITE') + ' folder ' + m.host + '  ->  ' + m.guest),

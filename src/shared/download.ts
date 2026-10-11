@@ -4,15 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { SYSTEM } from './system.js';
 
 const USER_AGENT = 'agent-sandbox';
 
-/** fetch with retries: the sandbox network can take a few seconds to come up. */
-export const fetchRetry = async (url: string, init: RequestInit = {}, attempts = 5): Promise<Response> => {
+/** fetch with retries (the sandbox network can take a few seconds to come up) and a timeout per attempt. */
+export const fetchRetry = async (url: string, init: RequestInit = {}, attempts = 5, timeoutMs = 60000): Promise<Response> => {
   let last: unknown;
   for (let i = 1; i <= attempts; i++) {
     try {
-      const response = await fetch(url, { ...init, headers: { 'User-Agent': USER_AGENT, ...(init.headers ?? {}) } });
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), headers: { 'User-Agent': USER_AGENT, ...(init.headers ?? {}) } });
       if (response.ok) return response;
       last = new Error('HTTP ' + response.status + ' for ' + url);
       if (response.status === 404) break;
@@ -22,11 +23,12 @@ export const fetchRetry = async (url: string, init: RequestInit = {}, attempts =
   throw last instanceof Error ? last : new Error(String(last));
 };
 
-export const fetchJson = async <T>(url: string): Promise<T> => await (await fetchRetry(url, { headers: { Accept: 'application/json' } })).json() as T;
+/** Small lookups fail fast (2 tries, 20 s each) so an offline boot falls back to cached versions quickly. */
+export const fetchJson = async <T>(url: string): Promise<T> => await (await fetchRetry(url, { headers: { Accept: 'application/json' } }, 2, 20000)).json() as T;
 export const fetchText = async (url: string): Promise<string> => await (await fetchRetry(url)).text();
 
 export const download = async (url: string, destination: string, expectedSha256?: string | null): Promise<void> => {
-  const response = await fetchRetry(url);
+  const response = await fetchRetry(url, {}, 3, 20 * 60 * 1000);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
   if (expectedSha256 && sha256File(destination) !== expectedSha256.toLowerCase()) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
@@ -61,11 +63,11 @@ export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = f
 /** Extracts .zip / .nupkg / .tar.gz with the tar.exe that ships with Windows, falling back to Expand-Archive. */
 export const extractArchive = (archive: string, destination: string): void => {
   fs.mkdirSync(destination, { recursive: true });
-  let result = spawnSync('tar.exe', ['-xf', archive, '-C', destination], { stdio: 'ignore', windowsHide: true });
+  let result = spawnSync(SYSTEM.tar(), ['-xf', archive, '-C', destination], { stdio: 'ignore', windowsHide: true });
   if (result.status !== 0 && /\.(zip|nupkg)$/i.test(archive)) {
     const zip = archive.endsWith('.zip') ? archive : archive + '.zip';
     if (zip !== archive) fs.copyFileSync(archive, zip);
-    result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-Command', "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destination.replace(/'/g, "''") + "' -Force"], { stdio: 'ignore', windowsHide: true });
+    result = spawnSync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "Expand-Archive -LiteralPath '" + zip.replace(/'/g, "''") + "' -DestinationPath '" + destination.replace(/'/g, "''") + "' -Force"], { stdio: 'ignore', windowsHide: true });
   }
   if (result.status !== 0) throw new Error('Could not extract ' + archive);
 };

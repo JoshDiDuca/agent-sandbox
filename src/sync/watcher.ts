@@ -36,24 +36,24 @@ export const syncBeforeLaunch = (config: Config, dataPath: string, hostWorkspace
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!config.storage.persistAgentState) return summary;
   const previous = readSyncState(dataPath);
-  if (previous && profile.syncHistory) syncHistoryOut(toPaths(previous, dataPath));
-  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace };
+  if (previous?.syncHistory) syncHistoryOut(toPaths(previous, dataPath));
+  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace, syncHistory: profile.syncHistory, syncClaudeMem: profile.syncClaudeMem };
   if (profile.syncHistory) summary.history = syncHistoryIn(toPaths(state, dataPath));
   if (profile.syncClaudeMem) {
-    if (previous) memSync(dataPath, state, 'out');
+    if (previous?.syncClaudeMem) memSync(dataPath, state, 'out');
     summary.claudeMem = memSync(dataPath, state, 'in');
   }
   writeSyncState(dataPath, state);
   return summary;
 };
 
-/** Syncs the sandbox's history (and, when `final`, claude-mem) back to this PC. */
-export const syncBack = (config: Config, dataPath: string, final: boolean): SyncSummary => {
+/** Syncs the sandbox's history (and, when `final`, claude-mem) back to this PC, as configured for the last launch. */
+export const syncBack = (dataPath: string, final: boolean): SyncSummary => {
   const state = readSyncState(dataPath);
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!state) return summary;
-  if (config.claudeProfile.syncHistory) summary.history = syncHistoryOut(toPaths(state, dataPath));
-  if (final && config.claudeProfile.syncClaudeMem) summary.claudeMem = memSync(dataPath, state, 'out');
+  if (state.syncHistory) summary.history = syncHistoryOut(toPaths(state, dataPath));
+  if (final && state.syncClaudeMem) summary.claudeMem = memSync(dataPath, state, 'out');
   writeSyncState(dataPath, state);
   return summary;
 };
@@ -68,7 +68,7 @@ export const watcherRunning = (dataPath: string): boolean => {
 };
 
 /** Body of the detached watcher process (`agent-sandbox _watch`). */
-export const watch = async (config: Config, dataPath: string): Promise<void> => {
+export const watch = async (dataPath: string): Promise<void> => {
   if (watcherRunning(dataPath)) return;
   fs.mkdirSync(hostRunDir(dataPath), { recursive: true });
   fs.mkdirSync(path.dirname(watcherLog(dataPath)), { recursive: true });
@@ -79,7 +79,7 @@ export const watch = async (config: Config, dataPath: string): Promise<void> => 
       for (const finding of checkRepo(dataPath)) note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail);
     } catch (e) { note('repo guard failed: ' + errMsg(e)); }
     try {
-      const s = syncBack(config, dataPath, final);
+      const s = syncBack(dataPath, final);
       if (s.history || final) note((final ? 'sandbox closed; final sync: ' : '') + 'history ' + s.history + ', claude-mem ' + s.claudeMem);
     } catch (e) { note('sync failed: ' + errMsg(e)); }
   };

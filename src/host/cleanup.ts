@@ -46,7 +46,9 @@ export const pruneStorage = (storageRoot: string, options: Partial<PruneOptions>
   }
   for (const data of children(path.join(storageRoot, 'data'))) {
     for (const log of children(path.join(data, 'logs'))) if (ageMs(log, now) > o.logDays * DAY) remove(log, 'logs');
-    for (const dir of [path.join(data, 'tools'), path.join(data, 'state'), path.join(data, 'run'), path.join(data, 'run', 'responses')]) {
+    const runDir = path.join(data, 'run');
+    const dirs = [path.join(data, 'tools'), path.join(data, 'state'), ...(isLink(runDir) ? [] : [runDir, path.join(runDir, 'responses')])];
+    for (const dir of dirs) {
       for (const entry of children(dir)) {
         const name = path.basename(entry);
         const leftover = /\.staging-[0-9a-f]+$|\.incoming$|\.tmp$/i.test(name) && ageMs(entry, now) > DAY;

@@ -5,8 +5,9 @@ import crypto from 'node:crypto';
 import type { Config, GenerateOptions, Generated, GuestSession, ProfileResult, ResolvedMapping } from '../core/types.js';
 import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
+import { assertSafeMapping } from '../core/workspace.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
-import { dirExists, ensureDir, fail, fileExists, homeDir, isRootPath, isUserProfile, writeJson, xmlEscape } from '../core/util.js';
+import { dirExists, ensureDir, fail, fileExists, homeDir, writeJson, xmlEscape } from '../core/util.js';
 
 export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools' } as const;
 const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'];
@@ -16,7 +17,7 @@ export const resolveMemoryMb = (sandbox: Config['sandbox'], freeMemoryBytes = os
   if (sandbox.memoryMb !== 'auto') return sandbox.memoryMb;
   const freeMb = Math.floor(freeMemoryBytes / 1048576);
   const rounded = Math.floor(Math.min(sandbox.maxMemoryMb, freeMb - sandbox.reserveHostMb) / 1024) * 1024;
-  if (rounded < 4096) fail('Not enough free RAM for the sandbox (free ' + freeMb + ' MB, reserve ' + sandbox.reserveHostMb + ' MB). Close apps, lower sandbox.reserveHostMb, or set sandbox.memoryMb to a fixed value.');
+  if (rounded < 4096) fail('Not enough free RAM for the sandbox (' + freeMb + ' MB free, ' + sandbox.reserveHostMb + ' MB kept for this PC).', 'Close some apps, lower sandbox.reserveHostMb, or set sandbox.memoryMb to a fixed value (>= 4096).');
   return rounded;
 };
 
@@ -48,9 +49,9 @@ const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMappin
     const host = m.host;
     if (!dirExists(host)) {
       if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
-      fail('Required mapping folder not found: ' + host);
+      fail('A mapped folder does not exist: ' + host, 'Create it, fix the path in your config, or mark the mapping "optional": true.');
     }
-    if (isRootPath(host) || isUserProfile(host)) fail('Refusing broad mapping: ' + host);
+    assertSafeMapping(host, o.packageRoot, o.run.storageRoot);
     mappings.push({ host, guest: m.guest, readOnly: m.readOnly });
   }
   const { probe } = o;
@@ -72,7 +73,7 @@ const stageHooks = (packageRoot: string, launchPath: string, scripts: string[]):
     }
   }
   scripts.forEach((script: string, index: number) => {
-    if (!fileExists(script)) fail('Script file not found: ' + script);
+    if (!fileExists(script)) fail('Script file not found: ' + script, 'Check the --script path.');
     fs.copyFileSync(script, path.join(launchPath, 'hooks', 'pre-agent', '90-extra-' + index + '-' + path.basename(script)));
   });
 };
@@ -106,16 +107,18 @@ export const gitIdentity = (gitconfig: string): string => {
 
 export const generateSandbox = (o: GenerateOptions): Generated & { personalization: string } => {
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
-  const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown harness: ' + harnessName);
-  if (!dirExists(workspaceHost)) fail('Workspace folder does not exist: ' + workspaceHost);
+  const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
+  if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
 
+  // Checked before anything is written, so a refusal leaves nothing behind.
+  const memoryMb = resolveMemoryMb(config.sandbox, o.freeMemoryBytes);
   const launchId = Date.now() + '-' + crypto.randomBytes(3).toString('hex');
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
   const mappings = collectMappings(o, launchPath);
 
-  const profile: ProfileResult = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath) : { hostDir: null, staged: [], skipped: [], credentials: false };
+  const profile: ProfileResult = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost) : { hostDir: null, staged: [], skipped: [], credentials: false };
   const gitconfig = path.join(homeDir(), '.gitconfig');
   const identity = fileExists(gitconfig) ? gitIdentity(fs.readFileSync(gitconfig, 'utf8')) : '';
   if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }
@@ -147,7 +150,6 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   copyRuntime(o.packageRoot, launchPath);
   stageHooks(o.packageRoot, launchPath, o.run.scripts);
 
-  const memoryMb = resolveMemoryMb(config.sandbox, o.freeMemoryBytes);
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
   return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization };

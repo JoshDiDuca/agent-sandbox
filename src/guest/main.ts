@@ -9,7 +9,7 @@ import { provisionHarness, resolveLaunch } from './setup/agents.js';
 import { restoreClaudeMem, syncClaudeProfile } from './setup/claude.js';
 import { agentEnv, persistEnvironment } from './setup/environment.js';
 import { runHooks } from './setup/hooks.js';
-import { applyNetworkPolicy } from './setup/network.js';
+import { applyNetworkPolicy, type LanState } from './setup/network.js';
 import { writeManagedSettings } from './setup/policy.js';
 import { applyPersonalization, setupGitConfig } from './setup/user.js';
 import { ensurePtyHost, pruneToolLeftovers } from './ptyhost.js';
@@ -44,7 +44,8 @@ const main = async (): Promise<void> => {
   step(1, 'Network and session host');
   let ptyHost: string | null = null;
   if (isWin && !dryRun && session.attach.enabled) await soft('Building the session host', () => { ptyHost = ensurePtyHost(); });
-  await soft('Private-network blocking', () => applyNetworkPolicy(ptyHost));
+  let lan: LanState = session.networking ? 'open' : 'offline';
+  await soft('Private-network blocking', async () => { lan = await applyNetworkPolicy(ptyHost); });
 
   step(2, 'Pre-provision hooks and desktop');
   runHooks('pre-provision', process.env);
@@ -64,7 +65,7 @@ const main = async (): Promise<void> => {
   step(5, 'Claude settings, history and claude-mem');
   if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
   await soft('claude-mem restore', restoreClaudeMem);
-  await soft('Sandbox guide for the agent', () => writeGuides(tools.summary));
+  await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, lan));
   await soft('Claude managed settings', () => writeManagedSettings(gitAccess));
 
   step(6, 'Agent: ' + session.harnessName);

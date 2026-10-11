@@ -7,8 +7,8 @@
 //
 // Safety (the sandbox side is untrusted):
 //  - links are never followed or written through, on either side;
-//  - data coming BACK is limited to plain data files (.jsonl/.json/.txt/.md; file-history backups without an
-//    extension), each capped in size. Nothing executable (settings, hooks, plugins, scripts) flows to this PC.
+//  - what comes BACK is limited to transcripts (.jsonl), prompt history and to-do lists (.json), each capped in
+//    size, and never Claude's memory folders. Nothing executable or instruction-like flows to this PC.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
@@ -19,22 +19,24 @@ export { projectFolderName, translatePaths };
 
 const SESSION_DIRS = ['todos', 'plans', 'file-history'];
 const DATA_FILE = /\.(jsonl?|txt|md)$/i;
-/** file-history backups are named <hash>@v<n> (no extension). */
-const BACKUP_FILE = /^[^.]+$/;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
+/** Host-only record of the last launch: which folders map to each other and what syncs (from the effective config). */
 export interface SyncState {
   hostClaudeDir: string; hostWorkspace: string; guestWorkspace: string;
+  syncHistory?: boolean; syncClaudeMem?: boolean;
   /** Newest claude-mem database time on each side right after the last sync (detects edits on both sides). */
   memHostStamp?: number; memGuestStamp?: number;
 }
 export interface SyncPaths { hostClaudeDir: string; guestClaudeDir: string; hostWorkspace: string; guestWorkspace: string }
 type Filter = (name: string) => boolean;
-interface CopyOptions { transform?: (text: string) => string; accept?: Filter }
+interface CopyOptions { transform?: (text: string) => string; accept?: Filter; skipDirs?: RegExp }
 
 const anyFile: Filter = () => true;
-const dataFile: Filter = (name) => DATA_FILE.test(name);
-const dataOrBackup: Filter = (name) => DATA_FILE.test(name) || BACKUP_FILE.test(name);
+const transcript: Filter = (name) => name.endsWith('.jsonl');
+const json: Filter = (name) => name.endsWith('.json');
+/** Claude's auto-memory is loaded into every host session, so the sandbox must never write it. */
+const NO_MEMORY = /^memory$/i;
 
 const newerThan = (source: fs.Stats, destination: string): boolean => {
   try { return source.mtimeMs > fs.statSync(destination).mtimeMs + 1; } catch { return true; }
@@ -53,7 +55,7 @@ const copyNewer = (from: string, to: string, options: CopyOptions = {}): number 
   return _.sumBy(fs.readdirSync(from, { withFileTypes: true }), (entry: fs.Dirent): number => {
     const source = path.join(from, entry.name);
     const destination = path.join(to, entry.name);
-    if (entry.isDirectory()) return copyNewer(source, destination, options);
+    if (entry.isDirectory()) return options.skipDirs?.test(entry.name) ? 0 : copyNewer(source, destination, options);
     if (!entry.isFile() || !accept(entry.name)) return 0;
     const stat = fs.statSync(source);
     if (stat.size > MAX_FILE_BYTES || !newerThan(stat, destination)) return 0;
@@ -103,9 +105,10 @@ export const syncHistoryOut = (p: SyncPaths): number => {
   const guestProjects = path.join(p.guestClaudeDir, 'projects');
   const names = dirExists(guestProjects) && !isLink(guestProjects) ? fs.readdirSync(guestProjects) : [];
   const projects = _.sumBy(names, (name) => name === guestProject
-    ? copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: dataFile, transform })
-    : copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', name), { accept: dataFile }));
-  const sessions = _.sumBy(SESSION_DIRS, (dir) => copyNewer(path.join(p.guestClaudeDir, dir), path.join(p.hostClaudeDir, dir), { accept: dir === 'file-history' ? dataOrBackup : dataFile }));
+    ? copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: transcript, skipDirs: NO_MEMORY, transform })
+    : copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
+  // Only to-do lists come back besides transcripts; plans and file backups stay in the sandbox.
+  const sessions = copyNewer(path.join(p.guestClaudeDir, 'todos'), path.join(p.hostClaudeDir, 'todos'), { accept: json });
 
   const hostFile = path.join(p.hostClaudeDir, 'history.jsonl');
   const known = new Set(readLines(hostFile));

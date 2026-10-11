@@ -31,7 +31,7 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
   const loaded = loadConfig(options.config);
   const dataPath = path.join(expandPath(loaded.config.storage.root, loaded.base), 'data', loaded.config.storage.dataName);
   const alive = isSandboxRunning;
-  const ready = (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.'));
+  const ready = (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.', 'Start one first, e.g. claude-sbx --headless.'));
   return {
     isRunning: alive,
     status: () => readSandboxStatus(dataPath),

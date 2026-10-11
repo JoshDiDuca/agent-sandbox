@@ -1,76 +1,131 @@
-// agent-sandbox user config: ~/.agent-sandbox/config.json (create it with `agent-sandbox config init`).
-// Comments and trailing commas are fine. Keep only the keys you want to change; everything else uses these defaults.
-// `agent-sandbox config show` prints the effective config.
 {
+  "$schema": "./schemas/config.schema.json",
   "defaultHarness": "claude",
-  // "auto" maps the folder you run from to C:\Workspace\<folder name> inside the sandbox.
   "guestWorkspace": "auto",
   "readOnly": false,
-  // Extra host folders: { "host": "D:\\Assets", "guest": "C:\\Assets", "readOnly": true, "optional": true }
   "mappings": [],
-
   "sandbox": {
-    "memoryMb": "auto",          // or a fixed number of MB (>= 2048)
+    "memoryMb": "auto",
     "maxMemoryMb": 32768,
-    "reserveHostMb": 8192,       // RAM always left for your PC when memoryMb is "auto"
-    "vGpu": false,               // off: Microsoft notes a virtual GPU widens the sandbox attack surface
+    "reserveHostMb": 8192,
+    "vGpu": false,
     "networking": true,
     "clipboard": true,
     "audioInput": false,
     "videoInput": false,
     "printerRedirection": false,
     "protectedClient": true,
-    "headless": false            // true hides the window (sbx-show brings it back); it shuts down when the last session ends
+    "headless": false
   },
-
   "storage": {
     "root": "%LOCALAPPDATA%\\AgentSandbox",
     "persistAgentState": true,
     "dataName": "default"
   },
-
-  "network": { "blockPrivateRanges": true },   // block your LAN from inside the sandbox
-
+  "network": {
+    "blockPrivateRanges": true
+  },
   "provisioning": {
-    "copyFromHost": true,        // copy Node / Git / nvm / claude.exe from this PC when installed here
-    "fallbackToInstall": true,   // otherwise download them inside the sandbox
-    "refresh": false,            // re-copy / re-download everything on the next launch
-    // access: "full" (normal git) | "readonly" (status/log/diff only, no commits) | "none" (no git, .git hidden)
-    "git": { "enabled": true, "access": "full" },
-    "terminal": { "enabled": true }             // Windows Terminal as the sandbox window
+    "copyFromHost": true,
+    "fallbackToInstall": true,
+    "refresh": false,
+    "git": {
+      "enabled": true,
+      "access": "full"
+    },
+    "terminal": {
+      "enabled": true
+    }
   },
-
   "toolchains": {
-    "node": { "version": "host", "extraVersions": [] },   // "host" = the Node on this PC; a project's .nvmrc wins
-    "python": { "enabled": true, "version": "3", "python2": true },
-    // The GNU host needs no Visual Studio (MinGW below is its linker).
-    "rust": { "enabled": true, "toolchain": "stable", "host": "x86_64-pc-windows-gnu" },
-    "cpp": { "enabled": true },                  // MinGW-w64 GCC: gcc, g++, mingw32-make
-    "dotnet": { "enabled": true, "channels": ["LTS"] },
-    "bun": { "enabled": true },
-    "uv": { "enabled": true },
-    "vscode": { "enabled": true }                // portable VS Code; its settings and extensions persist
+    "node": {
+      "version": "host",
+      "extraVersions": []
+    },
+    "python": {
+      "enabled": true,
+      "version": "3",
+      "python2": true
+    },
+    "rust": {
+      "enabled": true,
+      "toolchain": "stable",
+      "host": "x86_64-pc-windows-gnu"
+    },
+    "cpp": {
+      "enabled": true
+    },
+    "dotnet": {
+      "enabled": true,
+      "channels": [
+        "LTS"
+      ]
+    },
+    "bun": {
+      "enabled": true
+    },
+    "uv": {
+      "enabled": true
+    },
+    "vscode": {
+      "enabled": true
+    }
   },
-
-  "attach": { "enabled": true },                 // claude-sbx --terminal / agent-sandbox attach
-  "personalization": { "enabled": true },        // copy theme, accent, taskbar, wallpaper, ... from this PC
-
+  "attach": {
+    "enabled": true
+  },
+  "personalization": {
+    "enabled": true
+  },
   "claudeProfile": {
     "enabled": true,
     "hostDir": "auto",
-    "include": ["settings.json", "CLAUDE.md", "commands", "agents", "skills", "plugins"],
+    "include": [
+      "settings.json",
+      "CLAUDE.md",
+      "commands",
+      "agents",
+      "skills",
+      "plugins"
+    ],
     "globalStateFile": "auto",
-    "copyCredentials": false,    // true copies your Claude login into the sandbox (prefer `agent-sandbox account`)
+    "copyCredentials": false,
     "overwrite": true,
-    "syncHistory": true,         // conversations in and out (path-translated)
-    "syncClaudeMem": true        // claude-mem database in and out
+    "syncHistory": true,
+    "syncClaudeMem": true
   },
-
   "harnesses": {
-    "claude": { "hostExecutable": "claude.exe", "hostDir": "auto", "npmPackage": "@anthropic-ai/claude-code@latest", "npmBin": "claude", "arguments": [], "environment": { "DISABLE_AUTOUPDATER": "1" }, "resumeArguments": ["--continue"] },
-    "codex": { "npmPackage": "@openai/codex@latest", "npmBin": "codex", "arguments": [], "environment": {}, "resumeArguments": ["resume", "--last"] },
-    "gemini": { "npmPackage": "@google/gemini-cli@latest", "npmBin": "gemini", "arguments": [], "environment": {} }
+    "claude": {
+      "hostExecutable": "claude.exe",
+      "hostDir": "auto",
+      "npmPackage": "@anthropic-ai/claude-code@latest",
+      "npmBin": "claude",
+      "arguments": [],
+      "environment": {
+        "DISABLE_AUTOUPDATER": "1"
+      },
+      "resumeArguments": [
+        "--continue"
+      ]
+    },
+    "codex": {
+      "npmPackage": "@openai/codex@latest",
+      "npmBin": "codex",
+      "arguments": [],
+      "environment": {},
+      "resumeArguments": [
+        "resume",
+        "--last"
+      ]
+    },
+    "gemini": {
+      "npmPackage": "@google/gemini-cli@latest",
+      "npmBin": "gemini",
+      "arguments": [],
+      "environment": {}
+    }
   },
-
-  "hooks": { "failFast": false }
+  "hooks": {
+    "failFast": false
+  }
 }

@@ -9,14 +9,25 @@ import { ensureTerminal } from '../../host/terminal.js';
 import { hideSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
-import { errMsg, fail } from '../../core/util.js';
+import type { Config, ResolvedRun } from '../../core/types.js';
+import { errMsg, fail, sleep } from '../../core/util.js';
 import { askYesNo, resolveRun } from '../../core/workspace.js';
 import { currentGuestDir, sandboxAlive, table, type Context } from './context.js';
+
+/** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
+const runningSandboxStatus = async (dataPath: string) => {
+  for (let i = 0; i < 60; i++) {
+    const status = readSandboxStatus(dataPath);
+    if (status) return status;
+    await sleep(1000);
+  }
+  return fail('A Windows Sandbox is running that agent-sandbox did not start (or that uses another storage.dataName).', 'Close that sandbox window first, then run claude-sbx again.');
+};
 
 /** A sandbox is already running: open another agent session in it (new tab inside; optionally attach here). */
 const launchIntoRunning = async (ctx: Context): Promise<number> => {
   const { options, loaded, dataPath } = ctx;
-  const status = readSandboxStatus(dataPath) ?? fail('A Windows Sandbox is running but was not started by agent-sandbox (or uses another storage.dataName). Close it first.');
+  const status = await runningSandboxStatus(dataPath);
   const ready = status.phase === 'ready' ? status : await waitForReady(dataPath, status.launchId, sandboxAlive);
   const cwd = currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace);
   const harness = options.harness ?? loaded.config.defaultHarness;
@@ -27,11 +38,26 @@ const launchIntoRunning = async (ctx: Context): Promise<number> => {
   return 0;
 };
 
-const syncSummary = (run: Parameters<typeof syncBeforeLaunch>[0], dataPath: string, workspaceHost: string): string => {
+const syncSummary = (config: Config, dataPath: string, workspaceHost: string): string => {
   try {
-    const s = syncBeforeLaunch(run, dataPath, workspaceHost);
+    const s = syncBeforeLaunch(config, dataPath, workspaceHost);
     return s.history + ' file(s) of history in, claude-mem ' + s.claudeMem;
   } catch (e) { return 'FAILED: ' + errMsg(e); }
+};
+
+/** Everything a real launch does before the sandbox starts (skipped by `generate`, which only writes files). */
+const prepare = async (ctx: Context, run: ResolvedRun) => {
+  const { options, dataPath, storageRoot } = ctx;
+  const { config } = run;
+  const account = options.account ?? defaultAccount(storageRoot);
+  if (account && run.harnessName === 'claude' && account !== activeAccount(dataPath)) activateAccount(storageRoot, dataPath, account);
+  const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh) : { exe: null, message: 'disabled' };
+  const history = syncSummary(config, dataPath, run.workspaceHost);
+  const guarded = checkRepo(dataPath);
+  if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see agent-sandbox status).\x1b[0m');
+  saveRepoSnapshot(dataPath, run.workspaceHost);
+  resetRunDir(dataPath);
+  return { account, terminal: terminal.message, history, pruned: describePrune(pruneStorage(storageRoot)) };
 };
 
 export const launch = async (ctx: Context, generateOnly = false): Promise<number> => {
@@ -44,26 +70,15 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   });
   const { config } = run;
   if (!generateOnly) assertCanLaunch();
-
-  const account = options.account ?? defaultAccount(storageRoot);
-  if (account && run.harnessName === 'claude' && account !== activeAccount(dataPath)) activateAccount(storageRoot, dataPath, account);
-  const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh) : { exe: null, message: 'disabled' };
-  const history = syncSummary(config, dataPath, run.workspaceHost);
-  const guarded = checkRepo(dataPath);
-  if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' git hook/config change(s) made in the previous sandbox run (see agent-sandbox status).\x1b[0m');
-  saveRepoSnapshot(dataPath, run.workspaceHost);
-  resetRunDir(dataPath);
-  const pruned = describePrune(pruneStorage(storageRoot));
+  const prepared = generateOnly ? null : await prepare(ctx, run);
   const generated = generateSandbox({ packageRoot, run, harnessArgs: options.passthrough, probe: probeHost(config, run.harnessName) });
 
   for (const note of run.notes) console.log(note);
   table([
     ['Workspace', run.workspaceHost + '  ->  ' + config.guestWorkspace + (config.readOnly ? '  (read-only)' : '')],
-    ['Agent', run.harnessName + (account ? '  (account: ' + account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
+    ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
     ['Node', run.versions.node.spec + ' (' + run.versions.node.source + ')   Python: ' + run.versions.python.spec + ' (' + run.versions.python.source + ')'],
-    ['Terminal', terminal.message],
-    ['History', history],
-    ['Cleanup', pruned],
+    ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Desktop', generated.personalization],
     ['Claude', generated.profile.staged.length ? generated.profile.staged.join(', ') + (generated.profile.credentials ? '  (INCLUDING YOUR LOGIN)' : '') : 'no settings copied'],
     ...generated.mappings.slice(3).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
@@ -73,13 +88,14 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
 
   startSandbox(generated.wsbPath);
   if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', options.config] : [])]);
-  const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot) : null;
+  // Hiding runs alongside; a failure to find the window must never break the launch or an attach.
+  const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot).catch(() => false) : null;
   if (options.terminal) {
     console.log('Waiting for the sandbox (first boot downloads toolchains; later boots take seconds) ...');
     await waitForReady(dataPath, generated.launchId, sandboxAlive);
     return attachTerminal(await waitForSession(dataPath, generated.launchId, sandboxAlive));
   }
-  if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: claude-sbx --terminal' : 'Could not find the sandbox window to hide (it may still be starting); use agent-sandbox hide.');
-  else console.log('Sandbox starting. ' + run.harnessName + ' opens in Windows Terminal inside it. Attach here any time: claude-sbx --terminal');
+  if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: claude-sbx -t' : 'Could not find the sandbox window to hide (it may still be starting); run agent-sandbox hide in a moment.');
+  else console.log('Sandbox starting. ' + run.harnessName + ' opens in Windows Terminal inside it. Attach here any time: claude-sbx -t');
   return 0;
 };

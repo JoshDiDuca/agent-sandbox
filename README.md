@@ -1,157 +1,194 @@
 # agent-sandbox
 
 Run **Claude Code** (or Codex / Gemini) inside **Windows Sandbox**, with the folder you are in as its workspace.
-The agent can read and write that folder and nothing else on your PC. The sandbox is wiped when it closes; your
-project, toolchains, logins and history are kept.
+The agent gets a fully equipped Windows machine of its own, can read and write your project, and cannot touch
+anything else on your PC. The sandbox is thrown away when it closes; your project, toolchains, logins and
+conversation history are kept.
 
-- One command: `claude-sbx` in any project folder.
-- Windows Terminal inside the sandbox, with Git (+ Bash), nvm/Node, Python 3 + 2, Rust, C/C++ (MinGW), .NET, Bun and uv ready.
-- Use the sandboxed Claude **from your own terminal** (`claude-sbx --terminal`), or run the sandbox **headless**.
-- Several Claude sessions in one sandbox, several Claude **accounts** you can switch between mid-session.
-- Your conversation history and claude-mem data go in and come back out. Your desktop theme comes along too.
-
-## Requirements
-
-- Windows 10/11 Pro, Enterprise or Education with Windows Sandbox enabled. If it isn't, run this in an
-  admin PowerShell and reboot: `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All`
-- Node.js 20 or newer on your PC.
+```powershell
+cd C:\code\my-app
+claude-sbx            # Claude, sandboxed, in Windows Terminal
+claude-sbx -t         # ...or right here in your own terminal
+```
 
 ## Install
 
+You need Windows 10/11 **Pro, Enterprise or Education** and **Node.js 20+**.
+
 ```powershell
-# from a GitHub release (no build needed)
-npm install -g https://github.com/joshdiduca/agent-sandbox/releases/download/v3.0.0/agent-sandbox-3.0.0.tgz
+# 1. Enable Windows Sandbox once (admin PowerShell), then reboot
+Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
 
-# or from a clone of this repo
-npm install          # also builds
-npm install -g .
+# 2. Install (or update to) the latest release
+npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/agent-sandbox.tgz
 
-# or, once published to npm
-npm install -g agent-sandbox
+# 3. Check everything is ready
+agent-sandbox doctor
 ```
 
-That gives you these commands:
+<details><summary>Other ways to install</summary>
+
+```powershell
+# a specific release
+npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/download/v3.0.0/agent-sandbox-3.0.0.tgz
+
+# straight from the repository (builds on install)
+npm install -g github:JoshDiDuca/agent-sandbox
+
+# from a local clone
+npm install
+npm install -g .
+
+# from GitHub Packages (needs a GitHub token with read:packages in your ~/.npmrc)
+npm install -g @joshdiduca/agent-sandbox --registry=https://npm.pkg.github.com
+```
+</details>
+
+## Commands you will use
 
 | Command | What it does |
 |---|---|
 | `claude-sbx` | Start Claude in a sandbox for the current folder (`codex-sbx`, `gemini-sbx` for the others) |
-| `claude-sbx --terminal` | Same, but Claude runs in **this** terminal (attaches if a sandbox is already running) |
+| `claude-sbx -t` | Same, but Claude runs in **this** terminal. Detach with `Ctrl+]`; Claude keeps running |
+| `claude-sbx --headless` | No sandbox window at all (`sbx-show` brings it back) |
+| `claude-sbx` *(again)* | While a sandbox runs: another Claude session, in a new tab |
+| `claude-sbx --continue` | Anything agent-sandbox does not know goes straight to Claude |
 | `sbx-show` | Show the window of a headless sandbox |
-| `agent-sandbox ...` | Everything else (below) |
-| `claude-host` | Claude on your PC, *not* sandboxed, with a separate profile |
+| `claude-host` | Claude on your PC, **not** sandboxed, with its own profile |
 
-## Use it
-
-```powershell
-cd C:\code\my-app
-claude-sbx                     # sandbox window opens, Claude starts in C:\Workspace\my-app
-claude-sbx --terminal          # ...or use it right here (Ctrl+] detaches, Claude keeps running)
-claude-sbx --headless          # no window at all; sbx-show brings it back
-claude-sbx --continue          # anything agent-sandbox doesn't know goes to Claude
-claude-sbx                     # again while a sandbox runs: a second Claude session in a new tab
-```
-
-The first start downloads the toolchains (a few minutes, once). After that, a sandbox is up in seconds.
-
-### All commands
+Everything else is `agent-sandbox <command>`:
 
 ```
-agent-sandbox launch            start a sandbox (or another session in the running one)
-agent-sandbox attach [id]       show a running session in this terminal (Ctrl+] detaches)
-agent-sandbox sessions          list sessions                 agent-sandbox status      overview
-agent-sandbox exec -- <cmd>     run a command inside the sandbox and print its output
-agent-sandbox restart           restart Claude in place (it resumes the conversation)
-agent-sandbox stop              shut the sandbox down         agent-sandbox show | hide
-agent-sandbox account ...       list | save <name> [--from-host] | use <name> | default <name> | remove <name>
-agent-sandbox sync              copy history back now         agent-sandbox logs [-f]
-agent-sandbox clean [--days n]  prune old launches/logs       agent-sandbox doctor
-agent-sandbox config init|show|path                           agent-sandbox self-test
+launch [agent args]        start a sandbox (or another session in the running one)
+attach [id]                show a running session in this terminal (Ctrl+] detaches)
+sessions | status          what is running
+exec -- <command>          run a command inside the sandbox and print its output
+restart                    restart Claude in place; it resumes the conversation
+stop | show | hide         shut down, show or hide the sandbox
+account <action>           list | save <name> [--from-host] | use <name> | default <name> | remove <name>
+sync                       copy history back to this PC now
+logs [-f]                  the sandbox's log
+clean [--days n]           delete old launch folders, logs and leftovers
+config show|path|init|schema
+doctor | self-test
 ```
 
-Options: `--terminal`, `--headless` / `--window`, `--account <name>`, `--node <ver>`, `--python <ver>`,
+Launch options: `-t/--terminal`, `--headless`, `--window`, `--account <name>`, `--node <ver>`, `--python <ver>`,
 `--workspace <dir>`, `--harness <name>`, `--script <file>`, `--no-agent`, `--trust-config`, `--no-local-config`,
-`--config <file>`, `--json`.
+`--config <file>`. If Claude ever gains a flag with the same name, use the reserved spelling (`--sbx-terminal`,
+`--sbx-headless`, ...) for ours, or put Claude's flags after `--`.
 
-## Accounts
+## What's in the sandbox
+
+The first start downloads what it cannot copy from your PC (a few minutes, once). Everything lives in
+`C:\AgentData`, which survives the wipe, so later starts take seconds.
+
+| | |
+|---|---|
+| **Window** | Windows Terminal, maximised, with your desktop theme |
+| **Git** | Full Git for Windows with Git Bash (copied from your PC when installed); your name/email only |
+| **Node** | nvm-windows; `nvm use` / `nvm install` work. Default version: `--node` > `.sandbox-config.json` > `.nvmrc` / `.node-version` > your PC's version. Extra versions via config |
+| **Python** | Python 3 with pip (`.python-version` respected) and Python 2.7 as `python2` / `pip2` |
+| **Rust** | rustup, cargo, rustc (GNU host; `rust-toolchain.toml` respected) |
+| **C / C++** | MinGW-w64 GCC: `gcc`, `g++`, `mingw32-make` (also Rust's linker) |
+| **C# / .NET** | .NET SDK (LTS by default; a project's `global.json` is installed too) |
+| **Bun, uv** | Both on PATH (claude-mem needs them) |
+| **VS Code** | Portable, `code .` or the desktop shortcut; its settings and extensions persist |
+| **Your Claude** | settings, CLAUDE.md, commands, agents, skills, plugins and MCP servers from your PC |
+| **Your desktop** | theme, accent colour, taskbar, Explorer options, wallpaper, mouse/keyboard, date/number formats (an allow-list of registry values) |
+
+Installs that persist: `npm i -g` (per Node version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`,
+and anything portable in `C:\AgentData\tools\bin` (on PATH). Real installers (MSI, winget) need a hook script,
+because everything outside `C:\AgentData` is wiped. Every agent gets a short manifest telling it exactly this.
+
+## Your history and claude-mem
+
+- **Conversations:** before each start, all your Claude conversations, prompt history, todos and plans are copied in.
+  New history comes back every minute and when the sandbox closes. Paths are translated between your folder and
+  `C:\Workspace\<name>`, so `--continue` / `--resume` work on both sides.
+- **claude-mem:** the plugin and its data go in; its database comes back when the sandbox closes. If both sides
+  changed, your PC's copy is kept as `.claude-mem.conflict-<time>` first, so nothing is lost.
+
+## Several Claude accounts
 
 ```powershell
-agent-sandbox account save personal      # saves the login currently in the sandbox
-agent-sandbox account save work --from-host
-agent-sandbox account default personal   # used for new sandboxes
-agent-sandbox account use work           # switch now: Claude restarts with --continue and carries on
+agent-sandbox account save personal          # the login currently in the sandbox
+agent-sandbox account save work --from-host  # or this PC's login
+agent-sandbox account default personal       # used for new sandboxes
+agent-sandbox account use work               # switch now
 ```
 
-Claude refreshes its tokens while it runs, so switching away from an account saves its latest tokens first.
+`account use` swaps the login and restarts Claude in place with `--continue`, so the conversation carries on under
+the other account. Claude cannot change accounts without a restart, so a reply that is still streaming at that
+moment is lost (finished messages are kept, and an interrupted tool call is flagged for Claude to check). The
+outgoing account's refreshed tokens are saved first, so switching back always works.
 
-## Toolchains and versions
+## Git access
 
-Everything is installed into `C:\AgentData\tools`, which survives sandbox wipes.
+Choose how much the agent may do with git (`provisioning.git.access`, per project in `.sandbox-config.json`):
 
-| Tool | Version comes from (first match wins) |
+| Mode | The agent can |
 |---|---|
-| Node (nvm-windows) | `--node`, `.sandbox-config.json`, `.nvmrc` / `.node-version`, config, the Node on your PC |
-| Python 3 (+ `python2`) | `--python`, `.sandbox-config.json`, `.python-version`, config (latest 3.x) |
-| Rust | `rust-toolchain.toml` (rustup handles it), config (`stable`, GNU host, linked with MinGW) |
-| .NET SDK | `global.json`, config channels (`LTS`) |
-| Git for Windows | copied from your PC if installed, otherwise PortableGit |
-
-Inside the sandbox `nvm use 18` / `nvm install 22` work as usual. `npm i -g`, `pip`, `cargo install`, `dotnet tool -g`,
-`uv tool` and `bun add -g` all install somewhere persistent. Portable programs can go in `C:\AgentData\tools\bin`
-(it's on PATH). Every agent also gets a short manifest telling it what persists and where things are.
-
-## History, claude-mem and your desktop
-
-- **History:** before each start, all your Claude conversations, prompt history, todos and plans are copied in. New
-  history is copied back every minute and when the sandbox closes. Paths are translated between your folder and
-  `C:\Workspace\<name>`, so `--continue` / `--resume` work on both sides. Only data files come back, nothing executable.
-- **claude-mem:** your plugin and `~/.claude-mem` data go in. Changes come back when the sandbox closes. If both
-  sides changed, nothing is overwritten: the older copy is kept next to it as `.claude-mem.conflict-<time>`.
-- **Desktop:** theme, accent colour, taskbar, Explorer options, wallpaper, mouse/keyboard and date formats are
-  copied from your registry (an allow-list, nothing else).
+| `full` *(default)* | use git normally |
+| `readonly` | `status`, `log`, `diff`, `show`, `blame` and listing branches/tags; no commit, push, checkout, reset, ... |
+| `none` | not use git at all; the repository is invisible to git and Claude may not read `.git` |
 
 ## Configuration
 
-Your settings live in `~/.agent-sandbox/config.json` (`agent-sandbox config init` creates it from
-[config.example.json](config.example.json)). Keep only the keys you change. Your own hook scripts go in
-`~/.agent-sandbox/hooks/{pre-provision,pre-agent,post-agent}`.
+`agent-sandbox config init` creates `~/.agent-sandbox/config.json` with every setting and its default (see
+[config.example.json](config.example.json)); delete what you do not change. The file has a JSON Schema next to it,
+so VS Code shows docs and autocomplete for every key.
 
-A project can carry `.sandbox-config.json` ([example](.sandbox-config.example.json)) to pick its agent, memory,
-toolchain versions, extra folders and setup scripts. A repo can ship this file, so **you approve it** the first time
-and whenever it changes. Risky items (read/write folders, copying your login, turning off the LAN block) are flagged.
-It can never change storage paths, executables or anything outside a safe list.
+A project can carry a `.sandbox-config.json` ([example](.sandbox-config.example.json)) to choose its agent, memory,
+git mode, toolchain versions, extra folders and setup scripts. A repo can ship this file, so **you approve it** the
+first time and whenever it changes; risky settings are flagged. It can never change storage, executables or anything
+outside a safe list. Run `agent-sandbox config schema` once for editor help in these files too.
+
+Your own hook scripts (`.ps1`, `.mjs`, `.cmd`) go in `~/.agent-sandbox/hooks/{pre-provision,pre-agent,post-agent}`.
 
 ## Safety
 
-- The agent can write only to the workspace folder (plus its own persistent storage). Drive roots, your user profile,
-  system folders and agent-sandbox's own folders are refused as workspaces.
-- Your LAN is blocked from the sandbox by its firewall (DNS to the gateway excepted). For a hard guarantee, set
-  `sandbox.networking: false`.
-- Host and sandbox talk only through small JSON files. The sandbox can be asked to do exactly four things
-  (start a session, run a command, restart, ping). Everything it writes back is size-capped and validated. Your PC
-  never runs anything the sandbox sends.
-- `--terminal` only connects to addresses inside the sandbox's own Hyper-V network, with a random token per session.
+agent-sandbox treats the sandbox as hostile and your PC as precious:
+
+- **Containment:** the agent writes only your project folder (and its own storage). Drive roots, your user profile,
+  system folders and agent-sandbox's own folders are refused as workspaces. vGPU is off by default.
+- **Network:** your LAN is blocked from inside the sandbox (DNS to the gateway excepted). For hard isolation set
+  `sandbox.networking` to `false`.
+- **Nothing runs on your PC:** host and sandbox talk through small JSON files; the sandbox can be asked to do four
+  things (start a session, run a command, restart, ping) and everything it writes back is validated and size-capped.
+  Host-side state lives outside the sandbox's reach, and junctions or symlinks the sandbox plants are never followed.
+- **Coming back:** only data files return with history; claude-mem returns its database only (never settings or the
+  pickle-based vector store); git hooks or dangerous git config (`core.fsmonitor`, `core.sshCommand`, filters, ...)
+  added inside the sandbox are quarantined before your own git can run them. `agent-sandbox status` lists any.
+- **Your terminal:** `--terminal` connects only into the sandbox's own Hyper-V network with a per-session token, and
+  clipboard-writing escape sequences are stripped.
+- **Inside the sandbox** the usual "Do you want to run this file?" and SmartScreen prompts are switched off. That only
+  affects the disposable sandbox, never your PC.
+
+Treat what the agent writes into your project like a contribution from a stranger: review it before you run it.
 
 ## Storage and cleanup
 
-Everything lives under `storage.root` (default `%LOCALAPPDATA%\AgentSandbox`):
-`data\<name>` (tools, state, logs; mapped to `C:\AgentData`), `launches\` (one folder per start), `accounts\`.
-Every launch deletes launch folders older than 7 days, logs older than 14 days and interrupted downloads.
-`agent-sandbox clean` does the same on demand.
+Everything lives under `storage.root` (default `%LOCALAPPDATA%\AgentSandbox`): `data\<name>` (tools, state, logs;
+`C:\AgentData` in the sandbox), `launches\` (one folder per start), `accounts\`, `sync\`. Each launch deletes launch
+folders older than 7 days, logs older than 14 days and interrupted downloads; `agent-sandbox clean` does it on demand.
 
 ## Troubleshooting
 
-- `agent-sandbox doctor`: checks Windows Sandbox, RAM and what will be copied or downloaded.
-- `agent-sandbox logs -f`: follow the sandbox's log. All logs are in `<storage>\data\<name>\logs`.
-- Sandbox won't start? Only one Windows Sandbox can run at a time: `agent-sandbox status`, then `sbx-show` or `stop`.
+| Problem | Try |
+|---|---|
+| Anything | `agent-sandbox doctor`, then `agent-sandbox logs -f` |
+| "A Windows Sandbox is already running" | Only one can run at a time: `agent-sandbox status`, then `sbx-show` or `agent-sandbox stop` |
+| A toolchain failed on first boot | It is skipped, the rest still works; fix the network and set `provisioning.refresh` once |
+| Config errors | The message names the key and the problem; `agent-sandbox config show` prints the effective config |
 
 ## Development
 
 ```powershell
-npm install        # installs deps and builds
-npm test           # offline tests + live ConPTY/daemon tests; must end with ALL TESTS PASSED
-npm run release:patch   # bumps the version and pushes a tag -> GitHub Actions builds, tests and publishes a release
+npm install               # dependencies + build
+npm test                  # offline, security and live ConPTY/daemon/git tests; ends with ALL TESTS PASSED
+npm run release:patch     # bump the version and push a tag: GitHub Actions tests, packs and publishes a release
 ```
 
-Publishing to npm: add an `NPM_TOKEN` secret to the repository, and pick a package name you own (e.g. a scoped
-`@you/agent-sandbox`) in `package.json`. The release workflow then publishes every tagged version.
-See [CLAUDE.md](CLAUDE.md) for the code layout.
+To also publish to npm: add an `NPM_TOKEN` repository secret and pick a package name you own (for example
+`@you/agent-sandbox`). See [CLAUDE.md](CLAUDE.md) for the code layout.

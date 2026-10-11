@@ -79,9 +79,15 @@ export const restoreClaudeMem = (): void => {
 /** Copies the live claude-mem folder back to persistent storage (staging folder + swap, never a half copy). */
 export const saveClaudeMem = (): void => {
   if (!claudeMemEnabled() || !exists(claudeMemPaths.local)) return;
-  const incoming = claudeMemPaths.store + '.incoming';
+  const { store, local } = claudeMemPaths;
+  const incoming = store + '.incoming';
+  const previous = store + '.previous';
   fs.rmSync(incoming, { recursive: true, force: true });
-  fs.cpSync(claudeMemPaths.local, incoming, { recursive: true, filter: (src) => !/\.(pid|lock)$/i.test(src) });
-  fs.rmSync(claudeMemPaths.store, { recursive: true, force: true });
-  fs.renameSync(incoming, claudeMemPaths.store);
+  // The database, its -wal and -shm files are copied together, so the copy is consistent with itself.
+  fs.cpSync(local, incoming, { recursive: true, filter: (src) => !/\.(pid|lock)$/i.test(src) });
+  // Swap without a window where no copy exists: old aside, new in, then drop the old one.
+  fs.rmSync(previous, { recursive: true, force: true });
+  if (exists(store)) fs.renameSync(store, previous);
+  try { fs.renameSync(incoming, store); } catch (e) { if (exists(previous)) fs.renameSync(previous, store); throw e; }
+  fs.rmSync(previous, { recursive: true, force: true });
 };

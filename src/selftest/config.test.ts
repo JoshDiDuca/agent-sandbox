@@ -16,7 +16,7 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   check(builtIn.configPath === null && builtIn.config.guestWorkspace === 'auto' && !builtIn.config.sandbox.headless && !builtIn.config.sandbox.vGpu && builtIn.config.provisioning.git.access === 'full', 'no user config: built-in defaults (auto guest folder, headless off, vGPU off, git full)');
   const custom = loadConfig(write(path.join(temp, 'cfg.json'), JSON.stringify({ sandbox: { headless: true }, toolchains: { rust: { enabled: false } }, mappings: [{ host: 'rel-folder', guest: 'C:\\Rel', readOnly: true }] })));
   check(custom.config.sandbox.headless && !custom.config.toolchains.rust.enabled && custom.config.toolchains.python.enabled, 'a config file only needs the keys it changes (deep merge over defaults)');
-  check(await rejects(() => loadConfig(path.join(temp, 'missing.json')), 'Config not found'), 'an explicit --config that does not exist is an error');
+  check(await rejects(() => loadConfig(path.join(temp, 'missing.json')), 'Config file not found'), 'an explicit --config that does not exist is an error');
   check(loadConfig(path.join(t.packageRoot, 'config.example.json')).config.defaultHarness === 'claude', 'config.example.json is valid');
   ensureDir(path.join(temp, 'rel-folder'));
   const relRun = await f.run({}, { ...custom.config, storage: f.baseConfig.storage });
@@ -47,26 +47,26 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   check((await f.run()).versions.node.spec === 'v20.11.1', '.node-version is respected');
   fs.rmSync(path.join(f.workA, '.node-version'));
 
-  check(await rejects(() => f.run({ cwd: f.install }), 'install folder') && await rejects(() => f.run({ cwd: temp }), 'could modify it') && await rejects(() => f.run({ cwd: path.join(temp, 'storage') }), 'storage folder'), 'refuses the install folder, its parents and the storage folder');
+  check(await rejects(() => f.run({ cwd: f.install }), 'install folder') && await rejects(() => f.run({ cwd: temp }), 'must not be able to change') && await rejects(() => f.run({ cwd: path.join(temp, 'storage') }), 'storage folder'), 'refuses the install folder, its parents and the storage folder');
   const originalWindir = process.env.WINDIR;
   ensureDir(path.join(temp, 'winroot', 'sys'));
   process.env.WINDIR = path.join(temp, 'winroot');
   const sysRefused = await rejects(() => f.run({ cwd: path.join(temp, 'winroot', 'sys') }), 'system folder');
   process.env.WINDIR = originalWindir;
-  check(sysRefused && await rejects(() => f.run({ cwd: path.parse(temp).root }), 'drive root'), 'refuses system folders and drive roots');
+  check(sysRefused && await rejects(() => f.run({ cwd: path.parse(temp).root }), 'whole drive'), 'refuses system folders and drive roots');
 
   t.section('.sandbox-config.json');
   const localB = { harness: 'codex', sandbox: { memoryMb: 4096, networking: false, headless: true }, toolchains: { node: { version: '18' }, rust: { enabled: false } }, mappings: [{ host: './assets', guest: 'C:\\Assets', readOnly: true }, { host: '../shared', guest: 'C:\\Shared', readOnly: false }], scripts: ['./setup.mjs'] };
   f.writeLocal(f.workB, localB);
   check(await rejects(() => f.run({ cwd: f.workB }), '--trust-config') && await rejects(() => f.run({ cwd: f.workB }), 'READ/WRITE'), 'an untrusted .sandbox-config.json is refused and its effects are listed');
-  check(await rejects(() => f.run({ cwd: f.workB, ask: async () => false }), 'Untrusted'), 'answering "no" refuses it');
+  check(await rejects(() => f.run({ cwd: f.workB, ask: async () => false }), 'has not been approved'), 'answering "no" refuses it');
   const rB = await f.run({ cwd: f.workB, ask: async () => true });
   check(rB.harnessName === 'codex' && rB.config.sandbox.memoryMb === 4096 && rB.config.sandbox.headless && !rB.config.toolchains.rust.enabled && rB.config.toolchains.python.enabled && rB.versions.node.source === '.sandbox-config.json', 'approved local settings apply over the defaults (incl. toolchains, headless)');
   check(rB.config.mappings.some((m) => m.host === f.shared && !m.readOnly) && rB.scripts.includes(path.join(f.workB, 'setup.mjs')), 'relative paths resolve against the folder of .sandbox-config.json');
   check((await f.run({ cwd: f.workB })).harnessName === 'codex' && (await f.run({ cwd: f.workB, noLocalConfig: true })).harnessName === 'claude' && (await f.run({ cwd: f.workB, harness: 'gemini' })).harnessName === 'gemini', 'approval is remembered; --no-local-config and --harness win');
   check((await f.run({ cwd: f.workB, headless: false })).config.sandbox.headless === false, '--window beats a local headless setting');
   f.writeLocal(f.workB, { ...localB, sandbox: { memoryMb: 6144 } });
-  check(await rejects(() => f.run({ cwd: f.workB }), 'Untrusted'), 'changing the file requires approval again');
+  check(await rejects(() => f.run({ cwd: f.workB }), 'has not been approved'), 'changing the file requires approval again');
 
   const dirC = path.join(temp, 'work-c');
   ensureDir(dirC);

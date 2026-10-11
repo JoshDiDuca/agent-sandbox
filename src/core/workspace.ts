@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
+import { userDir } from './config.js';
 import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { dirExists, expandPath, fail, fileExists, isInsideOrEqual, isRootPath, isUserProfile } from './util.js';
 
@@ -13,18 +14,32 @@ export const askYesNo = async (question: string): Promise<boolean> => {
   return /^y(es)?$/i.test(answer.trim());
 };
 
+/** Folders the agent must never be able to write: the tool itself, its storage and your agent-sandbox settings. */
+const protectedFolders = (packageRoot: string, storageRoot: string): [string, string][] => [
+  ['the agent-sandbox install folder', packageRoot],
+  ['the sandbox storage folder', storageRoot],
+  ['your agent-sandbox settings folder', userDir()],
+];
+
+/** A read/write folder mapped into the sandbox must not contain, or sit inside, any protected folder. */
+export const assertSafeMapping = (folder: string, packageRoot: string, storageRoot: string): void => {
+  if (isRootPath(folder) || isUserProfile(folder)) fail('A whole drive or user profile cannot be mapped into the sandbox: ' + folder, 'Map a specific folder instead.');
+  for (const [label, dir] of protectedFolders(packageRoot, storageRoot)) {
+    if (isInsideOrEqual(dir, folder) || isInsideOrEqual(folder, dir)) fail(folder + ' cannot be mapped into the sandbox: it overlaps ' + label + ' (' + dir + ').', 'Map a folder that is not inside (and does not contain) ' + dir + '.');
+  }
+};
+
 /** The agent gets read/write access to the workspace, so refuse folders that would let it reach the tool itself, its storage, or the OS. */
 export const assertSafeWorkspace = (workspace: string, packageRoot: string, storageRoot: string): void => {
-  if (isRootPath(workspace)) fail('Refusing to use a drive root as the workspace: ' + workspace);
-  if (isUserProfile(workspace)) fail('Refusing to use your whole user profile as the workspace: ' + workspace + '. Run from a project folder instead.');
-  const protectedDirs: [string, string][] = [['the agent-sandbox install folder', packageRoot], ['the sandbox storage folder', storageRoot]];
-  for (const [label, dir] of protectedDirs) {
-    if (isInsideOrEqual(dir, workspace)) fail('Refusing to use ' + workspace + ' as the workspace: it is inside ' + label + ' (' + dir + ').');
-    if (isInsideOrEqual(workspace, dir)) fail('Refusing to use ' + workspace + ' as the workspace: it contains ' + label + ' (' + dir + '), so the agent could modify it.');
+  if (isRootPath(workspace)) fail('A whole drive cannot be the workspace: ' + workspace, 'Run claude-sbx from a project folder (or pass --workspace <folder>).');
+  if (isUserProfile(workspace)) fail('Your whole user profile cannot be the workspace: ' + workspace, 'Run claude-sbx from a project folder (or pass --workspace <folder>).');
+  for (const [label, dir] of protectedFolders(packageRoot, storageRoot)) {
+    if (isInsideOrEqual(dir, workspace)) fail(workspace + ' cannot be the workspace: it is inside ' + label + ' (' + dir + ').', 'Run claude-sbx from a project folder somewhere else.');
+    if (isInsideOrEqual(workspace, dir)) fail(workspace + ' cannot be the workspace: it contains ' + label + ' (' + dir + '), which the agent must not be able to change.', 'Run claude-sbx from a project folder that does not contain it.');
   }
   for (const name of ['WINDIR', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {
     const dir = process.env[name];
-    if (dir && isInsideOrEqual(dir, workspace)) fail('Refusing to use a system folder as the workspace: ' + workspace);
+    if (dir && isInsideOrEqual(dir, workspace)) fail('A system folder cannot be the workspace: ' + workspace, 'Run claude-sbx from a project folder.');
   }
 };
 
@@ -69,7 +84,7 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
   const storageRoot = expandPath(config.storage.root, req.loaded.base);
 
   const workspaceHost = path.resolve(req.workspace ?? req.cwd);
-  if (!dirExists(workspaceHost)) fail('Workspace folder does not exist: ' + workspaceHost);
+  if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'Check the --workspace path, or cd into the project first.');
   assertSafeWorkspace(workspaceHost, req.packageRoot, storageRoot);
 
   const scripts: string[] = [];
@@ -87,7 +102,7 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
         for (const line of summary) console.log('  ' + line);
         trusted = await req.ask('Trust and use this file?');
       }
-      if (!trusted) fail('Untrusted ' + local.path + ' (a repo can ship this file, so it needs your approval). It would apply:\n  ' + (summary.join('\n  ') || '(no changes)') + '\nReview it, then re-run with --trust-config (or answer y when asked). Use --no-local-config to ignore it.');
+      if (!trusted) fail(local.path + ' has not been approved yet (a repo can ship this file, so it needs your OK). It would apply:\n  ' + (summary.join('\n  ') || '(no changes)'), 'Review it, then run again in an interactive terminal and answer y, or add --trust-config. To ignore the file: --no-local-config');
       saveTrust(store, local.path, local.hash);
       notes.push('Trusted ' + local.path + ' (you will only be asked again if the file changes).');
     }
@@ -101,7 +116,7 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
 
   scripts.push(...req.scripts.map((s: string) => path.resolve(s)));
   const harnessName = req.noAgent ? 'none' : (req.harness ?? config.defaultHarness);
-  if (harnessName !== 'none' && !config.harnesses[harnessName]) fail('Unknown agent "' + harnessName + '". Configured agents: ' + Object.keys(config.harnesses).join(', '));
+  if (harnessName !== 'none' && !config.harnesses[harnessName]) fail('Unknown agent "' + harnessName + '".', 'Configured agents: ' + Object.keys(config.harnesses).join(', ') + ' (add more under "harnesses" in your config).');
   const versions = resolveVersions(config, workspaceHost, overrides, req, hostNodeVersion);
   const dataPath = path.join(storageRoot, 'data', config.storage.dataName);
   return { config, storageRoot, dataPath, workspaceHost, harnessName, scripts, localConfigPath, notes, versions };

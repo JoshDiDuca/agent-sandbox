@@ -9,6 +9,9 @@ import { arch, tool, type ToolEnv } from './common.js';
 
 interface Release { url: string; sha256hash: string; productVersion: string }
 
+/** Newer builds keep their files under a commit-hash folder, so the installed version is recorded here. */
+const VERSION_MARKER = '.agent-sandbox-version';
+
 const desktopShortcut = (exe: string): void => {
   if (!isWin) return;
   const link = path.join(os.homedir(), 'Desktop', 'Visual Studio Code.lnk');
@@ -29,9 +32,11 @@ export const setupVscode = async (env: ToolEnv, refresh: boolean): Promise<void>
     if (exists(keep)) { fs.rmSync(parked, { recursive: true, force: true }); fs.renameSync(keep, parked); }
     await installArchive(release.url, root, { sha256: release.sha256hash, locate: 'Code.exe', fileName: 'vscode.zip' });
     if (exists(parked)) fs.renameSync(parked, keep);
+    fs.writeFileSync(path.join(root, VERSION_MARKER), release.productVersion);
   }
   mkdirp(path.join(root, 'data'));
   env.prepend.push(path.join(root, 'bin'));
   desktopShortcut(exe);
-  env.summary.push('vscode: ' + (JSON.parse(fs.readFileSync(path.join(root, 'resources', 'app', 'package.json'), 'utf8')) as { version: string }).version + ' (portable, `code .`)');
+  const version = exists(path.join(root, VERSION_MARKER)) ? fs.readFileSync(path.join(root, VERSION_MARKER), 'utf8').trim() : 'installed';
+  env.summary.push('vscode: ' + version + ' (portable; run code . or use the desktop shortcut)');
 };

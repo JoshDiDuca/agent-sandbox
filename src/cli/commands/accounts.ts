@@ -1,8 +1,7 @@
 // `account list | save | use | default | remove`
-import path from 'node:path';
 import { activateAccount, listAccounts, removeAccount, saveAccount, setDefaultAccount, type Account } from '../../host/accounts.js';
 import { restartSessions, runningSessions } from '../../host/channel.js';
-import { hostClaudeDir } from '../../host/claude-profile.js';
+import { hostClaudeDir, hostGlobalStateFile } from '../../host/claude-profile.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { fail } from '../../core/util.js';
 import { printJson, sandboxAlive, table, type Context } from './context.js';
@@ -11,9 +10,8 @@ const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.e
 
 /** This PC's Claude login location (config folder + global state file). */
 const hostLogin = (ctx: Context): { claudeDir: string; globalStateFile: string } => {
-  const claudeDir = hostClaudeDir(ctx.loaded.config.claudeProfile);
-  const globalStateFile = process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(path.dirname(claudeDir), '.claude.json');
-  return { claudeDir, globalStateFile };
+  const profile = ctx.loaded.config.claudeProfile;
+  return { claudeDir: hostClaudeDir(profile), globalStateFile: hostGlobalStateFile(profile) };
 };
 
 const list = (ctx: Context): number => {
@@ -34,13 +32,13 @@ const use = async (ctx: Context, name: string): Promise<number> => {
 
 export const account = async (ctx: Context): Promise<number> => {
   const [action = 'list', name] = ctx.options.positionals;
-  const needName = (): string => name ?? fail('Usage: agent-sandbox account ' + action + ' <name>');
+  const needName = (): string => name ?? fail('Missing account name.', 'Usage: agent-sandbox account ' + action + ' <name>');
   switch (action) {
     case 'list': return list(ctx);
     case 'save': console.log('Saved account ' + label(saveAccount(ctx.storageRoot, ctx.dataPath, needName(), ctx.options.fromHost ? hostLogin(ctx) : null)) + '.'); return 0;
     case 'use': return use(ctx, needName());
     case 'default': setDefaultAccount(ctx.storageRoot, needName()); console.log('Default account: ' + name); return 0;
     case 'remove': removeAccount(ctx.storageRoot, needName()); console.log('Removed account ' + name); return 0;
-    default: fail('Unknown account action "' + action + '" (list | save | use | default | remove)');
+    default: fail('Unknown account action "' + action + '".', 'Use one of: agent-sandbox account list | save <name> | use <name> | default <name> | remove <name>');
   }
 };

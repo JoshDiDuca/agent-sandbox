@@ -17,15 +17,22 @@ export const versionOf = (exe: string, args: string[] = ['--version'], options =
 const resolvedFile = (): string => tool('resolved-versions.json');
 const remembered = (): Record<string, string> => { try { return JSON.parse(fs.readFileSync(resolvedFile(), 'utf8')) as Record<string, string>; } catch { return {}; } };
 
-/** Resolves a version online and remembers it, so an offline boot reuses what was installed last time. */
+let offline = false;
+
+/**
+ * Resolves a version online and remembers it, so an offline boot reuses what was installed last time. After one failed
+ * lookup the rest go straight to the remembered versions instead of each waiting for the network.
+ */
 export const resolveCached = async (key: string, resolve: () => Promise<string>): Promise<string> => {
+  const cached = remembered()[key];
+  if (offline && cached) return cached;
   try {
     const value = await resolve();
     fs.mkdirSync(toolsDir, { recursive: true });
     fs.writeFileSync(resolvedFile(), JSON.stringify({ ...remembered(), [key]: value }, null, 2));
     return value;
   } catch (e) {
-    const cached = remembered()[key];
+    offline = true;
     if (!cached) throw e;
     warn('Could not look up ' + key + ' online (' + errMsg(e) + '); using ' + cached + ' from the last boot.');
     return cached;

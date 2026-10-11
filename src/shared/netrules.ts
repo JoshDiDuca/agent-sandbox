@@ -1,4 +1,5 @@
-export const PRIVATE_V4 = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '224.0.0.0/4'];
+/** Private, carrier-grade NAT (Tailscale and similar live here), link-local and multicast ranges. */
+export const PRIVATE_V4 = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16', '224.0.0.0/4'];
 export const PRIVATE_V6 = ['fc00::/7', 'fe80::/10', 'ff00::/8'];
 export const RULE_NAMES = ['AgentSandbox-Block-Private', 'AgentSandbox-Block-IPv6-Local', 'AgentSandbox-Block-SMB', 'AgentSandbox-Gateway-TCP', 'AgentSandbox-Gateway-UDP'];
 

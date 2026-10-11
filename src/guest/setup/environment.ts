@@ -1,7 +1,7 @@
 // The environment every agent session, hook and terminal tab in the sandbox gets.
 import path from 'node:path';
 import type { ToolEnv } from '../toolchains/index.js';
-import { claudeDir, dataDir, dryRun, errMsg, isWin, mkdirp, powershell, session, stateDir, toolsDir, warn, workspace } from '../env.js';
+import { claudeDir, dataDir, dryRun, errMsg, isWin, testMode, mkdirp, powershell, session, stateDir, toolsDir, warn, workspace } from '../env.js';
 
 /** Variables agent-sandbox itself sets (besides the toolchains' own). */
 const AGENT_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'npm_config_cache', 'npm_config_update_notifier', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT'];
@@ -30,7 +30,7 @@ export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>): N
 
 /** Makes the agent environment machine-wide, so new terminal tabs and anything the agent starts see the same tools. */
 export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): void => {
-  if (!isWin || dryRun) return;
+  if (!isWin || dryRun || testMode) return;
   const vars = Object.fromEntries([...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]));
   const script = [
     "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",

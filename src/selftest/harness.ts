@@ -23,7 +23,7 @@ export const createHarness = (packageRoot: string): Harness & { failures: () => 
     temp,
     failures: () => failures,
     check: (ok, name) => { console.log((ok ? '\x1b[32mPASS\x1b[0m  ' : '\x1b[31mFAIL\x1b[0m  ') + name); if (!ok) failures++; },
-    rejects: async (fn, needle) => { try { await fn(); return false; } catch (e) { return errMsg(e).includes(needle); } },
+    rejects: async (fn, needle) => { try { await fn(); return false; } catch (e) { return (errMsg(e) + ' ' + ((e as { fix?: string }).fix ?? '')).includes(needle); } },
     write: (file, content) => { ensureDir(path.dirname(file)); fs.writeFileSync(file, content); return file; },
     waitFor: async (read, ms = 30000) => {
       const end = Date.now() + ms;

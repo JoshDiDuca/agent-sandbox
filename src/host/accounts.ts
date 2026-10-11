@@ -26,7 +26,7 @@ const indexFile = (storageRoot: string): string => path.join(accountsDir(storage
 const readIndex = (storageRoot: string): Index => tryReadJson<Index>(indexFile(storageRoot)) ?? {};
 const updateIndex = (storageRoot: string, change: (index: Index) => Index): void => writeJson(indexFile(storageRoot), change(readIndex(storageRoot)));
 
-const assertName = (name: string): void => { if (!NAME.test(name)) fail('Account names may only use letters, numbers, - and _ (max 40): ' + name); };
+const assertName = (name: string): void => { if (!NAME.test(name)) fail('Invalid account name "' + name + '".', 'Use letters, numbers, - and _ only (max 40), e.g. work or personal.'); };
 const emailOf = (oauthAccount: unknown): string | null => {
   const email = (oauthAccount as { emailAddress?: unknown } | null)?.emailAddress;
   return typeof email === 'string' ? email.slice(0, 200) : null;
@@ -55,7 +55,7 @@ const readUntrusted = (file: string, max: number): unknown => (fileExists(file) 
 /** The login currently in a Claude config folder (+ its global state file). */
 const readLogin = (claudeDir: string, globalStateFile: string): Login => {
   const credentials = readUntrusted(path.join(claudeDir, '.credentials.json'), MAX_LOGIN_BYTES);
-  if (!credentials || typeof credentials !== 'object') fail('No Claude login found in ' + claudeDir + ' (sign in first, then save it).');
+  if (!credentials || typeof credentials !== 'object') fail('No Claude login found in ' + claudeDir + '.', 'Sign in to Claude first (inside the sandbox, or on this PC with --from-host), then save it again.');
   return { credentials, oauthAccount: (readUntrusted(globalStateFile, MAX_STATE_BYTES) as { oauthAccount?: unknown } | null)?.oauthAccount ?? null };
 };
 
@@ -91,7 +91,7 @@ const writeSandboxJson = (file: string, value: unknown): void => {
  * current tokens are saved back first; otherwise its stored refresh token could already be invalid.
  */
 export const activateAccount = (storageRoot: string, dataPath: string, name: string): Account => {
-  const account = readAccount(storageRoot, name) ?? fail('Unknown account "' + name + '". Saved accounts: ' + (listAccounts(storageRoot, dataPath).map((a) => a.name).join(', ') || '(none)'));
+  const account = readAccount(storageRoot, name) ?? fail('Unknown account "' + name + '".', 'Saved accounts: ' + (listAccounts(storageRoot, dataPath).map((a) => a.name).join(', ') || 'none yet; save one with agent-sandbox account save <name>'));
   const { claudeDir, globalStateFile } = sandboxLogin(dataPath);
   const outgoing = activeAccount(dataPath);
   if (outgoing && outgoing !== name && readAccount(storageRoot, outgoing) && fileExists(path.join(claudeDir, '.credentials.json'))) {
@@ -108,12 +108,12 @@ export const activateAccount = (storageRoot: string, dataPath: string, name: str
 };
 
 export const setDefaultAccount = (storageRoot: string, name: string | null): void => {
-  if (name !== null && !readAccount(storageRoot, name)) fail('Unknown account "' + name + '".');
+  if (name !== null && !readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: agent-sandbox account list');
   updateIndex(storageRoot, (i) => ({ ...i, default: name ?? undefined }));
 };
 
 export const removeAccount = (storageRoot: string, name: string): void => {
-  if (!readAccount(storageRoot, name)) fail('Unknown account "' + name + '".');
+  if (!readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: agent-sandbox account list');
   fs.rmSync(accountFile(storageRoot, name));
   if (defaultAccount(storageRoot) === name) setDefaultAccount(storageRoot, null);
 };

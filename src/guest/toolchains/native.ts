@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { download, githubAsset, installArchive } from '../../shared/download.js';
+import { SYSTEM } from '../../shared/system.js';
 import { dryRun, exec, execOutput, exists, log, mkdirp, workspace } from '../env.js';
 import { arch, tool, versionOf, type ToolEnv } from './common.js';
 
@@ -58,7 +59,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   for (const [key, args] of installs.filter(([k]) => !done[k])) {
     if (!exists(script) || refresh) await download('https://dot.net/v1/dotnet-install.ps1', script);
     log('Installing .NET SDK (' + key + ') ...');
-    exec('powershell.exe', ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
+    exec(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
     done[key] = true;
     fs.writeFileSync(marker, JSON.stringify(done, null, 2));
   }

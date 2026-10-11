@@ -1,5 +1,3 @@
-// Copy to <your project>/.sandbox-config.json. Every key is optional; relative paths are relative to this file.
-// A repo can ship this file, so you are asked to approve it the first time and whenever it changes.
 {
   "harness": "claude",
   "sandbox": { "memoryMb": "auto", "headless": false },
@@ -12,6 +10,5 @@
   "mappings": [
     { "host": "D:\\Assets\\textures", "guest": "C:\\Assets", "readOnly": true, "optional": true }
   ],
-  // Scripts run inside the sandbox before the agent starts, e.g. "./sandbox-setup.ps1".
   "scripts": []
 }

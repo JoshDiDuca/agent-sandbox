@@ -41,12 +41,23 @@ const readValid = <S extends z.ZodType>(schema: S, file: string): z.output<S> | 
   return parsed.success ? parsed.data : null;
 };
 
-/** Write to a temp file and rename, so a reader on the other side of the mapped folder never sees half a file. */
+const pause = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/**
+ * Write to a uniquely named temp file and rename, so a reader on the other side of the mapped folder never sees half a
+ * file. The rename is retried briefly: antivirus or the other side's reader can hold the target for a moment.
+ */
 export const writeJsonAtomic = (file: string, value: unknown): void => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', 'utf8');
-  fs.renameSync(temp, file);
+  const temp = file + '.' + process.pid + '-' + Math.random().toString(36).slice(2) + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
+  for (let attempt = 1; ; attempt++) {
+    try { fs.renameSync(temp, file); return; } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (attempt >= 8 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) { fs.rmSync(temp, { force: true }); throw e; }
+      pause(50 * attempt);
+    }
+  }
 };
 
 /** Message files in a folder (strict names only), validated; invalid ones are reported separately for deletion. */
