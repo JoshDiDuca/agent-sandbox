@@ -7,7 +7,8 @@ import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
 import { assertSafeMapping } from '../core/workspace.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
-import { planDatabases } from './project-scan.js';
+import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
+import { pcLanguages, planDatabases, projectEntries } from './project-scan.js';
 import { dirExists, ensureDir, fail, fileExists, homeDir, writeJson, xmlEscape } from '../core/util.js';
 
 export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools' } as const;
@@ -125,6 +126,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
+  const toolchainDecisions = decideToolchains(config.toolchains, projectEntries(workspaceHost), o.pcLanguages ?? pcLanguages());
 
   const session: GuestSession = {
     launchId,
@@ -139,7 +141,8 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     headless: config.sandbox.headless,
     network: config.network,
     provisioning: config.provisioning,
-    toolchains: config.toolchains,
+    // "auto" is decided here, so the guest and the launch table agree.
+    toolchains: resolveToolchains(config.toolchains, toolchainDecisions),
     databases,
     versions: o.run.versions,
     attach: config.attach,
@@ -155,5 +158,5 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions };
 };

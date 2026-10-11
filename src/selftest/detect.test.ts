@@ -3,6 +3,7 @@ import { databasesFromServices, detectDatabases, type ProjectFile } from '../cor
 import { DEFAULTS } from '../core/config.js';
 import { planDatabases } from '../host/project-scan.js';
 import { voltaNode } from '../core/workspace.js';
+import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
 import { parseReleasePage } from '../shared/download.js';
 import type { Harness } from './harness.js';
 
@@ -29,6 +30,14 @@ export const detectTests = (t: Harness): void => {
   const volta = t.write(t.temp + '\\volta-ws\\package.json', '{"name":"x","volta":{"node":"20.11.1","pnpm":"9.1.0"}}');
   t.write(t.temp + '\\no-volta-ws\\package.json', '{"name":"y","volta":{"node":"latest; rm -rf"}}');
   check(voltaNode(volta.replace(/\\package\.json$/, '')) === '20.11.1' && voltaNode(t.temp + '\\no-volta-ws') === null && voltaNode(t.temp + '\\missing') === null, 'Volta: package.json "volta.node" picks the Node version (only a plain version is accepted)');
+  const tc = DEFAULTS.toolchains;
+  const goApi = decideToolchains(tc, ['README.md', 'go.mod', 'api/main.go'], ['python', 'rust']);
+  check(goApi.go.on && goApi.go.reason === 'go.mod' && !goApi.python.on && !goApi.rust.on && !goApi.dotnet.on && !goApi.java.on, 'toolchains: a Go project gets Go and nothing it does not use, whatever this PC has');
+  const fresh = decideToolchains(tc, ['notes.txt'], ['python', 'dotnet']);
+  check(fresh.python.on && fresh.dotnet.on && !fresh.go.on && fresh.python.reason.includes('this PC'), 'toolchains: a folder that is no project yet gets the languages this PC has');
+  const rusty = decideToolchains({ ...tc, python: { ...tc.python, enabled: true } }, ['Cargo.toml'], []);
+  check(rusty.rust.on && rusty.cpp.on && rusty.python.on && rusty.python.reason === 'enabled in config', 'toolchains: Rust brings its C/C++ linker; true in config always wins');
+  check(resolveToolchains(tc, goApi).go.enabled === true && resolveToolchains(tc, goApi).python.enabled === false, 'the sandbox gets plain decisions instead of "auto"');
   const page = '<a href="/o/r/releases/download/v1/tool-win-x64.zip">x</a><span>sha256:' + 'a'.repeat(64) + '</span><a href="/o/r/releases/download/v1/tool-linux.tar.gz">y</a>';
   const assets = parseReleasePage(page);
   check(assets.length === 2 && assets[0].url === 'https://github.com/o/r/releases/download/v1/tool-win-x64.zip' && assets[0].sha256 === 'a'.repeat(64) && assets[1].sha256 === null, 'GitHub release page fallback (API rate limit): assets with their own sha256 only');

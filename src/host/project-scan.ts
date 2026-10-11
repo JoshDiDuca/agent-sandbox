@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Config, DatabasePlan } from '../core/types.js';
 import { DATABASES, databasesFromServices, detectDatabases, INTERESTING_FILE, type Database, type ProjectFile } from '../core/detect-databases.js';
+import { AUTO_TOOLCHAINS, type AutoToolchain } from '../core/detect-toolchains.js';
 import { isWin } from '../core/util.js';
 import { system32 } from '../shared/system.js';
 
@@ -45,6 +46,26 @@ export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
   };
   walk(root, 0);
   return files;
+};
+
+/** File names in the project and its direct sub-folders ("api/go.mod"), for toolchain detection. No links followed. */
+export const projectEntries = (root: string): string[] => {
+  const list = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000); } catch { return []; } };
+  const top = list(root);
+  const below = top.filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name)).slice(0, 200)
+    .flatMap((d) => list(path.join(root, d.name)).filter((f) => f.isFile()).map((f) => d.name + '/' + f.name));
+  return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
+};
+
+/** Languages this PC has (their commands on PATH; Windows' Store stubs for python do not count). */
+export const pcLanguages = (): AutoToolchain[] => {
+  const dirs = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && !/WindowsApps/i.test(d));
+  const has = (...names: string[]): boolean => dirs.some((d) => names.some((n) => fs.existsSync(path.join(d, n))));
+  const found: Record<AutoToolchain, boolean> = {
+    python: has('python.exe', 'py.exe'), rust: has('cargo.exe', 'rustc.exe'), cpp: has('gcc.exe', 'g++.exe', 'cl.exe', 'clang.exe'),
+    dotnet: has('dotnet.exe'), go: has('go.exe'), java: has('java.exe', 'javac.exe'), ruby: has('ruby.exe'), php: has('php.exe'), deno: has('deno.exe'),
+  };
+  return AUTO_TOOLCHAINS.filter((t) => found[t]);
 };
 
 /** Database services installed on this PC (names from the service control manager; nothing is started or changed). */

@@ -17,10 +17,10 @@ export const DEFAULTS: Config = {
   provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },
   toolchains: {
     node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },
-    python: { enabled: true, version: '3', python2: true, pyenv: 'auto', tools: [] },
-    rust: { enabled: true, toolchain: 'stable', host: 'x86_64-pc-windows-gnu', components: [], targets: [], crates: [] },
-    cpp: { enabled: true, flexBison: true },
-    dotnet: { enabled: true, channels: ['LTS'], tools: [], workloads: [], frameworkTargets: ['net48', 'net472'], netfx35: false },
+    python: { enabled: 'auto', version: '3', python2: true, pyenv: 'auto', tools: [] },
+    rust: { enabled: 'auto', toolchain: 'stable', host: 'x86_64-pc-windows-gnu', components: [], targets: [], crates: [] },
+    cpp: { enabled: 'auto', flexBison: true },
+    dotnet: { enabled: 'auto', channels: ['LTS'], tools: [], workloads: [], frameworkTargets: ['net48', 'net472'], netfx35: false },
     // Bigger downloads only for projects that use them.
     go: { enabled: 'auto', version: 'stable', tools: [] },
     java: { enabled: 'auto', version: 'lts', maven: true, gradle: true },

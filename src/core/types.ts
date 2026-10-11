@@ -44,10 +44,12 @@ export interface HostProbe {
 export interface DatabasePlan { database: 'postgres' | 'mysql' | 'sqlserver' | 'mongodb' | 'redis' | 'dynamodb'; reasons: string[]; version: string; port: number; adminPort?: number }
 
 /** databases: the plan to use instead of scanning the workspace (tests). */
-export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[] }
+/** databases / pcLanguages: use these instead of scanning (tests). */
+export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[]; pcLanguages?: import('./detect-toolchains.js').AutoToolchain[] }
 export interface Generated {
   wsbPath: string; launchPath: string; launchId: string; sessionPath: string; memoryMb: number;
   mappings: ResolvedMapping[]; profile: ProfileResult; databases: DatabasePlan[];
+  toolchains: Record<import('./detect-toolchains.js').AutoToolchain, import('./detect-toolchains.js').ToolchainDecision>;
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult { hostDir: string | null; staged: string[]; skipped: string[]; credentials: boolean; secretsRemoved: string[] }

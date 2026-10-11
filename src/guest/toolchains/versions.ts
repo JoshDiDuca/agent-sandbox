@@ -62,7 +62,7 @@ export const pickGoRelease = (releases: GoRelease[], spec: string): GoRelease | 
  * Does the project use a language? `entries` are file names in the workspace root and one folder down ("api/go.mod");
  * markers are exact names or "*.ext".
  */
-export const projectUses = (entries: string[], markers: string[]): boolean => entries.some((entry) => {
+export const projectUses = (entries: readonly string[], markers: readonly string[]): boolean => entries.some((entry) => {
   const name = entry.split(/[\/]/).pop()!.toLowerCase();
   return markers.some((m) => (m.startsWith('*.') ? name.endsWith(m.slice(1).toLowerCase()) : name === m.toLowerCase()));
 });

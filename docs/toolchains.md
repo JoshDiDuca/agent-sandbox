@@ -1,8 +1,11 @@
 # Tools and databases
 
 Everything installs once into persistent storage (`C:\AgentData` inside) and is reused by every later sandbox.
-Settings marked **auto** install only when the project uses them, found from files in the workspace or one folder
-down.
+
+Only what the project needs gets installed. Every language defaults to **auto**, which your PC decides at launch from
+the project's files in the workspace and one folder down (`go.mod`, `*.csproj`, `*.py` ...). A folder that isn't a
+project yet gets the languages your PC has. The launch output lists each toolchain and why. `true` / `false` in the
+config always win.
 
 ## Languages
 
@@ -15,11 +18,11 @@ down.
 | **Rust** ✅ | rustup, cargo (GNU host) | `rust-toolchain.toml` |
 | **C / C++** ✅ | MinGW-w64 GCC, CMake, Ninja, premake5, win_flex/bison | |
 | **C# / .NET** ✅ | .NET SDK, workloads, global tools, .NET Framework reference assemblies (net48, net472 ...) | `global.json` |
-| Go (auto) | go.dev, `GOTOOLCHAIN=auto` | `go.mod` |
-| Java (auto) | Temurin JDK, Maven, Gradle | `.java-version`, `.sdkmanrc` |
-| Ruby (auto) | RubyInstaller, gems | `.ruby-version` |
-| PHP (auto) | PHP with common extensions, Composer | `.php-version` |
-| Deno (auto), Bun | single binaries | |
+| Go | go.dev, `GOTOOLCHAIN=auto` | `go.mod` |
+| Java | Temurin JDK, Maven, Gradle | `.java-version`, `.sdkmanrc` |
+| Ruby | RubyInstaller, gems | `.ruby-version` |
+| PHP | PHP with common extensions, Composer | `.php-version` |
+| Deno, Bun | single binaries | |
 | VS Code | portable, `code .`; settings and extensions are kept | |
 | Mesa 3D (opt-in) | software OpenGL 4.5 for games and apps without a GPU | |
 

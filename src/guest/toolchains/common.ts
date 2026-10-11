@@ -5,6 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { writeJsonAtomic } from '../../shared/rundir.js';
 import { errMsg, execOutput, exists, log, session, toolsDir, warn, workspace } from '../env.js';
+import { MARKERS } from '../../core/detect-toolchains.js';
 import { projectUses, specFromVersionFile } from './versions.js';
 
 /** What the toolchains contribute to the agent's environment. */
@@ -61,19 +62,6 @@ export const step = async (name: string, env: ToolEnv, work: () => Promise<void>
 
 // ---- which toolchains a project needs ------------------------------------------------------------------------------
 
-/** Files that show a project uses a language, for `enabled: "auto"` (looked for in the workspace and one folder down). */
-export const MARKERS: Record<string, string[]> = {
-  python: ['pyproject.toml', 'requirements.txt', 'setup.py', 'setup.cfg', 'Pipfile', 'uv.lock', 'poetry.lock', '.python-version'],
-  rust: ['Cargo.toml', 'rust-toolchain', 'rust-toolchain.toml'],
-  cpp: ['CMakeLists.txt', 'Makefile', 'meson.build', 'premake5.lua', 'Cargo.toml', '*.vcxproj'],
-  dotnet: ['*.sln', '*.slnx', '*.csproj', '*.fsproj', '*.vbproj', 'global.json'],
-  go: ['go.mod', 'go.work'],
-  java: ['pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'mvnw', 'gradlew', '.java-version', '.sdkmanrc'],
-  ruby: ['Gemfile', '*.gemspec', '.ruby-version'],
-  php: ['composer.json', 'artisan', '.php-version'],
-  deno: ['deno.json', 'deno.jsonc', 'deno.lock'],
-};
-
 const SKIP_DIRS = new Set(['node_modules', '.git', 'target', 'bin', 'obj', 'dist', 'build', 'vendor', '.venv', 'venv']);
 let entries: string[] | null = null;
 
@@ -88,9 +76,12 @@ export const workspaceEntries = (): string[] => {
   return entries;
 };
 
-/** true / false as configured; "auto" only when the workspace has one of the toolchain's marker files. */
+/**
+ * true / false as configured. The host already turns "auto" into a decision at launch (core/detect-toolchains.ts);
+ * this only applies when a session file still says "auto": the workspace has one of the marker files.
+ */
 export const wanted = (setting: boolean | 'auto', toolchain: string): boolean =>
-  setting === 'auto' ? projectUses(workspaceEntries(), MARKERS[toolchain] ?? []) : setting;
+  setting === 'auto' ? projectUses(workspaceEntries(), (MARKERS as Record<string, readonly string[]>)[toolchain] ?? []) : setting;
 
 /** The first of these version files in the workspace root, parsed (e.g. .ruby-version "3.3.1"). */
 export const versionFromFiles = (files: string[], parse: (text: string, name: string) => string | null = (t) => specFromVersionFile(t)): { spec: string; source: string } | null => {

@@ -46,14 +46,14 @@
       "globalPackages": []
     },
     "python": {
-      "enabled": true,
+      "enabled": "auto",
       "version": "3",
       "python2": true,
       "pyenv": "auto",
       "tools": []
     },
     "rust": {
-      "enabled": true,
+      "enabled": "auto",
       "toolchain": "stable",
       "host": "x86_64-pc-windows-gnu",
       "components": [],
@@ -61,11 +61,11 @@
       "crates": []
     },
     "cpp": {
-      "enabled": true,
+      "enabled": "auto",
       "flexBison": true
     },
     "dotnet": {
-      "enabled": true,
+      "enabled": "auto",
       "channels": [
         "LTS"
       ],
