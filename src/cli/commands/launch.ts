@@ -9,11 +9,18 @@ import { assertCanLaunch, isSandboxRunning, probeHost, spawnDetached, startSandb
 import { ensureTerminal } from '../../host/terminal.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
+import path from 'node:path';
+import fs from 'node:fs';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
 import { askYesNo, resolveRun } from '../../core/workspace.js';
 import { currentGuestDir, sandboxAlive, table, type Context } from './context.js';
+
+/** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
+const firstBoot = (dataPath: string): boolean => !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
+const FIRST_BOOT = 'First start for this storage: the sandbox downloads and installs the toolchains, databases and agent this project needs.\n' +
+  'That takes a few minutes, once. Everything is kept, so every later start reuses it and takes seconds. Progress:';
 
 /** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
 const runningSandboxStatus = async (dataPath: string) => {
@@ -22,7 +29,7 @@ const runningSandboxStatus = async (dataPath: string) => {
     if (status) return status;
     await sleep(1000);
   }
-  return fail('A Windows Sandbox is running that agent-sandbox did not start (or that uses another storage.dataName).', 'Close that sandbox window first, then run claude-sbx again.');
+  return fail('A Windows Sandbox is running that this tool did not start (or that uses another storage.dataName).', 'Close that sandbox window first, then run claude-sbx again.');
 };
 
 /** A sandbox is already running: open another agent session in it (new tab inside; optionally attach here). */
@@ -107,14 +114,18 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   if (generateOnly) return 0;
 
   startSandbox(generated.wsbPath);
-  if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', options.config] : [])]);
+  // Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently.
+  if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', path.resolve(options.config)] : [])]);
   // Hiding runs alongside; a failure to find the window must never break the launch or an attach.
   const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot).catch(() => false) : null;
-  if (options.terminal) {
-    console.log('Waiting for the sandbox (first boot downloads toolchains; later boots take seconds) ...');
+  if (options.terminal || options.noAgent) {
+    console.log(firstBoot(dataPath) ? FIRST_BOOT : 'Waiting for the sandbox (everything it needs is installed already; this takes seconds) ...');
     await waitForReady(dataPath, generated.launchId, sandboxAlive);
+    // Without an agent there is no session to attach to: the sandbox itself is the result.
+    if (options.noAgent) { console.log('Sandbox ready. Its window has a terminal in ' + config.guestWorkspace + '; from here: sandbox exec -- <command>, sandbox stop.'); return 0; }
     return attachTerminal(await waitForSession(dataPath, generated.launchId, sandboxAlive));
   }
+  if (firstBoot(dataPath)) console.log(FIRST_BOOT);
   if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: claude-sbx -t' : 'Could not find the sandbox window to hide (it may still be starting); run sandbox hide in a moment.');
   else console.log('Sandbox starting. ' + run.harnessName + ' opens in Windows Terminal inside it. Attach here any time: claude-sbx -t');
   return 0;

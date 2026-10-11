@@ -127,7 +127,7 @@ const MAX_LINE = 1000;
 const MAX_TEXT = 256 * 1024;
 const bounded = (text: string): string => text.slice(0, MAX_TEXT).split('\n').filter((line) => line.length <= MAX_LINE).join('\n');
 
-export const detectDatabases = (input: ProjectFile[], hostHas: Database[] = []): Detection[] => {
+export const detectDatabases = (input: ProjectFile[], hostHas: Database[] | (() => Database[]) = []): Detection[] => {
   const files = input.map((f) => ({ path: f.path, text: bounded(f.text) }));
   const found = new Map<Database, string[]>();
   const add = (db: Database, reason: string): void => { const list = found.get(db) ?? []; if (!list.includes(reason)) list.push(reason); found.set(db, list); };
@@ -137,7 +137,8 @@ export const detectDatabases = (input: ProjectFile[], hostHas: Database[] = []):
   }
   if (!SQL.some((db) => found.has(db))) {
     const orm = files.flatMap((file) => GENERIC_SQL.filter(([test, pattern]) => test.test(fileName(file.path)) && pattern.test(file.text)).map(([, , reason]) => file.path + ': ' + reason));
-    const mine = SQL.find((db) => hostHas.includes(db));
+    const host = orm.length ? (typeof hostHas === 'function' ? hostHas() : hostHas) : [];
+    const mine = SQL.find((db) => host.includes(db));
     if (orm.length && mine) add(mine, orm[0] + ', and this PC has ' + mine + ' installed');
   }
   return DATABASES.filter((db) => found.has(db)).map((database) => ({ database, reasons: found.get(database)! }));

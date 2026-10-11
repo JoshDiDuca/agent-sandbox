@@ -71,7 +71,7 @@ const pinnedVersion = (files: ProjectFile[], image: RegExp): string | null => {
 export const planDatabases = (config: Config['databases'], workspace: string, probe: { files?: ProjectFile[]; host?: Database[] } = {}): DatabasePlan[] => {
   const autos = DATABASES.filter((db) => config[db].enabled === 'auto');
   const files = autos.length ? probe.files ?? readProjectFiles(workspace) : [];
-  const detected = autos.length ? detectDatabases(files, probe.host ?? hostDatabases()) : [];
+  const detected = autos.length ? detectDatabases(files, probe.host ?? hostDatabases) : [];
   const compose = files.filter((f) => /compose/i.test(f.path));
   const versions: Record<Database, string> = {
     postgres: pinnedVersion(compose, /image:\s*["']?(?:[\w.-]+\/)*postgres:([\w.-]+)/i) ?? (config.postgres.version === 'latest' ? 'latest' : config.postgres.version),

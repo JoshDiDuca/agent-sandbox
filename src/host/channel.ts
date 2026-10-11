@@ -30,10 +30,10 @@ const id = (): string => Date.now().toString(36) + crypto.randomBytes(3).toStrin
 
 const until = async <T>(timeoutMs: number, isAlive: () => boolean, poll: () => T | null | undefined, timeoutMessage: string): Promise<T> => {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  for (let round = 0; Date.now() < deadline; round++) {
     const value = poll();
     if (value !== null && value !== undefined) return value;
-    if (!isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with claude-sbx; sandbox logs shows what happened.');
+    if (round % 10 === 0 && !isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with claude-sbx; sandbox logs shows what happened.');
     await sleep(500);
   }
   fail(timeoutMessage, 'Check what the sandbox is doing with sandbox logs -f (or sbx-show to see its window).');

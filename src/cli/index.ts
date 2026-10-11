@@ -33,7 +33,6 @@ const HANDLERS: Record<string, Handler> = {
   doctor: commands.doctor,
   setup: commands.setup,
   data: commands.data,
-  repair: (ctx) => commands.repair(ctx),
   'host-claude': commands.claudeHost,
   _watch: commands.watcher,
 };
@@ -51,7 +50,11 @@ const runFromMenu = (argv: string[]): Promise<number> => main(argv).catch((e: un
  * opens the menu; `sandbox <agent> [agent args]` starts that agent.
  */
 export const main = async (argv: string[], preset: Preset = {}): Promise<number> => {
-  const isAgent = (name: string | undefined): name is string => Boolean(name && !commandSpec(name) && loadConfig().config.harnesses[name]);
+  const isAgent = (name: string | undefined): name is string => {
+    if (!name || name.startsWith('-') || commandSpec(name)) return false;
+    const at = argv.indexOf('--config');
+    try { return Boolean(loadConfig(at >= 0 ? argv[at + 1] : undefined).config.harnesses[name]); } catch { return false; }
+  };
   if (!preset.command && !preset.harness) {
     if (argv.length === 0) return process.stdin.isTTY ? main(['menu']) : (buildProgram(() => undefined).outputHelp(), 0);
     if (isAgent(argv[0])) return main(argv.slice(1), { harness: argv[0] });

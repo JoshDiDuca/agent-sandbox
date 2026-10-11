@@ -192,7 +192,7 @@ export const Config = z.strictObject({
   mappings: z.array(Mapping).describe('Extra folders from this PC.'),
   sandbox: Sandbox,
   storage: z.strictObject({
-    root: z.string().min(1).describe('Where agent-sandbox keeps everything on this PC (tools, logins, launches).'),
+    root: z.string().min(1).describe('Where everything is kept on this PC (tools, databases, logins, launches).'),
     persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),
     dataName: Name.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
   }),
@@ -250,8 +250,8 @@ export const jsonSchemas = (): Record<string, object> => {
   };
   const toSchema = (schema: z.ZodType, title: string): object => ({ title, ...(z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) as object) });
   return {
-    'config.schema.json': dropRequired(toSchema(Config, 'agent-sandbox user config (~/.agent-sandbox/config.json)')) as object,
-    'sandbox-config.schema.json': toSchema(LocalOverrides, 'agent-sandbox project config (.sandbox-config.json)'),
+    'config.schema.json': dropRequired(toSchema(Config, 'windows-development-sandbox user config (~/.agent-sandbox/config.json)')) as object,
+    'sandbox-config.schema.json': toSchema(LocalOverrides, 'windows-development-sandbox project config (.sandbox-config.json)'),
   };
 };
 

@@ -85,7 +85,7 @@ export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js'];
 const copyRuntime = (packageRoot: string, launchPath: string): void => {
   const runtime = path.join(packageRoot, 'dist', 'runtime');
   const missing = RUNTIME_FILES.filter((f) => !fileExists(path.join(runtime, f)));
-  if (missing.length) fail('The sandbox runtime is missing from ' + runtime + ' (' + missing.join(', ') + ').', 'Rebuild agent-sandbox: npm run build (or reinstall the package).');
+  if (missing.length) fail('The sandbox runtime is missing from ' + runtime + ' (' + missing.join(', ') + ').', 'Rebuild it: npm run build (or reinstall the package).');
   ensureDir(path.join(launchPath, 'runtime'));
   for (const file of RUNTIME_FILES) fs.copyFileSync(path.join(runtime, file), path.join(launchPath, 'runtime', file));
   fs.writeFileSync(path.join(launchPath, 'package.json'), '{ "type": "module" }\n', 'utf8');

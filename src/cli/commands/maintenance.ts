@@ -80,7 +80,7 @@ const printSchemaSettings = (): number => {
   };
   console.log('Add this to your VS Code settings.json (Ctrl+Shift+P > "Preferences: Open User Settings (JSON)"):\n');
   console.log(JSON.stringify(setting, null, 2).slice(2, -2));
-  console.log('\nThe schema files live in ' + userDir() + ' and are refreshed whenever agent-sandbox runs.');
+  console.log('\nThe schema files live in ' + userDir() + ' and are refreshed whenever the sandbox command runs.');
   return 0;
 };
 

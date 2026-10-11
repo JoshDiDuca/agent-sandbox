@@ -74,8 +74,8 @@ export const restart = async (ctx: Context): Promise<number> => {
 
 export const stop = async (ctx: Context): Promise<number> => {
   if (!isSandboxRunning()) { console.log('No Windows Sandbox is running.'); return 0; }
-  const sandbox = readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by agent-sandbox.', 'Close its window instead.');
-  await execInSandbox(ctx.dataPath, ['shutdown', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive);
+  const sandbox = readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
+  await execInSandbox(ctx.dataPath, ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive);
   console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');
   return 0;
 };

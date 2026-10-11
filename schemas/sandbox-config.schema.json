@@ -1,5 +1,5 @@
 {
-  "title": "agent-sandbox project config (.sandbox-config.json)",
+  "title": "windows-development-sandbox project config (.sandbox-config.json)",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {

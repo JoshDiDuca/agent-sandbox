@@ -1,4 +1,4 @@
-// Programmatic API: `import { sandbox } from 'agent-sandbox'`. Same safety model as the CLI: the host only sends the
+// Programmatic API: `import { sandbox } from 'windows-development-sandbox'`. Same safety model as the CLI: the host only sends the
 // request kinds the guest daemon accepts, and everything coming back is validated data.
 import path from 'node:path';
 import type { GuestResponse, SandboxStatus, SessionStatus } from './core/types.js';
@@ -31,7 +31,8 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
   const loaded = loadConfig(options.config);
   const dataPath = path.join(expandPath(loaded.config.storage.root, loaded.base), 'data', loaded.config.storage.dataName);
   const alive = isSandboxRunning;
-  const ready = (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.', 'Start one first, e.g. claude-sbx --headless.'));
+  // async: no sandbox is a rejected promise like every other failure, not a synchronous throw.
+  const ready = async (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.', 'Start one first, e.g. claude-sbx --headless.'));
   return {
     isRunning: alive,
     status: () => readSandboxStatus(dataPath),

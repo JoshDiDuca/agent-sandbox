@@ -1,5 +1,5 @@
 {
-  "title": "agent-sandbox user config (~/.agent-sandbox/config.json)",
+  "title": "windows-development-sandbox user config (~/.agent-sandbox/config.json)",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
@@ -125,7 +125,7 @@
         "root": {
           "type": "string",
           "minLength": 1,
-          "description": "Where agent-sandbox keeps everything on this PC (tools, logins, launches)."
+          "description": "Where everything is kept on this PC (tools, databases, logins, launches)."
         },
         "persistAgentState": {
           "type": "boolean",
