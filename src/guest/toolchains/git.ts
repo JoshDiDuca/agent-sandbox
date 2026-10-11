@@ -46,6 +46,20 @@ const installGuard = (env: ToolEnv, access: Exclude<GitAccess, 'full'>, realGit:
   }
 };
 
+/**
+ * Git copied from this PC keeps its installer's absolute paths in etc\gitconfig, e.g. http.sslCAInfo =
+ * C:/Program Files/Git/mingw64/etc/ssl/certs/ca-bundle.crt, which does not exist here: every HTTPS clone/fetch failed
+ * with "error setting certificate file". Point it at the bundle inside this copy.
+ */
+const pointAtOwnCertificates = (root: string): void => {
+  const config = path.join(root, 'etc', 'gitconfig');
+  const bundle = path.join(root, 'mingw64', 'etc', 'ssl', 'certs', 'ca-bundle.crt');
+  if (!exists(config) || !exists(bundle)) return;
+  const text = fs.readFileSync(config, 'utf8');
+  const fixed = text.replace(/^(\s*sslCAInfo\s*=\s*).*$/gim, (_m, key: string) => key + posix(bundle));
+  if (fixed !== text) fs.writeFileSync(config, fixed);
+};
+
 export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean, access: GitAccess): Promise<void> => {
   const root = tool('git');
   const bash = path.join(root, 'bin', 'bash.exe');
@@ -58,6 +72,7 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
     else await installPortableGit(root);
   }
   if (!exists(bash)) throw new Error('bash.exe missing after installing Git');
+  pointAtOwnCertificates(root);
   env.vars.CLAUDE_CODE_GIT_BASH_PATH = bash;
   env.append.push(path.join(root, 'usr', 'bin'));
   const version = execOutput(gitExe, ['--version']).replace(/^git version /, '');
