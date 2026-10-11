@@ -4,8 +4,8 @@
 
 **A throwaway Windows machine for every project, with or without an AI agent.**
 
-[![Release](https://img.shields.io/github/v/release/JoshDiDuca/agent-sandbox?label=release)](https://github.com/JoshDiDuca/agent-sandbox/releases/latest)
-[![CI](https://github.com/JoshDiDuca/agent-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/JoshDiDuca/agent-sandbox/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/JoshDiDuca/windows-development-sandbox?label=release)](https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest)
+[![CI](https://github.com/JoshDiDuca/windows-development-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/JoshDiDuca/windows-development-sandbox/actions/workflows/ci.yml)
 ![Windows 10/11 Pro, Enterprise, Education](https://img.shields.io/badge/Windows-10%20%7C%2011%20Pro-0078D4)
 ![MIT](https://img.shields.io/badge/license-MIT-green)
 
@@ -18,7 +18,7 @@ on your PC is reachable. Close it and it's gone. Your project, tools, databases 
 ## Install
 
 ```powershell
-irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
+irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
 It checks your PC, offers to turn on Windows Sandbox, and installs everything. It uses your Node.js 20+ if you have it,

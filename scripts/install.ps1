@@ -1,12 +1,12 @@
 # windows-development-sandbox installer. Run in a normal (not admin) PowerShell:
-#   irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
+#   irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 # It checks this PC can run Windows Sandbox, offers to turn the feature on, then installs the CLI with npm: with your
 # Node.js 20+ if you have it, else with a private Node.js used only by this tool (nothing installed system-wide). Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
 # Windows PowerShell 5.1 compatible. Wrapped in a script block so `return` never closes the user's window under iex.
 & {
   # Not 'Stop': Windows PowerShell 5.1 would turn npm's and winget's warnings on stderr into fatal errors.
   $ErrorActionPreference = 'Continue'
-  $package = 'https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/windows-development-sandbox.tgz'
+  $package = 'https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz'
   if ($env:WDS_PACKAGE) { $package = $env:WDS_PACKAGE }
   $feature = 'Containers-DisposableClientVM'
   $enableCommand = "Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart"

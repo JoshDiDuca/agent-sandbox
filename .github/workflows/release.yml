@@ -50,6 +50,8 @@ jobs:
           }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "release=$release" >> $env:GITHUB_OUTPUT
+          # git rev-parse exits 1 for a new tag; without this the step would fail with that exit code.
+          exit 0
       - uses: actions/setup-node@v4
         if: steps.version.outputs.release == 'true'
         with:

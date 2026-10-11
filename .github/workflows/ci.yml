@@ -8,15 +8,11 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        # 22.0.0: the oldest Node users run it on (dependencies must not need newer); 22: current.
-        node: ['22.0.0', '22']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 22
           cache: npm
       - run: npm ci   # also builds (prepare)
       - name: Self-test (informational)
@@ -24,6 +20,24 @@ jobs:
         # desktop, so a failure here is reported but does not fail the build.
         continue-on-error: true
         run: node dist/bin/sandbox.js self-test
+      - name: Builds and runs on Node 22.0.0
+        # The oldest Node users run it on: dependencies and APIs must not need newer. setup-node's own 22.0.0 build
+        # for Windows ships a broken npm, so this takes the official zip from nodejs.org (checked) and only runs node.
+        shell: pwsh
+        run: |
+          $base = 'https://nodejs.org/dist/v22.0.0'
+          $zip = "$env:RUNNER_TEMP\node-v22.0.0-win-x64.zip"
+          Invoke-WebRequest "$base/node-v22.0.0-win-x64.zip" -OutFile $zip
+          $expected = ((Invoke-WebRequest "$base/SHASUMS256.txt").Content -split "`n" | Where-Object { $_ -match 'node-v22\.0\.0-win-x64\.zip$' }) -replace '\s.*$', ''
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'Node 22.0.0 download does not match its SHA-256' }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          $node = "$env:RUNNER_TEMP\node-v22.0.0-win-x64\node.exe"
+          & $node --version
+          & $node node_modules/typescript/bin/tsc -p tsconfig.json; if ($LASTEXITCODE) { exit 1 }
+          & $node scripts/bundle.mjs; if ($LASTEXITCODE) { exit 1 }
+          & $node scripts/schemas.mjs; if ($LASTEXITCODE) { exit 1 }
+          & $node dist/bin/sandbox.js --help; if ($LASTEXITCODE) { exit 1 }
+          & $node dist/bin/sandbox.js config schema | Out-Null; if ($LASTEXITCODE) { exit 1 }
       - name: Check install.ps1 parses in Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -34,5 +48,5 @@ jobs:
         run: npm pack --silent
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-development-sandbox-package-${{ matrix.node }}
+          name: windows-development-sandbox-package
           path: windows-development-sandbox-*.tgz
