@@ -1,6 +1,7 @@
 // `launch` / `generate`, and what sandbox claude runs: start a sandbox, or another session in the running one.
 import { activateAccount, activeAccount, defaultAccount } from '../../host/accounts.js';
-import { attachTerminal, findUnwatchedSession, requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
+import { attachTerminal, findUnwatchedSession } from '../../host/attach.js';
+import { requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { generateSandbox } from '../../host/generate.js';
 import { findSecretFiles } from '../../host/secrets.js';
@@ -14,7 +15,9 @@ import fs from 'node:fs';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
-import { askYesNo, resolveRun } from '../../core/workspace.js';
+import { askYesNo } from '../../core/prompt.js';
+import { resolveRun } from '../../core/workspace.js';
+import { c } from '../colors.js';
 import { currentGuestDir, requireOnPc, sandboxAlive, table, type Context } from './context.js';
 
 /** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
@@ -76,7 +79,7 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh, { pwsh: config.toolchains.pwsh.enabled !== false }) : { exe: null, message: 'disabled' };
   const history = syncSummary(config, dataPath, run.workspaceHost);
   const guarded = checkRepo(dataPath);
-  if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).\x1b[0m');
+  if (guarded.length) console.warn(c.yellow('SECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).'));
   saveRepoSnapshot(dataPath, run.workspaceHost);
   resetRunDir(dataPath);
   return { account, terminal: terminal.message, history, pruned: describePrune(pruneStorage(storageRoot)) };
@@ -105,7 +108,10 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
 
   for (const note of run.notes) console.log(note);
   const secretFiles = config.secrets.warnFiles ? findSecretFiles(run.workspaceHost) : [];
-  if (secretFiles.length) console.warn('\x1b[33mHeads-up: the agent can read these files in your workspace, which often hold secrets: ' + secretFiles.slice(0, 12).join(', ') + (secretFiles.length > 12 ? ', ...' : '') + '. Move real credentials out of the folder (or use test ones). Silence with secrets.warnFiles = false.\x1b[0m');
+  if (secretFiles.length) {
+    const shown = secretFiles.slice(0, 12).join(', ') + (secretFiles.length > 12 ? ', ...' : '');
+    console.warn(c.yellow('Heads-up: the agent can read these files in your workspace, which often hold secrets: ' + shown + '. Move real credentials out of the folder (or use test ones). Silence with secrets.warnFiles = false.'));
+  }
   table([
     ['Workspace', run.workspaceHost + '  ->  ' + config.guestWorkspace + (config.readOnly ? '  (read-only)' : '')],
     ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],

@@ -2,7 +2,8 @@
 // request kinds the guest daemon accepts, and everything coming back is validated data.
 import path from 'node:path';
 import type { GuestResponse, SandboxStatus, SessionStatus } from './core/types.js';
-import { attachTerminal, execInSandbox, pickSession, pingSandbox, requestSession, restartSessions, waitForReady, waitForSession } from './host/channel.js';
+import { attachTerminal } from './host/attach.js';
+import { execInSandbox, pickSession, pingSandbox, requestSession, restartSessions, waitForReady, waitForSession } from './host/channel.js';
 import { loadConfig } from './core/config.js';
 import { listSessions, readSandboxStatus } from './shared/rundir.js';
 import { isSandboxRunning } from './host/platform.js';

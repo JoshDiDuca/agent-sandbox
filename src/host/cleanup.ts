@@ -1,9 +1,10 @@
 // Keeps storage from growing forever. Runs automatically on every launch and via `sandbox clean`.
 import fs from 'node:fs';
-import { safeRemove } from '../shared/safe-remove.js';
 import path from 'node:path';
 import _ from 'lodash';
+import { sizeOf } from '../core/disk.js';
 import { dirExists, isLink } from '../core/util.js';
+import { safeRemove } from '../shared/safe-remove.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -11,14 +12,6 @@ export interface PruneOptions { launchDays: number; logDays: number; conflictDay
 export interface PruneResult { launches: number; logs: number; leftovers: number; bytes: number }
 
 export const DEFAULT_PRUNE: PruneOptions = { launchDays: 7, logDays: 14, conflictDays: 30, keep: [] };
-
-/** Size on disk, never following links (a sandbox-planted junction must not make us walk this PC's disk). */
-const sizeOf = (p: string): number => {
-  try {
-    const stat = fs.lstatSync(p);
-    return stat.isDirectory() ? _.sumBy(fs.readdirSync(p), (name) => sizeOf(path.join(p, name))) : stat.isSymbolicLink() ? 0 : stat.size;
-  } catch { return 0; }
-};
 
 const ageMs = (p: string, now: number): number => { try { return now - fs.lstatSync(p).mtimeMs; } catch { return 0; } };
 

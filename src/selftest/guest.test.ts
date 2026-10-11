@@ -1,7 +1,8 @@
 // Generated sandbox (.wsb + launch folder) and the guest boot in dry-run mode.
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildWsb, gitIdentity, resolveMemoryMb } from '../host/generate.js';
+import { gitIdentity } from '../host/launch/stage.js';
+import { buildWsb, resolveMemoryMb } from '../host/launch/wsb.js';
 import { readJsonFile } from '../shared/rundir.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
