@@ -66,10 +66,17 @@ export const findHalfInstalled = (toolsDir: string, rules: ToolRule[] = TOOL_RUL
   });
 };
 
-/** Every link or junction under `root` (the links themselves; nothing behind them is visited). */
+/**
+ * Every link or junction under `root` (the links themselves; nothing behind them is visited). Before descending into
+ * a folder its real path must still be inside root: a folder swapped for a junction between two looks is not followed.
+ */
 export const findLinks = (root: string): string[] => {
   if (isLink(root)) return [root];
+  const real = (p: string): string => { try { return fs.realpathSync.native(p).toLowerCase(); } catch { return ''; } };
+  const top = real(root);
+  const inside = (p: string): boolean => { const r = real(p); return r !== '' && (r === top || r.startsWith(top + path.sep)); };
   const walk = (dir: string): string[] => {
+    if (!inside(dir)) return [];
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
     return entries.flatMap((d) => {
@@ -122,10 +129,13 @@ const CHECKS: RepairCheck[] = [
     name: 'Links in the data folder',
     run: (env) => {
       if (isLink(env.dataPath)) return { status: 'needs-you', detail: env.dataPath + ' itself is a link or junction. agent-sandbox refuses to work through links; point storage.root at the real folder instead (sandbox config path).' };
+      // A running sandbox can swap folders for links while we look; only check a stopped one.
+      if (env.running) return whileRunning;
       const links = findLinks(env.dataPath);
       if (!links.length) return ok('none (nothing in ' + env.dataPath + ' points elsewhere).');
-      // A link here can only have been made inside the sandbox; it could point at this PC's own files. Remove the link itself.
-      for (const link of links) removeLink(link);
+      // A link here can only have been made inside the sandbox; it could point at this PC's own files. Remove the link
+      // itself, and only if every folder above it is still real.
+      for (const link of links) { guard(env, path.dirname(link)); removeLink(link); }
       return { status: 'fixed', detail: 'removed ' + links.length + ' link(s)/junction(s) the sandbox created, without following them: ' + links.map((l) => rel(env.dataPath, l)).join(', ') };
     },
   },

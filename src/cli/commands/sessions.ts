@@ -2,7 +2,7 @@
 import _ from 'lodash';
 import type { SessionStatus } from '../../core/types.js';
 import { activeAccount } from '../../host/accounts.js';
-import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
+import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
 import type { Viewers } from '../../shared/pty-client.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { repoFindings } from '../../host/repo-guard.js';
@@ -23,12 +23,15 @@ export const attach = async (ctx: Context): Promise<number> => {
 type Listed = SessionStatus & { viewers?: Viewers | null };
 
 const viewerText = (v: Viewers | null | undefined): string => (v === undefined ? '-' : v === null ? '?' : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox');
-const sessionRow = (s: Listed): string[] => [s.id, s.harness, s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), s.cwd, new Date(s.startedAt).toLocaleTimeString()];
+// harness, cwd and times are written by the sandbox: printed through safeText.
+const sessionRow = (s: Listed): string[] => [s.id, safeText(s.harness), s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), safeText(s.cwd), safeText(new Date(s.startedAt).toLocaleTimeString())];
 
 export const sessions = async (ctx: Context): Promise<number> => {
   // Who is attached comes from each session itself, so a terminal that was closed is never counted.
   const live = isSandboxRunning();
-  const list: Listed[] = await Promise.all(listSessions(ctx.dataPath).map(async (s) => (live && s.phase === 'running' ? { ...s, viewers: await sessionViewers(s) } : s)));
+  // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
+  const ask = new Set(live ? currentSessions(ctx.dataPath).map((s) => s.id) : []);
+  const list: Listed[] = await Promise.all(listSessions(ctx.dataPath).map(async (s) => (ask.has(s.id) ? { ...s, viewers: await sessionViewers(s) } : s)));
   if (printJson(ctx, list.map((s) => _.omit(s, 'attach')))) return 0;
   if (list.length === 0) console.log('No sessions.');
   else table([['ID', 'AGENT', 'STATE', 'ATTACHED', 'FOLDER', 'STARTED'], ...list.map(sessionRow)]);
@@ -45,7 +48,7 @@ export const status = async (ctx: Context): Promise<number> => {
     daemon, account: activeAccount(ctx.dataPath), sessions: running ? runningSessions(ctx.dataPath).length : 0, syncWatcher: watcherRunning(ctx.dataPath),
     repoGuard: findings.length ? findings.map((x) => x.kind + ': ' + x.detail).join('; ') : 'nothing from the sandbox needed neutralising',
   };
-  if (!printJson(ctx, info)) table(Object.entries(info).map(([k, v]) => [_.startCase(k), String(v ?? '-')]));
+  if (!printJson(ctx, info)) table(Object.entries(info).map(([k, v]) => [_.startCase(k), safeText(String(v ?? '-'))]));
   return 0;
 };
 

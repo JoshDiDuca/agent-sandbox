@@ -60,7 +60,7 @@ export const isInsideOrEqual = (parent: string, child: string): boolean => {
  * plain colours (SGR), so nothing written by the sandbox can drive your terminal (titles, clipboard, cursor tricks).
  */
 export const safeText = (text: string): string =>
-  text.replace(/\x1b\[[0-9;]*m|\x1b(\[[0-9;?]*[ -\/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[@-Z\\-_])|[\x00-\x08\x0b-\x1f\x7f]/g, (m) => (/^\x1b\[[0-9;]*m$/.test(m) ? m : ''));
+  text.replace(/\x1b\[[0-9;]*m|\x1b(\[[0-9;?]*[ -\/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[@-Z\\-_])|[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, (m) => (/^\x1b\[[0-9;]*m$/.test(m) ? m : ''));
 
 export const findOnPath = (names: string[]): string | null => {
   const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter((d: string) => d !== '');

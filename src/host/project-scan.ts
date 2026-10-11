@@ -10,19 +10,36 @@ import { system32 } from '../shared/system.js';
 
 const SKIP = /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;
 const MAX_FILES = 400;
-const MAX_BYTES = 512 * 1024;
+const MAX_BYTES = 256 * 1024;
+const MAX_FOLDERS = 2000;
+
+/** Reads a file through one handle, only if that handle is a regular file of at most MAX_BYTES. */
+const readSmallFile = (file: string): string | null => {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, 'r');
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_BYTES) return null;
+    const buffer = Buffer.alloc(stat.size);
+    fs.readSync(fd, buffer, 0, stat.size, 0);
+    return buffer.toString('utf8');
+  } catch { return null; } finally { if (fd !== null) fs.closeSync(fd); }
+};
 
 /** Manifest-type files in the project, up to 3 folders deep. Links are not followed (the workspace may be guest-written). */
 export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
   const files: ProjectFile[] = [];
+  let folders = 0;
   const walk = (dir: string, level: number): void => {
+    if (++folders > MAX_FOLDERS) return;
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
       if (files.length >= MAX_FILES) return;
       const full = path.join(dir, entry.name);
       if (entry.isFile() && INTERESTING_FILE.test(entry.name)) {
-        try { if (fs.statSync(full).size <= MAX_BYTES) files.push({ path: path.relative(root, full), text: fs.readFileSync(full, 'utf8') }); } catch { /* unreadable: skip */ }
+        const text = readSmallFile(full);
+        if (text !== null) files.push({ path: path.relative(root, full), text });
       } else if (entry.isDirectory() && level < depth && !SKIP.test(entry.name)) walk(full, level + 1);
     }
   };

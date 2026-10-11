@@ -103,6 +103,15 @@ export const pingSandbox = async (dataPath: string, isAlive: () => boolean): Pro
 
 export const runningSessions = (dataPath: string): SessionStatus[] => listSessions(dataPath).filter((s: SessionStatus) => s.phase === 'running');
 
+/** Most sessions the host will ever contact for one listing: a sandbox can write as many session files as it likes. */
+export const MAX_QUERIED_SESSIONS = 32;
+
+/** Running sessions of the sandbox that is running now (its launch id), newest last, capped. */
+export const currentSessions = (dataPath: string): SessionStatus[] => {
+  const launchId = readSandboxStatus(dataPath)?.launchId;
+  return runningSessions(dataPath).filter((s) => s.launchId === launchId).slice(-MAX_QUERIED_SESSIONS);
+};
+
 /** The session with this id (or id prefix), else the most recently started running one. */
 export const pickSession = (dataPath: string, sessionId?: string): SessionStatus => {
   const running = runningSessions(dataPath);
@@ -128,7 +137,7 @@ export const sessionViewers = (session: SessionStatus): Promise<Viewers | null> 
  * claude-sbx -t picks it back up instead of starting another. A session that cannot answer is never reused.
  */
 export const findUnwatchedSession = async (dataPath: string, harness: string, cwd: string): Promise<SessionStatus | null> => {
-  const candidates = runningSessions(dataPath).filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase()).reverse();
+  const candidates = currentSessions(dataPath).filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase()).reverse().slice(0, 8);
   for (const session of candidates) if ((await sessionViewers(session))?.remote === 0) return session;
   return null;
 };
@@ -139,12 +148,12 @@ export const attachTerminal = async (session: SessionStatus): Promise<number> =>
   if (!session.attach) fail('This session cannot be attached to: networking or attach is disabled for this sandbox.', 'Set sandbox.networking and attach.enabled to true, then start a new sandbox.');
   const endpoint = hostEndpoint(session) ?? fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run sandbox doctor.');
   const socket = await connect(endpoint);
-  console.log('Attaching to ' + session.harness + ' session ' + session.id + ' (' + session.cwd + '). Detach any time with Ctrl+]');
+  console.log('Attaching to ' + safeText(session.harness) + ' session ' + session.id + ' (' + safeText(session.cwd) + '). Detach any time with Ctrl+]');
   await sleep(400);
   const result = await runTerminalClient(socket, session.attach.token, { detachKey: DETACH_KEY });
   switch (result.reason) {
     case 'detach': console.log('Detached. The session keeps running; reattach with: sandbox attach ' + session.id); return 0;
-    case 'exit': console.log(session.harness + ' exited with code ' + result.exitCode + '.'); return result.exitCode;
+    case 'exit': console.log(safeText(session.harness) + ' exited with code ' + result.exitCode + '.'); return result.exitCode;
     case 'error': fail('The sandbox refused the connection: ' + result.message, 'Try sandbox attach again; the session may have restarted.');
     default: console.log('Connection to the sandbox closed.'); return 1;
   }

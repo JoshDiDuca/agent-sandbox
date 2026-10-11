@@ -8,7 +8,7 @@ const Time = Text(64);
 
 export const AttachEndpoint = z.strictObject({
   addresses: z.array(Text(64)).max(16),
-  port: z.number().int().min(1).max(65535),
+  port: z.number().int().min(1024).max(65535),
   token: Text(256),
 });
 

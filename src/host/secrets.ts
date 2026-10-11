@@ -36,7 +36,8 @@ const SECRET_VALUES: RegExp[] = [
   /\bAIza[0-9A-Za-z_-]{35}\b/, /\bya29\.[0-9A-Za-z_-]{20,}/, /\bnpm_[A-Za-z0-9]{36}\b/, /\bhf_[A-Za-z0-9]{30,}/,
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /AccountKey=[A-Za-z0-9+/=]{20,}/i, /SharedAccessSignature=|[?&]sig=[A-Za-z0-9%+/=]{20,}/i,
   /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s@/]+@/i, // user:password@host in any URL (database URLs, registries)
-  /^Bearer\s+\S{16,}/i, /^Basic\s+[A-Za-z0-9+/=]{12,}/i,
+  /\bBearer\s+\S{16,}/i, /\bBasic\s+[A-Za-z0-9+/=]{12,}/i,
+  /[?&](api[_-]?key|apikey|access[_-]?token|token|key|secret|password|sig|signature|auth)=[^&\s]{8,}/i, // credentials in a URL
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, // JWTs
 ];
 
@@ -45,7 +46,8 @@ const globMatch = (pattern: string, name: string): boolean =>
   new RegExp('^' + pattern.split('*').map((p) => p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i').test(name);
 
 export const isSecretName = (name: string, secrets: SecretsConfig): boolean => {
-  const upper = name.toUpperCase();
+  // X-API-Key, x-auth-token, api.key: compared as X_API_KEY, X_AUTH_TOKEN, API_KEY.
+  const upper = name.toUpperCase().replace(/[-\s.]/g, '_');
   return SECRET_NAMES.some((r) => r.test(upper)) || SECRET_WORDS.test(upper) || secrets.patterns.some((p) => globMatch(p, name));
 };
 
@@ -85,10 +87,13 @@ const stripServer = (server: unknown, secrets: SecretsConfig, where: string, rem
   const out = { ...(server as Record<string, unknown>) };
   if ('env' in out) out.env = stripVariables(out.env, secrets, where + ' env.', removed);
   if ('headers' in out) out.headers = stripVariables(out.headers, secrets, where + ' header ', removed);
+  if (typeof out.url === 'string' && secrets.strip && isSecretValue(out.url)) { removed.push(where + ' url (it carried a credential)'); out.url = out.url.replace(/([?&])[^=&#]+=[^&#]*/g, (m, sep: string) => (isSecretValue('?' + m.slice(1)) ? sep + m.slice(1).split('=')[0] + '=REMOVED' : m)); }
   if (Array.isArray(out.args) && secrets.strip) {
     out.args = out.args.map((arg: unknown, i: number) => {
       const previous = i > 0 ? String((out.args as unknown[])[i - 1]) : '';
-      const flagged = typeof arg === 'string' && (isSecretValue(arg) || (/^--?[\w-]+$/.test(previous) && isSecretName(previous.replace(/^-+/, '').replace(/-/g, '_'), secrets)));
+      const [flag, inline] = typeof arg === 'string' && /^--?[\w-]+=/.test(arg) ? [arg.slice(0, arg.indexOf('=')), arg.slice(arg.indexOf('=') + 1)] : [null, null];
+      const secretFlag = (f: string): boolean => /^--?[\w-]+$/.test(f) && isSecretName(f.replace(/^-+/, ''), secrets);
+      const flagged = typeof arg === 'string' && (isSecretValue(arg) || (flag !== null && (secretFlag(flag) || isSecretValue(inline!))) || secretFlag(previous));
       if (flagged) removed.push(where + ' argument ' + (i + 1));
       return flagged ? '[removed by agent-sandbox]' : arg;
     });

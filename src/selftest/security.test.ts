@@ -10,6 +10,7 @@ import { assertNoLinks, ensureDir, safeText } from '../core/util.js';
 import { assertSafeMapping } from '../core/workspace.js';
 import { sandboxGlobalState } from '../host/claude-profile.js';
 import { findSecretFiles, stripMcpServers, stripSettings } from '../host/secrets.js';
+import { detectDatabases } from '../core/detect-databases.js';
 import { gitDecision } from '../guest/gitguard.js';
 import { gitDenyRules } from '../guest/gitrules.js';
 import { encodeFrame, FrameReader, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
@@ -129,6 +130,14 @@ export const securityTests = async (t: Harness, f: Fixtures): Promise<void> => {
   check(JSON.stringify(gh.args) === '["server","--api-key","[removed by agent-sandbox]","--verbose","[removed by agent-sandbox]"]' && JSON.stringify(gh.env) === '{"LOG_LEVEL":"debug"}' && JSON.stringify(api.headers) === '{"Accept":"json"}',
     'MCP servers: token env vars, Authorization headers and key arguments are removed, the rest of the server works as before');
   check(JSON.stringify(stripSettings({ env: { AWS_SECRET_ACCESS_KEY: 'y' } }, { ...secrets, strip: false }, [])) === '{"env":{"AWS_SECRET_ACCESS_KEY":"y"}}', 'secrets.strip = false copies settings unchanged');
+  const sneaky = stripMcpServers({ mcpServers: { r: { type: 'http', url: 'https://mcp.example.com/mcp?api_key=0123456789abcdef&region=eu', headers: { 'X-API-Key': 'k', 'x-auth-token': 't', Accept: 'json' }, args: ['--api-key=deadbeefdeadbeef', '--header', 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz', '--port=8080'] } } }, secrets, []);
+  const r = (sneaky.mcpServers as Record<string, { url: string; headers: object; args: string[] }>).r;
+  check(r.url === 'https://mcp.example.com/mcp?api_key=REMOVED&region=eu' && JSON.stringify(r.headers) === '{"Accept":"json"}' && r.args[0] === '[removed by agent-sandbox]' && r.args[2] === '[removed by agent-sandbox]' && r.args[3] === '--port=8080',
+    'MCP servers: X-API-Key headers, ?api_key= in URLs, --flag=value keys and "Authorization: Bearer" arguments are removed too');
+  const evil = ['Server=a;Database=a;'.repeat(12000), 'services:\n  x:\n    image: ' + 'postgres'.repeat(20000) + '!\n', 'Host=a;'.repeat(30000)].map((text, i) => ({ path: ['.env', 'compose.yaml', 'appsettings.json'][i], text }));
+  const started = Date.now();
+  detectDatabases(evil);
+  check(Date.now() - started < 2000, 'database detection stays fast on hostile workspace files (no catastrophic backtracking): ' + (Date.now() - started) + ' ms');
   const ws = at('secret-ws');
   for (const file of ['.env', '.env.example', 'server.pem', 'README.md', 'api/credentials.json', 'node_modules/x/.env']) t.write(path.join(ws, file), 'x');
   check(findSecretFiles(ws).sort().join() === '.env,api\\credentials.json,server.pem', 'secret-looking workspace files are found for the launch warning (templates and dependencies ignored)');

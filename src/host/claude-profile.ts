@@ -52,7 +52,8 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
   const target = path.join(launchPath, 'claude-profile');
   ensureDir(target);
 
-  const items = [...settings.include];
+  // The login file goes only through copyCredentials (a project file asking for it is flagged); include never copies it.
+  const items = settings.include.filter((name) => name.toLowerCase() !== '.credentials.json');
   if (settings.copyCredentials) items.push('.credentials.json');
   for (const name of items) {
     if (!/^[A-Za-z0-9._-]+$/.test(name) || name === '.' || name === '..') { result.skipped.push(name + ' (invalid name)'); continue; }

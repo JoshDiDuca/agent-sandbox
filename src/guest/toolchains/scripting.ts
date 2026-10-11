@@ -30,7 +30,7 @@ export const setupVcRuntime = async (env: ToolEnv): Promise<void> => {
     const installer = tool('vcredist', 'vc_redist.x64.exe');
     if (!exists(installer)) { log('Downloading the Visual C++ runtime ...'); await download(VC_REDIST, installer); }
     const signer = execOutput(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "$s = Get-AuthenticodeSignature -LiteralPath '" + installer.replace(/'/g, "''") + "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }"]);
-    if (!/O=Microsoft Corporation/.test(signer)) { fs.rmSync(installer, { force: true }); throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)'); }
+    if (signer.trim() !== 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US') { fs.rmSync(installer, { force: true }); throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)'); }
     log('Installing the Visual C++ runtime ...');
     // 1638: a newer version is already installed; 3010: installed, a restart would finish it (not needed for the DLLs).
     const code = await spawnAsync(installer, ['/install', '/quiet', '/norestart']);
