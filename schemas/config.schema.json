@@ -872,6 +872,14 @@
             "description": "Command the npm package provides.",
             "type": "string"
           },
+          "uvPackage": {
+            "description": "Python package installed with `uv tool install` inside the sandbox (e.g. aider-chat).",
+            "type": "string"
+          },
+          "uvBin": {
+            "description": "Command the uv package provides.",
+            "type": "string"
+          },
           "arguments": {
             "type": "array",
             "items": {

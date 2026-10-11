@@ -49,7 +49,21 @@ export const DEFAULTS: Config = {
   harnesses: {
     claude: { hostExecutable: 'claude.exe', hostDir: 'auto', npmPackage: '@anthropic-ai/claude-code@latest', npmBin: 'claude', arguments: [], environment: { DISABLE_AUTOUPDATER: '1' }, resumeArguments: ['--continue'] },
     codex: { npmPackage: '@openai/codex@latest', npmBin: 'codex', arguments: [], environment: {}, resumeArguments: ['resume', '--last'] },
-    gemini: { npmPackage: '@google/gemini-cli@latest', npmBin: 'gemini', arguments: [], environment: {} },
+    gemini: { npmPackage: '@google/gemini-cli@latest', npmBin: 'gemini', arguments: [], environment: {}, resumeArguments: ['--resume'] },
+    // Not tested by us; installed from each project's official npm / PyPI package.
+    opencode: { npmPackage: 'opencode-ai@latest', npmBin: 'opencode', arguments: [], environment: {}, resumeArguments: ['--continue'] },
+    qwen: { npmPackage: '@qwen-code/qwen-code@latest', npmBin: 'qwen', arguments: [], environment: {}, resumeArguments: ['--continue'] },
+    crush: { npmPackage: '@charmland/crush@latest', npmBin: 'crush', arguments: [], environment: {}, resumeArguments: ['--continue'] },
+    copilot: { npmPackage: '@github/copilot@latest', npmBin: 'copilot', arguments: [], environment: {}, resumeArguments: ['--continue'] },
+    kilo: { npmPackage: '@kilocode/cli@latest', npmBin: 'kilo', arguments: [], environment: {}, resumeArguments: ['--continue'] },
+    amp: { npmPackage: '@ampcode/cli@latest', npmBin: 'amp', arguments: [], environment: {} },
+    cline: { npmPackage: 'cline@latest', npmBin: 'cline', arguments: [], environment: {} },
+    continue: { npmPackage: '@continuedev/cli@latest', npmBin: 'cn', arguments: [], environment: {}, resumeArguments: ['--resume'] },
+    kimi: { npmPackage: '@moonshot-ai/kimi-code@latest', npmBin: 'kimi', arguments: [], environment: {}, resumeArguments: ['-c'] },
+    // DeepSeek has no official coding CLI; these two community agents are built for it.
+    reasonix: { npmPackage: 'reasonix@latest', npmBin: 'reasonix', arguments: [], environment: {} },
+    deepseek: { npmPackage: 'codewhale@latest', npmBin: 'codewhale', arguments: [], environment: {} },
+    aider: { uvPackage: 'aider-chat', uvBin: 'aider', arguments: [], environment: {}, resumeArguments: ['--restore-chat-history'] },
   },
   hooks: { failFast: false },
 };
