@@ -1,0 +1,7 @@
+# One line ending everywhere (mixed CRLF/LF broke tooling). Windows scripts keep CRLF, which cmd.exe needs.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary

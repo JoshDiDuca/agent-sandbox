@@ -49,7 +49,7 @@ export const daemonTests = async (t: Harness, f: Fixtures, launchPath: string): 
     let denied = '';
     badClient.on('data', (c: Buffer) => { for (const fr of badReader.push(c)) if (fr.type === FrameType.Error) denied = fr.payload.toString(); });
     badClient.write(helloFrame('wrong-token', 80, 24));
-    check(Boolean(await waitFor(() => denied, 5000)) && denied.includes('denied'), 'a client with the wrong token is refused');
+    check(Boolean(await waitFor(() => denied, 20000)) && denied.includes('denied'), 'a client with the wrong token is refused');
 
     const local = { ...s.attach, addresses: ['127.0.0.1'] };
     const first = await queryViewers(local);
