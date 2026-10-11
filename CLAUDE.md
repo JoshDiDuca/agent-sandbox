@@ -7,29 +7,40 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
 
 ## Layout
 - `src/cli/`: `manifest.ts` defines every command, argument and option once (zod). `args.ts` builds the commander
-  parser from it (pure `parseCli`), `menu.ts` builds the interactive menu, `settings.ts` is the menu's settings screen
-  (generated from the config schema), `index.ts` dispatches (no args: menu, `sandbox <agent>`: launch).
-  `commands/*.ts`, one file per area (`launch`, `sessions` incl. `db`, `data`, `repair`, `setup`, `accounts`,
-  `maintenance`), `context.ts` has what they share.
-- `src/core/`: `schema.ts` (zod: every setting; JSON Schemas in `schemas/` are generated from it), `config.ts`
-  (`DEFAULTS`, loading), `local-config.ts` (`.sandbox-config.json`, tighten-only rules, hash-based approvals),
-  `workspace.ts` (run resolution, safe-workspace checks, version files), `detect-*.ts` (pure: project files to
-  databases / toolchains / pwsh), `util.ts`, `types.ts`.
-- `src/host/`: runs on the PC. `generate.ts` (.wsb + launch folder + session.json), `project-scan.ts`, `secrets.ts`
-  (strips credentials from everything copied in), `claude-profile.ts`, `channel.ts` (run-folder channel + attach),
-  `repo-guard.ts` (quarantines what the sandbox planted), `platform.ts`, `terminal.ts`, `window.ts`, `accounts.ts`,
-  `personalize.ts`, `cleanup.ts`.
-- `src/guest/`: runs in the sandbox (bundled by esbuild into `dist/runtime/*.js`). `main.ts` (boot), `daemon.ts`
-  (requests), `view.ts`, `gitguard.ts`, `db.ts` (`sbx-db`), `setup/*`, and `toolchains/*`: `index.ts` is the parallel
-  install scheduler (steps with `after` dependencies, PATH merged in plan order), one module per area (`node`, `python`,
-  `native` = C/C++/Rust/.NET/Mesa, `go`, `java`, `scripting` = Ruby/PHP/VC++, `runtimes` = Bun/uv/Deno, `managers` =
-  Volta/pyenv, `databases`, `git`, `vscode`), `common.ts` (resolveCached with a 1-day TTL, installOnce, `auto`
-  detection), `versions.ts` (pure version pickers).
-- `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts`, `download.ts` (streamed, hashed; GitHub
-  page fallback for the API rate limit), `netrules.ts`, `system.ts`, `guest-paths.ts`, `safe-remove.ts`.
+  parser from it (pure `parseCli`), `menu.ts` builds the interactive menu (`history.ts` remembers the last commands,
+  `colors.ts` is the one ANSI colour helper), `settings/` is the menu's settings screen (`schema.ts` reads the zod
+  schemas, `prompts.ts` one prompt per kind of setting, `edit.ts` jsonc-preserving edits, `index.ts` the screen for your
+  file and the project's `.sandbox-config.json`), `index.ts` dispatches (no args: menu, `sandbox <agent>`: launch).
+  `commands/`: one file per area (`launch`, `sessions` incl. `db`, `accounts`, `maintenance`) or a folder when an area
+  has several parts: `repair/` (`checks.ts` the checks, `finders.ts` pure finders, `types.ts`), `data/` (`collect.ts`
+  what is stored, `clean.ts` targets and removal, `remove.ts` link-safe delete), `setup/` (`facts.ts` what the PC has,
+  `checks.ts` the checklist). `context.ts` has what commands share (context, `table`, `printJson`, `requireOnPc`).
+- `src/core/`: `schema.ts` re-exports `schema/` (zod, split by area: `common`, `sandbox`, `toolchains`, `databases`,
+  `profile`, `harness`, `config` = user config + project overrides, `json-schema`; JSON Schemas in `schemas/` are
+  generated from it), `config.ts` (`DEFAULTS`, loading), `local-config.ts` (`.sandbox-config.json`, tighten-only rules,
+  hash-based approvals), `workspace.ts` (run resolution, version files), `safe-paths.ts` (which folders may be mapped),
+  `detect-*.ts` (pure: project files to databases / toolchains / pwsh), `disk.ts` (sizes, free space, `humanBytes`),
+  `prompt.ts` (y/N and typed confirmations), `util.ts`, `types.ts`.
+- `src/host/`: runs on the PC. `generate.ts` (launch folder + session.json) with `launch/` (`wsb.ts` the .wsb,
+  `mappings.ts` mapped folders, `stage.ts` hooks, runtime and git identity), `project-scan.ts` (bounded reads of the
+  project), `pc-scan.ts` (what this PC has), `database-plan.ts`, `secrets.ts` (strips credentials from everything copied
+  in), `claude-profile.ts`, `channel.ts` (run-folder requests and waiting), `attach.ts` (terminal attach, Hyper-V
+  address check), `repo-guard.ts` (quarantines what the sandbox planted), `platform.ts`, `terminal.ts`, `window.ts`,
+  `accounts.ts`, `personalize.ts`, `cleanup.ts`, `test-guard.ts`.
+- `src/guest/`: runs in the sandbox (bundled by esbuild into `dist/runtime/*.js`): `main.ts` (boot), `daemon.ts`
+  (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`), `view.ts`, `gitguard.ts`, `db.ts`,
+  `ports.ts`, `cmdline.ts` (agent command-line quoting), `helpers.ts` (compiles the C# helpers), `ptyhost.ts`,
+  `setup/*`, and `toolchains/*`: `index.ts` is the parallel install scheduler, `plan.ts` lists the steps, `common.ts`
+  shared helpers (resolveCached, installOnce, installFromGithub, downloadFile, `auto` detection), `versions.ts` (pure
+  version pickers), `leftovers.ts`; one module per area: `node`, `python`, `go`, `java`, `managers`, `runtimes`, `git`,
+  `cli`, `pwsh`, `vscode`; `scripting/` (ruby, php, vcruntime); `native/` (cpp, rust, binstall, dotnet, mesa, msvc/);
+  `databases/` (index, server, one file per database).
+- `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts`, `download.ts` (streamed to `.part`,
+  hashed; `downloads.requireChecksum`; GitHub page fallback for the API rate limit), `netrules.ts`, `system.ts`,
+  `guest-paths.ts`, `safe-remove.ts`, `test-guard.ts`.
 - `src/sync/`: history, claude-mem and the background watcher.
 - `sandbox/`: boot scripts (`logon.cmd`, `trust.cmd`, `bootstrap.ps1`, then `runtime\main.js`) and C# helpers compiled
-  in the sandbox by csc (`ptyhost.cs` ConPTY bridge, `gitshim.cs`, `vswhere.cs`).
+  in the sandbox by csc: `ptyhost.cs` (ConPTY bridge), `gitshim.cs`, `vswhere.cs`, `openssl.cs`.
 - `scripts/`: `install.ps1` (the `irm | iex` installer, PowerShell 5.1), `bundle.mjs`, `schemas.mjs`,
   `install-global.mjs`, `publish-npm.mjs`.
 - `src/selftest/`: `npm test`, split by area. Live tests need Windows (csc + ConPTY).

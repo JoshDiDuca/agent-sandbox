@@ -1,33 +1,15 @@
-// Host side of the sandbox channel: follow the boot, send requests (sessions, exec, restart), and bridge this terminal
-// to a session's pseudo console. Everything read from the run folder is guest-written and treated as untrusted.
+// Host side of the sandbox channel: follow the boot and send requests (sessions, exec, restart, ping). Attaching a
+// terminal to a session is in attach.ts. Everything read from the run folder is guest-written and treated as untrusted.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import net from 'node:net';
-import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
-import { insideSandbox } from './platform.js';
+import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
+import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { safeRemove } from '../shared/safe-remove.js';
 import { assertTestWritable, refuseInSelfTest } from './test-guard.js';
-import { connect, DETACH_KEY, queryViewers, runTerminalClient, type Endpoint, type Viewers } from '../shared/pty-client.js';
-import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
-import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
 
 const BOOT_TIMEOUT_MS = 30 * 60 * 1000;
 
-const ipToInt = (ip: string): number => ip.split('.').reduce((n: number, part: string) => n * 256 + Number(part), 0);
-
-/**
- * True only for IPv4 addresses inside the subnet of one of this PC's Hyper-V adapters ("vEthernet ..."), which is
- * where Windows Sandbox lives. Stops a compromised sandbox from pointing the host (and your keystrokes) anywhere else.
- */
-export const isSandboxAddress = (ip: string, interfaces = os.networkInterfaces()): boolean => {
-  if (!net.isIPv4(ip)) return false;
-  return Object.entries(interfaces).some(([name, list]) => /^vEthernet/i.test(name) && (list ?? []).some((i) => {
-    if (i.family !== 'IPv4' || i.internal) return false;
-    const mask = ipToInt(i.netmask);
-    return mask !== 0 && (ipToInt(i.address) & mask) === (ipToInt(ip) & mask) && i.address !== ip;
-  }));
-};
 
 const id = (): string => Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
 
@@ -126,45 +108,6 @@ export const pickSession = (dataPath: string, sessionId?: string): SessionStatus
   return running.find((s: SessionStatus) => s.id === sessionId || s.id.startsWith(sessionId)) ?? fail('No running session "' + sessionId + '".', 'Running sessions: ' + running.map((s) => s.id).join(', ') + ' (sandbox sessions lists them).');
 };
 
-/** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
-const hostEndpoint = (session: SessionStatus): Endpoint | null => {
-  // Inside the sandbox every session is on loopback; on the PC only addresses on its Hyper-V network are trusted.
-  const addresses = insideSandbox() ? ['127.0.0.1'] : session.attach?.addresses.filter((a: string) => isSandboxAddress(a)) ?? [];
-  return session.attach && addresses.length ? { ...session.attach, addresses } : null;
-};
-
-/** Who is watching a session right now (closed terminals do not count); null when it cannot be asked. */
-export const sessionViewers = (session: SessionStatus): Promise<Viewers | null> => {
-  const endpoint = hostEndpoint(session);
-  return endpoint ? queryViewers(endpoint) : Promise.resolve(null);
-};
-
-/**
- * The newest running session of this agent in exactly this folder that no terminal on this PC is attached to, so
- * sandbox claude -t picks it back up instead of starting another. A session that cannot answer is never reused.
- */
-export const findUnwatchedSession = async (dataPath: string, harness: string, cwd: string): Promise<SessionStatus | null> => {
-  const candidates = currentSessions(dataPath).filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase()).reverse().slice(0, 8);
-  for (const session of candidates) if ((await sessionViewers(session))?.remote === 0) return session;
-  return null;
-};
-
-/** Bridges this terminal to a session. Returns the agent's exit code, or 0 when the user detaches. */
-export const attachTerminal = async (session: SessionStatus): Promise<number> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) fail('--terminal / attach needs an interactive terminal.', 'Run it directly in Windows Terminal or PowerShell, not through a pipe or script.');
-  if (!session.attach) fail('This session cannot be attached to: networking or attach is disabled for this sandbox.', 'Set sandbox.networking and attach.enabled to true, then start a new sandbox.');
-  const endpoint = hostEndpoint(session) ?? fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run sandbox doctor.');
-  const socket = await connect(endpoint);
-  console.log('Attaching to ' + safeText(session.harness) + ' session ' + session.id + ' (' + safeText(session.cwd) + '). Detach any time with Ctrl+]');
-  await sleep(400);
-  const result = await runTerminalClient(socket, session.attach.token, { detachKey: DETACH_KEY });
-  switch (result.reason) {
-    case 'detach': console.log('Detached. The session keeps running; reattach with: sandbox attach ' + session.id); return 0;
-    case 'exit': console.log(safeText(session.harness) + ' exited with code ' + result.exitCode + '.'); return result.exitCode;
-    case 'error': fail('The sandbox refused the connection: ' + result.message, 'Try sandbox attach again; the session may have restarted.');
-    default: console.log('Connection to the sandbox closed.'); return 1;
-  }
-};
 
 /** Forgets status from a previous sandbox run so nothing stale is picked up. */
 export const resetRunDir = (dataPath: string): void => {

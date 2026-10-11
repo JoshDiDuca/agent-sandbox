@@ -2,6 +2,7 @@
 #   irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 # It checks this PC can run Windows Sandbox, offers to turn the feature on, then installs the CLI with npm: with your
 # Node.js 20+ if you have it, else with a private Node.js used only by this tool (nothing installed system-wide). Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
+# The release package must match the SHA-256 GitHub lists for it; with none listed the install is refused unless WDS_ALLOW_UNVERIFIED=1.
 # Windows PowerShell 5.1 compatible. Wrapped in a script block so `return` never closes the user's window under iex.
 & {
   # Not 'Stop': Windows PowerShell 5.1 would turn npm's and winget's warnings on stderr into fatal errors.
@@ -192,8 +193,8 @@
         if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'the download does not match the SHA-256 GitHub lists for it' }
         $installFrom = $file
         Ok 'package downloaded and its SHA-256 matches'
-      } elseif (Ask 'GitHub lists no SHA-256 for this package, so it cannot be checked. Install it anyway?') { Warn 'installing without a checksum' }
-      else { throw 'no SHA-256 to check the package against' }
+      } elseif ($env:WDS_ALLOW_UNVERIFIED -eq '1') { Warn 'GitHub lists no SHA-256 for this package; installing it unverified because WDS_ALLOW_UNVERIFIED=1.' }
+      else { throw 'GitHub lists no SHA-256 for this package, so it cannot be checked, and it is not installed. To install it anyway, set $env:WDS_ALLOW_UNVERIFIED = "1" and run the installer again.' }
     } catch {
       Problem "Could not check the package: $_"
       Remove-Inside $download $toolFolder

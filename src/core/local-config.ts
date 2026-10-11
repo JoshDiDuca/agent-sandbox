@@ -26,7 +26,7 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
  * Protections a project file may only make stricter, never looser. A repo can ship the file, so it must not be able to
  * switch off what you turned on (or turn on what you turned off). The strictest of the two values always wins.
  */
-const ON_IS_SAFER = ['readOnly', 'network.blockPrivateRanges', 'sandbox.protectedClient'];
+const ON_IS_SAFER = ['readOnly', 'network.blockPrivateRanges', 'sandbox.protectedClient', 'downloads.requireChecksum'];
 const OFF_IS_SAFER = ['sandbox.networking', 'sandbox.clipboard', 'sandbox.audioInput', 'sandbox.videoInput', 'sandbox.printerRedirection', 'sandbox.vGpu', 'claudeProfile.copyCredentials'];
 const GIT_STRICTNESS: Record<string, number> = { full: 0, readonly: 1, none: 2 };
 export const NEVER_LOOSER = [...ON_IS_SAFER, ...OFF_IS_SAFER, 'provisioning.git.access'];

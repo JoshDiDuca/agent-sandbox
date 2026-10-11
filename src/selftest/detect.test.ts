@@ -1,7 +1,7 @@
 // "Which databases does this project need?": detection from real-world file shapes, and the plan the host builds.
 import { databasesFromServices, detectDatabases, type ProjectFile } from '../core/detect-databases.js';
 import { DEFAULTS } from '../core/config.js';
-import { databaseCatalog, planDatabases } from '../host/project-scan.js';
+import { databaseCatalog, planDatabases } from '../host/database-plan.js';
 import { voltaNode } from '../core/workspace.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
 import { parseReleasePage } from '../shared/download.js';

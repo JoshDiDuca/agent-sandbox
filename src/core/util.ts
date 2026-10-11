@@ -110,6 +110,12 @@ export const runPowerShell = (script: string, capture = false): { status: number
   return { status: result.status ?? 1, stdout: result.stdout ?? '' };
 };
 
+/** Runs a program (an absolute path: `SYSTEM.*`, never a bare name) and returns its stdout, or '' if it failed or timed out. */
+export const captureOutput = (file: string, args: string[], options: { timeout?: number; cwd?: string; maxBuffer?: number } = {}): string => {
+  const result = spawnSync(file, args, { encoding: 'utf8', windowsHide: true, timeout: 60000, ...options });
+  return result.status === 0 ? result.stdout ?? '' : '';
+};
+
 /** Async variant (does not block the event loop), resolving with stdout. */
 export const runPowerShellAsync = (script: string): Promise<string> => new Promise((resolve, reject) => {
   const child = spawn(SYSTEM.powershell(), powerShellArgs(script), { stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true });

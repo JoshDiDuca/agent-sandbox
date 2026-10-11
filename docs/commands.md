@@ -12,7 +12,10 @@
 2. Start the default agent, or pick another (shows which are already installed)
 3. Start a sandbox without an agent
 4. Sandbox, sessions, accounts, data, diagnostics, configuration
-5. **Settings**: every setting with its value and description, changed and saved from the menu
+5. **Settings**: every setting with its value and description, changed and saved from the menu. It first asks which
+   file: your own (all projects), or this folder's `.sandbox-config.json` (only what a project may set). Saving a
+   project file does not approve it: the next launch shows what it applies and asks you to approve the changed file.
+   Lists of objects and maps (`harnesses`, `mappings`, environment variables) are edited as JSON, with an example shown.
 
 Each command asks for its arguments and options, with on/off options as checkboxes and agents, accounts and sessions
 as lists. It then shows the exact command line and runs it.

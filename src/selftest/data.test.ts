@@ -1,8 +1,10 @@
 // `sandbox data` target resolution and `sandbox repair` detection (half-installed toolchains, leftovers, links).
 import fs from 'node:fs';
 import path from 'node:path';
-import { humanBytes, removeTree, resolveCleanTargets, sizeOf } from '../cli/commands/data.js';
-import { deadPidFiles, findHalfInstalled, findLinks, findStagingLeftovers, globalPackages, resolvedVersionsValid } from '../cli/commands/repair.js';
+import { resolveCleanTargets } from '../cli/commands/data/clean.js';
+import { removeTree } from '../cli/commands/data/remove.js';
+import { deadPidFiles, findHalfInstalled, findLinks, findStagingLeftovers, globalPackages, resolvedVersionsValid } from '../cli/commands/repair/finders.js';
+import { humanBytes, sizeOf } from '../core/disk.js';
 import { ensureDir, errMsg } from '../core/util.js';
 import type { Harness } from './harness.js';
 

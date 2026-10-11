@@ -25,6 +25,7 @@ Commonly changed:
 | `attach.autoHide` | the sandbox window hides whenever this terminal attaches (`sandbox show` brings it back) |
 | `provisioning.git.access` | `full`, `readonly` or `none` |
 | `secrets.allow`, `secrets.patterns` | let named variables through, or strip more |
+| `downloads.requireChecksum` | `true` refuses toolchain, database and tool downloads that have no published checksum (default `false`; downloads that have one are always verified) |
 | `toolchains.environment` | extra environment variables (e.g. registry mirrors) |
 | `toolchains.msvc.acceptLicense` | `true` to allow installing MSVC (see [toolchains](toolchains.md#msvc)) |
 | `toolchains.rust.host`, `.targetDir`, `.crates` | Rust target (`auto`, msvc or gnu), where builds go, and binaries to install with cargo |
@@ -59,7 +60,8 @@ A repo can ship this file, so it is treated as untrusted:
 - You approve it the first time, and again whenever it changes (the approval is tied to the file's exact contents).
 - Read/write folders are flagged in the approval prompt.
 - It can only make protections **stricter**: read-only, git `readonly`/`none`, the LAN block, protected client, and
-  turning off network, clipboard, microphone, camera, printers, vGPU and login copying. Looser values are ignored.
+  turning off network, clipboard, microphone, camera, printers, vGPU and login copying, and turning on
+  `downloads.requireChecksum`. Looser values are ignored.
 - It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.
 
 ## Accounts

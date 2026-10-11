@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { GuestSession } from '../core/types.js';
 import { Config, Mapping } from '../core/schema.js';
 import { guestPathFor } from '../cli/commands/context.js';
-import { buildWsb } from '../host/generate.js';
+import { buildWsb } from '../host/launch/wsb.js';
 import { guestDrive, isValidGuestPath, planMirrorWorkspace, sandboxFolder, substDrives } from '../shared/guest-paths.js';
 import { guestWorkspaceAliases, projectFolderName } from '../shared/paths.js';
 import { syncHistoryIn, syncHistoryOut } from '../sync/history.js';

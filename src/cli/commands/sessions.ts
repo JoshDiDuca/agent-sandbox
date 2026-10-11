@@ -2,9 +2,10 @@
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import _ from 'lodash';
-import type { SessionStatus } from '../../core/types.js';
+import type { GuestResponse, SessionStatus } from '../../core/types.js';
 import { activeAccount } from '../../host/accounts.js';
-import { execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
+import { execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, waitForReady } from '../../host/channel.js';
+import { sessionViewers } from '../../host/attach.js';
 import type { Viewers } from '../../shared/pty-client.js';
 import { insideSandbox, isSandboxRunning } from '../../host/platform.js';
 import { repoFindings } from '../../host/repo-guard.js';
@@ -56,6 +57,13 @@ export const status = async (ctx: Context): Promise<number> => {
   return 0;
 };
 
+/** What a command run in the sandbox printed (text from the sandbox: through safeText), or why it failed. */
+const printExecResult = (result: GuestResponse): void => {
+  if (result.stdout) process.stdout.write(safeText(result.stdout));
+  if (result.stderr) process.stderr.write(safeText(result.stderr));
+  if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
+};
+
 export const exec = async (ctx: Context): Promise<number> => {
   const command = [...ctx.options.positionals, ...ctx.options.passthrough];
   if (command.length === 0) fail('No command given.', 'Usage: sandbox exec [--timeout <s>] -- <command> [args...]');
@@ -63,11 +71,7 @@ export const exec = async (ctx: Context): Promise<number> => {
   requireRunning();
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   const result = await execInSandbox(ctx.dataPath, command, currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace), ctx.options.timeout, sandboxAlive);
-  if (!printJson(ctx, result)) {
-    if (result.stdout) process.stdout.write(safeText(result.stdout));
-    if (result.stderr) process.stderr.write(safeText(result.stderr));
-    if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
-  }
+  if (!printJson(ctx, result)) printExecResult(result);
   return result.exitCode ?? 1;
 };
 
@@ -82,9 +86,7 @@ export const db = async (ctx: Context): Promise<number> => {
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   // Starting can download the database the first time.
   const result = await execInSandbox(ctx.dataPath, ['sbx-db', action, ...(name ? [name] : [])], ready.guestWorkspace, 1800, sandboxAlive);
-  if (result.stdout) process.stdout.write(safeText(result.stdout));
-  if (result.stderr) process.stderr.write(safeText(result.stderr));
-  if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
+  printExecResult(result);
   return result.exitCode ?? 1;
 };
 

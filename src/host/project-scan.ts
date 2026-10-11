@@ -1,15 +1,7 @@
-// Reads a project the way detect-databases.ts needs it (only manifest/config/compose files, bounded), and looks at which
-// database services this PC has, so `enabled: "auto"` databases are installed only for projects that use them.
+// Reads a project the way detect-databases.ts and detect-toolchains.ts need it (only manifest/config files, bounded).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import type { Config, DatabasePlan } from '../core/types.js';
-import { DATABASES, databasesFromServices, detectDatabases, INTERESTING_FILE, type Database, type ProjectFile } from '../core/detect-databases.js';
-import os from 'node:os';
-import { AUTO_TOOLCHAINS, type AutoToolchain } from '../core/detect-toolchains.js';
-import { pcHasPwsh } from '../core/detect-pwsh.js';
-import { isWin } from '../core/util.js';
-import { system32 } from '../shared/system.js';
+import { INTERESTING_FILE, type ProjectFile } from '../core/detect-databases.js';
 
 const SKIP = /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;
 const MAX_FILES = 400;
@@ -59,12 +51,6 @@ export const projectEntries = (root: string): string[] => {
   return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
 };
 
-/** This PC builds Rust with MSVC: rustup's default host is *-msvc (read from rustup's settings; nothing is run). */
-const msvcRust = (): boolean => {
-  const settings = path.join(process.env.RUSTUP_HOME ?? path.join(os.homedir(), '.rustup'), 'settings.toml');
-  try { return /default_host_triple\s*=\s*"[^"]*-msvc"/.test(fs.readFileSync(settings, 'utf8').slice(0, 64 * 1024)); } catch { return false; }
-};
-
 /** Scripts in the project root or one folder down that set up MSVC (vcvars*.bat, vswhere): read with bounded effort. */
 export const msvcHint = (root: string): string | undefined => {
   const scripts = projectEntries(root).filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e)).slice(0, 60);
@@ -76,71 +62,3 @@ export const msvcHint = (root: string): string | undefined => {
   return undefined;
 };
 
-/** Languages this PC has (their commands on PATH; Windows' Store stubs for python do not count). */
-export const pcLanguages = (): AutoToolchain[] => {
-  const dirs = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && !/WindowsApps/i.test(d));
-  const has = (...names: string[]): boolean => dirs.some((d) => names.some((n) => fs.existsSync(path.join(d, n))));
-  const found: Record<AutoToolchain, boolean> = {
-    python: has('python.exe', 'py.exe'), rust: has('cargo.exe', 'rustc.exe'), cpp: has('gcc.exe', 'g++.exe', 'cl.exe', 'clang.exe'),
-    msvc: msvcRust(), pwsh: pcHasPwsh(), dotnet: has('dotnet.exe'), go: has('go.exe'), java: has('java.exe', 'javac.exe'), ruby: has('ruby.exe'), php: has('php.exe'), deno: has('deno.exe'),
-  };
-  return AUTO_TOOLCHAINS.filter((t) => found[t]);
-};
-
-/** Database services installed on this PC (names from the service control manager; nothing is started or changed). */
-export const hostDatabases = (): Database[] => {
-  if (!isWin) return [];
-  const result = spawnSync(system32('sc.exe'), ['query', 'type=', 'service', 'state=', 'all'], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
-  const names = [...(result.stdout ?? '').matchAll(/^SERVICE_NAME:\s*(.+)$/gm)].map((m) => m[1].trim());
-  return databasesFromServices(names);
-};
-
-/** The version a compose file pins (postgres:16-alpine -> 16, mongo:7.0 -> 7.0), if any. */
-const pinnedVersion = (files: ProjectFile[], image: RegExp): string | null => {
-  for (const file of files) {
-    const match = image.exec(file.text);
-    if (match?.[1] && /^\d+(\.\d+)?/.test(match[1])) return /^\d+(\.\d+)?/.exec(match[1])![0];
-  }
-  return null;
-};
-
-/**
- * What to run in this sandbox: databases set to true, plus "auto" ones the project needs. SQL Server is reported (so
- * the user hears about it) but cannot run inside Windows Sandbox.
- */
-export const planDatabases = (config: Config['databases'], workspace: string, probe: { files?: ProjectFile[]; host?: Database[] } = {}): DatabasePlan[] => {
-  const autos = DATABASES.filter((db) => config[db].enabled === 'auto');
-  const files = autos.length ? probe.files ?? readProjectFiles(workspace) : [];
-  const detected = autos.length ? detectDatabases(files, probe.host ?? hostDatabases) : [];
-  const plan = databasePlanner(config, files.filter((f) => /compose/i.test(f.path)));
-  return DATABASES.flatMap((database): DatabasePlan[] => {
-    const setting = config[database].enabled;
-    const found = detected.find((d) => d.database === database);
-    if (setting === true) return [plan(database, ['enabled in config'])];
-    if (setting === 'auto' && found) return [plan(database, found.reasons)];
-    return [];
-  });
-};
-
-/** Every database the sandbox can run, so `sbx-db start <name>` works for ones that did not start at boot. */
-export const databaseCatalog = (config: Config['databases']): DatabasePlan[] => {
-  const plan = databasePlanner(config, []);
-  return DATABASES.filter((db) => db !== 'sqlserver').map((db) => plan(db, ['started with sbx-db']));
-};
-
-/** Version (a compose file's image tag wins), port and admin UI for one database. */
-const databasePlanner = (config: Config['databases'], compose: ProjectFile[]) => {
-  const versions: Record<Database, string> = {
-    postgres: pinnedVersion(compose, /image:\s*["']?(?:[\w.-]+\/)*postgres:([\w.-]+)/i) ?? (config.postgres.version === 'latest' ? 'latest' : config.postgres.version),
-    mysql: config.mysql.version,
-    mongodb: pinnedVersion(compose, /image:\s*["']?(?:[\w.-]+\/)*mongo:([\w.-]+)/i) ?? config.mongodb.version,
-    redis: 'latest',
-    dynamodb: 'latest',
-    sqlserver: '',
-  };
-  const ports: Record<Database, number> = { postgres: config.postgres.port, mysql: config.mysql.port, mongodb: config.mongodb.port, redis: config.redis.port, dynamodb: config.dynamodb.port, sqlserver: 1433 };
-  return (database: Database, reasons: string[]): DatabasePlan => ({
-    database, reasons, version: versions[database], port: ports[database],
-    ...(database === 'dynamodb' && config.dynamodb.admin ? { adminPort: config.dynamodb.adminPort } : {}),
-  });
-};

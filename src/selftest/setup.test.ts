@@ -1,5 +1,6 @@
 // `agent-sandbox setup`: the pure pieces of the machine checklist.
-import { buildChecks, canEnableFeature, editionSupport, featureFromInstallState, nodeMajor, parseDismState, parseProbe, parseRegQuery, type MachineFacts } from '../cli/commands/setup.js';
+import { buildChecks, canEnableFeature, editionSupport, nodeMajor } from '../cli/commands/setup/checks.js';
+import { featureFromInstallState, parseDismState, parseProbe, parseRegQuery, type MachineFacts } from '../cli/commands/setup/facts.js';
 import type { Harness } from './harness.js';
 
 export const setupTests = (t: Harness): void => {

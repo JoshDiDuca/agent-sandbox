@@ -37,6 +37,9 @@
       "enabled": true
     }
   },
+  "downloads": {
+    "requireChecksum": false
+  },
   "toolchains": {
     "node": {
       "version": "host",

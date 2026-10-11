@@ -1,0 +1,26 @@
+// What is copied from this PC, and how the terminal attaches.
+import { z } from 'zod';
+import { Strings } from './common.js';
+
+export const Secrets = z.strictObject({
+  strip: z.boolean().describe('Remove credentials from everything copied into the sandbox (your Claude settings.json "env" and credential helpers, MCP servers\' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys.'),
+  allow: Strings.describe('Variable names that may go in anyway; * matches anything, e.g. ["AWS_REGION", "AWS_PROFILE", "MY_APP_*"].'),
+  patterns: Strings.describe('More variable names to treat as secrets; * matches anything, e.g. ["ACME_*", "*_INTERNAL_URL"].'),
+  warnFiles: z.boolean().describe('Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder.'),
+});
+export const Attach = z.strictObject({
+  enabled: z.boolean().describe('Allow sandbox claude --terminal / sandbox attach from this PC.'),
+  reuseSession: z.boolean().describe('sandbox claude -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
+  auto: z.boolean().describe('Starting an agent attaches this terminal automatically, as if you passed -t (only in an interactive terminal).'),
+  autoHide: z.boolean().describe('Hide the Windows Sandbox window whenever this terminal attaches; it keeps running (sandbox show brings it back).'),
+});
+export const ClaudeProfile = z.strictObject({
+  enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),
+  hostDir: z.string().describe('Your Claude folder, or "auto" (~/.claude or CLAUDE_CONFIG_DIR).'),
+  include: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).describe('Files and folders copied from it.'),
+  globalStateFile: z.string().describe('Your .claude.json, or "auto". Empty string = do not copy.'),
+  copyCredentials: z.boolean().describe('Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead.'),
+  overwrite: z.boolean().describe('Refresh these settings from this PC on every launch.'),
+  syncHistory: z.boolean().describe('Bring all conversation history in, and sync new history back (path-translated).'),
+  syncClaudeMem: z.boolean().describe('Bring claude-mem data in, and its database back when the sandbox closes.'),
+});
