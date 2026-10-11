@@ -37,3 +37,9 @@ export const ago = (then: number | string | Date, now: number = Date.now()): str
 
 /** Width to lay text out in (terminal columns, 80 when unknown, never absurdly small). */
 export const termWidth = (): number => Math.max(40, process.stdout.columns ?? 80);
+
+/** Each menu page starts on a clean screen (answered prompts would otherwise pile up above it). */
+export const clearScreen = (): void => { if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H'); };
+
+/** Rows of a list that fit the terminal (leaving room for the prompt and the help line). */
+export const pageSizeFor = (wanted: number): number => Math.max(5, Math.min(wanted, (process.stdout.rows ?? 30) - 6));

@@ -40,7 +40,7 @@ export const askValue = async (schema: Schema, key: string[], current: unknown, 
       const chosen = await pick(label, [...choices, { name: 'a ' + kind(other) + ' ...', value: '@other' }], current);
       return chosen?.value === '@other' ? askValue(other, key, current) : chosen;
     }
-    case 'number': return typed(label, current, (v) => (Number.isFinite(Number(v)) ? true : 'a number'), Number);
+    case 'number': return typed(label, current, (v) => (Number.isFinite(Number(v)) ? true : 'Enter a number, e.g. 8192.'), Number);
     case 'string': return typed(label, current, () => true, (v) => v);
     case 'string-list': return typed(label + c.dim(' (comma separated, [] = none)'), current, () => true, (v) => (v.trim() === '[]' ? [] : v.split(',').map((x) => x.trim()).filter(Boolean)));
     default: return typed(label + c.dim(' (JSON, e.g. ' + jsonExample(key, s) + ')'), current, (v) => { try { JSON.parse(v); return true; } catch { return 'valid JSON'; } }, (v) => JSON.parse(v));

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { buildProgram, parseCli } from '../cli/args.js';
 import { COMMANDS } from '../cli/manifest.js';
 import { commandLine, readHistory, recordHistory } from '../cli/history.js';
-import { splitArgs } from '../cli/menu.js';
+import { optionProblem, splitArgs } from '../cli/menu.js';
+import { cleanTargetOf, type DataEntry } from '../cli/commands/data/collect.js';
 import { ago, colorEnabled, shorten, shortenMiddle } from '../cli/colors.js';
 import { hoistConfig, withoutConfig } from '../cli/index.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
@@ -56,6 +57,13 @@ export const cliTests = (t: Harness): void => {
     '--config before the command is moved behind it; history drops it');
   check(validNodeSpec('22') && validNodeSpec('v22.1.0') && validNodeSpec('lts/*') && !validNodeSpec('abc') && validPythonSpec('3.12') && !validPythonSpec('2.7') && closest('cluade', ['claude', 'codex']) === 'claude' && closest('zzzzzz', ['claude']) === undefined,
     'validation: node/python version syntax, did-you-mean for agent names');
+  const optionOf = (flag: string) => COMMANDS.flatMap((cmd) => cmd.options).find((o) => o.flag === flag)!;
+  check(optionProblem(optionOf('--node'), 'abc') !== undefined && optionProblem(optionOf('--node'), '22') === undefined && optionProblem(optionOf('--workspace'), path.join(t.packageRoot, 'no-such-folder-here')) !== undefined && optionProblem(optionOf('--workspace'), t.packageRoot) === undefined && optionProblem(optionOf('--days'), '0') !== undefined,
+    'menu: version, folder and number answers are checked while typing');
+  const rowOf = (area: DataEntry['area'], name: string): DataEntry => ({ area, name, path: 'x', bytes: 1 });
+  check(cleanTargetOf(rowOf('tools', 'go')) === 'tools/go' && cleanTargetOf(rowOf('tools', 'agents/claude')) === 'tools/agents/claude' && cleanTargetOf(rowOf('databases', 'databases/pg')) === 'databases/pg' && cleanTargetOf(rowOf('host', 'launches')) === 'launches' && cleanTargetOf(rowOf('host', 'accounts')) === null && cleanTargetOf(rowOf('tools', '(files in tools)')) === null,
+    'data menu: only removable rows become checkbox targets (accounts are never offered)');
+  check(COMMANDS.find((cmd) => cmd.name === 'data')!.options.find((o) => o.flag === '--yes')?.noMenu === true, 'data menu: --yes is never offered');
   recordHistory(['launch', '--harness', 'claude']);
   recordHistory(['status']);
   recordHistory(['launch', '--harness', 'claude']);
