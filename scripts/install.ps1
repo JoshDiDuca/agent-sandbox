@@ -1,12 +1,12 @@
 # windows-development-sandbox installer. Run in a normal (not admin) PowerShell:
-#   irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
+#   irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
 # It checks this PC can run Windows Sandbox, offers to turn the feature on and to install Node.js, then installs the
 # CLI with npm. Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
 # Windows PowerShell 5.1 compatible. Wrapped in a script block so `return` never closes the user's window under iex.
 & {
   # Not 'Stop': Windows PowerShell 5.1 would turn npm's and winget's warnings on stderr into fatal errors.
   $ErrorActionPreference = 'Continue'
-  $package = 'https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz'
+  $package = 'https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/windows-development-sandbox.tgz'
   if ($env:WDS_PACKAGE) { $package = $env:WDS_PACKAGE }
   $feature = 'Containers-DisposableClientVM'
   $enableCommand = "Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart"
@@ -25,7 +25,9 @@
     return $answer -match '^(y|yes)$'
   }
   function Refresh-Path {
-    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+    # Keep what this session already had (a portable Node, for example) and add what installers registered.
+    $parts = @($env:Path -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';')
+    $env:Path = ($parts | Where-Object { $_ } | Select-Object -Unique) -join ';'
   }
   function Node-Major {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 0 }
@@ -137,12 +139,13 @@
     return
   }
   Refresh-Path
-  $cli = Join-Path ((& npm.cmd prefix -g) | Select-Object -Last 1).Trim() 'agent-sandbox.cmd'
-  if (-not (Test-Path $cli)) { $cli = 'agent-sandbox.cmd' }
+  $prefix = (& npm.cmd prefix -g 2>$null) | Select-Object -Last 1
+  $cli = if ($prefix) { Join-Path $prefix.Trim() 'sandbox.cmd' } else { $null }
+  if (-not $cli -or -not (Test-Path $cli)) { $cli = 'sandbox.cmd' }
   Ok 'Installed'
 
-  Step 'Checking everything with agent-sandbox doctor'
-  & $cli doctor
+  Step 'Checking everything with sandbox doctor'
+  if (Get-Command $cli -ErrorAction SilentlyContinue) { & $cli doctor } else { Warn 'Open a new terminal and run: sandbox doctor' }
 
   # Summary ------------------------------------------------------------------------------------------------------
   Write-Host ''
@@ -154,7 +157,6 @@
   Write-Host ''
   Write-Host 'What next:' -ForegroundColor Cyan
   Write-Host '  1. Open a new terminal and cd into a project folder.'
-  Write-Host '  2. Run claude-sbx to start Claude Code in a sandbox with that folder as its workspace.'
-  Write-Host '     Or run sandbox for a sandbox with no agent.'
-  Write-Host '  3. Run agent-sandbox setup or agent-sandbox doctor any time to check this PC again.'
+  Write-Host '  2. Run sandbox for the menu, claude-sbx for Claude Code, or sandbox start for a sandbox with no agent.'
+  Write-Host '  3. Run sandbox setup or sandbox doctor any time to check this PC again.'
 }
