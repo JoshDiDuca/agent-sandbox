@@ -13,7 +13,7 @@ import { setupPyenv, setupVolta, wantsPyenv, wantsVolta } from './managers.js';
 import { setupCpp } from './native/cpp.js';
 import { setupDotnet } from './native/dotnet.js';
 import { setupMesa } from './native/mesa.js';
-import { setupMsvc } from './native/msvc.js';
+import { setupMsvc } from './native/msvc/index.js';
 import { setupRust } from './native/rust.js';
 import { setupNode } from './node.js';
 import { setupPwsh } from './pwsh.js';

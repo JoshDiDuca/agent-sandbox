@@ -4,7 +4,7 @@ import type { Toolchains } from '../../../core/types.js';
 import { dryRun, execAsync, exists, log } from '../../env.js';
 import { arch, downloadFile, installOnce, tool, versionOf, type ToolEnv } from '../common.js';
 import { crateInstaller } from './binstall.js';
-import { installedMsvcEnv } from './msvc.js';
+import { installedMsvcEnv } from './msvc/index.js';
 
 export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refresh: boolean): Promise<void> => {
   const RUSTUP_HOME = tool('rust', 'rustup');
