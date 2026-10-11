@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { SYSTEM } from '../shared/system.js';
+import { writeJsonAtomic } from '../shared/rundir.js';
+import { assertTestWritable } from '../shared/test-guard.js';
 import { parse as parseJsoncText, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 export const isWin = process.platform === 'win32';
@@ -37,7 +39,8 @@ export const dirExists = (p: string): boolean => { try { return fs.statSync(p).i
 export const fileExists = (p: string): boolean => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 export const readJson = <T>(p: string): T => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')) as T;
 export const tryReadJson = <T>(p: string): T | null => { try { return readJson<T>(p); } catch { return null; } };
-export const writeJson = (p: string, value: unknown): void => { ensureDir(path.dirname(p)); fs.writeFileSync(p, JSON.stringify(value, null, 2) + '\n', 'utf8'); };
+/** Atomic (a crash or a second command never leaves half a file); refused outside temp during the self-test. */
+export const writeJson = (p: string, value: unknown): void => writeJsonAtomic(p, value);
 export const realPath = (p: string): string => { try { return fs.realpathSync(p); } catch { return p; } };
 export const xmlEscape = (v: string): string => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 export const homeDir = (): string => process.env.USERPROFILE ?? os.homedir();
@@ -72,7 +75,7 @@ export const findOnPath = (names: string[]): string | null => {
 export const isLink = (p: string): boolean => { try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; } };
 
 /** Removes a symlink or junction itself (never its target). Junctions need rmdir on Windows. */
-export const removeLink = (p: string): void => { try { fs.unlinkSync(p); } catch { fs.rmdirSync(p); } };
+export const removeLink = (p: string): void => { assertTestWritable(p); try { fs.unlinkSync(p); } catch { fs.rmdirSync(p); } };
 
 /**
  * The sandbox can write anywhere in its data folder, so it could swap a folder for a junction that points at this

@@ -2,6 +2,7 @@
 // all is well (OK), fixes the problem itself (FIXED), or says what you need to do (NEEDS YOU). Nothing under the data
 // folder is followed through a link, and toolchain/run-state fixes wait until no sandbox is running.
 import fs from 'node:fs';
+import { assertTestWritable } from '../../shared/test-guard.js';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import _ from 'lodash';
@@ -159,6 +160,7 @@ const CHECKS: RepairCheck[] = [
       const file = path.join(env.storageRoot, 'run', 'hidden-windows.json');
       if (!fs.existsSync(file) && !isLink(file)) return ok('clean.');
       if (env.running) return ok('a sandbox is running; kept.');
+      assertTestWritable(file);
       fs.rmSync(file, { force: true });
       return { status: 'fixed', detail: 'removed the saved hidden-window list from a sandbox that is no longer running.' };
     },
@@ -168,7 +170,7 @@ const CHECKS: RepairCheck[] = [
     run: (env) => {
       const dead = deadPidFiles(path.join(env.storageRoot, 'run'));
       if (!dead.length) return ok('no stale watcher records.');
-      for (const f of dead) fs.rmSync(f, { force: true });
+      for (const f of dead) { assertTestWritable(f); fs.rmSync(f, { force: true }); }
       return { status: 'fixed', detail: 'removed ' + dead.length + ' record(s) of a history sync watcher that is no longer running (the next launch starts a new one).' };
     },
   },
@@ -203,6 +205,7 @@ const CHECKS: RepairCheck[] = [
       guard(env, env.toolsDir);
       if (isLink(file)) { removeLink(file); return { status: 'fixed', detail: 'removed a link in place of tools\\resolved-versions.json.' }; }
       if (fs.statSync(file).size < 4 * 1024 * 1024 && resolvedVersionsValid(fs.readFileSync(file, 'utf8'))) return ok('valid.');
+      assertTestWritable(file);
       fs.rmSync(file, { force: true });
       return { status: 'fixed', detail: 'tools\\resolved-versions.json was damaged; removed it (versions are looked up again on the next start).' };
     },

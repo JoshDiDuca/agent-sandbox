@@ -26,6 +26,8 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     console.error('The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox\'s terminal.');
     return 1;
   }
+  // Defence in depth (shared/test-guard.ts): with this set, host code refuses outward actions and writes outside temp.
+  process.env.AGENT_SANDBOX_SELFTEST = '1';
   const t = createHarness(packageRoot);
   const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR };
   process.env.AGENT_SANDBOX_HOME = t.temp + '\\user-home';
