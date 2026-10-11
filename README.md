@@ -30,7 +30,7 @@ irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/do
 Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
 # 2. The package (latest release, a specific one, or from GitHub)
 npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz
-npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/download/v3.0.0/windows-development-sandbox-3.0.0.tgz
+npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/download/v1.0.0/windows-development-sandbox-1.0.0.tgz
 npm install -g github:JoshDiDuca/windows-development-sandbox
 # 3. Check
 sandbox setup         # this PC: edition, virtualization, Windows Sandbox, RAM, disk, Node

@@ -19,7 +19,7 @@ jobs:
         # The live tests drive ConPTY, csc.exe and real file links; hosted runners differ from a real Windows
         # desktop, so a failure here is reported but does not fail the build.
         continue-on-error: true
-        run: node dist/bin/agent-sandbox.js self-test
+        run: node dist/bin/sandbox.js self-test
       - name: Check install.ps1 parses in Windows PowerShell 5.1
         shell: powershell
         run: |

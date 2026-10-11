@@ -7,14 +7,23 @@ name: Release
 #      npm install -g https://github.com/<owner>/<repo>/releases/latest/download/windows-development-sandbox.tgz
 #  - a GitHub Package (npm.pkg.github.com) named @<owner>/windows-development-sandbox
 #  - npm (registry.npmjs.org) too, if the repository has an NPM_TOKEN secret
+#
+# It also runs on every push to master (and from the Actions tab, "Run workflow"): when package.json has a version
+# that has no release yet, it tags v<version> and releases it. So bumping the version in a normal push is enough.
 on:
   push:
     tags: ['v*']
+    branches: [master, main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
   id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -23,20 +32,38 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags, to see whether this version is released already
+      - name: Version to release
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            if ('${{ github.ref_name }}' -ne $tag) { throw "Tag ${{ github.ref_name }} does not match package.json version $version" }
+            $release = 'true'
+          } else {
+            # A branch push or a manual run releases only a version that has no tag yet.
+            git rev-parse -q --verify "refs/tags/$tag" | Out-Null
+            $release = if ($LASTEXITCODE -eq 0) { 'false' } else { 'true' }
+            if ($release -eq 'false') { "$tag is already released; bump the version in package.json to release again." }
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "release=$release" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-node@v4
+        if: steps.version.outputs.release == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci   # also builds (prepare)
+        if: steps.version.outputs.release == 'true'
       - name: Self-test (informational)
+        if: steps.version.outputs.release == 'true'
         continue-on-error: true
-        run: node dist/bin/agent-sandbox.js self-test
-      - name: Check the tag matches package.json
-        shell: pwsh
-        run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match package.json version $version" }
+        run: node dist/bin/sandbox.js self-test
       - name: Pack
+        if: steps.version.outputs.release == 'true'
         id: pack
         shell: pwsh
         run: |
@@ -46,8 +73,11 @@ jobs:
           Copy-Item scripts/install.ps1 install.ps1
           "file=$file" >> $env:GITHUB_OUTPUT
       - name: GitHub release
+        if: steps.version.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             ${{ steps.pack.outputs.file }}
             windows-development-sandbox.tgz
@@ -63,6 +93,7 @@ jobs:
             npm install -g https://github.com/${{ github.repository }}/releases/latest/download/windows-development-sandbox.tgz
             ```
       - name: Publish to GitHub Packages
+        if: steps.version.outputs.release == 'true'
         shell: pwsh
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,7 +104,7 @@ jobs:
           "@${scope}:registry=https://npm.pkg.github.com`n//npm.pkg.github.com/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc
           npm publish --ignore-scripts
       - name: Publish to npm
-        if: ${{ env.NPM_TOKEN != '' }}
+        if: steps.version.outputs.release == 'true' && env.NPM_TOKEN != ''
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: pwsh
