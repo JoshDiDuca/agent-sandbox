@@ -19,6 +19,8 @@ export interface LoadedConfig { config: Config; configPath: string | null; base:
 export interface RunRequest {
   packageRoot: string; loaded: LoadedConfig; cwd: string; workspace?: string; harness?: string;
   noAgent: boolean; noLocalConfig: boolean; trustConfig: boolean; scripts: string[]; headless?: boolean;
+  /** --database: start these whatever the config and detection say. */
+  databases?: string[];
   nodeVersion?: string; pythonVersion?: string;
   ask?: (question: string) => Promise<boolean>;
 }
@@ -43,7 +45,6 @@ export interface HostProbe {
 /** A database the sandbox runs, and why ("compose.yaml: a compose service runs Postgres"). */
 export interface DatabasePlan { database: 'postgres' | 'mysql' | 'sqlserver' | 'mongodb' | 'redis' | 'dynamodb'; reasons: string[]; version: string; port: number; adminPort?: number }
 
-/** databases: the plan to use instead of scanning the workspace (tests). */
 /** databases / pcLanguages: use these instead of scanning (tests). */
 export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[]; pcLanguages?: import('./detect-toolchains.js').AutoToolchain[] }
 export interface Generated {
@@ -60,6 +61,8 @@ export interface GuestSession {
   harnessName: string; harness: Harness | null; harnessArguments: string[];
   persistAgentState: boolean; networking: boolean; headless: boolean;
   network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; databases: DatabasePlan[]; versions: ToolVersions;
+  /** Every database `sbx-db start` can run later (older launch folders lack it). */
+  databaseCatalog?: DatabasePlan[];
   attach: Config['attach']; hooks: Config['hooks'];
   /** nodeVersion: this PC's Node (e.g. 22.11.0), found under nvm\v<version> when nvm is mapped, else under node. */
   /** volta / pyenv: this PC uses them (their "auto" settings turn them on in the sandbox too). */

@@ -6,6 +6,13 @@ npm test                  # offline, security and live ConPTY/daemon/git tests; 
 npm run install:global    # install this checkout globally as a COPY
 ```
 
+The self-test refuses to run on a normal PC: it only runs inside a Windows Sandbox (run `sandbox start`, then `npm test`
+in it) or on GitHub Actions, because the live tests create files, links and processes. The live tests can flake under
+load; run them once more before assuming a real failure. `sandbox self-test` is the same thing.
+
+CI builds on Node 22 and on the official Node 22.0.0 zip (the oldest Node users run it on, so dependencies must not
+need newer), and runs the self-test as information only. Releases and `npm run publish:npm` run no tests.
+
 To work on this tool with an agent in its own sandbox, install it as a copy (`npm run install:global`), not with
 `npm install -g .`. A linked install would let the sandboxed agent edit the code your PC runs. With a copy, the
 agent's changes only reach your PC when you review them and install again.
@@ -24,7 +31,20 @@ a GitHub Release with:
 - `windows-development-sandbox.tgz` (the stable "latest" name)
 - `install.ps1`
 
-CI also publishes to GitHub Packages, and to npm when an `NPM_TOKEN` secret is set. `npm run release:patch` bumps,
-tags and pushes in one go.
+CI also publishes to GitHub Packages and to [npm](https://www.npmjs.com/package/windows-development-sandbox).
+`npm run release:patch` bumps, tags and pushes in one go.
+
+### npm
+
+npm only lets CI publish a package that already exists, so the first version is published once from your PC:
+
+```powershell
+npm login
+npm run publish:npm      # builds, packs like CI and publishes (no tests); asks for your 2FA code if you use one
+```
+
+Then, on npmjs.com, open the package's **Settings > Trusted Publisher**, choose GitHub Actions and enter the repository
+and `release.yml`. From then on every release reaches npm with no token. An `NPM_TOKEN` secret works instead.
+Until the first publish, CI skips npm with a warning.
 
 The code layout and the rules for contributors (and agents) are in [CLAUDE.md](../CLAUDE.md).

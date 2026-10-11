@@ -16,4 +16,6 @@ Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 | MSVC is not installed | Set `toolchains.msvc.acceptLicense: true`; the launch output says when a project would use it |
 | No Vulkan | Windows Sandbox has none: `toolchains.mesa.vulkan: true` gives software Vulkan, `sandbox.vGpu: true` Direct3D 12 |
 | winget is missing | Windows Sandbox has no winget; everything here installs portably, and real installers go in a hook |
+| `self-test` or `npm test` refuses to run | By design: it starts real processes and creates files and links, so it only runs inside a Windows Sandbox (`sandbox start`) or on GitHub Actions |
+| `sandbox launch` says you are inside the sandbox | Commands that control the sandbox run from your PC, not from inside it |
 | Check a project file | `sandbox config check` validates `.sandbox-config.json` and lists what it changes |

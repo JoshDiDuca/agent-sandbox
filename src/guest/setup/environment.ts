@@ -42,3 +42,16 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
   ].join('\n');
   try { powershell(script); } catch (e) { warn('Could not persist the environment machine-wide: ' + errMsg(e)); }
 };
+
+/** Adds variables and PATH folders machine-wide after boot (`sbx-db start`): new terminal tabs see them. */
+export const addMachineEnvironment = (vars: Record<string, string>, dirs: string[]): void => {
+  if (!isWin || dryRun || testMode) return;
+  const script = [
+    "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",
+    "foreach ($p in $vars.PSObject.Properties) { [Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
+    "$path = [Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';'",
+    "$add = '" + JSON.stringify(dirs).replace(/'/g, "''") + "' | ConvertFrom-Json | Where-Object { $path -notcontains $_ }",
+    "if ($add) { [Environment]::SetEnvironmentVariable('Path', ((@($add) + $path) -join ';'), 'Machine') }",
+  ].join('\n');
+  try { powershell(script); } catch (e) { warn('Could not add to the environment: ' + errMsg(e)); }
+};

@@ -25,7 +25,7 @@ config always win.
 | PHP | PHP with common extensions, Composer | `.php-version` |
 | Deno, Bun | single binaries | |
 | PowerShell 7 | portable `pwsh` (`powershell` stays 5.1), a Windows Terminal profile | `#Requires -Version 7` or `pwsh ...` in a `.ps1` |
-| CLI tools | `gh` (only with git access `full`), `zstd`, `openssl` | `.github/` for gh |
+| CLI tools (`toolchains.cli`) | `gh` (only with git access `full`; `auto` = a `.github` folder), `zstd` (off unless `true`), `openssl` (on, from Git for Windows) | |
 | VS Code | portable, `code .`; settings and extensions are kept | |
 | Mesa 3D (opt-in) | software OpenGL 4.5, and with `mesa.vulkan` software Vulkan 1.4 (lavapipe) | |
 
@@ -41,6 +41,10 @@ by the [Visual Studio licence terms](https://visualstudio.microsoft.com/license-
 `toolchains.msvc.acceptLicense: true`. `msvcVersion` and `sdkVersion` pin versions (default: the newest).
 
 ### Rust builds
+
+`rust.host` is the Rust target: `auto` (default) uses `x86_64-pc-windows-msvc` when MSVC is on and `-gnu` (MinGW)
+otherwise. `rust.crates` lists cargo binaries to install; they are downloaded prebuilt (cargo-binstall) when the crate
+publishes a Windows build, else compiled once.
 
 `rust.targetDir` keeps the sandbox's builds apart from your PC's: `"separate"` (default) builds into
 `target\sandbox`, `"shared"` uses cargo's normal `target`, `"local"` uses the sandbox's own disk (fast, lost on close).
@@ -67,6 +71,9 @@ Each database starts only when the project needs it. That's found from compose i
 ecosystem (pg, psycopg, Npgsql, mongoose, ioredis, AWS DynamoDB SDKs ...), Prisma and ORM config, CloudFormation /
 SAM / Terraform tables, connection strings and `.env` templates. A project with only an ORM gets the database your PC
 has installed. The launch output says what was found and why. Data is kept; servers listen on localhost only.
+
+Start any of them yourself: `--database postgres` (repeatable) at launch, `sbx-db start redis` in a terminal inside,
+or `sandbox db start redis` from your PC. `sbx-db` / `sandbox db` alone lists what runs; `stop <name>` stops one.
 
 | | Connect with |
 |---|---|

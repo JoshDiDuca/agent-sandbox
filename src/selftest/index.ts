@@ -1,5 +1,7 @@
 // `agent-sandbox self-test`: offline logic and security tests, plus live tests of the session daemon, ptyhost and
 // the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11).
+// They start real processes (the guest runtime, the daemon, csc, git), so they only run on a throwaway machine.
+import os from 'node:os';
 import { errMsg } from '../core/util.js';
 import { configTests } from './config.test.js';
 import { cliTests } from './cli.test.js';
@@ -16,7 +18,14 @@ import { securityTests } from './security.test.js';
 import { setupTests } from './setup.test.js';
 import { syncTests } from './sync.test.js';
 
+/** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */
+export const onThrowawayMachine = (): boolean => os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
+
 export const selfTest = async (packageRoot: string): Promise<number> => {
+  if (!onThrowawayMachine()) {
+    console.error('The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox\'s terminal.');
+    return 1;
+  }
   const t = createHarness(packageRoot);
   const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR };
   process.env.AGENT_SANDBOX_HOME = t.temp + '\\user-home';

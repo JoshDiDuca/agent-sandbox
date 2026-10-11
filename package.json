@@ -1,6 +1,6 @@
 {
   "name": "windows-development-sandbox",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A disposable Windows Sandbox for development, with or without an AI agent (Claude Code, Codex, Gemini, opencode, ...): the folder you run it from is the workspace, toolchains and databases for your project install themselves, and nothing else on your PC is reachable.",
   "type": "module",
   "license": "MIT",
@@ -37,7 +37,8 @@
     "hooks",
     "config.example.json",
     ".sandbox-config.example.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node scripts/schemas.mjs",
@@ -50,6 +51,7 @@
     "release:minor": "npm version minor && git push --follow-tags",
     "release:major": "npm version major && git push --follow-tags",
     "install:global": "node scripts/install-global.mjs",
+    "publish:npm": "node scripts/publish-npm.mjs",
     "doctor": "node dist/bin/agent-sandbox.js doctor"
   },
   "publishConfig": {
@@ -83,10 +85,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JoshDiDuca/agent-sandbox.git"
+    "url": "git+https://github.com/JoshDiDuca/windows-development-sandbox.git"
   },
-  "homepage": "https://github.com/JoshDiDuca/agent-sandbox#readme",
+  "homepage": "https://github.com/JoshDiDuca/windows-development-sandbox#readme",
   "bugs": {
-    "url": "https://github.com/JoshDiDuca/agent-sandbox/issues"
+    "url": "https://github.com/JoshDiDuca/windows-development-sandbox/issues"
   }
 }

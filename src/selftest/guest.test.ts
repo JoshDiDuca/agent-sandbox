@@ -16,7 +16,7 @@ export const guestTests = async (t: Harness, f: Fixtures): Promise<string> => {
   check(wsb.includes('<MemoryInMB>8192</MemoryInMB>') && wsb.includes('<SandboxFolder>C:\\Workspace\\work-a</SandboxFolder>') && wsb.includes('C:\\HostTools\\git') && wsb.includes('C:\\HostTools\\nvm') && !wsb.includes('Missing') && wsb.includes('logon.cmd</Command>') && wsb.includes('<vGPU>Disable</vGPU>'), 'wsb: memory, workspace, host git/nvm, optional mapping skipped, logon command, vGPU off');
   const files = ['package.json', 'runtime/main.js', 'runtime/daemon.js', 'runtime/view.js', 'runtime/gitguard.js', 'sandbox/bootstrap.ps1', 'sandbox/logon.cmd', 'sandbox/trust.cmd', 'sandbox/ptyhost.cs', 'sandbox/gitshim.cs'];
   const missing = files.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
-  check(missing.length === 0 && fs.readdirSync(path.join(gen.launchPath, 'runtime')).length === 4, 'launch folder has the bundled sandbox runtime (4 self-contained files), the C# sources and the boot scripts' + (missing.length ? ' (missing: ' + missing.join(', ') + ')' : ''));
+  check(missing.length === 0 && fs.readdirSync(path.join(gen.launchPath, 'runtime')).length === 5, 'launch folder has the bundled sandbox runtime (5 self-contained files), the C# sources and the boot scripts' + (missing.length ? ' (missing: ' + missing.join(', ') + ')' : ''));
   const logon = fs.readFileSync(path.join(gen.launchPath, 'sandbox', 'logon.cmd'), 'utf8');
   check(logon.indexOf('trust.cmd') < logon.indexOf('wt.exe') && logon.includes('tools\\terminal\\wt.exe') && logon.includes('-NoExit'), 'logon.cmd applies sandbox trust settings first, then opens Windows Terminal (PowerShell fallback)');
   const session = f.readJson(gen.sessionPath);

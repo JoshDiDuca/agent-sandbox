@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
 import { userDir } from './config.js';
 import { planMirrorWorkspace } from '../shared/guest-paths.js';
+import { DATABASES, type Database } from './detect-databases.js';
 import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { dirExists, expandPath, fail, fileExists, isInsideOrEqual, isRootPath, isUserProfile } from './util.js';
 
@@ -39,7 +40,7 @@ export const assertSafeWorkspace = (workspace: string, packageRoot: string, stor
     if (isInsideOrEqual(dir, workspace)) fail(workspace + ' cannot be the workspace: it is inside ' + label + ' (' + dir + '), so the agent could change the code that runs on this PC.', dir === packageRoot ? 'Developing windows-development-sandbox itself? Install it as a copy instead of a link: run `npm run install:global` in the repository, then sandbox claude works there.' : 'Run sandbox claude from a project folder somewhere else.');
     if (isInsideOrEqual(workspace, dir)) fail(workspace + ' cannot be the workspace: it contains ' + label + ' (' + dir + '), which the agent must not be able to change.', 'Run sandbox claude from a project folder that does not contain it.');
   }
-  for (const name of ['WINDIR', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {
+  for (const name of ['WINDIR', 'SystemRoot', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {
     const dir = process.env[name];
     if (dir && isInsideOrEqual(dir, workspace)) fail('A system folder cannot be the workspace: ' + workspace, 'Run sandbox claude from a project folder.');
   }
@@ -124,6 +125,11 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
     notes.push('Using ' + local.path);
   }
   if (req.headless !== undefined) config = { ...config, sandbox: { ...config.sandbox, headless: req.headless } };
+  for (const name of req.databases ?? []) {
+    const db = name.toLowerCase() as Database;
+    if (!DATABASES.includes(db)) fail('Unknown database "' + name + '".', 'Choose from: ' + DATABASES.join(', '));
+    config = { ...config, databases: { ...config.databases, [db]: { ...config.databases[db], enabled: true } } };
+  }
   if (config.guestWorkspace === 'auto') config = { ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) };
   else if (config.guestWorkspace === 'mirror') {
     const plan = planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));

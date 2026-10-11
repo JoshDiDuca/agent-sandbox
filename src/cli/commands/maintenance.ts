@@ -7,7 +7,7 @@ import { DEFAULTS, userConfigPath, userDir } from '../../core/config.js';
 import { describeOverrides, isTrusted, LOCAL_CONFIG_NAME, normalizeOverrides, readLocalConfig, trustStorePath } from '../../core/local-config.js';
 import { fail, safeText, sleep, writeJson } from '../../core/util.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
-import { doctorRows, hostClaude, isSandboxRunning } from '../../host/platform.js';
+import { doctorRows, hostClaude, insideSandbox, isSandboxRunning } from '../../host/platform.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { syncBack, watch } from '../../sync/watcher.js';
 import { table, type Context } from './context.js';
@@ -113,7 +113,9 @@ export const config = (ctx: Context): number => {
 };
 
 export const doctor = (ctx: Context): number => {
-  table(doctorRows(ctx.loaded.config, ctx.options.harness ?? ctx.loaded.config.defaultHarness, ctx.storageRoot, ctx.loaded.configPath));
+  const rows = doctorRows(ctx.loaded.config, ctx.options.harness ?? ctx.loaded.config.defaultHarness, ctx.storageRoot, ctx.loaded.configPath);
+  // Inside a sandbox the feature and "running" rows describe the sandbox itself, and the host rows describe nothing useful.
+  table(insideSandbox() ? [['Where', 'inside a Windows Sandbox started by this tool (run doctor on your PC to check the PC)'], ...rows.filter(([name]) => name === 'Config file')] : rows);
   return 0;
 };
 

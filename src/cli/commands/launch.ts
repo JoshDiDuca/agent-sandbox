@@ -15,7 +15,7 @@ import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
 import { askYesNo, resolveRun } from '../../core/workspace.js';
-import { currentGuestDir, sandboxAlive, table, type Context } from './context.js';
+import { currentGuestDir, requireOnPc, sandboxAlive, table, type Context } from './context.js';
 
 /** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
 export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
@@ -86,6 +86,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   const { options, loaded, packageRoot, dataPath, storageRoot } = ctx;
   // attach.auto: an agent started from an interactive terminal attaches it, as with -t.
   if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY) options.terminal = true;
+  if (!generateOnly) requireOnPc('launch');
   if (!generateOnly && isSandboxRunning()) {
     if (!options.noAgent) return launchIntoRunning(ctx);
     // Only one Windows Sandbox can run: "start" on a running one brings its window up instead.
@@ -94,7 +95,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   }
   const run = await resolveRun({
     packageRoot, loaded, cwd: process.cwd(), workspace: options.workspace, harness: options.harness, noAgent: options.noAgent,
-    noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, headless: options.headless,
+    noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, databases: options.databases, headless: options.headless,
     nodeVersion: options.node, pythonVersion: options.python, ask: askYesNo,
   });
   const { config } = run;
@@ -112,7 +113,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Toolchains', Object.entries(generated.toolchains).filter(([, d]) => d.on).map(([name, d]) => name + ' (' + d.reason + ')').join(', ') || 'Node only (nothing else used by this project)'],
     ...(generated.databases.length
-      ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; see hostAccess.forwards)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])
+      ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; use Postgres or SQLite for local work)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])
       : [['Databases', 'none needed (databases.<name>.enabled = true adds one)']]),
     ['Desktop', generated.personalization],
     ['Claude', generated.profile.staged.length ? generated.profile.staged.join(', ') + (generated.profile.credentials ? '  (INCLUDING YOUR LOGIN)' : '') : 'no settings copied'],

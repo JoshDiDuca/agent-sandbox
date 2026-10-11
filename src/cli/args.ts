@@ -1,15 +1,24 @@
 // Command-line parsing with commander. parseCli() only parses (no side effects), so it is easy to test; cli/index.ts
 // dispatches the result. sandbox claude & co parse as `launch`: every option launch does not own goes to the agent, in order.
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { fail } from '../core/util.js';
+import { z } from 'zod';
+import { fail, tryReadJson } from '../core/util.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';
 
 export interface CliOptions {
   command: string; positionals: string[]; passthrough: string[];
   config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
-  scripts: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
+  scripts: string[]; databases: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
   personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; yes: boolean; timeout: number; days: number;
 }
+
+/** This package's version (this file is dist/cli/args.js, two folders below package.json). */
+export const packageVersion = (): string => {
+  const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
+  return z.object({ version: z.string() }).safeParse(tryReadJson(file)).data?.version ?? 'unknown';
+};
 
 /** Reserved spelling for our launch options that can never clash with an agent's flags: --sbx-terminal, ... */
 const SBX_PREFIX = '--sbx-';
@@ -35,6 +44,7 @@ const toOption = (o: OptionSpecT): Option => {
 export const buildProgram = (record: (name: string, cmd: Command) => void): Command => {
   const program = new Command('sandbox')
     .description('A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.')
+    .version(packageVersion(), '-v, --version', 'show the version')
     .enablePositionalOptions()
     .showHelpAfterError('(run with --help for usage)')
     .exitOverride();
@@ -89,6 +99,7 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     node: o.node as string | undefined,
     python: o.python as string | undefined,
     scripts: (o.script as string[] | undefined) ?? [],
+    databases: ((o.database as string[] | undefined) ?? []).flatMap((d) => d.split(',')).map((d) => d.trim()).filter(Boolean),
     headless: o.window ? false : o.headless ? true : undefined,
     terminal: Boolean(o.terminal),
     newSession: Boolean(o.new),
@@ -107,6 +118,6 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 };
 
 const defaults = (): CliOptions => ({
-  command: '', positionals: [], passthrough: [], scripts: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
+  command: '', positionals: [], passthrough: [], scripts: [], databases: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
   personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, timeout: 600, days: 7,
 });
