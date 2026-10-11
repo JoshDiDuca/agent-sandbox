@@ -26,7 +26,8 @@ folder with this tool's commands, not `node` itself, so nothing is installed sys
 # 1. Windows Sandbox, in an admin PowerShell, then reboot
 Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
 
-# 2. The package: latest release, a specific one, or from the repository
+# 2. The package: from npm, the latest release, a specific one, or from the repository
+npm install -g windows-development-sandbox
 npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/windows-development-sandbox.tgz
 npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/download/v1.0.0/windows-development-sandbox-1.0.0.tgz
 npm install -g github:JoshDiDuca/agent-sandbox

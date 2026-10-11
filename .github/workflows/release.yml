@@ -6,7 +6,8 @@ name: Release
 #      irm https://github.com/<owner>/<repo>/releases/latest/download/install.ps1 | iex
 #      npm install -g https://github.com/<owner>/<repo>/releases/latest/download/windows-development-sandbox.tgz
 #  - a GitHub Package (npm.pkg.github.com) named @<owner>/windows-development-sandbox
-#  - npm (registry.npmjs.org) too, if the repository has an NPM_TOKEN secret
+#  - npm (registry.npmjs.org): the first version once from your PC (npm run publish:npm), then CI publishes each
+#    release through npm trusted publishing (or an NPM_TOKEN secret)
 #
 # It also runs on every push to master (and from the Actions tab, "Run workflow"): when package.json has a version
 # that has no release yet, it tags v<version> and releases it. So bumping the version in a normal push is enough.
@@ -28,8 +29,6 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,6 +93,25 @@ jobs:
             ```
             npm install -g https://github.com/${{ github.repository }}/releases/latest/download/windows-development-sandbox.tgz
             ```
+      - name: Publish to npm
+        if: steps.version.outputs.release == 'true'
+        shell: pwsh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          $name = (Get-Content package.json | ConvertFrom-Json).name
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $registry = 'https://registry.npmjs.org'
+          $published = npm view $name versions --json --registry $registry 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            "::warning::$name is not on npm yet. Publish the first version from your PC with: npm login, then npm run publish:npm"
+            exit 0
+          }
+          if (($published | ConvertFrom-Json) -contains $version) { "$name@$version is already on npm."; exit 0 }
+          # Trusted publishing (OIDC from this workflow, set up once on npmjs.com) needs npm 11.5.1+; an NPM_TOKEN secret also works.
+          if ($env:NODE_AUTH_TOKEN) { "//registry.npmjs.org/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc }
+          npx -y npm@11 publish ${{ steps.pack.outputs.file }} --provenance --access public --registry $registry
+          if ($LASTEXITCODE -ne 0) { throw "npm publish failed: set up the trusted publisher on npmjs.com ($name > Settings) or add an NPM_TOKEN secret" }
       - name: Publish to GitHub Packages
         if: steps.version.outputs.release == 'true'
         shell: pwsh
@@ -105,11 +123,3 @@ jobs:
           npm pkg set "name=@$scope/windows-development-sandbox" "publishConfig.registry=https://npm.pkg.github.com" "repository.url=https://github.com/${{ github.repository }}.git"
           "@${scope}:registry=https://npm.pkg.github.com`n//npm.pkg.github.com/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc
           npm publish --ignore-scripts
-      - name: Publish to npm
-        if: steps.version.outputs.release == 'true' && env.NPM_TOKEN != ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: pwsh
-        run: |
-          "//registry.npmjs.org/:_authToken=`${NODE_AUTH_TOKEN}" | Add-Content .npmrc
-          npm publish ${{ steps.pack.outputs.file }} --provenance --access public --registry https://registry.npmjs.org

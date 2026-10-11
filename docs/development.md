@@ -24,7 +24,20 @@ a GitHub Release with:
 - `windows-development-sandbox.tgz` (the stable "latest" name)
 - `install.ps1`
 
-CI also publishes to GitHub Packages, and to npm when an `NPM_TOKEN` secret is set. `npm run release:patch` bumps,
-tags and pushes in one go.
+CI also publishes to GitHub Packages and to [npm](https://www.npmjs.com/package/windows-development-sandbox).
+`npm run release:patch` bumps, tags and pushes in one go.
+
+### npm
+
+npm only lets CI publish a package that already exists, so the first version is published once from your PC:
+
+```powershell
+npm login
+npm run publish:npm      # tests, packs like CI and publishes; asks for your 2FA code if you use one
+```
+
+Then, on npmjs.com, open the package's **Settings > Trusted Publisher**, choose GitHub Actions and enter the repository
+and `release.yml`. From then on every release reaches npm with no token. An `NPM_TOKEN` secret works instead.
+Until the first publish, CI skips npm with a warning.
 
 The code layout and the rules for contributors (and agents) are in [CLAUDE.md](../CLAUDE.md).
