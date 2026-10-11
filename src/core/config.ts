@@ -18,7 +18,8 @@ export const DEFAULTS: Config = {
   toolchains: {
     node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },
     python: { enabled: 'auto', version: '3', python2: true, pyenv: 'auto', tools: [] },
-    rust: { enabled: 'auto', toolchain: 'stable', host: 'x86_64-pc-windows-gnu', components: [], targets: [], crates: [] },
+    rust: { enabled: 'auto', toolchain: 'stable', host: 'auto', components: [], targets: [], crates: [], targetDir: 'separate' },
+    msvc: { enabled: 'auto', acceptLicense: false, msvcVersion: 'latest', sdkVersion: 'latest' },
     cpp: { enabled: 'auto', flexBison: true },
     dotnet: { enabled: 'auto', channels: ['LTS'], tools: [], workloads: [], frameworkTargets: ['net48', 'net472'], netfx35: false },
     // Bigger downloads only for projects that use them.
@@ -27,10 +28,12 @@ export const DEFAULTS: Config = {
     ruby: { enabled: 'auto', version: '3', gems: [] },
     php: { enabled: 'auto', version: '8', composer: true },
     deno: { enabled: 'auto' },
+    pwsh: { enabled: 'auto' },
+    cli: { gh: 'auto', zstd: false, openssl: 'auto' },
     bun: { enabled: true },
     uv: { enabled: true },
     vcRuntime: { enabled: false },
-    mesa: { enabled: false },
+    mesa: { enabled: false, vulkan: false },
     vscode: { enabled: true },
     environment: {},
   },

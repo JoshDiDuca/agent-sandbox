@@ -13,3 +13,7 @@ Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 | Config errors | The message names the key and the problem; `sandbox config show` prints the effective config |
 | pnpm, Bun or npm workspaces fail with EPERM | Mapped folders allow no symlinks; see [mapped folders](toolchains.md#mapped-folders) |
 | A database didn't start | Check `sandbox logs`. Turn it on explicitly with `databases.<name>.enabled: true` |
+| MSVC is not installed | Set `toolchains.msvc.acceptLicense: true`; the launch output says when a project would use it |
+| No Vulkan | Windows Sandbox has none: `toolchains.mesa.vulkan: true` gives software Vulkan, `sandbox.vGpu: true` Direct3D 12 |
+| winget is missing | Windows Sandbox has no winget; everything here installs portably, and real installers go in a hook |
+| Check a project file | `sandbox config check` validates `.sandbox-config.json` and lists what it changes |

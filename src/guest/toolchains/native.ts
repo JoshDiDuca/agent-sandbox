@@ -9,6 +9,9 @@ import { readJsonFile, writeJsonAtomic } from '../../shared/rundir.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
 import { arch, installOnce, tool, versionOf, type ToolEnv } from './common.js';
+import { CMAKE_FLOOR, cmakeTooOld } from './versions.js';
+import { crateInstaller } from './binstall.js';
+import { installedMsvcEnv } from './msvc.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */
 export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise<void> => {
@@ -24,7 +27,9 @@ export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise
   // Appended (not prepended) so MinGW's tools never shadow Windows or toolchain commands of the same name.
   env.append.unshift(bin);
   env.vars.CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = gcc;
-  env.summary.push('gcc: ' + versionOf(gcc) + ' (MinGW-w64, with cmake, ninja, premake5)');
+  const cmake = versionOf(path.join(bin, 'cmake.exe'));
+  if (cmakeTooOld(cmake)) warn('The bundled CMake ' + cmake + ' is older than ' + CMAKE_FLOOR + ', which many projects need; set toolchains.cpp.enabled to refresh it, or install a newer CMake into C:\\AgentData\\tools\\bin.');
+  env.summary.push('gcc: ' + versionOf(gcc) + ' (MinGW-w64, with cmake ' + cmake + ', ninja, premake5)');
   if (config.flexBison) await setupFlexBison(env);
 };
 
@@ -44,7 +49,7 @@ const setupFlexBison = async (env: ToolEnv): Promise<void> => {
  * Mesa 3D for Windows (llvmpipe): OpenGL 4.5 on the CPU when the sandbox has no GPU. Windows only offers OpenGL 1.1 in
  * software, and opengl32.dll cannot be replaced system-wide, so programs pick Mesa up from their own folder.
  */
-export const setupMesa = async (env: ToolEnv): Promise<void> => {
+export const setupMesa = async (env: ToolEnv, config: Toolchains['mesa']): Promise<void> => {
   if (dryRun) { log('(dry run) would provision Mesa 3D'); return; }
   const root = tool('mesa');
   const dir = path.join(root, arch === 'arm64' ? 'arm64' : 'x64');
@@ -55,6 +60,29 @@ export const setupMesa = async (env: ToolEnv): Promise<void> => {
   }
   Object.assign(env.vars, { MESA_DIR: dir, GALLIUM_DRIVER: 'llvmpipe' });
   env.summary.push('mesa (software OpenGL 4.5): copy opengl32.dll + libgallium_wgl.dll from %MESA_DIR% next to a game\'s .exe');
+  if (config.vulkan) await setupLavapipe(env, dir);
+};
+
+const VULKAN_RUNTIME = 'https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime-components.zip';
+
+/**
+ * Software Vulkan: Mesa's lavapipe plus the Khronos loader (vulkan-1.dll, from LunarG's runtime components; Windows
+ * Sandbox has no Vulkan loader). The loader ignores VK_DRIVER_FILES in elevated processes, and everything in the
+ * sandbox runs elevated, so lavapipe is registered where the loader looks (HKLM; the registry is new every boot).
+ */
+const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
+  const icd = path.join(mesaDir, arch === 'arm64' ? 'lvp_icd.aarch64.json' : 'lvp_icd.x86_64.json');
+  if (!exists(icd)) throw new Error('this Mesa build has no lavapipe (' + path.basename(icd) + ')');
+  const dir = tool('vulkan');
+  if (!exists(path.join(dir, 'vulkan-1.dll'))) {
+    log('Downloading the Vulkan loader (LunarG runtime components) ...');
+    // LunarG publishes no checksum for this zip; it comes over HTTPS from LunarG, the Khronos SDK's maintainer.
+    // The zip has x86 and x64 folders: only the 64-bit loader (and vulkaninfo) is extracted.
+    await installArchive(VULKAN_RUNTIME, dir, { locate: 'vulkan-1.dll', fileName: 'vulkan-runtime.zip', members: ['*/x64/*'] });
+  }
+  await execAsync(SYSTEM.reg(), ['add', 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers', '/v', icd, '/t', 'REG_DWORD', '/d', '0', '/f'], { stdio: 'ignore' });
+  env.prepend.push(dir);
+  env.summary.push('vulkan: lavapipe (software Vulkan 1.4 on the CPU), vulkaninfo on PATH; WGPU_BACKEND=vulkan for wgpu');
 };
 
 export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refresh: boolean): Promise<void> => {
@@ -69,6 +97,9 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
     await download('https://static.rust-lang.org/rustup/dist/' + (arch === 'arm64' ? 'aarch64' : 'x86_64') + '-pc-windows-msvc/rustup-init.exe', init);
     await execAsync(init, ['-y', '--no-modify-path', '--profile', 'default', '--default-host', config.host, '--default-toolchain', config.toolchain], rustEnv);
   } else {
+    // The host can change (GNU <-> msvc with toolchains.msvc): install the toolchain for it; a no-op when it is there.
+    await execAsync(rustup, ['set', 'default-host', config.host], { ...rustEnv, stdio: 'ignore' });
+    await execAsync(rustup, ['toolchain', 'install', config.toolchain, '--profile', 'default', '--no-self-update'], { ...rustEnv, stdio: 'ignore' });
     await execAsync(rustup, ['default', config.toolchain], { ...rustEnv, stdio: 'ignore' });
     if (refresh) await execAsync(rustup, ['update'], rustEnv);
   }
@@ -78,10 +109,15 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
   const toolchainKey = 'rustup@' + config.toolchain;
   await installOnce(env, toolchainKey + ' components', config.components, (c) => execAsync(rustup, ['component', 'add', c], rustEnv));
   await installOnce(env, toolchainKey + ' targets', config.targets, (t) => execAsync(rustup, ['target', 'add', t], rustEnv));
-  // cargo install links with MinGW's gcc (the C/C++ step runs first), which is on the agent's PATH, not ours yet.
+  // cargo install links with MSVC's link.exe (msvc host) or MinGW's gcc (GNU host). Those steps ran first, but their
+  // PATH only reaches the agent at the end, so it is put together here.
+  const msvc = config.host.endsWith('-msvc') ? installedMsvcEnv() : null;
   const mingw = tool('mingw', 'mingw64', 'bin');
-  const cargoEnv = { env: { ...rustEnv.env, CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: path.join(mingw, 'gcc.exe'), PATH: [path.join(CARGO_HOME, 'bin'), mingw, process.env.PATH ?? ''].join(path.delimiter) } };
-  await installOnce(env, 'cargo', config.crates, (c) => execAsync(path.join(CARGO_HOME, 'bin', 'cargo.exe'), ['install', '--locked', c], cargoEnv));
+  const cargoEnv = msvc
+    ? { env: { ...rustEnv.env, ...msvc.vars, PATH: [path.join(CARGO_HOME, 'bin'), ...msvc.path, process.env.PATH ?? ''].join(path.delimiter) } }
+    : { env: { ...rustEnv.env, CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: path.join(mingw, 'gcc.exe'), PATH: [path.join(CARGO_HOME, 'bin'), mingw, process.env.PATH ?? ''].join(path.delimiter) } };
+  // Prebuilt through cargo-binstall where the crate publishes a Windows build, else compiled (same "cargo" keys as before).
+  await installOnce(env, 'cargo', config.crates, crateInstaller(CARGO_HOME, cargoEnv));
 };
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */

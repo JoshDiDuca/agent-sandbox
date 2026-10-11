@@ -44,6 +44,13 @@ can read because the whole folder is mapped.
 - So are executables planted in the project under names you type there (`node.exe`, `sandbox.cmd` ...).
 - `sandbox status` lists anything that was quarantined.
 
+## GitHub CLI
+
+`gh` is never given your PC's login (`GH_TOKEN`, `GITHUB_TOKEN` are stripped) and is only installed with git access
+`full`, because it can push and merge through the GitHub API. A login made inside is kept in `C:\AgentData\state\gh`.
+
+`ssh` comes with Git, but no keys are copied in and your LAN is blocked, so deploys stay on your PC.
+
 ## Git access
 
 `provisioning.git.access`, settable per project:

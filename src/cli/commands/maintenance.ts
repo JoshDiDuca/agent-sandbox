@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import _ from 'lodash';
 import { DEFAULTS, userConfigPath, userDir } from '../../core/config.js';
+import { describeOverrides, isTrusted, LOCAL_CONFIG_NAME, normalizeOverrides, readLocalConfig, trustStorePath } from '../../core/local-config.js';
 import { fail, safeText, sleep, writeJson } from '../../core/util.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { doctorRows, hostClaude, isSandboxRunning } from '../../host/platform.js';
@@ -84,6 +85,21 @@ const printSchemaSettings = (): number => {
   return 0;
 };
 
+/**
+ * `sandbox config check`: the folder's .sandbox-config.json validated and described (risky settings flagged, approval
+ * state), without launching. Fails with the same message a launch would give when the file is not valid.
+ */
+const checkLocalConfig = (ctx: Context): number => {
+  const dir = path.resolve(ctx.options.workspace ?? process.cwd());
+  const file = readLocalConfig(dir);
+  if (!file) { console.log('No ' + LOCAL_CONFIG_NAME + ' in ' + dir + '; the sandbox uses your own settings only.'); return 0; }
+  const overrides = normalizeOverrides(file.data, dir, file.path);
+  const approved = isTrusted(trustStorePath(ctx.storageRoot), file.path, file.hash);
+  console.log(file.path + ': valid. ' + (approved ? 'Approved (this exact version).' : 'Not approved yet: the next launch asks you.') + '\n');
+  for (const line of describeOverrides(overrides)) console.log('  ' + safeText(line));
+  return 0;
+};
+
 export const config = (ctx: Context): number => {
   const [action = 'show'] = ctx.options.positionals;
   switch (action) {
@@ -91,7 +107,8 @@ export const config = (ctx: Context): number => {
     case 'init': return initConfig();
     case 'show': console.log(JSON.stringify(ctx.loaded.config, null, 2)); return 0;
     case 'schema': return printSchemaSettings();
-    default: fail('Unknown config action "' + action + '".', 'Use one of: sandbox config show | path | init | schema');
+    case 'check': return checkLocalConfig(ctx);
+    default: fail('Unknown config action "' + action + '".', 'Use one of: sandbox config show | path | init | schema | check');
   }
 };
 

@@ -7,6 +7,14 @@ import { claudeDir, dataDir, launchDir, session, stateDir, toolsDir, workspace }
 const BEGIN = '<!-- agent-sandbox:begin (generated every boot, do not edit) -->';
 const END = '<!-- agent-sandbox:end -->';
 
+/** Drives other than C: are subst drives onto C:\Mirror\<letter> (mapped folders shown at their PC paths). */
+const mirrorLine = (): string[] => {
+  // Only the ones bootstrap.ps1 could create (a letter already in use is reported there and skipped).
+  const drives = (session.substDrives ?? []).filter((d) => fs.existsSync(d.letter + ':\\'));
+  if (!drives.length) return [];
+  return ['- ' + drives.map((d) => d.letter + ':').join(', ') + ' = mapped folders at their PC paths (subst onto `' + drives.map((d) => d.target).join('`, `') + '`; real-path tools may print that form).'];
+};
+
 /** Deliberately tiny: it is loaded into every conversation. */
 export const sandboxGuide = (toolSummary: string[], lan: 'blocked' | 'open' | 'offline' = 'blocked'): string => [
   BEGIN,
@@ -16,6 +24,7 @@ export const sandboxGuide = (toolSummary: string[], lan: 'blocked' | 'open' | 'o
   '- RW, persists: `' + toolsDir + '` (toolchains) — put portable exes in `' + path.join(toolsDir, 'bin') + '` (on PATH)',
   '- RW, persists: `' + stateDir + '` (agent config/history; do not edit logins) · logs: `' + path.join(dataDir, 'logs') + '`',
   '- RO: `' + launchDir + '` (this boot\'s scripts) · lost on close: everything else, incl. `C:\\nvm` (Node symlink)',
+  ...mirrorLine(),
   '- Tools: ' + toolSummary.join(' · '),
   '- Persistent installs: `npm i -g` (per nvm version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`. Real installers must re-run each boot via a hook (ask the user).',
   '- Mapped folders (workspace, C:\\AgentData) allow NO symlinks or junctions: pnpm runs hoisted (set), npm workspaces / `file:` deps and deno node_modules dirs fail there (use a folder on C:\\ outside them), bun cannot save its lockfile there (`bun install --no-save`).',

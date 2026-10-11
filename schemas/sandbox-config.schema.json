@@ -19,10 +19,14 @@
           "const": "auto"
         },
         {
+          "type": "string",
+          "const": "mirror"
+        },
+        {
           "type": "string"
         }
       ],
-      "description": "Where the workspace appears inside the sandbox. \"auto\" = C:\\Workspace\\<folder name>."
+      "description": "Where the workspace appears inside the sandbox. \"auto\" = C:\\Workspace\\<folder name>. \"mirror\" = the same path as on this PC, so absolute paths in configs and build caches match (another drive letter such as F: is a subst drive onto C:\\Mirror\\F); paths the sandbox reserves (C:\\Users\\..., C:\\Program Files\\...) fall back to \"auto\"."
     },
     "readOnly": {
       "type": "boolean",
@@ -40,7 +44,7 @@
           },
           "guest": {
             "type": "string",
-            "description": "Where it appears inside the sandbox, e.g. C:\\Assets."
+            "description": "Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game: mapped to C:\\Mirror\\F\\... and shown as F: (subst) at boot."
           },
           "readOnly": {
             "type": "boolean",
@@ -300,7 +304,7 @@
             "host": {
               "type": "string",
               "minLength": 1,
-              "description": "Host triple. The GNU host needs no Visual Studio; MinGW (cpp) is its linker."
+              "description": "Host triple, or \"auto\": x86_64-pc-windows-msvc when the MSVC toolchain is on (like most PCs), else x86_64-pc-windows-gnu (MinGW is its linker)."
             },
             "components": {
               "type": "array",
@@ -321,7 +325,44 @@
               "items": {
                 "type": "string"
               },
-              "description": "Binaries built with `cargo install` (compiled once, slow the first time), installed once and kept (e.g. [\"cargo-watch\"])."
+              "description": "Binaries for cargo: prebuilt via cargo-binstall when the crate publishes a Windows build, else compiled with `cargo install --locked` (slow the first time), installed once and kept (e.g. [\"sccache\", \"cargo-nextest\", \"cargo-deny\"])."
+            },
+            "targetDir": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"shared\": cargo's default target\\ (shared with builds on this PC, so builds on either side invalidate the other), \"separate\": <workspace>\\target\\sandbox (kept, no cross-talk), \"local\": on the sandbox's own disk (fastest, lost every boot), or a guest path."
+            }
+          },
+          "additionalProperties": false
+        },
+        "msvc": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "MSVC (cl, link) and the Windows SDK, portable from Microsoft's Visual Studio manifest (~1-2 GB once), with vcvars64.bat and vswhere. true, false, or \"auto\" = only when the project has a .vcxproj, CMakePresets.json, a script calling vcvars/vswhere, or a Rust project when this PC builds Rust with MSVC."
+            },
+            "acceptLicense": {
+              "type": "boolean",
+              "description": "Required to install MSVC: you accept the Visual Studio licence terms (https://visualstudio.microsoft.com/license-terms/), which need a Visual Studio licence."
+            },
+            "msvcVersion": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"latest\" or an MSVC tools version prefix, e.g. \"14.44\"."
+            },
+            "sdkVersion": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"latest\" or a Windows SDK build, e.g. \"26100\" or \"10.0.22621\"."
             }
           },
           "additionalProperties": false
@@ -534,6 +575,66 @@
           },
           "additionalProperties": false
         },
+        "pwsh": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "PowerShell 7 (pwsh), portable (~110 MB once); `powershell` stays Windows PowerShell 5.1. true, false, or \"auto\" = when a .ps1 at the root or one folder down has #Requires -Version 7 / -PSEdition Core or a `pwsh ...` usage line, or, in a folder that is no project yet, when this PC has PowerShell 7."
+            }
+          },
+          "additionalProperties": false
+        },
+        "cli": {
+          "type": "object",
+          "properties": {
+            "gh": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "GitHub CLI (gh). Only with provisioning.git.access \"full\": gh can push and merge through the GitHub API, past a read-only git. Your PC's gh login is never copied; `gh auth login` inside persists (GH_CONFIG_DIR). \"auto\" = when the project has a .github folder."
+            },
+            "zstd": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Zstandard (zstd). \"auto\" = off; set true to get it."
+            },
+            "openssl": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "`openssl` on PATH, from the copy Git for Windows ships (its mingw64\\bin is not put on PATH, so it cannot shadow MinGW's gcc). \"auto\" = on."
+            }
+          },
+          "additionalProperties": false
+        },
         "bun": {
           "type": "object",
           "properties": {
@@ -570,6 +671,10 @@
             "enabled": {
               "type": "boolean",
               "description": "Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program's .exe."
+            },
+            "vulkan": {
+              "type": "boolean",
+              "description": "Also software Vulkan 1.4 (Mesa lavapipe) with the Khronos loader, registered for every program; for wgpu set WGPU_BACKEND=vulkan."
             }
           },
           "additionalProperties": false

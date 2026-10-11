@@ -3,12 +3,12 @@
 // schemas/ (editor autocomplete and docs via "$schema") are generated from them at build time.
 import _ from 'lodash';
 import { z } from 'zod';
+import { isValidGuestPath } from '../shared/guest-paths.js';
 
-const RESERVED_GUEST = /^C:\\(?:Windows|Program Files|Program Files \(x86\)|ProgramData|Users|AgentLaunch|AgentData|HostTools|nvm)(?:\\|$)/i;
-
+// Rules (and RESERVED_GUEST) live in shared/guest-paths.ts: the host re-checks them before writing the .wsb.
 export const GuestPath = z.string().refine(
-  (v) => /^C:\\/.test(v) && !v.includes('..') && v !== 'C:\\' && !RESERVED_GUEST.test(v),
-  'reserved or invalid guest path (must be a folder under C:\\, not Windows, Program Files, Users, AgentData, ...)',
+  isValidGuestPath,
+  'reserved or invalid guest path (a folder under C:\\ other than Windows, Program Files, Users, AgentData, Mirror, ..., or on drive D: to Z:)',
 );
 const Name = z.string().regex(/^[A-Za-z0-9_-]+$/, 'letters, numbers, - and _ only');
 const Strings = z.array(z.string());
@@ -17,11 +17,11 @@ const SchemaRef = z.string().describe('Path or URL of the JSON Schema for editor
 
 export const GitAccess = z.enum(['full', 'readonly', 'none'])
   .describe('full: normal git. readonly: status/log/diff/show/blame only (no commit, push, checkout, ...). none: no git at all; .git is hidden from the agent.');
-const GuestWorkspace = z.union([z.literal('auto'), GuestPath]).describe('Where the workspace appears inside the sandbox. "auto" = C:\\Workspace\\<folder name>.');
+const GuestWorkspace = z.union([z.literal('auto'), z.literal('mirror'), GuestPath]).describe('Where the workspace appears inside the sandbox. "auto" = C:\\Workspace\\<folder name>. "mirror" = the same path as on this PC, so absolute paths in configs and build caches match (another drive letter such as F: is a subst drive onto C:\\Mirror\\F); paths the sandbox reserves (C:\\Users\\..., C:\\Program Files\\...) fall back to "auto".');
 
 export const Mapping = z.strictObject({
   host: z.string().min(1).describe('Folder on this PC (relative paths are relative to the config file).'),
-  guest: GuestPath.describe('Where it appears inside the sandbox, e.g. C:\\Assets.'),
+  guest: GuestPath.describe('Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game: mapped to C:\\Mirror\\F\\... and shown as F: (subst) at boot.'),
   readOnly: z.boolean().describe('true = the agent can only read it.'),
   optional: z.boolean().optional().describe('true = skip it quietly when the host folder does not exist.'),
 });
@@ -85,10 +85,17 @@ const Toolchains = z.strictObject({
   rust: z.strictObject({
     enabled: enabled('Rust via rustup (cargo, rustc).', 'Cargo.toml or rust-toolchain(.toml)'),
     toolchain: z.string().min(1).describe('Default toolchain, e.g. "stable". rust-toolchain.toml in a project wins.'),
-    host: z.string().min(1).describe('Host triple. The GNU host needs no Visual Studio; MinGW (cpp) is its linker.'),
+    host: z.string().min(1).describe('Host triple, or "auto": x86_64-pc-windows-msvc when the MSVC toolchain is on (like most PCs), else x86_64-pc-windows-gnu (MinGW is its linker).'),
     components: Packages('Extra rustup components', '["rust-src", "llvm-tools"]'),
     targets: Packages('Extra rustup targets', '["wasm32-unknown-unknown"]'),
-    crates: Packages('Binaries built with `cargo install` (compiled once, slow the first time)', '["cargo-watch"]'),
+    crates: Packages('Binaries for cargo: prebuilt via cargo-binstall when the crate publishes a Windows build, else compiled with `cargo install --locked` (slow the first time)', '["sccache", "cargo-nextest", "cargo-deny"]'),
+    targetDir: z.string().min(1).describe('"shared": cargo\'s default target\\ (shared with builds on this PC, so builds on either side invalidate the other), "separate": <workspace>\\target\\sandbox (kept, no cross-talk), "local": on the sandbox\'s own disk (fastest, lost every boot), or a guest path.'),
+  }),
+  msvc: z.strictObject({
+    enabled: enabled('MSVC (cl, link) and the Windows SDK, portable from Microsoft\'s Visual Studio manifest (~1-2 GB once), with vcvars64.bat and vswhere.', 'a .vcxproj, CMakePresets.json, a script calling vcvars/vswhere, or a Rust project when this PC builds Rust with MSVC'),
+    acceptLicense: z.boolean().describe('Required to install MSVC: you accept the Visual Studio licence terms (https://visualstudio.microsoft.com/license-terms/), which need a Visual Studio licence.'),
+    msvcVersion: z.string().min(1).describe('"latest" or an MSVC tools version prefix, e.g. "14.44".'),
+    sdkVersion: z.string().min(1).describe('"latest" or a Windows SDK build, e.g. "26100" or "10.0.22621".'),
   }),
   cpp: z.strictObject({
     enabled: enabled('MinGW-w64 GCC with CMake, Ninja, premake5 and mingw32-make (also Rust\'s linker).', 'CMakeLists.txt, Makefile, meson.build, premake5.lua or Cargo.toml'),
@@ -124,10 +131,19 @@ const Toolchains = z.strictObject({
     composer: z.boolean().describe('Composer.'),
   }),
   deno: z.strictObject({ enabled: enabled('Deno.', 'deno.json, deno.jsonc or deno.lock') }),
+  pwsh: z.strictObject({ enabled: Enabled.describe('PowerShell 7 (pwsh), portable (~110 MB once); `powershell` stays Windows PowerShell 5.1. true, false, or "auto" = when a .ps1 at the root or one folder down has #Requires -Version 7 / -PSEdition Core or a `pwsh ...` usage line, or, in a folder that is no project yet, when this PC has PowerShell 7.') }),
+  cli: z.strictObject({
+    gh: Enabled.describe('GitHub CLI (gh). Only with provisioning.git.access "full": gh can push and merge through the GitHub API, past a read-only git. Your PC\'s gh login is never copied; `gh auth login` inside persists (GH_CONFIG_DIR). "auto" = when the project has a .github folder.'),
+    zstd: Enabled.describe('Zstandard (zstd). "auto" = off; set true to get it.'),
+    openssl: Enabled.describe('`openssl` on PATH, from the copy Git for Windows ships (its mingw64\\bin is not put on PATH, so it cannot shadow MinGW\'s gcc). "auto" = on.'),
+  }).describe('Small portable command-line tools from their GitHub releases, installed once into tools\\cli.'),
   bun: toggle('Bun runtime (claude-mem needs it).'),
   uv: toggle('uv, the Python package manager (claude-mem needs it).'),
   vcRuntime: toggle('Microsoft Visual C++ runtime for tools that need it (a real installer, so it runs on every boot, ~15 s). PHP installs it regardless.'),
-  mesa: toggle('Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program\'s .exe.'),
+  mesa: z.strictObject({
+    enabled: z.boolean().describe('Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program\'s .exe.'),
+    vulkan: z.boolean().describe('Also software Vulkan 1.4 (Mesa lavapipe) with the Khronos loader, registered for every program; for wgpu set WGPU_BACKEND=vulkan.'),
+  }),
   vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
   environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'letters, digits and _ only'), z.string()).describe('Extra environment variables for the agent and every terminal, e.g. registry mirrors: {"NPM_CONFIG_REGISTRY": "https://...", "PIP_INDEX_URL": "https://..."}.'),
 });

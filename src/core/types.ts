@@ -66,4 +66,6 @@ export interface GuestSession {
   hostTools: { node: boolean; nodeVersion: string | null; harnessExecutable: string | null; git: boolean; nvm: boolean; volta?: boolean; pyenv?: boolean };
   claudeProfile: { overwrite: boolean; items: string[]; credentials: boolean; hostConfigDir: string | null; syncClaudeMem: boolean };
   personalization: boolean;
+  /** Drives other than C: that bootstrap.ps1 makes with subst before anything uses them: letter D-Z onto C:\Mirror\<letter>. */
+  substDrives?: { letter: string; target: string }[];
 }

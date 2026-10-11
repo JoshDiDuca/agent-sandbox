@@ -89,7 +89,7 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'doctor', summary: 'check this PC and show what will be copied or downloaded', group: 'Health', args: [], options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })] },
   { name: 'repair', summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)', group: 'Health', args: [], options: [] },
   { name: 'self-test', summary: 'run the built-in tests', group: 'Health', args: [], options: [] },
-  { name: 'config', summary: 'show the effective config, its path, create it, or install editor schemas', group: 'Config', args: [{ name: 'action', description: 'what to do', required: false, choices: ['show', 'path', 'init', 'schema'] }], options: [] },
+  { name: 'config', summary: 'show the effective config, its path, create it, editor schemas, or check a project\'s .sandbox-config.json', group: 'Config', args: [{ name: 'action', description: 'what to do', required: false, choices: ['show', 'path', 'init', 'schema', 'check'] }], options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')] },
   { name: 'host-claude', summary: 'Claude on this PC (NOT sandboxed) with a separate profile', group: 'Agents', args: [], options: [bool('--personal', 'use your normal Claude profile')], passthrough: 'agent', interactive: true },
   { name: 'menu', summary: 'the interactive menu (what `sandbox` opens with no arguments)', group: 'Config', args: [], options: [], hidden: true, interactive: true },
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },

@@ -5,7 +5,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Config, DatabasePlan } from '../core/types.js';
 import { DATABASES, databasesFromServices, detectDatabases, INTERESTING_FILE, type Database, type ProjectFile } from '../core/detect-databases.js';
+import os from 'node:os';
 import { AUTO_TOOLCHAINS, type AutoToolchain } from '../core/detect-toolchains.js';
+import { pcHasPwsh } from '../core/detect-pwsh.js';
 import { isWin } from '../core/util.js';
 import { system32 } from '../shared/system.js';
 
@@ -57,13 +59,30 @@ export const projectEntries = (root: string): string[] => {
   return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
 };
 
+/** This PC builds Rust with MSVC: rustup's default host is *-msvc (read from rustup's settings; nothing is run). */
+const msvcRust = (): boolean => {
+  const settings = path.join(process.env.RUSTUP_HOME ?? path.join(os.homedir(), '.rustup'), 'settings.toml');
+  try { return /default_host_triple\s*=\s*"[^"]*-msvc"/.test(fs.readFileSync(settings, 'utf8').slice(0, 64 * 1024)); } catch { return false; }
+};
+
+/** Scripts in the project root or one folder down that set up MSVC (vcvars*.bat, vswhere): read with bounded effort. */
+export const msvcHint = (root: string): string | undefined => {
+  const scripts = projectEntries(root).filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e)).slice(0, 60);
+  for (const rel of scripts) {
+    let text = '';
+    try { const file = path.join(root, rel); if (fs.statSync(file).size <= 256 * 1024) text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    if (/vcvars(all|64|32)?\.bat|vswhere(\.exe)?/i.test(text)) return rel + ' sets up MSVC';
+  }
+  return undefined;
+};
+
 /** Languages this PC has (their commands on PATH; Windows' Store stubs for python do not count). */
 export const pcLanguages = (): AutoToolchain[] => {
   const dirs = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && !/WindowsApps/i.test(d));
   const has = (...names: string[]): boolean => dirs.some((d) => names.some((n) => fs.existsSync(path.join(d, n))));
   const found: Record<AutoToolchain, boolean> = {
     python: has('python.exe', 'py.exe'), rust: has('cargo.exe', 'rustc.exe'), cpp: has('gcc.exe', 'g++.exe', 'cl.exe', 'clang.exe'),
-    dotnet: has('dotnet.exe'), go: has('go.exe'), java: has('java.exe', 'javac.exe'), ruby: has('ruby.exe'), php: has('php.exe'), deno: has('deno.exe'),
+    msvc: msvcRust(), pwsh: pcHasPwsh(), dotnet: has('dotnet.exe'), go: has('go.exe'), java: has('java.exe', 'javac.exe'), ruby: has('ruby.exe'), php: has('php.exe'), deno: has('deno.exe'),
   };
   return AUTO_TOOLCHAINS.filter((t) => found[t]);
 };

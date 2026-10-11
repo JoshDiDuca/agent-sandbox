@@ -37,7 +37,7 @@ export const cmdArgs = (args: string[]): string => {
 export const commandLine = (file: string, args: string[]): string =>
   path.win32.basename(file).toLowerCase() === 'cmd.exe' ? [quoteArg(file), cmdArgs(args)].filter(Boolean).join(' ') : [file, ...args].map(quoteArg).join(' ');
 
-export type Helper = 'ptyhost' | 'gitshim';
+export type Helper = 'ptyhost' | 'gitshim' | 'vswhere';
 
 const sourceHash = (name: Helper): string => crypto.createHash('sha256').update(fs.readFileSync(path.join(launchDir, 'sandbox', name + '.cs'))).digest('hex').slice(0, 12);
 

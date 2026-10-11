@@ -15,20 +15,44 @@ config always win.
 |---|---|---|
 | **Node** ✅ | nvm, npm, pnpm and yarn via corepack, **Volta** when the project pins it | `.nvmrc`, `.node-version`, `package.json` volta, your PC |
 | **Python** ✅ | CPython 3 + pip, Python 2.7 (`python2`), uv, pyenv-win when your PC uses pyenv | `.python-version` |
-| **Rust** ✅ | rustup, cargo (GNU host) | `rust-toolchain.toml` |
+| **Rust** ✅ | rustup, cargo: the msvc host when MSVC is on (like most PCs), else GNU; `rust.crates` prebuilt via cargo-binstall | `rust-toolchain.toml` |
 | **C / C++** ✅ | MinGW-w64 GCC, CMake, Ninja, premake5, win_flex/bison | |
+| MSVC | `cl`, `link` and the Windows SDK, portable (~1-2 GB once); `vcvars64.bat` and `vswhere` work. Needs `toolchains.msvc.acceptLicense` | `*.vcxproj`, `CMakePresets.json`, scripts calling vcvars/vswhere, Rust when your PC uses MSVC |
 | **C# / .NET** ✅ | .NET SDK, workloads, global tools, .NET Framework reference assemblies (net48, net472 ...) | `global.json` |
 | Go | go.dev, `GOTOOLCHAIN=auto` | `go.mod` |
 | Java | Temurin JDK, Maven, Gradle | `.java-version`, `.sdkmanrc` |
 | Ruby | RubyInstaller, gems | `.ruby-version` |
 | PHP | PHP with common extensions, Composer | `.php-version` |
 | Deno, Bun | single binaries | |
+| PowerShell 7 | portable `pwsh` (`powershell` stays 5.1), a Windows Terminal profile | `#Requires -Version 7` or `pwsh ...` in a `.ps1` |
+| CLI tools | `gh` (only with git access `full`), `zstd`, `openssl` | `.github/` for gh |
 | VS Code | portable, `code .`; settings and extensions are kept | |
-| Mesa 3D (opt-in) | software OpenGL 4.5 for games and apps without a GPU | |
+| Mesa 3D (opt-in) | software OpenGL 4.5, and with `mesa.vulkan` software Vulkan 1.4 (lavapipe) | |
 
 Global packages per ecosystem can be listed in the config (`npm`, `uv tool`, `go install`, `gem`, `cargo install`,
 `dotnet tool`, rustup components). Installs that persist on their own: `npm i -g`, `pip`, `cargo install`,
 `dotnet tool -g`, `uv tool`, `go install`, `gem install`. Real installers (MSI, winget) need a hook script.
+
+### MSVC
+
+Microsoft's compiler is installed without its installer, from the same packages Visual Studio uses (each one checked
+against Microsoft's SHA-256). It takes about two minutes the first time and is reused afterwards. Using it is governed
+by the [Visual Studio licence terms](https://visualstudio.microsoft.com/license-terms/), so it is only installed with
+`toolchains.msvc.acceptLicense: true`. `msvcVersion` and `sdkVersion` pin versions (default: the newest).
+
+### Rust builds
+
+`rust.targetDir` keeps the sandbox's builds apart from your PC's: `"separate"` (default) builds into
+`target\sandbox`, `"shared"` uses cargo's normal `target`, `"local"` uses the sandbox's own disk (fast, lost on close).
+sccache keeps its cache in `C:\AgentData\cache\sccache` unless the project sets `SCCACHE_DIR`.
+
+### Graphics
+
+| | |
+|---|---|
+| `sandbox.vGpu: true` | the PC's GPU through Direct3D 12 (`WGPU_BACKEND=dx12`) |
+| `mesa.enabled` | OpenGL 4.5 on the CPU: copy `opengl32.dll` + `libgallium_wgl.dll` from `%MESA_DIR%` next to the program |
+| `mesa.vulkan` | Vulkan 1.4 on the CPU, for every program (`WGPU_BACKEND=vulkan`); `vulkaninfo` is on PATH |
 
 ### Mapped folders
 

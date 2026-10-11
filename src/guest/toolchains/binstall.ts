@@ -1,0 +1,49 @@
+// toolchains.rust.crates with prebuilt binaries: cargo-binstall (from its own GitHub release) fetches a crate's
+// published Windows build in seconds; only crates without one are compiled with `cargo install --locked`.
+import fs from 'node:fs';
+import path from 'node:path';
+import type { SpawnOptions } from 'node:child_process';
+import { githubAsset, installArchive } from '../../shared/download.js';
+import { errMsg, execAsync, exists, log, warn } from '../env.js';
+import { binstallAsset } from './catalogue.js';
+import { arch, tool } from './common.js';
+
+/**
+ * cargo-binstall.exe into CARGO_HOME\bin (so `cargo binstall` works for the agent too). Downloaded into its own
+ * tools\cargo-binstall folder first: installArchive replaces its destination, which must never be cargo's bin.
+ */
+const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
+  const target = path.join(cargoBin, 'cargo-binstall.exe');
+  if (exists(target)) return true;
+  try {
+    const dir = tool('cargo-binstall');
+    if (!exists(path.join(dir, 'cargo-binstall.exe'))) {
+      const asset = await githubAsset('cargo-bins/cargo-binstall', binstallAsset(arch));
+      log('Downloading ' + asset.name + ' (prebuilt Rust tools) ...');
+      await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'cargo-binstall.exe', fileName: asset.name });
+    }
+    fs.copyFileSync(path.join(dir, 'cargo-binstall.exe'), target);
+    return true;
+  } catch (e) { warn('cargo-binstall unavailable, compiling crates with cargo install instead: ' + errMsg(e)); return false; }
+};
+
+/**
+ * Returns the installer for one crate: `cargo binstall` (prebuilt only: its own compile fallback is off, so a crate
+ * without a Windows build is compiled by our `cargo install` with the linker settings in `cargoEnv`), then
+ * `cargo install --locked`. cargo-binstall is fetched on first use, so boots with every crate installed download nothing.
+ */
+export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((crate: string) => Promise<void>) => {
+  const cargo = path.join(cargoHome, 'bin', 'cargo.exe');
+  let binstall: Promise<boolean> | null = null;
+  // quick-install's install statistics are opt-out; the sandbox opts out.
+  const binstallEnv: SpawnOptions = { ...cargoEnv, env: { ...(cargoEnv.env ?? process.env), BINSTALL_DISABLE_TELEMETRY: 'true' } };
+  return async (crate) => {
+    binstall ??= ensureBinstall(path.join(cargoHome, 'bin'));
+    if (await binstall) {
+      try { await execAsync(cargo, ['binstall', '--no-confirm', '--locked', '--disable-strategies', 'compile', crate], binstallEnv); return; } catch (e) {
+        log('No prebuilt ' + crate + ' for Windows (' + errMsg(e) + '); compiling it with cargo install ...');
+      }
+    }
+    await execAsync(cargo, ['install', '--locked', crate], cargoEnv);
+  };
+};

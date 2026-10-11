@@ -4,15 +4,29 @@ import { githubAsset, installArchive } from '../../shared/download.js';
 import { dryRun, exists, localDir, log } from '../env.js';
 import { arch, tool, versionOf, type ToolEnv } from './common.js';
 
-const setupSingleExe = async (env: ToolEnv, name: string, repo: string, pattern: RegExp, exeName: string, dir: string): Promise<void> => {
+export interface SingleExeOptions {
+  /** Download again even when installed (provisioning.refresh). */
+  refresh?: boolean;
+  /** Keep the whole archive and put this folder inside it on PATH (default: keep only the folder holding the exe). */
+  subdir?: string;
+  versionArgs?: string[];
+  /** Appended to the summary line, e.g. " (PowerShell 7)". */
+  note?: string;
+}
+
+/** A tool from one GitHub release archive, into `dir` (atomically), on PATH. */
+export const setupSingleExe = async (env: ToolEnv, name: string, repo: string, pattern: RegExp, exeName: string, dir: string, options: SingleExeOptions = {}): Promise<void> => {
   if (dryRun) { log('(dry run) would provision ' + name); return; }
-  if (!exists(path.join(dir, exeName))) {
+  const bin = options.subdir ? path.join(dir, options.subdir) : dir;
+  const exe = path.join(bin, exeName);
+  if (!exists(exe) || options.refresh) {
     const asset = await githubAsset(repo, pattern);
     log('Downloading ' + asset.name + ' ...');
-    await installArchive(asset.url, dir, { sha256: asset.sha256, locate: exeName, fileName: asset.name });
+    await installArchive(asset.url, dir, { sha256: asset.sha256, fileName: asset.name, ...(options.subdir ? {} : { locate: exeName }) });
   }
-  env.prepend.push(dir);
-  env.summary.push(name + ': ' + versionOf(path.join(dir, exeName)));
+  if (!exists(exe)) throw new Error(exeName + ' missing after installing ' + name);
+  env.prepend.push(bin);
+  env.summary.push(name + ': ' + versionOf(exe, options.versionArgs) + (options.note ?? ''));
 };
 
 export const setupBun = async (env: ToolEnv): Promise<void> => {

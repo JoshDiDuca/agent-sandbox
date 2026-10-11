@@ -6,12 +6,14 @@ import type { Config, GenerateOptions, Generated, GuestSession, ProfileResult, R
 import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
 import { assertSafeMapping } from '../core/workspace.js';
+import { isValidGuestPath, MIRROR_ROOT, sandboxFolder, substDrives } from '../shared/guest-paths.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
-import { pcLanguages, planDatabases, projectEntries } from './project-scan.js';
+import { msvcHint, pcLanguages, planDatabases, projectEntries } from './project-scan.js';
+import { readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
 import { dirExists, ensureDir, fail, fileExists, homeDir, writeJson, xmlEscape } from '../core/util.js';
 
-export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools' } as const;
+export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools', mirror: MIRROR_ROOT } as const;
 const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'];
 const toggle = (value: boolean): string => (value ? 'Enable' : 'Disable');
 
@@ -25,7 +27,8 @@ export const resolveMemoryMb = (sandbox: Config['sandbox'], freeMemoryBytes = os
 
 export const buildWsb = (config: Config, memoryMb: number, mappings: ResolvedMapping[]): string => {
   const s = config.sandbox;
-  const folders = mappings.map((m) => '<MappedFolder><HostFolder>' + xmlEscape(m.host) + '</HostFolder><SandboxFolder>' + xmlEscape(m.guest) + '</SandboxFolder><ReadOnly>' + String(m.readOnly) + '</ReadOnly></MappedFolder>').join('');
+  // Guest paths on other drive letters (F:\x) really live under C:\Mirror\F; bootstrap.ps1 substs F: onto it at boot.
+  const folders = mappings.map((m) => '<MappedFolder><HostFolder>' + xmlEscape(m.host) + '</HostFolder><SandboxFolder>' + xmlEscape(sandboxFolder(m.guest)) + '</SandboxFolder><ReadOnly>' + String(m.readOnly) + '</ReadOnly></MappedFolder>').join('');
   return '<Configuration>'
     + '<MemoryInMB>' + memoryMb + '</MemoryInMB>'
     + '<vGPU>' + toggle(s.vGpu) + '</vGPU>'
@@ -42,6 +45,7 @@ export const buildWsb = (config: Config, memoryMb: number, mappings: ResolvedMap
 
 const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
+  assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
     { host: dataPath, guest: GUEST.data, readOnly: false },
@@ -49,6 +53,7 @@ const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMappin
   ];
   for (const m of config.mappings) {
     const host = m.host;
+    assertGuestPath(m.guest, 'mappings[].guest for ' + host);
     if (!dirExists(host)) {
       if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
       fail('A mapped folder does not exist: ' + host, 'Create it, fix the path in your config, or mark the mapping "optional": true.');
@@ -62,7 +67,14 @@ const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMappin
   if (probe.gitDir) mappings.push({ host: probe.gitDir, guest: GUEST.hostTools + '\\git', readOnly: true });
   if (probe.nvmDir) mappings.push({ host: probe.nvmDir, guest: GUEST.hostTools + '\\nvm', readOnly: true });
   assertNoGuestOverlap(mappings);
+  // Same check on where the folders really are (F:\x and C:\Mirror\F\x are one place).
+  assertNoGuestOverlap(mappings.map((m) => ({ guest: sandboxFolder(m.guest) })));
   return mappings;
+};
+
+/** The schema checks this already; the host re-checks what goes into the .wsb and the subst list anyway. */
+const assertGuestPath = (guest: string, what: string): void => {
+  if (!isValidGuestPath(guest)) fail(what + ' is not a usable sandbox folder: ' + guest, 'Use a folder under C:\\ (not Windows, Program Files, Users, AgentData, Mirror, ...) or on drive D: to Z:, e.g. C:\\Assets or F:\\SteamLibrary\\steamapps\\common\\Game.');
 };
 
 /** Package hooks first, then ~/.agent-sandbox/hooks (same file name = user's wins), then --script / "scripts". */
@@ -126,7 +138,9 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
-  const toolchainDecisions = decideToolchains(config.toolchains, projectEntries(workspaceHost), o.pcLanguages ?? pcLanguages());
+  const msvcScript = config.toolchains.msvc.enabled === 'auto' ? msvcHint(workspaceHost) : undefined;
+  const pwshScript = config.toolchains.pwsh.enabled === 'auto' ? usesPwsh(readPwshScripts(workspaceHost)) : null;
+  const toolchainDecisions = decideToolchains(config.toolchains, projectEntries(workspaceHost), o.pcLanguages ?? pcLanguages(), { ...(msvcScript ? { msvc: msvcScript } : {}), ...(pwshScript ? { pwsh: pwshScript } : {}) });
 
   const session: GuestSession = {
     launchId,
@@ -150,6 +164,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     hostTools: { node: Boolean(o.probe.nodeDir), nodeVersion: o.probe.nodeDir || o.probe.nvmNode ? o.probe.hostNodeVersion.replace(/^v/, '') : null, harnessExecutable: o.probe.harnessExe?.file ?? null, git: Boolean(o.probe.gitDir), nvm: Boolean(o.probe.nvmDir), volta: Boolean(o.probe.volta), pyenv: Boolean(o.probe.pyenv) },
     claudeProfile: { overwrite: config.claudeProfile.overwrite, items: profile.staged, credentials: profile.credentials, hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile), syncClaudeMem: config.claudeProfile.syncClaudeMem },
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
+    substDrives: substDrives(mappings.map((m) => m.guest)),
   };
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);

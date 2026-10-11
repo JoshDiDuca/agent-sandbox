@@ -5,6 +5,7 @@ import { configTests } from './config.test.js';
 import { cliTests } from './cli.test.js';
 import { dataTests } from './data.test.js';
 import { detectTests } from './detect.test.js';
+import { mirrorTests } from './mirror.test.js';
 import { createFixtures } from './fixtures.js';
 import { guestTests } from './guest.test.js';
 import { createHarness } from './harness.js';
@@ -24,6 +25,7 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     await configTests(t, f);
     const launchPath = await guestTests(t, f);
     await syncTests(t, f);
+    await mirrorTests(t, f);
     await securityTests(t, f);
     helperTests(t);
     detectTests(t);

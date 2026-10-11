@@ -55,10 +55,17 @@
     "rust": {
       "enabled": "auto",
       "toolchain": "stable",
-      "host": "x86_64-pc-windows-gnu",
+      "host": "auto",
       "components": [],
       "targets": [],
-      "crates": []
+      "crates": [],
+      "targetDir": "separate"
+    },
+    "msvc": {
+      "enabled": "auto",
+      "acceptLicense": false,
+      "msvcVersion": "latest",
+      "sdkVersion": "latest"
     },
     "cpp": {
       "enabled": "auto",
@@ -101,6 +108,14 @@
     "deno": {
       "enabled": "auto"
     },
+    "pwsh": {
+      "enabled": "auto"
+    },
+    "cli": {
+      "gh": "auto",
+      "zstd": false,
+      "openssl": "auto"
+    },
     "bun": {
       "enabled": true
     },
@@ -111,7 +126,8 @@
       "enabled": false
     },
     "mesa": {
-      "enabled": false
+      "enabled": false,
+      "vulkan": false
     },
     "vscode": {
       "enabled": true

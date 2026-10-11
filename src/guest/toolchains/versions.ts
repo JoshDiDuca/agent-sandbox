@@ -66,3 +66,25 @@ export const projectUses = (entries: readonly string[], markers: readonly string
   const name = entry.split(/[\/]/).pop()!.toLowerCase();
   return markers.some((m) => (m.startsWith('*.') ? name.endsWith(m.slice(1).toLowerCase()) : name === m.toLowerCase()));
 });
+
+/** Newest MSVC tools version among VS manifest package ids ("microsoft.vc.14.44.17.14.tools.hostx64.targetx64.base"). */
+export const pickMsvcVersion = (packageIds: string[], spec = 'latest'): string | null => {
+  const versions = packageIds.map((id) => /^microsoft\.vc\.(\d+\.\d+\.\d+\.\d+)\.tools\.hostx64\.targetx64\.base$/i.exec(id)?.[1]).filter((v): v is string => Boolean(v));
+  const sorted = [...new Set(versions)].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  return (spec === 'latest' ? sorted[0] : sorted.find((v) => v === spec || v.startsWith(spec + '.'))) ?? null;
+};
+
+/** Newest Windows SDK build among component ids ("microsoft.visualstudio.component.windows11sdk.26100"). */
+export const pickWindowsSdk = (packageIds: string[], spec = 'latest'): { build: string; componentId: string } | null => {
+  const found = packageIds.map((id) => ({ id, build: /^microsoft\.visualstudio\.component\.windows1[01]sdk\.(\d+)$/i.exec(id)?.[1] })).filter((x): x is { id: string; build: string } => Boolean(x.build));
+  const sorted = found.sort((a, b) => Number(b.build) - Number(a.build));
+  const hit = spec === 'latest' ? sorted[0] : sorted.find((x) => x.build === spec.replace(/^10\.0\./, '').split('.')[0]);
+  return hit ? { build: hit.build, componentId: hit.id } : null;
+};
+
+/** The .cab files an SDK .msi refers to (their names are inside the msi as plain "<32 hex>.cab"). */
+export const msiCabs = (msi: Buffer): string[] => [...new Set([...msi.toString('latin1').matchAll(/([0-9a-f]{32}\.cab)/gi)].map((m) => m[1].toLowerCase()))];
+
+/** The oldest CMake many projects (OpenMoHAA among them) accept. */
+export const CMAKE_FLOOR = '3.25';
+export const cmakeTooOld = (version: string): boolean => /^\d+\.\d+/.test(version) && version.localeCompare(CMAKE_FLOOR, undefined, { numeric: true }) < 0;

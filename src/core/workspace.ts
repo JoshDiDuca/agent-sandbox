@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import { z } from 'zod';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
 import { userDir } from './config.js';
+import { planMirrorWorkspace } from '../shared/guest-paths.js';
 import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { dirExists, expandPath, fail, fileExists, isInsideOrEqual, isRootPath, isUserProfile } from './util.js';
 
@@ -124,6 +125,11 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
   }
   if (req.headless !== undefined) config = { ...config, sandbox: { ...config.sandbox, headless: req.headless } };
   if (config.guestWorkspace === 'auto') config = { ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) };
+  else if (config.guestWorkspace === 'mirror') {
+    const plan = planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));
+    if (plan.note) notes.push(plan.note);
+    config = { ...config, guestWorkspace: plan.guest };
+  }
 
   scripts.push(...req.scripts.map((s: string) => path.resolve(s)));
   const harnessName = req.noAgent ? 'none' : (req.harness ?? config.defaultHarness);

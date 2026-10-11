@@ -47,7 +47,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 |  |  |
 |---|---|
 | **Safe by default** | The agent sees only your project folder. Credentials are stripped before anything is copied in, your LAN is blocked, and nothing the sandbox writes can run on your PC. |
-| **Languages** | Node, Python, Rust, C/C++, .NET (incl. .NET Framework targeting), Go, Java, Ruby, PHP, Deno, Bun, with pnpm, yarn, Volta, uv, pyenv, Maven, Gradle, Composer ... |
+| **Languages** | Node, Python, Rust, C/C++ (GCC or MSVC), .NET (incl. .NET Framework targeting), Go, Java, Ruby, PHP, Deno, Bun, PowerShell 7, with pnpm, yarn, Volta, uv, pyenv, Maven, Gradle, Composer, gh ... |
 | **Databases** | PostgreSQL, MySQL, MongoDB, Redis and DynamoDB Local with a web UI, started only when the project uses them |
 | **Agents** | Claude Code, Codex, Gemini, opencode, Qwen, Crush, Copilot, Kilo, Amp, Cline, Continue, Kimi, Aider, DeepSeek agents |
 | **Smart** | Detects what the project needs from its files, respects version files, installs in parallel and reuses everything |

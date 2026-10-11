@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { projectFolderName, translatePaths } from '../shared/paths.js';
+import { guestWorkspaceAliases, projectFolderName, translatePaths } from '../shared/paths.js';
 import { dirExists, ensureDir, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../core/util.js';
 
 export { projectFolderName, translatePaths };
@@ -100,13 +100,15 @@ export const syncHistoryIn = (p: SyncPaths): number => {
 /** Copies new sandbox history back to this PC (safe while the sandbox runs: transcripts are append-only). */
 export const syncHistoryOut = (p: SyncPaths): number => {
   const hostProject = projectFolderName(p.hostWorkspace);
-  const guestProject = projectFolderName(p.guestWorkspace);
-  const transform = (t: string): string => translatePaths(t, p.guestWorkspace, p.hostWorkspace);
-  const guestProjects = path.join(p.guestClaudeDir, 'projects');
-  const names = dirExists(guestProjects) && !isLink(guestProjects) ? fs.readdirSync(guestProjects) : [];
-  const projects = _.sumBy(names, (name) => name === guestProject
-    ? copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: transcript, skipDirs: NO_MEMORY, transform })
-    : copyNewer(path.join(guestProjects, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
+  // A mirrored workspace on F: really lives at C:\Mirror\F\...; tools that resolve real paths record that one.
+  const guestNames = guestWorkspaceAliases(p.guestWorkspace);
+  const guestProjects = new Set(guestNames.map(projectFolderName));
+  const transform = (t: string): string => guestNames.reduce((out, guest) => translatePaths(out, guest, p.hostWorkspace), t);
+  const guestProjectsDir = path.join(p.guestClaudeDir, 'projects');
+  const names = dirExists(guestProjectsDir) && !isLink(guestProjectsDir) ? fs.readdirSync(guestProjectsDir) : [];
+  const projects = _.sumBy(names, (name) => guestProjects.has(name)
+    ? copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: transcript, skipDirs: NO_MEMORY, transform })
+    : copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
   // Only to-do lists come back besides transcripts; plans and file backups stay in the sandbox.
   const sessions = copyNewer(path.join(p.guestClaudeDir, 'todos'), path.join(p.hostClaudeDir, 'todos'), { accept: json });
 

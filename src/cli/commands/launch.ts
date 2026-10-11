@@ -73,7 +73,7 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const { config } = run;
   const account = options.account ?? defaultAccount(storageRoot);
   if (account && run.harnessName === 'claude' && account !== activeAccount(dataPath)) activateAccount(storageRoot, dataPath, account);
-  const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh) : { exe: null, message: 'disabled' };
+  const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh, { pwsh: config.toolchains.pwsh.enabled !== false }) : { exe: null, message: 'disabled' };
   const history = syncSummary(config, dataPath, run.workspaceHost);
   const guarded = checkRepo(dataPath);
   if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).\x1b[0m');

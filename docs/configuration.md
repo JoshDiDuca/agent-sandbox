@@ -32,8 +32,12 @@ Commonly changed:
 |---|---|---|
 | `storage.root` | `%LOCALAPPDATA%\AgentSandbox` | everything on your PC |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
-| `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside |
-| `mappings` | none | more folders from your PC, read-only or read/write |
+| `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`) |
+| `mappings` | none | more folders from your PC, read-only or read/write; `guest` may be on D: to Z: (e.g. `F:\SteamLibrary\...`) |
+
+Windows Sandbox can only map onto C:, so a guest path on F: is mapped to `C:\Mirror\F\...` and `subst F: C:\Mirror\F` runs at
+boot. Tools that resolve real paths may print the `C:\Mirror` form; history sync understands both. A letter that already
+exists in the sandbox is left alone.
 
 Under `storage.root`: `data\<name>` (tools, databases, logins, logs), `launches\` (one per start; cleaned after 7
 days), `accounts\`, `sync\`.

@@ -47,9 +47,11 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/.
 
 ## Gotchas
 - Mapped folders (this repo, `C:\AgentData`) refuse symlinks/junctions and rename-over: never `sed -i` here (it
-  leaves `sedXXXXXX` files), use the Edit tool.
+  leaves `sedXXXXXX` files), use the Edit tool. Moving a folder from the local disk into one fails silently, so tools
+  that unpack to %TEMP% and move (nvm) get a TEMP inside the target. Git Bash `rm -rf` can also fail silently there.
+- Never read, set or override HOME/USERPROFILE (or `$home` in PowerShell) in scripts or tests: use explicit paths.
 - Host Node can be 22.0.0 (CI tests it): no APIs or dependencies that need newer (commander 14, @inquirer/prompts 7).
 - SQL Server LocalDB cannot start inside Windows Sandbox; Docker cannot run there (no nested virtualization).
 - Handled in code, keep it that way: postgres via `pg_ctl` (postgres.exe refuses admin), Volta's shims are copies of
   `volta-shim.exe`, pnpm hoisted and Bun's cache on local disk (no symlinks on mapped folders), GitHub page fallback
-  for the API rate limit, the self-test runs with its own HOME/USERPROFILE, `.gitattributes` fixes line endings.
+  for the API rate limit, nvm's TEMP on the data disk, `.gitattributes` fixes line endings.

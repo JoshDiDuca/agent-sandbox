@@ -4,7 +4,7 @@ import type { ToolEnv } from '../toolchains/index.js';
 import { claudeDir, dataDir, dryRun, errMsg, isWin, testMode, mkdirp, powershell, session, stateDir, toolsDir, warn, workspace } from '../env.js';
 
 /** Variables agent-sandbox itself sets (besides the toolchains' own). */
-const AGENT_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'npm_config_cache', 'npm_config_update_notifier', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT'];
+const AGENT_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'npm_config_cache', 'npm_config_update_notifier', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT', 'AGENT_SANDBOX', 'AGENT_SANDBOX_WORKSPACE'];
 
 export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = {
@@ -19,6 +19,9 @@ export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>): N
     AGENT_DATA: dataDir,
     AGENT_TOOLS: toolsDir,
     AGENT_PROJECT: session.project,
+    // For project scripts: "am I in the sandbox, and where is the project?" (stable names; documented).
+    AGENT_SANDBOX: '1',
+    AGENT_SANDBOX_WORKSPACE: workspace,
   };
   for (const dir of [env.CLAUDE_CONFIG_DIR, env.CODEX_HOME, env.GEMINI_CLI_HOME, env.npm_config_cache]) mkdirp(dir as string);
   // The runner's own Node (bootstrap.ps1 puts it first on PATH) is not exposed: `node` is whatever nvm selected.
