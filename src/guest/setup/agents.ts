@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Harness } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
+import { uvVars } from '../toolchains/runtimes.js';
 import { dryRun, exec, exists, hostToolsDir, isWin, log, mkdirp, session, toolsDir, warn } from '../env.js';
 
 const harnessPaths = (name: string, harness: Harness) => {
@@ -28,7 +29,7 @@ const installViaUv = (name: string, harness: Harness, dir: string, env: NodeJS.P
   log('Installing ' + harness.uvPackage + ' with uv (this can take a minute)...');
   if (dryRun) { log('(dry run) uv tool install ' + harness.uvPackage); return; }
   if (!exists(uv)) throw new Error(name + ' is installed with uv; enable toolchains.uv');
-  exec(uv, ['tool', 'install', '--force', '--python', '3.12', harness.uvPackage!], { env: { ...env, UV_TOOL_BIN_DIR: dir, UV_TOOL_DIR: path.join(toolsDir, 'uv-tools'), UV_PYTHON_INSTALL_DIR: path.join(toolsDir, 'uv-python'), UV_CACHE_DIR: path.join(toolsDir, 'uv-cache') } });
+  exec(uv, ['tool', 'install', '--force', '--python', '3.12', harness.uvPackage!], { env: { ...env, ...uvVars(), UV_TOOL_BIN_DIR: dir } });
 };
 
 /** Copies the agent from this PC when it was mapped in (primary agent only), otherwise installs it with npm or uv. */

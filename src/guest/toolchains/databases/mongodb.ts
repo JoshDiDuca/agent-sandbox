@@ -1,9 +1,9 @@
 // MongoDB Community, with mongosh.
 import path from 'node:path';
 import type { DatabasePlan } from '../../../core/types.js';
-import { fetchJson, githubAsset, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download.js';
 import { exists, log, mkdirp } from '../../env.js';
-import { resolveCached, tool, type ToolEnv } from '../common.js';
+import { installFromGithub, resolveCached, tool, type ToolEnv } from '../common.js';
 import { clearStaleLocks, dataFor, startServer } from './server.js';
 
 interface MongoVersions { versions: { version: string; production_release: boolean; downloads: { target: string; arch: string; edition: string; archive: { url: string; sha256: string } }[] }[] }
@@ -25,9 +25,7 @@ export const setupMongo = async (env: ToolEnv, plan: DatabasePlan): Promise<void
   }
   const shell = tool('mongosh');
   if (!exists(path.join(shell, 'mongosh.exe'))) {
-    const asset = await githubAsset('mongodb-js/mongosh', /^mongosh-[\d.]+-win32-x64\.zip$/);
-    log('Downloading mongosh, the MongoDB shell (~50 MB once) ...');
-    await installArchive(asset.url, shell, { sha256: asset.sha256, locate: 'mongosh.exe', fileName: asset.name });
+    await installFromGithub('mongodb-js/mongosh', /^mongosh-[\d.]+-win32-x64\.zip$/, { dest: shell, what: 'mongosh, the MongoDB shell (~50 MB once)', locate: 'mongosh.exe' });
   }
   const data = mkdirp(dataFor('mongodb'));
   await clearStaleLocks(data, ['mongod.lock'], plan.port);

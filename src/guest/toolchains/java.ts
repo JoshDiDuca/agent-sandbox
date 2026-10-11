@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { fetchJson, fetchText, installArchive } from '../../shared/download.js';
 import { dryRun, errMsg, exists, log, warn } from '../env.js';
-import { arch, resolveCached, tool, versionFromFiles, type ToolEnv } from './common.js';
+import { arch, emptyEnv, resolveCached, tool, versionFromFiles, type ToolEnv } from './common.js';
 import { javaMajorFrom, pickPackageVersion } from './versions.js';
 
 interface TemurinAsset { release_name: string; binary: { package: { link: string; name: string; checksum: string } } }
@@ -50,7 +50,7 @@ export const ensureJdk = async (): Promise<string> => {
   const root = tool('java');
   const installed = exists(root) ? fs.readdirSync(root).filter((d) => exists(path.join(root, d, 'bin', 'java.exe'))).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) : [];
   if (installed.length) return path.join(root, installed[0]);
-  const scratch: ToolEnv = { vars: {}, prepend: [], append: [], summary: [] };
+  const scratch = emptyEnv();
   await setupJdk(scratch, { enabled: true, version: 'lts', maven: false, gradle: false });
   return scratch.vars.JAVA_HOME;
 };

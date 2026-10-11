@@ -1,26 +1,13 @@
 // What every database module shares: where data lives, starting a server detached, and safe first-time creation.
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { safeRemove } from '../../../shared/safe-remove.js';
 import { dataDir, exists, logsDir, mkdirp } from '../../env.js';
+import { portOpen, waitForPort } from '../../ports.js';
 
 /** C:\AgentData\databases\<name>: the data survives the sandbox. */
 export const dataFor = (name: string): string => path.join(dataDir, 'databases', name);
-
-export const portOpen = (port: number): Promise<boolean> => new Promise((resolve) => {
-  const socket = net.connect({ host: '127.0.0.1', port }, () => { socket.destroy(); resolve(true); });
-  socket.once('error', () => resolve(false));
-});
-
-export const waitForPort = async (port: number, seconds: number): Promise<boolean> => {
-  for (const end = Date.now() + seconds * 1000; Date.now() < end;) {
-    if (await portOpen(port)) return true;
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  return false;
-};
 
 /** Starts a server detached (it outlives the boot script) with its output in logs\<name>.log, and waits for its port. */
 export const startServer = async (name: string, exe: string, args: string[], port: number): Promise<void> => {

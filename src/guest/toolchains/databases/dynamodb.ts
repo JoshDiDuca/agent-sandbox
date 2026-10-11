@@ -7,7 +7,8 @@ import { fetchText, installArchive } from '../../../shared/download.js';
 import { execAsync, exists, log, logsDir, mkdirp } from '../../env.js';
 import { ensureJdk } from '../java.js';
 import { tool, type ToolEnv } from '../common.js';
-import { dataFor, portOpen, startServer, waitForPort } from './server.js';
+import { portOpen, waitForPort } from '../../ports.js';
+import { dataFor, startServer } from './server.js';
 
 const DYNAMO_ZIP = 'https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_latest.zip';
 

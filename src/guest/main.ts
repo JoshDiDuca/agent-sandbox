@@ -12,7 +12,8 @@ import { runHooks } from './setup/hooks.js';
 import { applyNetworkPolicy, type LanState } from './setup/network.js';
 import { writeManagedSettings } from './setup/policy.js';
 import { applyPersonalization, setupGitConfig } from './setup/user.js';
-import { ensurePtyHost, pruneToolLeftovers } from './ptyhost.js';
+import { ensurePtyHost } from './ptyhost.js';
+import { pruneToolLeftovers } from './toolchains/leftovers.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
 import { dataDir, dryRun, errMsg, isWin, localDir, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
@@ -61,7 +62,9 @@ const main = async (): Promise<void> => {
 
   const gitAccess = session.provisioning.git.access ?? 'full';
   step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
-  const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [] });
+  const tools = await setupToolchains(session.toolchains, session.versions, {
+    gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [],
+  });
   if (!dryRun) tools.prepend.push(writeDbCommand());
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
