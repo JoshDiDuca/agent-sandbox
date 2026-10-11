@@ -31,10 +31,13 @@ export const applyPersonalization = (): void => {
  * differs in the sandbox). Uses the real git.exe directly: the read-only guard would rightly refuse `config --add`.
  */
 export const setupGitConfig = (env: NodeJS.ProcessEnv): void => {
+  // A dry run (the self-test) must not touch the real ~/.gitconfig: it once replaced the sandbox's own, safe.directory
+  // included, so git refused the workspace until the next boot.
+  if (dryRun) return;
   const source = path.join(launchDir, 'home', '.gitconfig');
   if (exists(source)) fs.copyFileSync(source, path.join(os.homedir(), '.gitconfig'));
   const git = path.join(toolsDir, 'git', 'cmd', 'git.exe');
-  if (dryRun || !exists(git)) return;
+  if (!exists(git)) return;
   const { GIT_DIR: _gitDir, ...rest } = env;
   spawnSync(git, ['config', '--global', '--add', 'safe.directory', '*'], { env: rest, windowsHide: true, stdio: 'ignore' });
 };

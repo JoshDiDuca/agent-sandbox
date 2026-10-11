@@ -36,7 +36,8 @@ export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
 export const freePort = (): Promise<number> => new Promise((resolve, reject) => {
   const server = net.createServer();
   server.once('error', reject);
-  server.listen(0, '0.0.0.0', () => { const { port } = server.address() as net.AddressInfo; server.close(() => resolve(port)); });
+  // Loopback: finding a port must not count as "node listens on the network" (that is what raises firewall prompts).
+  server.listen(0, '127.0.0.1', () => { const { port } = server.address() as net.AddressInfo; server.close(() => resolve(port)); });
 });
 
 const portOpen = (port: number): Promise<boolean> => new Promise((resolve) => {
