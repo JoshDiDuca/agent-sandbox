@@ -13,9 +13,7 @@ import { setupMongo } from './mongodb.js';
 import { setupMysql } from './mysql.js';
 import { postgresData, setupPostgres } from './postgres.js';
 import { setupRedis } from './redis.js';
-import { portOpen } from './server.js';
-
-export { portOpen } from './server.js';
+import { portOpen } from '../../ports.js';
 
 const SETUP = { postgres: setupPostgres, mysql: setupMysql, mongodb: setupMongo, redis: setupRedis, dynamodb: setupDynamo } as const;
 

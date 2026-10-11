@@ -4,7 +4,8 @@ import type { DatabasePlan } from '../../../core/types.js';
 import { fetchJson, installArchive } from '../../../shared/download.js';
 import { execAsync, exists, log, logsDir } from '../../env.js';
 import { resolveCached, tool, type ToolEnv } from '../common.js';
-import { clearStaleLocks, createOnce, dataFor, portOpen } from './server.js';
+import { portOpen } from '../../ports.js';
+import { clearStaleLocks, createOnce, dataFor } from './server.js';
 
 interface PgVersion { major: string; latestMinor: string; supported: boolean; current: boolean }
 

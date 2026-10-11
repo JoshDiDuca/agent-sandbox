@@ -1,6 +1,7 @@
 // `sbx-db`: list, start and stop the sandbox's databases from a terminal inside it (`sandbox db` on the PC runs it too).
 // Usage: sbx-db [list] | sbx-db start <name> | sbx-db stop <name>
-import { DATABASE_NAMES, portOpen, setupDatabase, stopDatabase } from './toolchains/databases/index.js';
+import { portOpen } from './ports.js';
+import { DATABASE_NAMES, setupDatabase, stopDatabase } from './toolchains/databases/index.js';
 import { emptyEnv } from './toolchains/common.js';
 import { addMachineEnvironment } from './setup/environment.js';
 import { errMsg, session } from './env.js';

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { errMsg, mkdirp, warn } from '../../../env.js';
-import { ensureCompiled } from '../../../ptyhost.js';
+import { ensureCompiled } from '../../../helpers.js';
 import { hostBin, ROOT } from './tree.js';
 
 /** Where build tools look for vswhere (local to the sandbox, so it is written each boot). */
