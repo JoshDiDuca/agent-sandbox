@@ -27,9 +27,12 @@ export const ArgSpec = z.strictObject({
   required: z.boolean(),
   variadic: z.boolean().optional(),
   choices: Choices.optional(),
-  /** Only asked in the menu when the command's first argument has this value (data clean: targets). */
-  when: z.string().optional(),
+  /** Only asked in the menu when the command's first argument has this value, or one of these (data clean: targets). */
+  when: z.union([z.string(), z.array(z.string())]).optional(),
 });
+
+/** Is an argument or option with this `when` asked, given the first argument's answer? */
+export const askedWhen = (when: string | string[] | undefined, first: string): boolean => when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
 
 export const Group = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
 
@@ -66,9 +69,11 @@ const SANDBOX_OPTIONS: OptionSpecT[] = [
   bool('--window', 'show the sandbox window even if config says headless', { advanced: true }),
   bool('--trust-config', 'approve the folder\'s .sandbox-config.json without asking', { advanced: true }),
   bool('--no-local-config', 'ignore the folder\'s .sandbox-config.json', { advanced: true }),
+  bool('--yes', 'when this folder is not in the running sandbox and adding it needs a restart, restart without asking', { noMenu: true }),
 ];
 const AGENT_OPTIONS: OptionSpecT[] = [
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
+  { flag: '--session', type: 'list', value: 'agent@folder', description: 'start several sessions at once, e.g. --session claude@C:\\code\\api --session codex@C:\\code\\web (repeatable; -t attaches the first)', noMenu: true },
   text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts' }),
   ...SANDBOX_OPTIONS,
   bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true }),
@@ -84,8 +89,17 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'status', summary: 'show what the sandbox is doing', group: 'Sandbox', args: [], options: [], json },
   { name: 'db', summary: 'list, start or stop databases in the running sandbox', group: 'Sandbox', args: [{ name: 'action', description: 'list, start or stop', required: false, choices: ['list', 'start', 'stop'] }, { name: 'name', description: 'postgres, mysql, mongodb, redis or dynamodb', required: false, choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'] }], options: [] },
   { name: 'exec', summary: 'run a command inside the sandbox and print its output', group: 'Sandbox', args: [{ name: 'command', description: 'command and its arguments', required: true, variadic: true }], options: [{ flag: '--timeout', type: 'number', value: 'seconds', description: 'give up after this many seconds', default: 600 }, text('--workspace', 'dir', 'folder (inside the mapped workspace) to run in')], passthrough: 'command', json },
-  { name: 'restart', summary: 'restart running agents in place; they resume their conversation', group: 'Sessions', args: [], options: [text('--harness', 'name', 'only this agent', { choices: 'harnesses' })] },
-  { name: 'stop', summary: 'shut the sandbox down', group: 'Sandbox', args: [], options: [] },
+  { name: 'restart', summary: 'restart this project\'s running agents in place; they resume their conversation', group: 'Sessions', args: [], options: [text('--harness', 'name', 'only this agent', { choices: 'harnesses' }), bool('--all', 'every project\'s sessions, not only this folder\'s')] },
+  { name: 'stop', summary: 'shut the sandbox down (every project\'s sessions end)', group: 'Sandbox', args: [], options: [bool('--yes', 'do not ask when other projects\' sessions would end', { noMenu: true })] },
+  {
+    name: 'projects', summary: 'the projects a sandbox can open without a restart: list, choose, roots, all/exclude', group: 'Sandbox', json,
+    args: [
+      { name: 'action', description: 'list, choose, add, remove, include, exclude, all, roots', required: false, choices: ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'] },
+      { name: 'value', description: 'a folder (add, remove, include, exclude), on/off (all), or list/add/remove (roots)', required: false, when: ['add', 'remove', 'include', 'exclude', 'all', 'roots'] },
+      { name: 'folder', description: '(roots add/remove) the folder', required: false, when: 'roots' },
+    ],
+    options: [],
+  },
   { name: 'show', summary: 'show the sandbox window', group: 'Sandbox', args: [], options: [] },
   { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sandbox', args: [], options: [] },
   { name: 'account', summary: 'Claude logins: list, save, use, set the default, remove', group: 'Accounts', args: [{ name: 'action', description: 'what to do', required: false, choices: ['list', 'save', 'use', 'default', 'remove'] }, { name: 'name', description: 'account name', required: false, choices: 'accounts' }], options: [bool('--from-host', '(save) save this PC\'s login instead of the sandbox\'s', { when: 'save' }), bool('--no-restart', '(use) do not restart running sessions', { when: 'use' })], json },

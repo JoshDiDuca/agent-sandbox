@@ -15,6 +15,9 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   has several parts: `repair/` (`checks.ts` the checks, `finders.ts` pure finders, `types.ts`), `data/` (`collect.ts`
   what is stored, `clean.ts` targets and removal, `remove.ts` link-safe delete), `setup/` (`facts.ts` what the PC has,
   `checks.ts` the checklist). `context.ts` has what commands share (context, `table`, `printJson`, `requireOnPc`).
+  Several projects: `project.ts` is the ONE helper every command uses to find "the project this folder is in"
+  (`locateHere` looks, `joinHere` registers); `restart.ts` the consented restart that adds folders; `projects.ts` the
+  `sandbox projects` command; `user-config.ts` edits your config file; `../menu-multi.ts` "Start several agents".
 - `src/core/`: `schema.ts` re-exports `schema/` (zod, split by area: `common`, `sandbox`, `toolchains`, `databases`,
   `profile`, `harness`, `config` = user config + project overrides, `json-schema`; JSON Schemas in `schemas/` are
   generated from it), `config.ts` (`DEFAULTS`, loading), `local-config.ts` (`.sandbox-config.json`, tighten-only rules,
@@ -26,9 +29,15 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   project), `pc-scan.ts` (what this PC has), `database-plan.ts`, `secrets.ts` (strips credentials from everything copied
   in), `claude-profile.ts`, `channel.ts` (run-folder requests and waiting), `attach.ts` (terminal attach, Hyper-V
   address check), `repo-guard.ts` (quarantines what the sandbox planted), `platform.ts`, `terminal.ts`, `window.ts`,
-  `accounts.ts`, `personalize.ts`, `cleanup.ts`, `test-guard.ts`.
+  `accounts.ts`, `personalize.ts`, `cleanup.ts`, `test-guard.ts`. Several projects: `projects.ts` (host-only registry
+  of the running sandbox's projects + known projects, and `ProjectMapper`: roots, then `wsb share`, else
+  `NeedsRestart`), `join.ts` (resolve + check + register a folder, build its `ProjectSpec`), `launch/projects.ts`
+  (roots and projects mapped at boot), `wsb.ts` (the Windows Sandbox CLI adapter, untested).
 - `src/guest/`: runs in the sandbox (bundled by esbuild into `dist/runtime/*.js`): `main.ts` (boot), `daemon.ts`
-  (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`), `view.ts`, `gitguard.ts`, `db.ts`,
+  (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`, `project` = provisioning a project
+  that joined after boot, per-session env), `project-context.ts` (AsyncLocalStorage: which project a toolchain step
+  is for, and `duringSession()`: never switch machine-wide state then), `boot-env.ts` / `project-env.ts` (the boot's
+  base environment, pure part separate), `project-status.ts`, `view.ts`, `gitguard.ts`, `db.ts`,
   `ports.ts`, `cmdline.ts` (agent command-line quoting), `helpers.ts` (compiles the C# helpers), `ptyhost.ts`,
   `setup/*`, and `toolchains/*`: `index.ts` is the parallel install scheduler, `plan.ts` lists the steps, `common.ts`
   shared helpers (resolveCached, installOnce, installFromGithub, downloadFile, `auto` detection), `versions.ts` (pure
@@ -37,7 +46,8 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   `databases/` (index, server, one file per database).
 - `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts`, `download.ts` (streamed to `.part`,
   hashed; `downloads.requireChecksum`; GitHub page fallback for the API rate limit), `netrules.ts`, `system.ts`,
-  `guest-paths.ts`, `safe-remove.ts`, `test-guard.ts`.
+  `guest-paths.ts`, `projects.ts` (pure: project ids, host <-> guest folders, `C:\Projects`), `safe-remove.ts`,
+  `test-guard.ts`.
 - `src/sync/`: history, claude-mem and the background watcher.
 - `sandbox/`: boot scripts (`logon.cmd`, `trust.cmd`, `bootstrap.ps1`, then `runtime\main.js`) and C# helpers compiled
   in the sandbox by csc: `ptyhost.cs` (ConPTY bridge), `gitshim.cs`, `vswhere.cs`, `openssl.cs`.
@@ -68,6 +78,10 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   `common.ts` for `auto`. Long-running work uses `execAsync` / async downloads so parallel steps keep going. Update docs.
 - New setting or command: schema.ts / manifest.ts first (flags, menu and JSON Schema follow), then docs. The self-test
   checks that `config.example.json` equals `DEFAULTS`.
+- Several projects: the launch folder is the primary workspace; other projects are under `C:\Projects` (roots, boot
+  mapped, wsb shares). Anything that assumed ONE workspace must take the project from `ProjectSpec` / the registry.
+  Toolchain steps read the project folder through `projectWorkspace()`, and with `duringSession()` must not change
+  machine-wide state that running sessions use. Machine-wide protections are never loosened (`core/project-policy.ts`).
 - C# helpers: C# 5 only (the compiler that ships with Windows).
 - Host Node may be 22.0.0 (CI tests it): no APIs or dependencies that need newer (commander 14, @inquirer/prompts 7).
 

@@ -14,6 +14,7 @@ import { setupMysql } from './mysql.js';
 import { postgresData, setupPostgres } from './postgres.js';
 import { setupRedis } from './redis.js';
 import { portOpen } from '../../ports.js';
+import { duringSession } from '../../project-context.js';
 
 const SETUP = { postgres: setupPostgres, mysql: setupMysql, mongodb: setupMongo, redis: setupRedis, dynamodb: setupDynamo } as const;
 
@@ -49,5 +50,7 @@ export const setupDatabase = async (env: ToolEnv, plan: DatabasePlan): Promise<v
     return;
   }
   if (dryRun) { log('(dry run) would run ' + DATABASE_NAMES[plan.database] + ' on port ' + plan.port + ' (' + plan.reasons.join('; ') + ')'); return; }
+  // A project that joined later, while another project's server already listens there: they share it.
+  if (duringSession() && (await portOpen(plan.port))) { env.summary.push(plan.database + ': shared, already running on port ' + plan.port); return; }
   await SETUP[plan.database](env, plan);
 };

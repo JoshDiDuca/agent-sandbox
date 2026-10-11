@@ -27,6 +27,8 @@ export interface RunRequest {
 export interface ResolvedRun {
   config: Config; storageRoot: string; dataPath: string; workspaceHost: string; harnessName: string; scripts: string[];
   localConfigPath: string | null; notes: string[]; versions: ToolVersions;
+  /** Your config asks for guestWorkspace "mirror" (project roots then appear at their PC paths too). */
+  mirror?: boolean;
 }
 
 /** A requested version plus where the request came from (shown to the user). */
@@ -46,10 +48,18 @@ export interface HostProbe {
 export interface DatabasePlan { database: 'postgres' | 'mysql' | 'sqlserver' | 'mongodb' | 'redis' | 'dynamodb'; reasons: string[]; version: string; port: number; adminPort?: number }
 
 /** databases / pcLanguages: use these instead of scanning (tests). */
-export interface GenerateOptions { packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[]; pcLanguages?: import('./detect-toolchains.js').AutoToolchain[] }
+export interface GenerateOptions {
+  packageRoot: string; run: ResolvedRun; harnessArgs: string[]; probe: HostProbe; freeMemoryBytes?: number; databases?: DatabasePlan[]; pcLanguages?: import('./detect-toolchains.js').AutoToolchain[];
+  /** More projects to map (a restart that adds one keeps the ones in use); knownProjects: instead of known-projects.json (tests). */
+  extraProjects?: string[]; knownProjects?: string[];
+  /** false: no agent session at boot. */
+  autoSession?: boolean;
+}
 export interface Generated {
   wsbPath: string; launchPath: string; launchId: string; sessionPath: string; memoryMb: number;
   mappings: ResolvedMapping[]; profile: ProfileResult; databases: DatabasePlan[];
+  /** Project roots and other projects mapped with the launch folder. */
+  projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };
   toolchains: Record<import('./detect-toolchains.js').AutoToolchain, import('./detect-toolchains.js').ToolchainDecision>;
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
@@ -58,6 +68,13 @@ export interface ProfileResult { hostDir: string | null; staged: string[]; skipp
 /** Written by the host to C:\AgentLaunch\session.json (read-only for the guest): everything the guest needs to know. */
 export interface GuestSession {
   launchId: string; project: string; workspace: string; workspaceHost: string;
+  /** The launch folder's project id (file-name safe; status files and sessions use it). Older launch folders lack it. */
+  projectId?: string;
+  /** Where other projects appear (C:\Projects), and the project roots' guest folders. Older launch folders lack them. */
+  projectsDir?: string;
+  roots?: string[];
+  /** false: start no agent session at boot (a restart that adds a project opens its sessions itself). */
+  autoSession?: boolean;
   harnessName: string; harness: Harness | null; harnessArguments: string[];
   persistAgentState: boolean; networking: boolean; headless: boolean;
   network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; databases: DatabasePlan[]; versions: ToolVersions;

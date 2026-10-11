@@ -1,0 +1,21 @@
+// What the boot's provisioning left for projects that join later: the PATH before any toolchain was added, which
+// variables the toolchains set, and what each step contributed. Kept on the sandbox's own disk (lost on close, as it
+// should be). The session daemon builds every later project's environment from it instead of from the boot
+// project's, so project A's Node, Rust target folder or database variables never leak into project B's sessions.
+import fs from 'node:fs';
+import path from 'node:path';
+import { writeJsonAtomic } from '../shared/rundir.js';
+import { localDir } from './env.js';
+import { BootEnv, type BootEnvT } from './project-env.js';
+
+export { baseEnvFor, type BootEnvT } from './project-env.js';
+
+const file = (): string => path.join(localDir, 'boot-env.json');
+
+export const saveBootEnv = (value: BootEnvT): void => {
+  try { writeJsonAtomic(file(), value); } catch { /* projects added later then fall back to the boot environment */ }
+};
+
+export const readBootEnv = (): BootEnvT | null => {
+  try { return BootEnv.safeParse(JSON.parse(fs.readFileSync(file(), 'utf8'))).data ?? null; } catch { return null; }
+};

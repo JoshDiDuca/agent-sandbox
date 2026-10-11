@@ -4,10 +4,11 @@ import type { GenerateOptions, ResolvedMapping } from '../../core/types.js';
 import { assertNoGuestOverlap } from '../../core/config.js';
 import { assertSafeMapping } from '../../core/safe-paths.js';
 import { dirExists, fail } from '../../core/util.js';
+import type { BootProjects } from './projects.js';
 import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
 import { GUEST } from './wsb.js';
 
-export const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMapping[] => {
+export const collectMappings = (o: GenerateOptions, launchPath: string, boot: BootProjects = { roots: [], projects: [], notes: [] }): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   const mappings: ResolvedMapping[] = [
@@ -24,6 +25,11 @@ export const collectMappings = (o: GenerateOptions, launchPath: string): Resolve
     }
     assertSafeMapping(host, o.packageRoot, o.run.storageRoot);
     mappings.push({ host, guest: m.guest, readOnly: m.readOnly });
+  }
+  // Project roots and other projects, so they can join the running sandbox without a restart (launch/projects.ts).
+  for (const m of [...boot.roots, ...boot.projects]) {
+    assertGuestPath(m.guest, 'project folder for ' + m.host);
+    mappings.push({ host: m.host, guest: m.guest, readOnly: false });
   }
   const { probe } = o;
   if (probe.nodeDir) mappings.push({ host: probe.nodeDir, guest: GUEST.hostTools + '\\node', readOnly: true });

@@ -8,6 +8,7 @@ import { safeRemove } from '../../shared/safe-remove.js';
 import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, toolsDir, warn } from '../env.js';
 import { ensureCompiled } from '../helpers.js';
 import { arch, tool, type ToolEnv } from './common.js';
+import { duringSession } from '../project-context.js';
 
 const BLOCKED_HOOKS = ['pre-commit', 'commit-msg', 'pre-merge-commit', 'pre-push', 'pre-rebase', 'pre-applypatch', 'applypatch-msg'];
 const posix = (p: string): string => p.replace(/\\/g, '/');
@@ -30,7 +31,9 @@ const installGuard = (env: ToolEnv, access: Exclude<GitAccess, 'full'>, realGit:
   const dir = mkdirp(tool('gitguard'));
   const guard = path.join(launchDir, 'runtime', 'gitguard.js');
   // A real git.exe (programs like Claude Code only look for .exe); a .cmd only if the C# compiler is unavailable.
-  try { fs.copyFileSync(ensureCompiled('gitshim'), path.join(dir, 'git.exe')); fs.rmSync(path.join(dir, 'git.cmd'), { force: true }); }
+  // A project added later reuses the boot's: sessions may be running it, and Windows cannot replace a running exe.
+  if (duringSession() && (exists(path.join(dir, 'git.exe')) || exists(path.join(dir, 'git.cmd')))) { /* keep it */ }
+  else try { fs.copyFileSync(ensureCompiled('gitshim'), path.join(dir, 'git.exe')); fs.rmSync(path.join(dir, 'git.cmd'), { force: true }); }
   catch (e) { warn('git guard: falling back to git.cmd (' + errMsg(e) + ')'); fs.writeFileSync(path.join(dir, 'git.cmd'), '@"' + process.execPath + '" "' + guard + '" %*\r\n'); }
   fs.writeFileSync(path.join(dir, 'bashenv.sh'), 'git() { "' + posix(process.execPath) + '" "' + posix(guard) + '" "$@"; }\nexport -f git\n');
   env.prepend.unshift(dir);

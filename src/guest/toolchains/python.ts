@@ -6,6 +6,7 @@ import { fetchJson, installArchive } from '../../shared/download.js';
 import { dryRun, execAsync, exists, log, mkdirp } from '../env.js';
 import { resolveCached, tool, type ToolEnv } from './common.js';
 import { pickPackageVersion } from './versions.js';
+import { duringSession } from '../project-context.js';
 
 type Package = 'python' | 'python2';
 
@@ -24,26 +25,33 @@ const installPython = async (pkg: Package, spec: string): Promise<string> => {
   return dir;
 };
 
-/** Writes `<name>.cmd` into tools\shims, e.g. python2.cmd. */
-const shim = (name: string, command: string): void => {
-  fs.writeFileSync(path.join(mkdirp(tool('shims')), name + '.cmd'), '@echo off\r\n' + command + ' %*\r\n');
+/**
+ * The shims folder: tools\shims at boot. A project added later gets one per Python version (tools\shims\<version>)
+ * so the boot project's python3.cmd keeps pointing at its own version.
+ */
+const shimDir = (dir: string): string => (duringSession() ? tool('shims', path.basename(dir)) : tool('shims'));
+
+/** Writes `<name>.cmd` into the shims folder, e.g. python2.cmd. */
+const shim = (folder: string, name: string, command: string): void => {
+  fs.writeFileSync(path.join(mkdirp(folder), name + '.cmd'), '@echo off\r\n' + command + ' %*\r\n');
 };
 
-const shimPair = (version: '2' | '3', dir: string): void => {
+const shimPair = (folder: string, version: '2' | '3', dir: string): void => {
   const python = '"' + path.join(dir, 'python.exe') + '"';
-  shim('python' + version, python);
-  shim('pip' + version, python + ' -m pip');
+  shim(folder, 'python' + version, python);
+  shim(folder, 'pip' + version, python + ' -m pip');
 };
 
 export const setupPython = async (env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> => {
   if (dryRun) { log('(dry run) would provision Python ' + versions.python.spec + (config.python2 ? ' and Python 2.7' : '')); return; }
   const py3 = await installPython('python', versions.python.spec);
-  shimPair('3', py3);
-  env.prepend.push(py3, path.join(py3, 'Scripts'), tool('shims'));
+  const shims = shimDir(py3);
+  shimPair(shims, '3', py3);
+  env.prepend.push(py3, path.join(py3, 'Scripts'), shims);
   env.vars.PYTHONIOENCODING = 'utf-8';
   env.summary.push('python: ' + path.basename(py3).replace('python-', '') + ' (from ' + versions.python.source + ')');
   if (!config.python2) return;
   const py2 = await installPython('python2', '2.7');
-  shimPair('2', py2);
+  shimPair(shims, '2', py2);
   env.summary.push('python2: ' + path.basename(py2).replace('python2-', ''));
 };

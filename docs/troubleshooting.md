@@ -20,3 +20,7 @@ Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 | `self-test` or `npm test` refuses to run | By design: it starts real processes and creates files and links, so it only runs inside a Windows Sandbox (`sandbox start`) or on GitHub Actions |
 | `sandbox launch` says you are inside the sandbox | Commands that control the sandbox run from your PC, not from inside it |
 | Check a project file | `sandbox config check` validates `.sandbox-config.json` and lists what it changes |
+| Another project "needs a restart" | Windows Sandbox cannot add folders while it runs. Folders inside a project root open at once: `sandbox projects roots add <parent folder>` (from the next start). On Windows 11 24H2+ with the updated Windows Sandbox, `wsb share` adds them live (untested) |
+| Getting `wsb` | Settings > Windows Update: "Get the latest updates as soon as they're available" (or the Windows 11 Installation Assistant), then update Windows Sandbox in the Microsoft Store. `wsb --version` shows it; `sandbox doctor` says whether it is found |
+| "needs stricter protection than the running sandbox has" | A project asking for stricter git access, no network, the LAN block or read-only cannot join a sandbox started with looser settings (they are machine-wide). Stop it and start from that project |
+| Hooks quarantined in a project root | A project that appeared in a root after the start has no baseline, so its git hooks and `core.hooksPath` count as added inside the sandbox. `sandbox status` lists them; move them back if they are yours |

@@ -2,7 +2,8 @@
 // step depends on. The scheduler (index.ts) runs them.
 import path from 'node:path';
 import type { DatabasePlan, GitAccess, Toolchains, ToolVersions } from '../../core/types.js';
-import { dataDir, execAsync, exists, localDir, workspace } from '../env.js';
+import { dataDir, execAsync, exists, localDir } from '../env.js';
+import { projectWorkspace } from '../project-context.js';
 import { arch, installOnce, tool, wanted, type ToolEnv } from './common.js';
 import { DATABASE_NAMES, setupDatabase } from './databases/index.js';
 import { setupGit } from './git.js';
@@ -26,7 +27,12 @@ import { setupVscode } from './vscode.js';
 
 export interface ToolchainOptions { gitEnabled: boolean; gitAccess: GitAccess; hostGit: boolean; refresh: boolean; databases: DatabasePlan[] }
 
-export interface Step { name: string; on: boolean; after?: string[]; run: (env: ToolEnv) => Promise<void> | void }
+/**
+ * shared: the step's effect is machine-wide and the same for every project (an installer, a registry entry, a
+ * shortcut, the git guard). A project added after boot reuses what the boot's run contributed instead of running it
+ * again under the sessions that already use it.
+ */
+export interface Step { name: string; on: boolean; after?: string[]; shared?: boolean; run: (env: ToolEnv) => Promise<void> | void }
 
 /** Python command-line tools through uv (each in its own environment, commands in uv's bin folder on PATH). */
 const setupPythonTools = async (env: ToolEnv, tools: string[]): Promise<void> => {
@@ -38,7 +44,7 @@ const setupPythonTools = async (env: ToolEnv, tools: string[]): Promise<void> =>
 /** Where cargo builds: shared with the PC's target\, a separate folder next to it, one on the sandbox's disk, or a path. */
 const cargoTarget = (targetDir: Toolchains['rust']['targetDir']): string | null => {
   if (targetDir === 'shared') return null;
-  if (targetDir === 'separate') return path.join(workspace, 'target', 'sandbox');
+  if (targetDir === 'separate') return path.join(projectWorkspace(), 'target', 'sandbox');
   if (targetDir === 'local') return path.join(localDir, 'cargo-target');
   return targetDir;
 };
@@ -64,7 +70,7 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
   const java = wanted(config.java.enabled, 'java');
   const python = wanted(config.python.enabled, 'python');
   return [
-    { name: 'Git', on: o.gitEnabled, run: (env) => setupGit(env, o.hostGit, o.refresh, o.gitAccess) },
+    { name: 'Git', on: o.gitEnabled, shared: true, run: (env) => setupGit(env, o.hostGit, o.refresh, o.gitAccess) },
     // Before Node: with package.json pins, Volta's node/npm/pnpm/yarn come first on PATH.
     { name: 'Volta', on: wantsVolta(config.node.volta), run: (env) => setupVolta(env) },
     { name: 'Node ' + versions.node.spec, on: true, run: (env) => setupNode(env, versions, config.node) },
@@ -82,7 +88,7 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
     { name: 'Java', on: java, run: (env) => setupJava(env, config.java) },
     { name: 'Ruby', on: wanted(config.ruby.enabled, 'ruby'), run: (env) => setupRuby(env, config.ruby) },
     // PHP installs the Visual C++ runtime itself: one installer at a time.
-    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled, run: async (env) => { await setupVcRuntime(env); } },
+    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled, shared: true, run: async (env) => { await setupVcRuntime(env); } },
     { name: 'PHP', on: wanted(config.php.enabled, 'php'), after: ['Visual C++ runtime'], run: (env) => setupPhp(env, config.php) },
     { name: 'Deno', on: wanted(config.deno.enabled, 'deno'), run: (env) => setupDeno(env) },
     { name: 'Bun', on: config.bun.enabled, run: (env) => setupBun(env) },
@@ -90,10 +96,11 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
     { name: 'PowerShell 7', on: wanted(config.pwsh.enabled, 'pwsh'), run: (env) => setupPwsh(env, o.refresh) },
     // The openssl tool comes from Git's install: after Git.
     { name: 'CLI tools', on: Object.values(config.cli).some((v) => v !== false), after: ['Git'], run: (env) => setupCli(env, config.cli, o.gitAccess, o.refresh) },
-    { name: 'Mesa 3D', on: config.mesa.enabled, run: (env) => setupMesa(env, config.mesa) },
-    { name: 'VS Code', on: config.vscode.enabled, run: (env) => setupVscode(env, o.refresh) },
+    { name: 'Mesa 3D', on: config.mesa.enabled, shared: true, run: (env) => setupMesa(env, config.mesa) },
+    { name: 'VS Code', on: config.vscode.enabled, shared: true, run: (env) => setupVscode(env, o.refresh) },
     { name: 'Python tools', on: python && config.python.tools.length > 0, after: ['Python', 'uv'], run: (env) => setupPythonTools(env, config.python.tools) },
     // DynamoDB Local runs on Java: the Java step installs the JDK first instead of racing it.
-    ...o.databases.map((db): Step => ({ name: DATABASE_NAMES[db.database], on: true, after: db.database === 'dynamodb' && java ? ['Java'] : [], run: (env) => setupDatabase(env, db) })),
+    // One server per database in the sandbox: a project that joins later shares the one the boot started.
+    ...o.databases.map((db): Step => ({ name: DATABASE_NAMES[db.database], on: true, shared: true, after: db.database === 'dynamodb' && java ? ['Java'] : [], run: (env) => setupDatabase(env, db) })),
   ];
 };
