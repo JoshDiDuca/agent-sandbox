@@ -97,10 +97,12 @@ export const securityTests = async (t: Harness, f: Fixtures): Promise<void> => {
   const before2 = snapshotRepo(repo2);
   write(path.join(repo2, 'node.exe'), 'MZ');
   write(path.join(repo2, 'git.cmd'), 'calc');
+  write(path.join(repo2, 'sandbox.cmd'), 'calc');
+  write(path.join(repo2, 'opencode.ps1'), 'calc');
   write(path.join(repo2, '.git', 'commondir'), 'C:/evil');
   fs.appendFileSync(path.join(repo2, '.git', 'config'), '[core] fsmonitor = calc.exe\n');
   const found2 = guardRepo(repo2, before2);
-  check(!fs.existsSync(path.join(repo2, 'node.exe')) && !fs.existsSync(path.join(repo2, 'git.cmd')) && fs.existsSync(path.join(repo2, 'build.cmd')) && found2.filter((x) => x.kind === 'command').length === 2, 'executables planted under command names (node.exe, git.cmd) are quarantined; other scripts stay');
+  check(!fs.existsSync(path.join(repo2, 'node.exe')) && !fs.existsSync(path.join(repo2, 'git.cmd')) && fs.existsSync(path.join(repo2, 'build.cmd')) && !fs.existsSync(path.join(repo2, 'sandbox.cmd')) && found2.filter((x) => x.kind === 'command').length === 4, 'executables planted under command names (node.exe, git.cmd, sandbox.cmd, opencode.ps1) are quarantined; other scripts stay');
   check(!fs.existsSync(path.join(repo2, '.git', 'commondir')) && /# \[agent-sandbox\] disabled.*fsmonitor/.test(fs.readFileSync(path.join(repo2, '.git', 'config'), 'utf8')), 'a planted commondir and a key on the same line as its [section] are neutralised');
   const repo3 = at('repo3');
   write(path.join(repo3, '.git', 'config'), '[core]\n');
