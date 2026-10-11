@@ -17,10 +17,8 @@ import { syncTests } from './sync.test.js';
 
 export const selfTest = async (packageRoot: string): Promise<number> => {
   const t = createHarness(packageRoot);
-  // The tests never see the real home folder, so nothing can write ~/.gitconfig, ~/.claude, ... by accident.
-  const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR, userProfile: process.env.USERPROFILE, homeEnv: process.env.HOME };
+  const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR };
   process.env.AGENT_SANDBOX_HOME = t.temp + '\\user-home';
-  process.env.USERPROFILE = process.env.HOME = t.temp + '\\profile';
   try {
     const f = createFixtures(t);
     await configTests(t, f);
@@ -40,9 +38,6 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
   } finally {
     if (saved.home === undefined) delete process.env.AGENT_SANDBOX_HOME; else process.env.AGENT_SANDBOX_HOME = saved.home;
     process.env.WINDIR = saved.windir;
-    const restore = (key: 'USERPROFILE' | 'HOME', value: string | undefined): void => { if (value === undefined) delete process.env[key]; else process.env[key] = value; };
-    restore('USERPROFILE', saved.userProfile);
-    restore('HOME', saved.homeEnv);
     t.dispose();
   }
   const failures = t.failures();

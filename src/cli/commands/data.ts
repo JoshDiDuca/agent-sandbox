@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import _ from 'lodash';
+import { removeRefusal, safeRemove } from '../../shared/safe-remove.js';
 import { assertNoLinks, dirExists, fail, isInsideOrEqual, isLink, removeLink } from '../../core/util.js';
 import { askYesNo } from '../../core/workspace.js';
 import { isSandboxRunning } from '../../host/platform.js';
@@ -39,7 +40,8 @@ export const sizeOf = (p: string): number => {
  * Deletes a folder or file without ever following a link: links found anywhere inside are removed themselves first,
  * then the (now link-free) tree is deleted. A link in place of `p` is removed itself.
  */
-export const removeTree = (p: string): void => {
+/** Deletes p (strictly inside root): links inside are removed first and never followed; see shared/safe-remove.ts. */
+export const removeTree = (p: string, root: string): void => {
   const unlinkInside = (dir: string): void => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       const child = path.join(dir, d.name);
@@ -48,8 +50,11 @@ export const removeTree = (p: string): void => {
   };
   if (isLink(p)) { removeLink(p); return; }
   if (!fs.existsSync(p)) return;
+  // Refused before anything is touched (safeRemove below checks again).
+  const refusal = removeRefusal(p, root);
+  if (refusal) throw new Error('Refusing to delete ' + p + ': ' + refusal);
   if (dirExists(p)) unlinkInside(p);
-  fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 });
+  safeRemove(p, root);
 };
 
 /** Real (non-link) children of a real folder; a link in place of the folder yields nothing. */
@@ -200,7 +205,7 @@ export const dataClean = async (ctx: Context): Promise<number> => {
   }
   const failed: string[] = [];
   for (const t of sized) {
-    try { removeTree(t.path); } catch (e) { failed.push(t.target + ' (' + (e instanceof Error ? e.message : String(e)) + ')'); }
+    try { removeTree(t.path, t.root); } catch (e) { failed.push(t.target + ' (' + (e instanceof Error ? e.message : String(e)) + ')'); }
   }
   const freed = total - _.sumBy(sized, (t) => sizeOf(t.path));
   console.log('Freed ' + humanBytes(freed) + '. ' + (sized.some((t) => t.root === ctx.dataPath || t.target === 'all') ? 'The next sandbox reinstalls what it needs.' : ''));

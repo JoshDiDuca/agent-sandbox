@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { safeRemove } from './safe-remove.js';
 import { SYSTEM } from './system.js';
 
 const USER_AGENT = 'windows-development-sandbox';
@@ -18,7 +19,7 @@ export const stagingFolder = (destination: string): string => destination + '.st
 
 /** Replaces `destination` with the finished `work` folder (a folder rename: the destination is never half there). */
 export const moveIntoPlace = (work: string, destination: string): void => {
-  fs.rmSync(destination, { recursive: true, force: true });
+  safeRemove(destination, path.dirname(destination));
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.renameSync(work, destination);
 };
@@ -187,6 +188,6 @@ export const installArchive = async (url: string, destination: string, options: 
     }
     moveIntoPlace(root, destination);
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    safeRemove(work, path.dirname(work));
   }
 };

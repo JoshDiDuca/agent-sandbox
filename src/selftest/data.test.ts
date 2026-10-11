@@ -33,7 +33,7 @@ export const dataTests = (t: Harness): void => {
   try { fs.symlinkSync(outside, path.join(sized, 'sub', 'escape'), 'junction'); linked = true; } catch { /* no junctions here */ }
   check(sizeOf(sized) === 1024 && humanBytes(1536) === '1.5 KB' && humanBytes(0) === '0 B' && humanBytes(3 * 1024 ** 3) === '3.0 GB', 'data: sizes count real files only' + (linked ? ' (a junction counts 0)' : ''));
   if (linked) check(findLinks(sized).length === 1, 'repair: finds a junction planted in the data folder');
-  removeTree(sized);
+  removeTree(sized, t.temp);
   check(!fs.existsSync(sized) && fs.existsSync(path.join(outside, 'keep.txt')), 'data: removing a folder never deletes what a link inside points to');
 
   t.section('repair: detection');

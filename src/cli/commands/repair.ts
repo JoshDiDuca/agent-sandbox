@@ -179,7 +179,7 @@ const CHECKS: RepairCheck[] = [
       guard(env, env.toolsDir);
       const found = findStagingLeftovers(env.toolsDir);
       if (!found.length) return ok('none.');
-      for (const p of found) removeTree(p);
+      for (const p of found) removeTree(p, env.dataPath);
       return { status: 'fixed', detail: 'removed ' + found.length + ' half-finished download/copy folder(s): ' + found.map((p) => rel(env.toolsDir, p)).join(', ') };
     },
   },
@@ -190,7 +190,7 @@ const CHECKS: RepairCheck[] = [
       guard(env, env.toolsDir);
       const found = findHalfInstalled(env.toolsDir);
       if (!found.length) return ok('every toolchain folder has its program.');
-      for (const f of found) removeTree(f.path);
+      for (const f of found) removeTree(f.path, env.dataPath);
       return { status: 'fixed', detail: 'removed ' + found.map((f) => rel(env.toolsDir, f.path) + ' (no ' + f.missing + ')').join(', ') + '; the next sandbox reinstalls them.' };
     },
   },

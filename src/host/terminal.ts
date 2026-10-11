@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { githubAsset, installArchive } from '../shared/download.js';
+import { safeRemove } from '../shared/safe-remove.js';
 import { assertNoLinks, errMsg, fileExists, writeJson } from '../core/util.js';
 
 export const terminalDir = (dataPath: string): string => path.join(dataPath, 'tools', 'terminal');
@@ -34,7 +35,7 @@ export const ensureTerminal = async (dataPath: string, refresh: boolean): Promis
   assertNoLinks(dataPath, parked);
   if (fileExists(exe) && !refresh) return { exe, message: 'cached' };
   try {
-    if (fs.existsSync(settings)) { fs.rmSync(parked, { recursive: true, force: true }); fs.renameSync(settings, parked); }
+    if (fs.existsSync(settings)) { safeRemove(parked, path.dirname(parked)); fs.renameSync(settings, parked); }
     try {
       const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
       const asset = await githubAsset('microsoft/terminal', new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'));
@@ -42,7 +43,7 @@ export const ensureTerminal = async (dataPath: string, refresh: boolean): Promis
       fs.writeFileSync(path.join(dir, '.portable'), '');
       return { exe, message: 'downloaded ' + asset.name };
     } finally {
-      if (fs.existsSync(parked)) { fs.mkdirSync(dir, { recursive: true }); fs.rmSync(settings, { recursive: true, force: true }); fs.renameSync(parked, settings); }
+      if (fs.existsSync(parked)) { fs.mkdirSync(dir, { recursive: true }); safeRemove(settings, path.dirname(settings)); fs.renameSync(parked, settings); }
       const settingsFile = path.join(settings, 'settings.json');
       assertNoLinks(dataPath, settingsFile);
       if (fileExists(path.join(dir, '.portable')) && !fs.existsSync(settingsFile)) writeJson(settingsFile, SETTINGS);

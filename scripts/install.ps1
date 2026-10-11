@@ -1,7 +1,7 @@
 # windows-development-sandbox installer. Run in a normal (not admin) PowerShell:
 #   irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
-# It checks this PC can run Windows Sandbox, offers to turn the feature on and to install Node.js, then installs the
-# CLI with npm. Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
+# It checks this PC can run Windows Sandbox, offers to turn the feature on, then installs the CLI with npm: with your
+# Node.js 20+ if you have it, else with a private Node.js used only by this tool (nothing installed system-wide). Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
 # Windows PowerShell 5.1 compatible. Wrapped in a script block so `return` never closes the user's window under iex.
 & {
   # Not 'Stop': Windows PowerShell 5.1 would turn npm's and winget's warnings on stderr into fatal errors.
@@ -99,31 +99,46 @@
   }
 
   # 4. Node.js ---------------------------------------------------------------------------------------------------
+  # Your own Node is used when it is new enough. Otherwise nothing is installed system-wide: a private Node (the
+  # official zip, checksum-verified) runs only this tool, and only its commands go on your PATH, not node itself.
   Step 'Checking Node.js (20 or newer)'
+  # This tool's own folder, always under LOCALAPPDATA, never anything that could resolve to a profile or the current folder.
+  if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) { Problem 'LOCALAPPDATA is not set, so there is nowhere safe to put the private Node.js.'; return }
+  $toolFolder = Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'
+  $privateNode = Join-Path $toolFolder 'node'
+  $npm = 'npm.cmd'
   $major = Node-Major
-  if ($major -ge 20) { Ok "Node.js $(& node --version)" }
+  if ($major -ge 20) { Ok "using your Node.js $(& node --version)" }
+  elseif (Test-Path (Join-Path $privateNode 'node.exe')) { $npm = Join-Path $privateNode 'npm.cmd'; Ok "using the private Node.js in $privateNode" }
   else {
-    if ($major -gt 0) { Write-Host "   Node.js $(& node --version) is too old." } else { Write-Host '   Node.js is not installed.' }
-    $winget = Get-Command winget -ErrorAction SilentlyContinue
-    if (-not $winget) {
-      Problem 'Node.js 20 or newer is needed, and winget (App Installer) is not available to install it.'
-      Write-Host '   Install the LTS version from https://nodejs.org, open a new PowerShell and run this installer again.'
+    if ($major -gt 0) { Write-Host "   Your Node.js $(& node --version) is too old; it is left alone." } else { Write-Host '   No Node.js on this PC.' }
+    Write-Host "   Downloading a private Node.js LTS just for this tool (into $privateNode; nothing is installed system-wide) ..."
+    try {
+      # A loop, not a pipeline: Windows PowerShell 5.1 passes a JSON array down the pipeline as ONE object.
+      $lts = $null
+      foreach ($release in (Invoke-RestMethod 'https://nodejs.org/dist/index.json' -UseBasicParsing)) { if ($release.lts) { $lts = $release.version; break } }
+      if (-not $lts) { throw 'no Node.js LTS release found' }
+      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+      $name = "node-$lts-win-$arch"
+      $zip = Join-Path $env:TEMP "$name.zip"
+      $ProgressPreference = 'SilentlyContinue'
+      Invoke-WebRequest "https://nodejs.org/dist/$lts/$name.zip" -OutFile $zip -UseBasicParsing
+      $sums = (Invoke-WebRequest "https://nodejs.org/dist/$lts/SHASUMS256.txt" -UseBasicParsing).Content
+      $expected = ($sums -split "`n" | Where-Object { $_ -match " $name\.zip$" }) -replace '\s.*$', ''
+      if (-not $expected -or (Get-FileHash $zip -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw "checksum mismatch for $name.zip" }
+      $staging = Join-Path $toolFolder 'node-staging'
+      Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+      Expand-Archive $zip -DestinationPath $staging -Force
+      Remove-Item $privateNode -Recurse -Force -ErrorAction SilentlyContinue
+      Move-Item (Join-Path $staging $name) $privateNode
+      Remove-Item $staging, $zip -Recurse -Force -ErrorAction SilentlyContinue
+    } catch {
+      Problem "Could not download Node.js: $_"
+      Write-Host '   Check your internet connection and run this again (or install Node.js 20+ yourself from https://nodejs.org).'
       return
     }
-    if (-not (Ask 'Install Node.js LTS with winget now?')) {
-      Problem 'Node.js 20 or newer is needed.'
-      Write-Host '   Install it with: winget install OpenJS.NodeJS.LTS   (or from https://nodejs.org), then run this again.'
-      return
-    }
-    & winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-    Refresh-Path
-    $major = Node-Major
-    if ($major -lt 20) {
-      Problem 'Node.js was installed but is not usable in this window yet.'
-      Write-Host '   Open a new PowerShell window and run this installer again.'
-      return
-    }
-    Ok "Node.js $(& node --version) installed"
+    $npm = Join-Path $privateNode 'npm.cmd'
+    Ok "private Node.js $lts in $privateNode"
   }
 
   # 5. The CLI ---------------------------------------------------------------------------------------------------
@@ -131,16 +146,28 @@
   Write-Host "   npm install -g $package"
   # npm.cmd, not npm: the npm.ps1 shim is blocked when scripts are disabled on this PC.
   # The old agent-sandbox package ships the same commands; npm will not install over it.
-  if ((& npm.cmd ls -g --depth=0 agent-sandbox 2>$null) -match 'agent-sandbox@') { Write-Host '   Removing the old agent-sandbox package (it is now windows-development-sandbox) ...'; & npm.cmd uninstall -g agent-sandbox | Out-Null }
-  & npm.cmd install -g $package
+  if ((& $npm ls -g --depth=0 agent-sandbox 2>$null) -match 'agent-sandbox@') { Write-Host '   Removing the old agent-sandbox package (it is now windows-development-sandbox) ...'; & $npm uninstall -g agent-sandbox | Out-Null }
+  & $npm install -g $package
   if ($LASTEXITCODE -ne 0) {
     Problem "npm could not install the package (exit code $LASTEXITCODE)."
     Write-Host '   Check your internet connection and try again. Details are in the npm output above.'
     return
   }
   Refresh-Path
-  $prefix = (& npm.cmd prefix -g 2>$null) | Select-Object -Last 1
-  $cli = if ($prefix) { Join-Path $prefix.Trim() 'sandbox.cmd' } else { $null }
+  $prefix = ((& $npm prefix -g 2>$null) | Select-Object -Last 1)
+  if ($prefix) { $prefix = $prefix.Trim() }
+  if ($npm -ne 'npm.cmd') {
+    # With the private Node, put small wrappers for our commands on your PATH (not node.exe itself).
+    $bin = Join-Path $toolFolder 'bin'
+    New-Item -ItemType Directory -Force $bin | Out-Null
+    $commands = 'sandbox', 'windows-development-sandbox', 'agent-sandbox', 'claude-sandbox', 'codex-sandbox', 'gemini-sandbox', 'claude-sbx', 'codex-sbx', 'gemini-sbx', 'claude-host', 'sbx-show', 'sbx-hide'
+    foreach ($c in $commands) { if (Test-Path (Join-Path $prefix "$c.cmd")) { Set-Content -Path (Join-Path $bin "$c.cmd") -Value "@`"$prefix\$c.cmd`" %*" -Encoding ASCII } }
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if (-not (($userPath -split ';') -contains $bin)) { [Environment]::SetEnvironmentVariable('Path', (($userPath, $bin) | Where-Object { $_ }) -join ';', 'User') }
+    $env:Path = "$bin;$env:Path"
+    $prefix = $bin
+  }
+  $cli = if ($prefix) { Join-Path $prefix 'sandbox.cmd' } else { $null }
   if (-not $cli -or -not (Test-Path $cli)) { $cli = 'sandbox.cmd' }
   Ok 'Installed'
 

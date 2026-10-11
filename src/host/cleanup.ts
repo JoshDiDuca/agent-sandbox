@@ -1,8 +1,9 @@
 // Keeps storage from growing forever. Runs automatically on every launch and via `sandbox clean`.
 import fs from 'node:fs';
+import { safeRemove } from '../shared/safe-remove.js';
 import path from 'node:path';
 import _ from 'lodash';
-import { dirExists, isLink, removeLink } from '../core/util.js';
+import { dirExists, isLink } from '../core/util.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -37,7 +38,7 @@ export const pruneStorage = (storageRoot: string, options: Partial<PruneOptions>
   const result: PruneResult = { launches: 0, logs: 0, leftovers: 0, bytes: 0 };
   const remove = (p: string, counter: keyof Omit<PruneResult, 'bytes'>): void => {
     result.bytes += sizeOf(p);
-    if (isLink(p)) removeLink(p); else fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 });
+    safeRemove(p, storageRoot);
     result[counter]++;
   };
 

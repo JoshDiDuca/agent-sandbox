@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { dirExists, homeDir, isLink } from '../core/util.js';
+import { safeRemove } from '../shared/safe-remove.js';
 import type { SyncState } from './history.js';
 
 const SKIP_IN = /(^logs$|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
@@ -29,9 +30,9 @@ const stampOf = (dir: string): number => _.max(databaseFiles(dir).map((f) => fs.
 /** Host -> sandbox: replace the sandbox store with a copy of this PC's folder (staging folder, then swap). */
 const mirrorIn = (hostDir: string, store: string): void => {
   const incoming = store + '.incoming';
-  fs.rmSync(incoming, { recursive: true, force: true });
+  safeRemove(incoming, path.dirname(store));
   fs.cpSync(hostDir, incoming, { recursive: true, filter: (src: string) => src === hostDir || !SKIP_IN.test(path.basename(src)) });
-  fs.rmSync(store, { recursive: true, force: true });
+  safeRemove(store, path.dirname(store));
   fs.renameSync(incoming, store);
 };
 

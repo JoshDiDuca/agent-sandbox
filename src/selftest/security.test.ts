@@ -11,6 +11,7 @@ import { assertSafeMapping } from '../core/workspace.js';
 import { sandboxGlobalState } from '../host/claude-profile.js';
 import { findSecretFiles, stripMcpServers, stripSettings } from '../host/secrets.js';
 import { detectDatabases } from '../core/detect-databases.js';
+import { removeRefusal, safeRemove } from '../shared/safe-remove.js';
 import { gitDecision } from '../guest/gitguard.js';
 import { gitDenyRules } from '../guest/gitrules.js';
 import { encodeFrame, FrameReader, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
@@ -140,6 +141,13 @@ export const securityTests = async (t: Harness, f: Fixtures): Promise<void> => {
   const started = Date.now();
   detectDatabases(evil);
   check(Date.now() - started < 2000, 'database detection stays fast on hostile workspace files (no catastrophic backtracking): ' + (Date.now() - started) + ' ms');
+  const profile = os.homedir();
+  const refused = [profile, path.dirname(profile), 'C:\\', 'C:\\Windows', '', 'relative\\folder', at('outside-root', 'x')].map((p) => removeRefusal(p, at('safe-root')));
+  const allowedTarget = at('safe-root', 'tools', 'go');
+  t.write(path.join(allowedTarget, 'go.exe'), 'x');
+  safeRemove(allowedTarget, at('safe-root'));
+  check(refused.every((r) => r !== null) && !fs.existsSync(allowedTarget),
+    'deletes can never reach your profile, a folder above it, a drive root, Windows, a relative path or anything outside their root');
   const ws = at('secret-ws');
   for (const file of ['.env', '.env.example', 'server.pem', 'README.md', 'api/credentials.json', 'node_modules/x/.env']) t.write(path.join(ws, file), 'x');
   check(findSecretFiles(ws).sort().join() === '.env,api\\credentials.json,server.pem', 'secret-looking workspace files are found for the launch warning (templates and dependencies ignored)');

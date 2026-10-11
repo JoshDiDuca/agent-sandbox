@@ -21,7 +21,8 @@ on your PC is reachable. Close it and it's gone. Your project, tools, databases 
 irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
-It checks your PC, offers to turn on Windows Sandbox and install Node.js, then installs everything.
+It checks your PC, offers to turn on Windows Sandbox, and installs everything. It uses your Node.js 20+ if you have it,
+otherwise a private copy just for this tool. Nothing is installed system-wide.
 Needs Windows 10/11 **Pro, Enterprise or Education**. [Other ways to install](docs/install.md)
 
 ## Use

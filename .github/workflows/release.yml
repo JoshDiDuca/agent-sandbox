@@ -67,6 +67,8 @@ jobs:
         id: pack
         shell: pwsh
         run: |
+          # The packed release is already built: without prepare, npm installs it without running any package script.
+          npm pkg delete scripts.prepare
           npm pack --silent | Out-Null
           $file = (Get-ChildItem windows-development-sandbox-*.tgz | Select-Object -First 1).Name
           Copy-Item $file windows-development-sandbox.tgz

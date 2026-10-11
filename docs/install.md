@@ -5,7 +5,7 @@
 - Windows 10 or 11 **Pro, Enterprise or Education** (Home has no Windows Sandbox)
 - Virtualization turned on in the BIOS/UEFI
 - 8 GB RAM or more is comfortable; the sandbox takes what is free, minus a reserve for your PC
-- Node.js 20+ (the installer offers to install it)
+- Node.js 20+, or none: the installer then uses a private Node.js just for this tool
 
 ## One line
 
@@ -13,8 +13,12 @@
 irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
-It checks the edition, virtualization, RAM and disk, offers to turn on Windows Sandbox (that step asks for admin and
-needs a reboot) and to install Node.js with winget, then installs the package and runs `sandbox doctor`.
+It checks the edition, virtualization, RAM and disk, and offers to turn on Windows Sandbox (that step asks for admin
+and needs a reboot). It then installs the package and runs `sandbox doctor`.
+
+It uses your Node.js 20+ if you have one. Otherwise it downloads the official Node.js LTS zip, checks its SHA-256 and
+unpacks it into `%LOCALAPPDATA%\WindowsDevelopmentSandbox\node`, used only to run this tool. Your PATH only gets a small
+folder with this tool's commands, not `node` itself, so nothing is installed system-wide.
 
 ## By hand
 

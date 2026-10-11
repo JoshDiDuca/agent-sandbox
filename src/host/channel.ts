@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
 import { insideSandbox } from './platform.js';
+import { safeRemove } from '../shared/safe-remove.js';
 import { connect, DETACH_KEY, queryViewers, runTerminalClient, type Endpoint, type Viewers } from '../shared/pty-client.js';
 import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
@@ -167,6 +168,6 @@ export const resetRunDir = (dataPath: string): void => {
   // A link (planted by a sandbox) is removed itself and never followed, including `run` itself.
   if (isLink(p.run)) { removeLink(p.run); return; }
   for (const target of [p.sandbox, p.requests, p.responses, p.sessions]) {
-    if (isLink(target)) removeLink(target); else fs.rmSync(target, { recursive: true, force: true });
+    safeRemove(target, dataPath);
   }
 };
