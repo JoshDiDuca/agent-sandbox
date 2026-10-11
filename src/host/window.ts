@@ -1,7 +1,9 @@
 // Headless mode: Windows Sandbox always opens its client window, so we hide it (ShowWindow SW_HIDE) as soon as it
 // appears. The VM and the logged-in session keep running; `sbx-show` brings the window back.
 import path from 'node:path';
-import { isWin, runPowerShell, runPowerShellAsync, tryReadJson, writeJson } from '../core/util.js';
+import { writeJsonAtomic } from '../shared/rundir.js';
+import { refuseInSelfTest } from './test-guard.js';
+import { isWin, runPowerShell, runPowerShellAsync, tryReadJson } from '../core/util.js';
 
 const PRELUDE = `
 $ErrorActionPreference = 'Stop'
@@ -37,6 +39,7 @@ const stateFile = (storageRoot: string): string => path.join(storageRoot, 'run',
 
 /** Waits for the sandbox window and hides it; keeps watching briefly in case Windows re-shows it while connecting. */
 export const hideSandboxWindow = async (storageRoot: string, waitSeconds = 180): Promise<boolean> => {
+  refuseInSelfTest('hide windows');
   if (!isWin) return false;
   const script = PRELUDE + `
 $hidden = New-Object System.Collections.ArrayList
@@ -50,12 +53,13 @@ while ((Get-Date) -lt $deadline) {
 ConvertTo-Json -Compress @($hidden)`;
   const stdout = await runPowerShellAsync(script);
   const handles = (JSON.parse(stdout.trim() || '[]') as unknown[]).filter((h): h is number => Number.isSafeInteger(h));
-  writeJson(stateFile(storageRoot), { handles });
+  writeJsonAtomic(stateFile(storageRoot), { handles });
   return handles.length > 0;
 };
 
 /** Shows the sandbox window again (the ones we hid, or any hidden Windows Sandbox window). */
 export const showSandboxWindow = (storageRoot: string): boolean => {
+  refuseInSelfTest('show windows');
   if (!isWin) return false;
   // Only integers go into the script, whatever the file contains.
   const recorded = (tryReadJson<{ handles: unknown[] }>(stateFile(storageRoot))?.handles ?? []).filter((h): h is number => Number.isSafeInteger(h));
@@ -65,6 +69,6 @@ if (-not $handles) { $handles = Get-SandboxWindows $false }
 foreach ($h in $handles) { [void][AgentSandbox.Win]::ShowWindow([IntPtr]$h, 5); [void][AgentSandbox.Win]::ShowWindow([IntPtr]$h, 9); [void][AgentSandbox.Win]::SetForegroundWindow([IntPtr]$h) }
 @($handles).Count`;
   const { stdout } = runPowerShell(script, true);
-  writeJson(stateFile(storageRoot), { handles: [] });
+  writeJsonAtomic(stateFile(storageRoot), { handles: [] });
   return Number(stdout.trim()) > 0;
 };

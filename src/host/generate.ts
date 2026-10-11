@@ -6,6 +6,7 @@ import type { Config, GenerateOptions, Generated, GuestSession, ProfileResult, R
 import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
 import { assertSafeMapping } from '../core/workspace.js';
+import { assertTestWritable } from './test-guard.js';
 import { isValidGuestPath, MIRROR_ROOT, sandboxFolder, substDrives } from '../shared/guest-paths.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
@@ -123,6 +124,8 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
   if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
+  assertTestWritable(storageRoot);
+  assertTestWritable(dataPath);
 
   // Checked before anything is written, so a refusal leaves nothing behind.
   const memoryMb = resolveMemoryMb(config.sandbox, o.freeMemoryBytes);

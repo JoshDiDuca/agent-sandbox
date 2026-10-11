@@ -29,6 +29,32 @@
     $parts = @($env:Path -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';')
     $env:Path = ($parts | Where-Object { $_ } | Select-Object -Unique) -join ';'
   }
+  function Remove-Inside($path, $root) {
+    # The only deletes in this script: a folder this script made, never anything outside the folder it was given.
+    $full = [IO.Path]::GetFullPath($path).TrimEnd('\')
+    $base = [IO.Path]::GetFullPath($root).TrimEnd('\')
+    if (-not $full.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "refusing to delete $full (not inside $base)" }
+    if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+  function Add-UserPath($dir) {
+    # Adds this one folder to YOUR PATH and touches nothing else in it. The value is read and written back unexpanded (so
+    # entries such as %USERPROFILE%\bin stay as they are), and a PATH that would get too long is left alone.
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
+      $raw = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      if (@($raw -split ';') | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { return }
+      $new = if ($raw) { $raw.TrimEnd(';') + ';' + $dir } else { $dir }
+      if ($new.Length -gt 32000) { Warn "Your PATH is too long to add $dir. Add it yourself in Settings > System > About > Advanced system settings > Environment Variables."; return }
+      $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+      $key.SetValue('Path', $new, $kind)
+    } finally { $key.Close() }
+    # Tell running programs (Explorer, so new terminals) that the environment changed.
+    try {
+      Add-Type -Namespace WdsInstall -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint msg, System.UIntPtr wParam, string lParam, uint flags, uint timeout, out System.UIntPtr result);'
+      $ignored = [UIntPtr]::Zero
+      [void][WdsInstall.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$ignored)
+    } catch { Warn 'Open a new terminal (or sign out and in) to pick up the new PATH.' }
+  }
   function Node-Major {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 0 }
     $version = (& node --version) -replace '^v', ''
@@ -117,21 +143,25 @@
       # A loop, not a pipeline: Windows PowerShell 5.1 passes a JSON array down the pipeline as ONE object.
       $lts = $null
       foreach ($release in (Invoke-RestMethod 'https://nodejs.org/dist/index.json' -UseBasicParsing)) { if ($release.lts) { $lts = $release.version; break } }
-      if (-not $lts) { throw 'no Node.js LTS release found' }
+      if ($lts -notmatch '^v\d+\.\d+\.\d+$') { throw 'no Node.js LTS release found' }
       $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
       $name = "node-$lts-win-$arch"
-      $zip = Join-Path $env:TEMP "$name.zip"
       $ProgressPreference = 'SilentlyContinue'
-      Invoke-WebRequest "https://nodejs.org/dist/$lts/$name.zip" -OutFile $zip -UseBasicParsing
-      $sums = (Invoke-WebRequest "https://nodejs.org/dist/$lts/SHASUMS256.txt" -UseBasicParsing).Content
-      $expected = ($sums -split "`n" | Where-Object { $_ -match " $name\.zip$" }) -replace '\s.*$', ''
-      if (-not $expected -or (Get-FileHash $zip -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw "checksum mismatch for $name.zip" }
-      $staging = Join-Path $toolFolder 'node-staging'
-      Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-      Expand-Archive $zip -DestinationPath $staging -Force
-      Remove-Item $privateNode -Recurse -Force -ErrorAction SilentlyContinue
-      Move-Item (Join-Path $staging $name) $privateNode
-      Remove-Item $staging, $zip -Recurse -Force -ErrorAction SilentlyContinue
+      # A fresh folder of our own for the download, so the only things deleted are folders made here.
+      $work = Join-Path $toolFolder ('download-' + [guid]::NewGuid().ToString('N'))
+      New-Item -ItemType Directory -Force $work | Out-Null
+      try {
+        $zip = Join-Path $work "$name.zip"
+        Invoke-WebRequest "https://nodejs.org/dist/$lts/$name.zip" -OutFile $zip -UseBasicParsing
+        $sums = (Invoke-WebRequest "https://nodejs.org/dist/$lts/SHASUMS256.txt" -UseBasicParsing).Content
+        $expected = @($sums -split "`n" | Where-Object { $_ -match " $name\.zip\s*$" } | ForEach-Object { ($_ -split '\s+')[0] })
+        if ($expected.Count -ne 1 -or $expected[0] -notmatch '^[0-9a-fA-F]{64}$' -or (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $expected[0].ToUpper()) { throw "checksum mismatch for $name.zip" }
+        $staging = Join-Path $work 'x'
+        Expand-Archive -LiteralPath $zip -DestinationPath $staging -Force
+        if (-not (Test-Path -LiteralPath (Join-Path $staging "$name\node.exe"))) { throw 'node.exe is not in the download' }
+        Remove-Inside $privateNode $toolFolder
+        Move-Item -LiteralPath (Join-Path $staging $name) -Destination $privateNode
+      } finally { Remove-Inside $work $toolFolder }
     } catch {
       Problem "Could not download Node.js: $_"
       Write-Host '   Check your internet connection and run this again (or install Node.js 20+ yourself from https://nodejs.org).'
@@ -143,13 +173,42 @@
 
   # 5. The CLI ---------------------------------------------------------------------------------------------------
   Step 'Installing windows-development-sandbox'
-  Write-Host "   npm install -g $package"
+  # The release package is downloaded first and checked against the SHA-256 GitHub publishes for it. A package you named
+  # yourself with WDS_PACKAGE is installed as given.
+  $installFrom = $package
+  $download = $null
+  if (-not $env:WDS_PACKAGE) {
+    $download = Join-Path $toolFolder ('download-' + [guid]::NewGuid().ToString('N'))
+    try {
+      $release = Invoke-RestMethod 'https://api.github.com/repos/JoshDiDuca/windows-development-sandbox/releases/latest' -UseBasicParsing -Headers @{ 'User-Agent' = 'windows-development-sandbox-installer' }
+      $asset = @($release.assets | Where-Object { $_.name -eq 'windows-development-sandbox.tgz' })[0]
+      $expected = if ($asset -and "$($asset.digest)" -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null }
+      if (-not $asset) { throw 'the release has no windows-development-sandbox.tgz' }
+      if ($expected) {
+        New-Item -ItemType Directory -Force $download | Out-Null
+        $file = Join-Path $download 'windows-development-sandbox.tgz'
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest $asset.browser_download_url -OutFile $file -UseBasicParsing
+        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'the download does not match the SHA-256 GitHub lists for it' }
+        $installFrom = $file
+        Ok 'package downloaded and its SHA-256 matches'
+      } elseif (Ask 'GitHub lists no SHA-256 for this package, so it cannot be checked. Install it anyway?') { Warn 'installing without a checksum' }
+      else { throw 'no SHA-256 to check the package against' }
+    } catch {
+      Problem "Could not check the package: $_"
+      Remove-Inside $download $toolFolder
+      return
+    }
+  }
+  Write-Host "   npm install -g $installFrom"
   # npm.cmd, not npm: the npm.ps1 shim is blocked when scripts are disabled on this PC.
   # The old agent-sandbox package ships the same commands; npm will not install over it.
   if ((& $npm ls -g --depth=0 agent-sandbox 2>$null) -match 'agent-sandbox@') { Write-Host '   Removing the old agent-sandbox package (it is now windows-development-sandbox) ...'; & $npm uninstall -g agent-sandbox | Out-Null }
-  & $npm install -g $package
-  if ($LASTEXITCODE -ne 0) {
-    Problem "npm could not install the package (exit code $LASTEXITCODE)."
+  & $npm install -g $installFrom
+  $npmExit = $LASTEXITCODE
+  if ($download) { Remove-Inside $download $toolFolder }
+  if ($npmExit -ne 0) {
+    Problem "npm could not install the package (exit code $npmExit)."
     Write-Host '   Check your internet connection and try again. Details are in the npm output above.'
     return
   }
@@ -162,8 +221,7 @@
     New-Item -ItemType Directory -Force $bin | Out-Null
     $commands = 'sandbox', 'windows-development-sandbox', 'agent-sandbox', 'claude-sandbox', 'codex-sandbox', 'gemini-sandbox', 'claude-sbx', 'codex-sbx', 'gemini-sbx', 'claude-host', 'sbx-show', 'sbx-hide'
     foreach ($c in $commands) { if (Test-Path (Join-Path $prefix "$c.cmd")) { Set-Content -Path (Join-Path $bin "$c.cmd") -Value "@`"$prefix\$c.cmd`" %*" -Encoding ASCII } }
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not (($userPath -split ';') -contains $bin)) { [Environment]::SetEnvironmentVariable('Path', (($userPath, $bin) | Where-Object { $_ }) -join ';', 'User') }
+    Add-UserPath $bin
     $env:Path = "$bin;$env:Path"
     $prefix = $bin
   }

@@ -4,14 +4,20 @@
 // restarted in place with --continue so the conversation carries on.
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
+import { isSafeFileName } from '../shared/paths.js';
+import { assertTestWritable } from './test-guard.js';
+import { readValid, writeJsonAtomic } from '../shared/rundir.js';
 import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../core/util.js';
 
 export interface Account { name: string; savedAt: string; email: string | null; credentials: unknown; oauthAccount: unknown }
 export interface AccountRow { name: string; email: string | null; isDefault: boolean; isActive: boolean; savedAt: string }
-interface Index { default?: string; active?: Record<string, string> }
 interface Login { credentials: unknown; oauthAccount: unknown }
 
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
+const AccountSchema = z.object({ name: z.string().regex(NAME), savedAt: z.string().max(64), email: z.string().max(200).nullable(), credentials: z.looseObject({}), oauthAccount: z.unknown() });
+const IndexSchema = z.object({ default: z.string().regex(NAME).optional(), active: z.record(z.string().max(200), z.string().regex(NAME)).optional() });
+type Index = z.output<typeof IndexSchema>;
 const ACCOUNT_CACHES = ['remote-settings.json', 'policy-limits.json', 'policy-limits.json.stamp.json'];
 const MAX_LOGIN_BYTES = 1024 * 1024;
 /** .claude.json holds per-project state and can be large; it is still capped so a hostile file cannot exhaust memory. */
@@ -23,16 +29,18 @@ const storageOf = (dataPath: string): string => path.dirname(path.dirname(dataPa
 const dataName = (dataPath: string): string => path.basename(dataPath);
 const accountFile = (storageRoot: string, name: string): string => path.join(accountsDir(storageRoot), name + '.json');
 const indexFile = (storageRoot: string): string => path.join(accountsDir(storageRoot), 'index.json');
-const readIndex = (storageRoot: string): Index => tryReadJson<Index>(indexFile(storageRoot)) ?? {};
-const updateIndex = (storageRoot: string, change: (index: Index) => Index): void => writeJson(indexFile(storageRoot), change(readIndex(storageRoot)));
+const readIndex = (storageRoot: string): Index => readValid(IndexSchema, indexFile(storageRoot)) ?? {};
+const updateIndex = (storageRoot: string, change: (index: Index) => Index): void => writeJsonAtomic(indexFile(storageRoot), change(readIndex(storageRoot)));
 
-const assertName = (name: string): void => { if (!NAME.test(name)) fail('Invalid account name "' + name + '".', 'Use letters, numbers, - and _ only (max 40), e.g. work or personal.'); };
+/** A file name of its own: not "index" (the index file), not a Windows device name such as con or nul. */
+const validName = (name: string): boolean => NAME.test(name) && name.toLowerCase() !== 'index' && isSafeFileName(name + '.json');
+const assertName = (name: string): void => { if (!validName(name)) fail('Invalid account name "' + name + '".', 'Use letters, numbers, - and _ only (max 40), e.g. work or personal.'); };
 const emailOf = (oauthAccount: unknown): string | null => {
   const email = (oauthAccount as { emailAddress?: unknown } | null)?.emailAddress;
   return typeof email === 'string' ? email.slice(0, 200) : null;
 };
 
-export const readAccount = (storageRoot: string, name: string): Account | null => (NAME.test(name) ? tryReadJson<Account>(accountFile(storageRoot, name)) : null);
+export const readAccount = (storageRoot: string, name: string): Account | null => (validName(name) ? readValid(AccountSchema, accountFile(storageRoot, name)) as Account | null : null);
 export const defaultAccount = (storageRoot: string): string | null => readIndex(storageRoot).default ?? null;
 export const activeAccount = (dataPath: string): string | null => readIndex(storageOf(dataPath)).active?.[dataName(dataPath)] ?? null;
 const setActive = (dataPath: string, name: string): void => updateIndex(storageOf(dataPath), (i) => ({ ...i, active: { ...i.active, [dataName(dataPath)]: name } }));
@@ -61,7 +69,7 @@ const readLogin = (claudeDir: string, globalStateFile: string): Login => {
 
 const store = (storageRoot: string, name: string, login: Login): Account => {
   const account: Account = { name, savedAt: new Date().toISOString(), email: emailOf(login.oauthAccount), ...login };
-  writeJson(accountFile(storageRoot, name), account);
+  writeJsonAtomic(accountFile(storageRoot, name), account);
   return account;
 };
 
@@ -82,6 +90,7 @@ export const saveAccount = (storageRoot: string, dataPath: string, name: string,
 
 /** Replaces a file that may be a sandbox-planted link instead of writing through it. */
 const writeSandboxJson = (file: string, value: unknown): void => {
+  assertTestWritable(file);
   if (isLink(file)) removeLink(file);
   writeJson(file, value);
 };
