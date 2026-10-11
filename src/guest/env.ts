@@ -58,9 +58,24 @@ export const execOutput = (file: string, args: string[], options: SpawnSyncOptio
 
 export const powershell = (script: string): void => exec(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
 
-/** Copies a folder with robocopy (fast, restartable); robocopy exit codes below 8 mean success. */
-export const robocopy = (from: string, to: string): void => {
-  if (!isWin) { fs.cpSync(from, to, { recursive: true }); return; }
-  const result = spawnSync(SYSTEM.robocopy(), [from, to, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1'], { stdio: 'ignore', windowsHide: true });
+/** Copies a folder with robocopy (fast, restartable), or just the named files in it; exit codes below 8 mean success. */
+export const robocopy = (from: string, to: string, files: string[] = []): void => {
+  if (!isWin) {
+    if (!files.length) { fs.cpSync(from, to, { recursive: true }); return; }
+    fs.mkdirSync(to, { recursive: true });
+    for (const f of files.filter((f) => fs.existsSync(path.join(from, f)))) fs.copyFileSync(path.join(from, f), path.join(to, f));
+    return;
+  }
+  const what = files.length ? files : ['/E', '/MT:16'];
+  const result = spawnSync(SYSTEM.robocopy(), [from, to, ...what, '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1', '/XJ'], { stdio: 'ignore', windowsHide: true });
   if ((result.status ?? 16) >= 8) throw new Error('robocopy ' + from + ' -> ' + to + ' failed (exit ' + result.status + ')');
+};
+
+/**
+ * A Node install without its global packages (nvm keeps those per version: often tens of thousands of small files,
+ * which is what made copying from this PC slow). Same file list as Copy-NodeFromHost in sandbox/bootstrap.ps1.
+ */
+export const copyNode = (from: string, to: string): void => {
+  robocopy(from, to, ['node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd']);
+  robocopy(path.join(from, 'node_modules', 'npm'), path.join(to, 'node_modules', 'npm'));
 };

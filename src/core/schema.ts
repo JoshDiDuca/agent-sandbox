@@ -61,7 +61,7 @@ const Provisioning = z.strictObject({
 const Toolchains = z.strictObject({
   node: z.strictObject({
     version: z.string().min(1).describe('Default Node version for nvm. "host" = the Node on this PC. A project\'s .nvmrc / .node-version wins.'),
-    extraVersions: Strings.describe('More Node versions to install (switch with nvm use).'),
+    extraVersions: Strings.describe('More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC\'s nvm, not counted towards that limit.'),
   }),
   python: z.strictObject({
     enabled: z.boolean().describe('Python 3 (CPython with pip).'),

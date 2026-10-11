@@ -14,6 +14,8 @@ const SETTINGS = {
   theme: 'dark',
   firstWindowPreference: 'defaultProfile',
   confirmCloseAllTabs: false,
+  // New tabs pick up the PATH and variables the runner writes machine-wide after the window opened.
+  compatibility: { reloadEnvironmentVariables: true },
   warning: { confirmCloseAllTabs: false, largePaste: false, multiLinePaste: false },
   profiles: { defaults: { font: { face: 'Cascadia Mono' }, startingDirectory: '%AGENT_WORKSPACE%',closeOnExit: 'graceful' } },
 };

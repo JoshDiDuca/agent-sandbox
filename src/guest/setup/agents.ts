@@ -13,7 +13,7 @@ const harnessPaths = (name: string, harness: Harness) => {
 /** npm install with the runner's own npm into tools\agents\<name> (no global state outside persistent storage). */
 const installViaNpm = (name: string, harness: Harness, dir: string, env: NodeJS.ProcessEnv): void => {
   if (!harness.npmPackage) throw new Error('No npmPackage configured for ' + name + ' and no host executable was available.');
-  const npmCli = path.join(toolsDir, 'node', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
   const args = [npmCli, 'install', '--global', '--prefix', dir, harness.npmPackage, '--no-fund', '--no-audit'];
   log('Installing ' + harness.npmPackage + ' (this can take a minute)...');
   if (dryRun) { log('(dry run) ' + process.execPath + ' ' + args.join(' ')); return; }

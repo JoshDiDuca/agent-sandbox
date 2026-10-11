@@ -30,12 +30,17 @@ export const probeHost = (config: Config, harnessName: string): HostProbe => {
   const nodeDir = isWin ? path.dirname(process.execPath) : null;
   const copy = config.provisioning.copyFromHost;
   const nvmHome = process.env.NVM_HOME;
+  const nvmDir = copy && nvmHome && dirExists(nvmHome) ? realPath(nvmHome) : null;
+  const hasNode = (dir: string): boolean => fileExists(path.join(dir, 'node.exe')) && fileExists(path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  // One source for Node: nvm's copy of this version when there is one, otherwise the Node folder itself.
+  const nvmNode = Boolean(nvmDir && hasNode(path.join(nvmDir, process.version)));
   return {
-    nodeDir: copy && nodeDir && fileExists(path.join(nodeDir, 'node.exe')) && fileExists(path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')) ? realPath(nodeDir) : null,
+    nodeDir: copy && !nvmNode && nodeDir && hasNode(nodeDir) ? realPath(nodeDir) : null,
     harnessExe: copy ? findHarnessExe(config, harnessName) : null,
     gitDir: copy && config.provisioning.git.enabled ? findGitRoot() : null,
-    nvmDir: copy && nvmHome && dirExists(nvmHome) ? realPath(nvmHome) : null,
+    nvmDir,
     hostNodeVersion: process.version,
+    nvmNode,
   };
 };
 
@@ -91,7 +96,7 @@ export const doctorRows = (config: Config, harnessName: string, storageRoot: str
     ['Sandbox running', isSandboxRunning() ? 'YES' : 'no'],
     ['Free host RAM (MB)', String(Math.floor(os.freemem() / 1048576))],
     ['Provisioning', config.provisioning.copyFromHost ? 'copy from this PC' + (config.provisioning.fallbackToInstall ? ', fall back to download' : ', no fallback') : 'download inside sandbox'],
-    ['Host Node (runner)', probe.nodeDir ?? '(none; will download)'],
+    ['Host Node (runner)', probe.nvmNode ? 'nvm ' + probe.hostNodeVersion : probe.nodeDir ?? '(none; will download)'],
     ['Host nvm versions', probe.nvmDir ?? '(no NVM_HOME; versions will be downloaded)'],
     ['Host ' + harnessName, probe.harnessExe ? path.join(probe.harnessExe.dir, probe.harnessExe.file) : '(none; will npm install)'],
     ['Host Git for Windows', probe.gitDir ?? '(none with bash; PortableGit will be downloaded)'],

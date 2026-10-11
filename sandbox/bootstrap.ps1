@@ -8,19 +8,24 @@ $ProgressPreference = 'SilentlyContinue'   # progress bars make PS 5.1 downloads
 
 $launchDir = 'C:\AgentLaunch'
 $dataDir = 'C:\AgentData'
-$hostNode = 'C:\HostTools\node'
+$hostNodeDir = 'C:\HostTools\node'
+$hostNvm = 'C:\HostTools\nvm'
 $toolsDir = Join-Path $dataDir 'tools'
-$nodeDir = Join-Path $toolsDir 'node'
-$nodeExe = Join-Path $nodeDir 'node.exe'
+# The runner's Node lives with nvm's versions (tools\nvm\v<version>), so nvm reuses it instead of copying it again.
+$nvmDir = Join-Path $toolsDir 'nvm'
+$runnerFile = Join-Path $toolsDir 'runner-node.txt'
+$nodeDir = $null
+$nodeExe = $null
 $logsDir = Join-Path $dataDir 'logs'
 $runDir = Join-Path $dataDir 'run'
-foreach ($dir in @($logsDir, $toolsDir, $runDir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+foreach ($dir in @($logsDir, $toolsDir, $nvmDir, $runDir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 $host.UI.RawUI.WindowTitle = 'Agent Sandbox'
 Write-Host 'Agent sandbox bootstrap started.' -ForegroundColor Cyan
 $transcript = Join-Path $logsDir ('bootstrap-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 Start-Transcript -Path $transcript | Out-Null
 $transcriptStopped = $false
 $session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw | ConvertFrom-Json
+$hostVersion = [string]$session.hostTools.nodeVersion
 
 function Set-Status([string]$Phase, [string]$Message) {
     # Same shape as SandboxStatus in src/shared/schema.ts; written atomically so the host never reads half a file.
@@ -47,9 +52,25 @@ function Invoke-Download([string]$Uri, [string]$OutFile) {
     }
 }
 
+function Set-Runner([string]$Version) {
+    $script:nodeDir = Join-Path $nvmDir ('v' + $Version.TrimStart('v'))
+    $script:nodeExe = Join-Path $script:nodeDir 'node.exe'
+}
+
 function Test-Node {
     if (-not (Test-Path -LiteralPath $nodeExe)) { return $false }
     try { $null = & $nodeExe --version; return ($LASTEXITCODE -eq 0) } catch { return $false }
+}
+
+function Find-CachedRunner {
+    # This PC's version first (nvm will want it anyway), else whichever version the last boot used.
+    $last = if (Test-Path -LiteralPath $runnerFile) { (Get-Content -LiteralPath $runnerFile -Raw).Trim() } else { '' }
+    foreach ($version in @($hostVersion, $last)) {
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { continue }
+        Set-Runner $version
+        if (Test-Node) { return $true }
+    }
+    return $false
 }
 
 function Publish-Directory([string]$Staging, [string]$Destination) {
@@ -57,17 +78,62 @@ function Publish-Directory([string]$Staging, [string]$Destination) {
     Move-Item -LiteralPath $Staging -Destination $Destination
 }
 
+function Get-Size([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return 0 }
+    $sum = (Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sum) { return 0 } else { return [long]$sum }
+}
+
+function Invoke-Robocopy([string]$Label, [string]$From, [string]$To, [string[]]$Options, [long]$Total) {
+    # Runs robocopy in the background and prints how far it has got, so a slow copy never looks frozen.
+    # /R:2 /W:1: robocopy's default is 1,000,000 retries 30 s apart, which hangs "forever" on one unreadable file.
+    $totalMb = [math]::Round($Total / 1MB, 1)
+    Write-Host "  $Label ($totalMb MB) ..."
+    $argList = @("`"$From`"", "`"$To`"") + $Options + @('/XJ', '/R:2', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+    $process = Start-Process -FilePath 'robocopy.exe' -ArgumentList $argList -NoNewWindow -PassThru
+    $null = $process.Handle   # keeps ExitCode readable after the process exits
+    $started = Get-Date
+    while (-not $process.WaitForExit(2000)) {
+        $done = Get-Size $To
+        $pct = if ($Total -gt 0) { [math]::Min(100, [math]::Floor($done * 100 / $Total)) } else { 0 }
+        $secs = [int]((Get-Date) - $started).TotalSeconds
+        Write-Host ("  {0}: {1} of {2} MB ({3}%), {4}s" -f $Label, [math]::Round($done / 1MB, 1), $totalMb, $pct, $secs)
+    }
+    $code = $process.ExitCode
+    if ($code -ge 8) { Write-Warning "robocopy failed copying $Label (exit code $code)"; return $false }
+    Write-Host ("  {0}: done in {1}s" -f $Label, [int]((Get-Date) - $started).TotalSeconds)
+    return $true
+}
+
 function Copy-NodeFromHost {
-    if (-not (Test-Path -LiteralPath (Join-Path $hostNode 'node.exe'))) { return $false }
-    Write-Host "Copying Node from this PC ($hostNode) ..."
+    # The host maps one of these: nvm (when this PC's Node is an nvm version) or the plain Node folder.
+    if ($hostVersion -notmatch '^\d+\.\d+\.\d+$') { return $false }
+    $hostNode = @((Join-Path $hostNvm "v$hostVersion"), $hostNodeDir) | Where-Object { Test-Path -LiteralPath (Join-Path $_ 'node.exe') } | Select-Object -First 1
+    if (-not $hostNode) { return $false }
+    # Only node.exe, the npm shims and node_modules\npm (same list as copyNode in src/guest/env.ts): nothing else is
+    # needed, and the folder can hold every global npm package, i.e. tens of thousands of small files over a slow mapping.
+    Write-Host "Copying Node $hostVersion from this PC ($hostNode) ..."
+    Set-Status 'booting' 'Copying Node from this PC'
     $staging = Join-Path $toolsDir 'node-staging'
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
-    & robocopy.exe $hostNode $staging /E /NFL /NDL /NJH /NJS /NP | Out-Null
-    $code = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
-    if ($code -ge 8) { Write-Warning "robocopy failed with exit code $code"; return $false }
+    $files = @('node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd')
+    $filesSize = ($files | ForEach-Object { Get-Item -LiteralPath (Join-Path $hostNode $_) -ErrorAction SilentlyContinue } | Measure-Object -Property Length -Sum).Sum
+    $npmFrom = Join-Path $hostNode 'node_modules\npm'
+    $ok = (Invoke-Robocopy -Label 'node.exe' -From $hostNode -To $staging -Options ($files + '/J') -Total ([long]$filesSize)) -and
+          (Invoke-Robocopy -Label 'npm' -From $npmFrom -To (Join-Path $staging 'node_modules\npm') -Options @('/E', '/MT:16') -Total (Get-Size $npmFrom))
+    if (-not $ok) { return $false }
+    Set-Runner $hostVersion
     Publish-Directory -Staging $staging -Destination $nodeDir
     return (Test-Node)
+}
+
+function Update-Environment {
+    # main.js writes PATH and the tool variables machine-wide; reload them so this (-NoExit) shell has nvm, git, etc.
+    foreach ($scope in @('Machine', 'User')) {
+        $vars = [Environment]::GetEnvironmentVariables($scope)
+        foreach ($name in $vars.Keys) { if ($name -ne 'Path') { Set-Item -LiteralPath "env:$name" -Value ([string]$vars[$name]) } }
+    }
+    $env:PATH = ([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User') | Where-Object { $_ }) -join ';'
 }
 
 function Install-NodeFromWeb {
@@ -97,6 +163,7 @@ function Install-NodeFromWeb {
         if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force }
         $inner = Join-Path $extractDir "node-$version-win-$arch"
         if (-not (Test-Path -LiteralPath (Join-Path $inner 'node.exe'))) { throw 'Unexpected Node archive layout.' }
+        Set-Runner $version
         Publish-Directory -Staging $inner -Destination $nodeDir
     }
     finally {
@@ -107,7 +174,7 @@ function Install-NodeFromWeb {
 try {
     Set-Status 'booting' 'Preparing the runner'
     $provisioning = $session.provisioning
-    if ((Test-Node) -and -not $provisioning.refresh) {
+    if (-not $provisioning.refresh -and (Find-CachedRunner)) {
         Write-Host ('Runner Node ' + (& $nodeExe --version) + ' cached in persistent storage.')
     }
     else {
@@ -123,6 +190,10 @@ try {
         if (-not (Test-Node)) { throw 'Node is not runnable after provisioning.' }
         Write-Host ('Runner Node ' + (& $nodeExe --version) + ' ready.')
     }
+    [IO.File]::WriteAllText($runnerFile, (Split-Path -Leaf $nodeDir).TrimStart('v'))
+    # Older versions kept a full copy of the host's Node folder here.
+    $legacy = Join-Path $toolsDir 'node'
+    if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Recurse -Force -ErrorAction SilentlyContinue }
 
     $env:PATH = "$nodeDir;$env:PATH"
     Set-Location -LiteralPath $session.workspace
@@ -136,6 +207,7 @@ try {
         if ($null -eq $current -or $current.phase -ne 'failed') { Set-Status 'failed' ("The sandbox runner stopped (exit code $code). See C:\AgentData\logs.") }
         Write-Host "The sandbox runner stopped with exit code $code. Logs: $logsDir" -ForegroundColor Red
     }
+    Update-Environment
     Write-Host "This window stays open in $($session.workspace)."
 }
 catch {

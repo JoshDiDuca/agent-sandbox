@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pruneStorage } from '../host/cleanup.js';
 import { toRegFile } from '../host/personalize.js';
-import { pickNodeVersion, pickPackageVersion } from '../guest/toolchains/versions.js';
+import { pickNodeVersion, pickPackageVersion, pickSpreadVersions } from '../guest/toolchains/versions.js';
 import { buildFirewallCommands, cidrToRange, parseDefaultGateways, parseDnsServers, subtractIps } from '../shared/netrules.js';
 import { ensureDir } from '../core/util.js';
 import type { Harness } from './harness.js';
@@ -14,6 +14,8 @@ export const helperTests = (t: Harness): void => {
   t.section('versions, registry, firewall');
   const releases = [{ version: 'v23.1.0', lts: false as const }, { version: 'v22.11.0', lts: 'Jod' }, { version: 'v20.18.0', lts: 'Iron' }, { version: 'v20.9.0', lts: 'Iron' }];
   check(pickNodeVersion(releases, 'lts/*') === '22.11.0' && pickNodeVersion(releases, 'lts/iron') === '20.18.0' && pickNodeVersion(releases, '20') === '20.18.0' && pickNodeVersion(releases, 'v20.9.0') === '20.9.0' && pickNodeVersion(releases, 'node') === '23.1.0' && pickNodeVersion(releases, '99') === null, '.nvmrc specs resolve (lts/*, lts/<name>, major, exact, node)');
+  const spread = pickSpreadVersions(['16.20.2', '18.19.0', '18.20.4', '20.18.0', '22.3.0', '22.11.0', '23.1.0', 'notes'], '22.11.0', 3);
+  check(JSON.stringify(spread) === '["22.11.0","16.20.2","23.1.0"]' && pickSpreadVersions(['20.18.0'], '22.3.0', 3).join() === '22.3.0,20.18.0' && pickSpreadVersions(['18.20.4', '20.18.0'], '22.3.0', 1).join() === '22.3.0', 'host nvm versions: capped, current first, rest spread across other majors');
   check(pickPackageVersion(['3.9.13', '3.12.7', '3.12.10', '3.13.0-rc1', '3.13.1'], '3') === '3.13.1' && pickPackageVersion(['3.12.7', '3.12.10'], '3.12') === '3.12.10' && pickPackageVersion(['2.7.18'], '2.7') === '2.7.18', 'Python versions resolve to the newest stable match');
   const reg = toRegFile([{ key: 'Control Panel\\Desktop', name: 'WallpaperStyle', kind: 'String', value: '10' }, { key: 'X', name: 'D', kind: 'DWord', value: 4294967295 }, { key: 'X', name: 'B', kind: 'Binary', value: Buffer.from([1, 255]).toString('base64') }]);
   check(reg.includes('[HKEY_CURRENT_USER\\Control Panel\\Desktop]') && reg.includes('"WallpaperStyle"="10"') && reg.includes('"D"=dword:ffffffff') && reg.includes('"B"=hex:01,ff'), 'personalisation: registry values become a valid .reg file (HKCU only)');

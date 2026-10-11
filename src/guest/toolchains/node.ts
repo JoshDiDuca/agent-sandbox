@@ -5,14 +5,20 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { ToolVersions } from '../../core/types.js';
 import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
-import { dryRun, errMsg, exists, hostToolsDir, localDir, log, mkdirp, robocopy, warn } from '../env.js';
+import { copyNode, dryRun, errMsg, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
 import { arch, resolveCached, tool, type ToolEnv } from './common.js';
-import { pickNodeVersion, type NodeRelease } from './versions.js';
+import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
 
 
 const NVM_HOME = tool('nvm');
 const NVM_SYMLINK = path.join(localDir, 'nodejs');
 const HOST_NVM = path.join(hostToolsDir, 'nvm');
+/** Most Node versions taken from this PC's nvm, the selected one included. */
+const HOST_VERSIONS_MAX = 3;
+
+const hostNvmVersions = (): string[] => exists(HOST_NVM)
+  ? fs.readdirSync(HOST_NVM).filter((d) => /^v\d+\.\d+\.\d+$/.test(d) && exists(path.join(HOST_NVM, d, 'node.exe'))).map((d) => d.slice(1))
+  : [];
 
 const resolveNode = (spec: string): Promise<string> => resolveCached('node:' + spec, async () => {
   const exact = spec.replace(/^v/, '');
@@ -46,7 +52,7 @@ const installNodeVersion = (version: string): void => {
   const dir = path.join(NVM_HOME, 'v' + version);
   const fromHost = path.join(HOST_NVM, 'v' + version);
   if (exists(path.join(dir, 'node.exe'))) return;
-  if (exists(path.join(fromHost, 'node.exe'))) { log('Copying Node ' + version + ' from this PC\'s nvm ...'); robocopy(fromHost, dir); return; }
+  if (exists(path.join(fromHost, 'node.exe'))) { log('Copying Node ' + version + ' from this PC\'s nvm (without global packages) ...'); copyNode(fromHost, dir); return; }
   log('nvm install ' + version + ' ...');
   const out = nvm(['install', version]);
   if (!exists(path.join(dir, 'node.exe'))) throw new Error('nvm install ' + version + ' failed: ' + out.trim().split('\n').slice(-2).join(' '));
@@ -69,6 +75,10 @@ export const setupNode = async (env: ToolEnv, versions: ToolVersions): Promise<v
   }
   const main = await resolveNode(versions.node.spec);
   installNodeVersion(main);
+  // A few more of this PC's versions (copied, never downloaded) so `nvm use` works offline; capped to keep boot fast.
+  for (const version of pickSpreadVersions(hostNvmVersions(), main, HOST_VERSIONS_MAX).slice(1)) {
+    try { installNodeVersion(version); } catch (e) { warn('Node ' + version + ' from this PC: ' + errMsg(e)); }
+  }
   activate(main);
   Object.assign(env.vars, { NVM_HOME, NVM_SYMLINK });
   env.prepend.push(NVM_HOME, NVM_SYMLINK);

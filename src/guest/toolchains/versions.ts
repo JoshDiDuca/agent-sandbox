@@ -13,6 +13,22 @@ export const pickNodeVersion = (releases: NodeRelease[], spec: string): string |
   return hit ? hit.version.slice(1) : null;
 };
 
+/**
+ * Which of this PC's nvm versions to copy along with `current`: at most `max` in total, current included, the rest
+ * spread across the range (newest of each major first, then evenly spaced from oldest to newest).
+ */
+export const pickSpreadVersions = (available: string[], current: string, max: number): string[] => {
+  const byVersion = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+  const exact = available.filter((v) => /^\d+\.\d+\.\d+$/.test(v) && v !== current).sort(byVersion);
+  const newestPerMajor = exact.filter((v, i) => exact[i + 1]?.split('.')[0] !== v.split('.')[0]);
+  const pool = newestPerMajor.filter((v) => v.split('.')[0] !== current.split('.')[0]);
+  const want = Math.max(0, max - 1);
+  const picked = want >= pool.length ? pool
+    : want === 1 ? [pool[pool.length - 1]]
+    : Array.from({ length: want }, (_, i) => pool[Math.round(i * (pool.length - 1) / (want - 1))]);
+  return [current, ...picked];
+};
+
 /** Newest stable version matching a prefix spec ("3" -> 3.13.1, "3.12" -> 3.12.10). */
 export const pickPackageVersion = (all: string[], spec: string): string | null => {
   const s = spec.trim().replace(/^python-?/i, '');

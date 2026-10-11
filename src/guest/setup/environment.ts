@@ -21,9 +21,9 @@ export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>): N
     AGENT_PROJECT: session.project,
   };
   for (const dir of [env.CLAUDE_CONFIG_DIR, env.CODEX_HOME, env.GEMINI_CLI_HOME, env.npm_config_cache]) mkdirp(dir as string);
-  // The runner's own Node (C:\AgentData\tools\node) is not exposed: `node` is whatever nvm selected.
-  const runner = path.join(toolsDir, 'node').toLowerCase();
-  const base = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && d.toLowerCase() !== runner);
+  // The runner's own Node (bootstrap.ps1 puts it first on PATH) is not exposed: `node` is whatever nvm selected.
+  const runners = [path.join(toolsDir, 'node'), path.dirname(process.execPath)].map((d) => d.toLowerCase());
+  const base = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && !runners.includes(d.toLowerCase()));
   env.PATH = [...new Set([...tools.prepend, ...base, ...tools.append])].join(path.delimiter);
   return env;
 };
