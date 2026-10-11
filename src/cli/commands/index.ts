@@ -3,6 +3,6 @@ export { launch } from './launch.js';
 export { setup } from './setup.js';
 export { data } from './data.js';
 export { repair, repairCommand } from './repair.js';
-export { attach, exec, hide, restart, sessions, show, status, stop } from './sessions.js';
+export { attach, db, exec, hide, restart, sessions, show, status, stop } from './sessions.js';
 export { account } from './accounts.js';
 export { claudeHost, clean, config, doctor, logs, sync, watcher } from './maintenance.js';

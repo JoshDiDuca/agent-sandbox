@@ -15,6 +15,7 @@ export const cliTests = (t: Harness): void => {
   check(start.command === 'launch' && start.noAgent && start.headless === true, '`start` is launch without an agent');
   const clean = parseCli(['data', 'clean', 'tools/go', 'logs', '--yes']);
   check(clean.command === 'data' && clean.positionals.join() === 'clean,tools/go,logs' && clean.yes, 'data clean takes targets and --yes');
+  check(parseCli(['start', '--database', 'postgres,redis', '--database', 'mongodb']).databases.join() === 'postgres,redis,mongodb' && parseCli(['db', 'start', 'redis']).positionals.join() === 'start,redis', '--database takes lists and repeats; `db` takes an action and a name');
   check(parseCli(['launch', '--harness', 'opencode', '--', '--continue']).passthrough.join() === '--continue', 'agent arguments after -- reach the agent');
   check(JSON.stringify(splitArgs('--model "big one" -c \'x y\'')) === '["--model","big one","-c","x y"]' && commandLine(['exec', 'echo', 'a b']) === 'sandbox exec echo "a b"', 'menu: arguments split like a shell, command lines quoted');
   const original = '{\n  // my notes stay\n  "sandbox": { "headless": true }\n}\n';

@@ -15,7 +15,7 @@ import { applyPersonalization, setupGitConfig } from './setup/user.js';
 import { ensurePtyHost, pruneToolLeftovers } from './ptyhost.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
-import { dataDir, dryRun, errMsg, isWin, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
+import { dataDir, dryRun, errMsg, isWin, localDir, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
 
 const STEPS = 8;
 const step = (n: number, title: string): void => { log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m'); setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title); };
@@ -23,6 +23,14 @@ const soft = async (what: string, work: () => unknown): Promise<void> => { try {
 
 const startDaemon = (env: NodeJS.ProcessEnv): void => {
   spawn(process.execPath, [path.join(path.dirname(process.argv[1]), 'daemon.js')], { detached: true, stdio: 'ignore', windowsHide: true, env: { ...env, AGENT_LOG_PREFIX: 'daemon' } }).unref();
+};
+
+/** `sbx-db` for terminals and `sandbox db`: this boot's Node running runtime\db.js (on the sandbox's disk, rewritten each boot). */
+const writeDbCommand = (): string => {
+  const dir = mkdirp(path.join(localDir, 'bin'));
+  const db = path.join(path.dirname(process.argv[1]), 'db.js');
+  fs.writeFileSync(path.join(dir, 'sbx-db.cmd'), '@setlocal\r\n@set AGENT_LOG_PREFIX=db\r\n@"' + process.execPath + '" "' + db + '" %*\r\n');
+  return dir;
 };
 
 const waitForPrimary = async (): Promise<boolean> => {
@@ -54,6 +62,7 @@ const main = async (): Promise<void> => {
   const gitAccess = session.provisioning.git.access ?? 'full';
   step(3, 'Toolchains (Git, nvm/Node, Python, Rust, .NET, Bun, uv)');
   const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [] });
+  if (!dryRun) tools.prepend.push(writeDbCommand());
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
   for (const line of tools.summary) log('  ' + line);

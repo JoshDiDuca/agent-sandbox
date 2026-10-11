@@ -35,6 +35,7 @@ Options:
 | `--harness <agent>`, `--account <name>` | which agent, which Claude account |
 | `--node <v>`, `--python <v>` | override the versions |
 | `--workspace <dir>` | another folder instead of the current one |
+| `--database <name>` | also start this database, e.g. `--database postgres,redis` (repeatable) |
 | `--script <file>` | run a `.ps1`/`.mjs`/`.cmd` inside before the agent (repeatable) |
 | `--no-agent`, `--trust-config`, `--no-local-config` | no agent, approve the project file, ignore the project file |
 
@@ -48,6 +49,7 @@ Anything else goes to the agent: `sandbox claude --continue`. If an agent has a 
 | `sandbox attach [id]` | show a session in this terminal (`Ctrl+]` detaches) |
 | `sandbox sessions` | sessions and who is attached |
 | `sandbox status` | overview |
+| `sandbox db [start\|stop <name>]` | list, start or stop databases in the running sandbox (`sbx-db` inside) |
 | `sandbox exec -- <cmd>` | run a command inside and print its output (`--timeout`, `--workspace`) |
 | `sandbox restart` | restart agents in place; they resume their conversation |
 | `sandbox stop` | shut down (history syncs back) |

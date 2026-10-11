@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
 import { userDir } from './config.js';
 import { planMirrorWorkspace } from '../shared/guest-paths.js';
+import { DATABASES, type Database } from './detect-databases.js';
 import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { dirExists, expandPath, fail, fileExists, isInsideOrEqual, isRootPath, isUserProfile } from './util.js';
 
@@ -124,6 +125,11 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
     notes.push('Using ' + local.path);
   }
   if (req.headless !== undefined) config = { ...config, sandbox: { ...config.sandbox, headless: req.headless } };
+  for (const name of req.databases ?? []) {
+    const db = name.toLowerCase() as Database;
+    if (!DATABASES.includes(db)) fail('Unknown database "' + name + '".', 'Choose from: ' + DATABASES.join(', '));
+    config = { ...config, databases: { ...config.databases, [db]: { ...config.databases[db], enabled: true } } };
+  }
   if (config.guestWorkspace === 'auto') config = { ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) };
   else if (config.guestWorkspace === 'mirror') {
     const plan = planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));

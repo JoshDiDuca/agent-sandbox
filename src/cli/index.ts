@@ -21,6 +21,7 @@ const HANDLERS: Record<string, Handler> = {
   sessions: commands.sessions,
   status: commands.status,
   exec: commands.exec,
+  db: commands.db,
   restart: commands.restart,
   stop: commands.stop,
   show: commands.show,

@@ -67,6 +67,20 @@ export const exec = async (ctx: Context): Promise<number> => {
   return result.exitCode ?? 1;
 };
 
+/** `sandbox db`: runs the sandbox's own `sbx-db`, which knows this project's database versions and ports. */
+export const db = async (ctx: Context): Promise<number> => {
+  const [action = 'list', name] = ctx.options.positionals;
+  if (action !== 'list' && !name) fail('Which database?', 'Usage: sandbox db ' + action + ' <postgres|mysql|mongodb|redis|dynamodb>');
+  requireRunning('Start one with: sandbox start --database <name>');
+  const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
+  // Starting can download the database the first time.
+  const result = await execInSandbox(ctx.dataPath, ['sbx-db', action, ...(name ? [name] : [])], ready.guestWorkspace, 1800, sandboxAlive);
+  if (result.stdout) process.stdout.write(safeText(result.stdout));
+  if (result.stderr) process.stderr.write(safeText(result.stderr));
+  if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
+  return result.exitCode ?? 1;
+};
+
 export const restart = async (ctx: Context): Promise<number> => {
   requireRunning();
   console.log((await restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive)).message);

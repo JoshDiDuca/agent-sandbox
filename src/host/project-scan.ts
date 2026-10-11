@@ -112,7 +112,24 @@ export const planDatabases = (config: Config['databases'], workspace: string, pr
   const autos = DATABASES.filter((db) => config[db].enabled === 'auto');
   const files = autos.length ? probe.files ?? readProjectFiles(workspace) : [];
   const detected = autos.length ? detectDatabases(files, probe.host ?? hostDatabases) : [];
-  const compose = files.filter((f) => /compose/i.test(f.path));
+  const plan = databasePlanner(config, files.filter((f) => /compose/i.test(f.path)));
+  return DATABASES.flatMap((database): DatabasePlan[] => {
+    const setting = config[database].enabled;
+    const found = detected.find((d) => d.database === database);
+    if (setting === true) return [plan(database, ['enabled in config'])];
+    if (setting === 'auto' && found) return [plan(database, found.reasons)];
+    return [];
+  });
+};
+
+/** Every database the sandbox can run, so `sbx-db start <name>` works for ones that did not start at boot. */
+export const databaseCatalog = (config: Config['databases']): DatabasePlan[] => {
+  const plan = databasePlanner(config, []);
+  return DATABASES.filter((db) => db !== 'sqlserver').map((db) => plan(db, ['started with sbx-db']));
+};
+
+/** Version (a compose file's image tag wins), port and admin UI for one database. */
+const databasePlanner = (config: Config['databases'], compose: ProjectFile[]) => {
   const versions: Record<Database, string> = {
     postgres: pinnedVersion(compose, /image:\s*["']?(?:[\w.-]+\/)*postgres:([\w.-]+)/i) ?? (config.postgres.version === 'latest' ? 'latest' : config.postgres.version),
     mysql: config.mysql.version,
@@ -122,12 +139,8 @@ export const planDatabases = (config: Config['databases'], workspace: string, pr
     sqlserver: '',
   };
   const ports: Record<Database, number> = { postgres: config.postgres.port, mysql: config.mysql.port, mongodb: config.mongodb.port, redis: config.redis.port, dynamodb: config.dynamodb.port, sqlserver: 1433 };
-  return DATABASES.flatMap((database): DatabasePlan[] => {
-    const setting = config[database].enabled;
-    const found = detected.find((d) => d.database === database);
-    const extra = database === 'dynamodb' && config.dynamodb.admin ? { adminPort: config.dynamodb.adminPort } : {};
-    if (setting === true) return [{ database, reasons: ['enabled in config'], version: versions[database], port: ports[database], ...extra }];
-    if (setting === 'auto' && found) return [{ database, reasons: found.reasons, version: versions[database], port: ports[database], ...extra }];
-    return [];
+  return (database: Database, reasons: string[]): DatabasePlan => ({
+    database, reasons, version: versions[database], port: ports[database],
+    ...(database === 'dynamodb' && config.dynamodb.admin ? { adminPort: config.dynamodb.adminPort } : {}),
   });
 };

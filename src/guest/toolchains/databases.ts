@@ -4,16 +4,17 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { DatabasePlan } from '../../core/types.js';
 import { fetchJson, fetchText, githubAsset, installArchive } from '../../shared/download.js';
+import { SYSTEM } from '../../shared/system.js';
 import { ensureJdk } from './java.js';
 import { dataDir, dryRun, execAsync, exists, log, logsDir, mkdirp } from '../env.js';
 import { resolveCached, tool, type ToolEnv } from './common.js';
 
 const dataFor = (name: string): string => path.join(dataDir, 'databases', name);
 
-const portOpen = (port: number): Promise<boolean> => new Promise((resolve) => {
+export const portOpen = (port: number): Promise<boolean> => new Promise((resolve) => {
   const socket = net.connect({ host: '127.0.0.1', port }, () => { socket.destroy(); resolve(true); });
   socket.once('error', () => resolve(false));
 });
@@ -202,6 +203,30 @@ const setupDynamo = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
 const SETUP = { postgres: setupPostgres, mysql: setupMysql, mongodb: setupMongo, redis: setupRedis, dynamodb: setupDynamo } as const;
 
 export const DATABASE_NAMES: Record<DatabasePlan['database'], string> = { postgres: 'PostgreSQL', mysql: 'MySQL (MariaDB)', mongodb: 'MongoDB', redis: 'Redis', dynamodb: 'DynamoDB Local', sqlserver: 'SQL Server' };
+
+/** The process listening on a local TCP port (netstat: no PowerShell start-up cost), or null. */
+const listenerPid = (port: number): number | null => {
+  const out = spawnSync(SYSTEM.netstat(), ['-ano', '-p', 'TCP'], { encoding: 'utf8', windowsHide: true }).stdout ?? '';
+  const hit = out.split(/\r?\n/).map((l) => /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/.exec(l)).find((m) => m && Number(m[1]) === port);
+  return hit ? Number(hit[2]) : null;
+};
+
+/** Stops a database (and DynamoDB's admin UI). PostgreSQL shuts down cleanly through pg_ctl; the others are ended. */
+export const stopDatabase = async (plan: DatabasePlan): Promise<boolean> => {
+  if (!(await portOpen(plan.port))) return false;
+  if (plan.database === 'postgres' && exists(tool('postgres'))) {
+    for (const version of fs.readdirSync(tool('postgres'))) {
+      const data = dataFor('postgres-' + version.split('.')[0]);
+      const pgCtl = path.join(tool('postgres', version), 'bin', 'pg_ctl.exe');
+      if (exists(path.join(data, 'postmaster.pid')) && exists(pgCtl)) await execAsync(pgCtl, ['stop', '-D', data, '-m', 'fast', '-w'], { stdio: 'ignore' });
+    }
+  }
+  for (const port of [plan.port, plan.adminPort ?? 0]) {
+    const pid = port && listenerPid(port);
+    if (pid) try { process.kill(pid); } catch { /* already gone */ }
+  }
+  return true;
+};
 
 export const setupDatabase = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   if (plan.database === 'sqlserver') {

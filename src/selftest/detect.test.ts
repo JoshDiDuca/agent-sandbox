@@ -1,7 +1,7 @@
 // "Which databases does this project need?": detection from real-world file shapes, and the plan the host builds.
 import { databasesFromServices, detectDatabases, type ProjectFile } from '../core/detect-databases.js';
 import { DEFAULTS } from '../core/config.js';
-import { planDatabases } from '../host/project-scan.js';
+import { databaseCatalog, planDatabases } from '../host/project-scan.js';
 import { voltaNode } from '../core/workspace.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
 import { parseReleasePage } from '../shared/download.js';
@@ -27,6 +27,8 @@ export const detectTests = (t: Harness): void => {
   const plan = planDatabases({ ...DEFAULTS.databases, mongodb: { ...DEFAULTS.databases.mongodb, enabled: true }, redis: { ...DEFAULTS.databases.redis, enabled: false } }, 'unused', { files: [compose], host: [] });
   check(plan.map((p) => p.database + '@' + p.version + ':' + p.port).join() === 'postgres@16:5432,mongodb@latest:27017,dynamodb@latest:8000' && plan.find((p) => p.database === 'dynamodb')?.adminPort === 8001,
     'plan: "auto" from the project (compose pins Postgres 16), true always, false never; DynamoDB gets its admin UI');
+  const catalog = databaseCatalog({ ...DEFAULTS.databases, postgres: { ...DEFAULTS.databases.postgres, enabled: false, port: 6543 } });
+  check(catalog.map((p) => p.database).join() === 'postgres,mysql,mongodb,redis,dynamodb' && catalog[0].port === 6543, 'sbx-db catalog: every database that can run (not SQL Server), even ones off at boot, with their configured ports');
   const volta = t.write(t.temp + '\\volta-ws\\package.json', '{"name":"x","volta":{"node":"20.11.1","pnpm":"9.1.0"}}');
   t.write(t.temp + '\\no-volta-ws\\package.json', '{"name":"y","volta":{"node":"latest; rm -rf"}}');
   check(voltaNode(volta.replace(/\\package\.json$/, '')) === '20.11.1' && voltaNode(t.temp + '\\no-volta-ws') === null && voltaNode(t.temp + '\\missing') === null, 'Volta: package.json "volta.node" picks the Node version (only a plain version is accepted)');

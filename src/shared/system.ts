@@ -13,6 +13,7 @@ export const SYSTEM = {
   tar: (): string => system32('tar.exe'),
   reg: (): string => system32('reg.exe'),
   netsh: (): string => system32('netsh.exe'),
+  netstat: (): string => system32('NETSTAT.EXE'),
   route: (): string => system32('ROUTE.EXE'),
   ipconfig: (): string => system32('ipconfig.exe'),
   robocopy: (): string => system32('Robocopy.exe'),

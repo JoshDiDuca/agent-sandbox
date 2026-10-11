@@ -94,7 +94,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   }
   const run = await resolveRun({
     packageRoot, loaded, cwd: process.cwd(), workspace: options.workspace, harness: options.harness, noAgent: options.noAgent,
-    noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, headless: options.headless,
+    noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, databases: options.databases, headless: options.headless,
     nodeVersion: options.node, pythonVersion: options.python, ask: askYesNo,
   });
   const { config } = run;

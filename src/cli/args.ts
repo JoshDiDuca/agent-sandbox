@@ -7,7 +7,7 @@ import { COMMANDS, type OptionSpecT } from './manifest.js';
 export interface CliOptions {
   command: string; positionals: string[]; passthrough: string[];
   config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
-  scripts: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
+  scripts: string[]; databases: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
   personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; yes: boolean; timeout: number; days: number;
 }
 
@@ -89,6 +89,7 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     node: o.node as string | undefined,
     python: o.python as string | undefined,
     scripts: (o.script as string[] | undefined) ?? [],
+    databases: ((o.database as string[] | undefined) ?? []).flatMap((d) => d.split(',')).map((d) => d.trim()).filter(Boolean),
     headless: o.window ? false : o.headless ? true : undefined,
     terminal: Boolean(o.terminal),
     newSession: Boolean(o.new),
@@ -107,6 +108,6 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 };
 
 const defaults = (): CliOptions => ({
-  command: '', positionals: [], passthrough: [], scripts: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
+  command: '', positionals: [], passthrough: [], scripts: [], databases: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
   personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, timeout: 600, days: 7,
 });

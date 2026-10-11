@@ -68,6 +68,9 @@ ecosystem (pg, psycopg, Npgsql, mongoose, ioredis, AWS DynamoDB SDKs ...), Prism
 SAM / Terraform tables, connection strings and `.env` templates. A project with only an ORM gets the database your PC
 has installed. The launch output says what was found and why. Data is kept; servers listen on localhost only.
 
+Start any of them yourself: `--database postgres` (repeatable) at launch, `sbx-db start redis` in a terminal inside,
+or `sandbox db start redis` from your PC. `sbx-db` / `sandbox db` alone lists what runs; `stop <name>` stops one.
+
 | | Connect with |
 |---|---|
 | **PostgreSQL** | `postgres://postgres@localhost:5432/postgres`, no password; psql and pg_dump on PATH |

@@ -9,7 +9,7 @@ import { assertSafeMapping } from '../core/workspace.js';
 import { isValidGuestPath, MIRROR_ROOT, sandboxFolder, substDrives } from '../shared/guest-paths.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
-import { msvcHint, pcLanguages, planDatabases, projectEntries } from './project-scan.js';
+import { databaseCatalog, msvcHint, pcLanguages, planDatabases, projectEntries } from './project-scan.js';
 import { readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
 import { dirExists, ensureDir, fail, fileExists, homeDir, writeJson, xmlEscape } from '../core/util.js';
 
@@ -92,7 +92,7 @@ const stageHooks = (packageRoot: string, launchPath: string, scripts: string[]):
   });
 };
 
-export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js'];
+export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js', 'db.js'];
 
 /** The bundled sandbox runtime (dist/runtime: one self-contained file per entry point) and the sandbox/ scripts. */
 const copyRuntime = (packageRoot: string, launchPath: string): void => {
@@ -158,6 +158,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     // "auto" is decided here, so the guest and the launch table agree.
     toolchains: resolveToolchains(config.toolchains, toolchainDecisions),
     databases,
+    databaseCatalog: databaseCatalog(config.databases),
     versions: o.run.versions,
     attach: config.attach,
     hooks: config.hooks,
