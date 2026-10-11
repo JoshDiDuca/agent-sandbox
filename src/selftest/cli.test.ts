@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildProgram, parseCli } from '../cli/args.js';
 import { COMMANDS } from '../cli/manifest.js';
-import { commandLine, readHistory, recordHistory, splitArgs } from '../cli/menu.js';
-import { editConfigText } from '../cli/settings.js';
+import { commandLine, readHistory, recordHistory } from '../cli/history.js';
+import { splitArgs } from '../cli/menu.js';
+import { editConfigText, SECTION_TITLES } from '../cli/settings/index.js';
+import { childrenOf, isSection, jsonExample, leavesOf, promptKind, type Schema } from '../cli/settings/schema.js';
+import { Config, LocalOverrides } from '../core/schema.js';
 import type { Harness } from './harness.js';
 
 export const cliTests = (t: Harness): void => {
@@ -29,6 +32,20 @@ export const cliTests = (t: Harness): void => {
   const invalid = editConfigText(original, ['sandbox', 'memoryMb'], 12);
   check('text' in reset && reset.text.includes('// my notes stay') && reset.text.includes('"auto": true') && reset.text.includes('"port": 6543') && !reset.text.includes('headless') && 'problems' in invalid && invalid.problems.join().includes('memoryMb'),
     'settings screen: changes keep the file\'s comments, nested keys are created, reset removes a key, invalid values are not saved');
+  // Every setting must be reachable in the settings screen: each leaf has a prompt, each top-level section a title.
+  const userLeaves = leavesOf(Config as unknown as Schema);
+  const projectLeaves = leavesOf(LocalOverrides as unknown as Schema);
+  const sections = childrenOf(Config as unknown as Schema).filter(([, s]) => isSection(s)).map(([name]) => name);
+  const projectSections = childrenOf(LocalOverrides as unknown as Schema).filter(([, s]) => isSection(s)).map(([name]) => name);
+  const kinds = new Set(userLeaves.map((l) => promptKind(l.schema)));
+  check(userLeaves.length > 100 && projectLeaves.length > 50 && ['boolean', 'enum', 'union', 'number', 'string', 'string-list', 'json'].every((k) => kinds.has(k as never)), 'settings screen: every setting maps to a prompt (' + userLeaves.length + ' settings, kinds: ' + [...kinds].join(', ') + ')');
+  check(userLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum') && projectLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum'), 'settings screen: downloads.requireChecksum is reachable in your settings and in a project file');
+  check([...sections, ...projectSections].every((name) => SECTION_TITLES[name]), 'settings screen: every top-level section has a title (missing: ' + [...sections, ...projectSections].filter((n) => !SECTION_TITLES[n]).join(', ') + ')');
+  const json = userLeaves.filter((l) => promptKind(l.schema) === 'json');
+  check(json.length > 0 && json.every((l) => jsonExample(l.key, l.schema).length > 5) && jsonExample(['harnesses'], json[0].schema).includes('npmPackage'), 'settings screen: JSON settings show an example of the expected shape');
+  const projectEdit = editConfigText('{}', ['downloads', 'requireChecksum'], true, 'project');
+  const projectBad = editConfigText('{}', ['storage', 'root'], 'C:\\x', 'project');
+  check('text' in projectEdit && projectEdit.text.includes('requireChecksum') && 'problems' in projectBad, 'settings screen: a project file is validated against the project schema (storage cannot be set there)');
   recordHistory(['launch', '--harness', 'claude']);
   recordHistory(['status']);
   recordHistory(['launch', '--harness', 'claude']);

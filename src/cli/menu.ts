@@ -4,34 +4,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkbox, confirm, input, select, Separator } from '@inquirer/prompts';
-import { z } from 'zod';
-import { userDir } from '../core/config.js';
-import { tryReadJson, writeJson } from '../core/util.js';
 import { listAccounts } from '../host/accounts.js';
 import { runningSessions } from '../host/channel.js';
 import { isSandboxRunning } from '../host/platform.js';
 import type { Context } from './commands/context.js';
-import { settingsMenu } from './settings.js';
+import { c } from './colors.js';
+import { commandLine, readHistory } from './history.js';
+import { settingsMenu } from './settings/index.js';
 import { COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
-
-const c = { bold: (s: string) => '\x1b[1m' + s + '\x1b[0m', dim: (s: string) => '\x1b[2m' + s + '\x1b[0m', cyan: (s: string) => '\x1b[36m' + s + '\x1b[0m', green: (s: string) => '\x1b[32m' + s + '\x1b[0m', yellow: (s: string) => '\x1b[33m' + s + '\x1b[0m' };
-
-// ---- history ---------------------------------------------------------------------------------------------------------
-
-const History = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
-const historyFile = (): string => path.join(userDir(), 'history.json');
-const HIDDEN = new Set(['menu', '_watch', 'self-test']);
-
-export const readHistory = (): z.output<typeof History> => History.safeParse(tryReadJson(historyFile())).data ?? [];
-
-/** Remembers a command (menu or typed) so the menu can offer it again. Never fails the command itself. */
-export const recordHistory = (argv: string[]): void => {
-  if (!argv.length || HIDDEN.has(argv[0]) || argv.includes('--help')) return;
-  try { writeJson(historyFile(), [{ argv, at: new Date().toISOString() }, ...readHistory().filter((h) => h.argv.join('\0') !== argv.join('\0'))].slice(0, 10)); } catch { /* history is a convenience */ }
-};
-
-/** argv as you would type it (quoted where needed). */
-export const commandLine = (argv: string[]): string => ['sandbox', ...argv].map((a) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)).join(' ');
 
 // ---- asking for one command ------------------------------------------------------------------------------------------
 

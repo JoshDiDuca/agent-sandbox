@@ -6,7 +6,7 @@ import { Name, SchemaRef, Strings, toggle } from './common.js';
 import { Databases } from './databases.js';
 import { Harness } from './harness.js';
 import { Attach, ClaudeProfile, Secrets } from './profile.js';
-import { Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
+import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
 
 export const Config = z.strictObject({
@@ -23,6 +23,7 @@ export const Config = z.strictObject({
   }),
   network: z.strictObject({ blockPrivateRanges: z.boolean().describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.') }),
   provisioning: Provisioning,
+  downloads: Downloads,
   toolchains: Toolchains,
   databases: Databases.describe('Databases running inside the sandbox. Data persists in C:\\AgentData\\databases; each one starts at boot.'),
   attach: Attach,
@@ -47,6 +48,7 @@ export const LocalOverrides = z.strictObject({
   sandbox: Sandbox.partial(),
   network: z.strictObject({ blockPrivateRanges: z.boolean() }).partial(),
   provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true }).extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() }).partial(),
+  downloads: Downloads.partial(),
   // Every toolchain setting, each one optional (a project usually only switches languages on or pins a version).
   toolchains: z.strictObject({
     ..._.mapValues(_.omit(Toolchains.shape, 'environment'), (shape) => shape.partial()),

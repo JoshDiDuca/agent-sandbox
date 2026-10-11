@@ -15,6 +15,7 @@ export const DEFAULTS: Config = {
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default' },
   network: { blockPrivateRanges: true },
   provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },
+  downloads: { requireChecksum: false },
   toolchains: {
     node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },
     python: { enabled: 'auto', version: '3', python2: true, pyenv: 'auto', tools: [] },

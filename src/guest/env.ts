@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
-import { moveIntoPlace, spawnAsync, stagingFolder } from '../shared/download.js';
+import { moveIntoPlace, setChecksumRequired, spawnAsync, stagingFolder } from '../shared/download.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { safeRemove } from '../shared/safe-remove.js';
@@ -22,6 +22,7 @@ export const logsDir = path.join(dataDir, 'logs');
 export const run = runPaths(dataDir);
 
 export const session = JSON.parse(fs.readFileSync(path.join(launchDir, 'session.json'), 'utf8').replace(/^\uFEFF/, '')) as GuestSession;
+setChecksumRequired(session.downloads?.requireChecksum === true);
 export const workspace = process.env.AGENT_WORKSPACE ?? session.workspace;
 export const stateDir = path.join(dataDir, session.persistAgentState ? 'state' : 'state-session');
 export const claudeDir = path.join(stateDir, 'claude');

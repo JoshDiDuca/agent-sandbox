@@ -3,7 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { CommanderError } from 'commander';
 import { buildProgram, parseCli } from './args.js';
 import { commandSpec } from './manifest.js';
-import { menu, recordHistory } from './menu.js';
+import { c } from './colors.js';
+import { recordHistory } from './history.js';
+import { menu } from './menu.js';
 import { loadConfig } from '../core/config.js';
 import * as commands from './commands/index.js';
 import { UserError, errMsg, fail } from '../core/util.js';
@@ -38,8 +40,6 @@ const HANDLERS: Record<string, Handler> = {
   _watch: commands.watcher,
 };
 
-const red = (s: string): string => '\x1b[31m' + s + '\x1b[0m';
-const dim = (s: string): string => '\x1b[2m' + s + '\x1b[0m';
 
 export interface Preset { harness?: string; command?: string }
 
@@ -77,12 +77,12 @@ export const main = async (argv: string[], preset: Preset = {}): Promise<number>
 export const report = (e: unknown): number => {
   if (e instanceof CommanderError) return ['commander.helpDisplayed', 'commander.help', 'commander.version'].includes(e.code) ? 0 : e.exitCode || 1;
   if (e instanceof UserError) {
-    console.error(red('Error: ') + e.message);
+    console.error(c.red('Error: ') + e.message);
     if (e.fix) console.error('  Fix:  ' + e.fix);
     return 1;
   }
-  console.error(red('Unexpected error: ') + errMsg(e));
-  console.error(dim('This is a bug in windows-development-sandbox. Details: ' + (e instanceof Error && e.stack ? e.stack.split('\n').slice(1, 4).join(' | ').trim() : 'none')));
+  console.error(c.red('Unexpected error: ') + errMsg(e));
+  console.error(c.dim('This is a bug in windows-development-sandbox. Details: ' + (e instanceof Error && e.stack ? e.stack.split('\n').slice(1, 4).join(' | ').trim() : 'none')));
   console.error('  Please report it with the output of: sandbox doctor');
   return 1;
 };

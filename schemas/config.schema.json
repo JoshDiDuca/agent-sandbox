@@ -200,6 +200,16 @@
       },
       "additionalProperties": false
     },
+    "downloads": {
+      "type": "object",
+      "properties": {
+        "requireChecksum": {
+          "type": "boolean",
+          "description": "Refuse any toolchain, database or tool download that has no published checksum (SHA-256/SHA-512) to verify it against. false = allow those, as before. Downloads that do have a published checksum are always verified. A project's .sandbox-config.json can only turn this on."
+        }
+      },
+      "additionalProperties": false
+    },
     "toolchains": {
       "type": "object",
       "properties": {

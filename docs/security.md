@@ -37,6 +37,14 @@ can read because the whole folder is mapped.
 - Files it writes are read with bounded effort.
 - Attaching from your terminal connects only into the sandbox's Hyper-V network, with a per-session token.
 
+## Downloads
+
+Toolchain, database and tool downloads are checked against the SHA-256/SHA-512 their publisher lists, and a mismatch
+deletes the file. Some sources list none (for example a script fetched from a vendor's site). By default those are
+still allowed. Set `downloads.requireChecksum` to `true` to refuse any download that has no published checksum; the
+failure names the file and the setting. A project's `.sandbox-config.json` can turn this on but never off. The
+installer (`install.ps1`) similarly refuses a release package with no listed SHA-256 unless `WDS_ALLOW_UNVERIFIED=1`.
+
 ## Coming back
 
 - Only data files return with history. claude-mem returns its database only.

@@ -32,3 +32,7 @@ export const Provisioning = z.strictObject({
   git: Git,
   terminal: toggle('Windows Terminal as the sandbox window (downloaded once).'),
 });
+
+export const Downloads = z.strictObject({
+  requireChecksum: z.boolean().describe('Refuse any toolchain, database or tool download that has no published checksum (SHA-256/SHA-512) to verify it against. false = allow those, as before. Downloads that do have a published checksum are always verified. A project\'s .sandbox-config.json can only turn this on.'),
+});

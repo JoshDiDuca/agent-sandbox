@@ -1,6 +1,8 @@
 // Config loading, argument parsing, workspace resolution and .sandbox-config.json trust.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { download, setChecksumRequired } from '../shared/download.js';
 import { parseCli as parseArgs } from '../cli/args.js';
 import _ from 'lodash';
 import { DEFAULTS, loadConfig } from '../core/config.js';
@@ -89,5 +91,17 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   f.writeLocal(dirC, { readOnly: true, network: { blockPrivateRanges: true }, provisioning: { git: { access: 'none' } }, sandbox: { networking: false, clipboard: false } });
   const tightened = (await f.run({ cwd: dirC, trustConfig: true })).config;
   check(tightened.readOnly && tightened.provisioning.git.access === 'none' && !tightened.sandbox.networking && !tightened.sandbox.clipboard, 'a project file can still make things stricter');
+  // downloads.requireChecksum: a project may turn it on, never off.
+  f.writeLocal(dirC, { downloads: { requireChecksum: false } });
+  const keptOn = (await f.run({ cwd: dirC, trustConfig: true }, { ...f.baseConfig, downloads: { requireChecksum: true } })).config;
+  f.writeLocal(dirC, { downloads: { requireChecksum: true } });
+  const turnedOn = (await f.run({ cwd: dirC, trustConfig: true })).config;
+  check(keptOn.downloads.requireChecksum && turnedOn.downloads.requireChecksum && !f.baseConfig.downloads.requireChecksum, 'a project file can require checksums for downloads but never switch the requirement off');
+  // With the requirement on, a download without a hash is refused before anything is fetched; with a hash it goes on.
+  setChecksumRequired(true);
+  const target = path.join(os.tmpdir(), 'agent-sandbox-no-such-download.bin');
+  const refused = await download('http://127.0.0.1:9/tool.zip', target).then(() => '', (e: Error) => e.message);
+  setChecksumRequired(false);
+  check(refused.includes('requireChecksum') && refused.includes('tool.zip') && !fs.existsSync(target) && !fs.existsSync(target + '.part'), 'downloads.requireChecksum refuses a download with no hash, and leaves nothing behind');
   fs.rmSync(path.join(dirC, '.sandbox-config.json'));
 };

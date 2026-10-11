@@ -63,7 +63,7 @@ export interface GuestSession {
   network: Config['network']; provisioning: Config['provisioning']; toolchains: Toolchains; databases: DatabasePlan[]; versions: ToolVersions;
   /** Every database `sbx-db start` can run later (older launch folders lack it). */
   databaseCatalog?: DatabasePlan[];
-  attach: Config['attach']; hooks: Config['hooks'];
+  attach: Config['attach']; hooks: Config['hooks']; downloads: Config['downloads'];
   /** nodeVersion: this PC's Node (e.g. 22.11.0), found under nvm\v<version> when nvm is mapped, else under node. */
   /** volta / pyenv: this PC uses them (their "auto" settings turn them on in the sandbox too). */
   hostTools: { node: boolean; nodeVersion: string | null; harnessExecutable: string | null; git: boolean; nvm: boolean; volta?: boolean; pyenv?: boolean };

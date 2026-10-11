@@ -46,12 +46,19 @@ export const fetchText = async (url: string): Promise<string> => await (await fe
 /** Expected checksums of a download; any that are given must match. */
 export interface Checksums { sha256?: string | null; sha512?: string | null }
 
+let checksumRequired = false;
+/** downloads.requireChecksum: from then on download() refuses anything it has no expected hash for. The guest sets it from session.json. */
+export const setChecksumRequired = (on: boolean): void => { checksumRequired = on; };
+
 /**
  * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
  * event loop stays free so other toolchains keep downloading meanwhile. A mismatch (or any failure) leaves no file behind.
  */
 export const download = async (url: string, destination: string, expected: string | null | Checksums = null): Promise<void> => {
   const sums: Checksums = typeof expected === 'string' || expected === null ? { sha256: expected } : expected;
+  if (checksumRequired && !sums.sha256?.trim() && !sums.sha512?.trim()) {
+    throw new Error('Refusing to download ' + path.basename(destination) + ' (' + url + '): no checksum is published for it, and downloads.requireChecksum is on. Turn that setting off to allow downloads that cannot be verified.');
+  }
   const response = await fetchRetry(url, {}, 3, 20 * 60 * 1000);
   if (!response.body) throw new Error('Empty response for ' + url);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
