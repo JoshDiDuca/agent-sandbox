@@ -20,6 +20,10 @@ It uses your Node.js 20+ if you have one. Otherwise it downloads the official No
 unpacks it into `%LOCALAPPDATA%\WindowsDevelopmentSandbox\node`, used only to run this tool. Your PATH only gets a small
 folder with this tool's commands, not `node` itself, so nothing is installed system-wide.
 
+The release package is checked against the SHA-256 GitHub lists for it. If GitHub lists none, the installer stops
+instead of installing something it cannot check. To install it anyway, set `$env:WDS_ALLOW_UNVERIFIED = "1"` before
+running the one-liner. A package you name yourself with `WDS_PACKAGE` is installed as given.
+
 ## By hand
 
 ```powershell
