@@ -1,4 +1,4 @@
-// `agent-sandbox setup`: checks this PC can run Windows Sandbox and offers to turn the feature on.
+// `sandbox setup`: checks this PC can run Windows Sandbox and offers to turn the feature on.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -150,7 +150,7 @@ const enableFeature = (): boolean => {
 };
 
 export const setup = async (ctx: Context): Promise<number> => {
-  if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Run agent-sandbox setup on a Windows 10/11 Pro, Enterprise or Education PC.');
+  if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Run sandbox setup on a Windows 10/11 Pro, Enterprise or Education PC.');
   console.log('Checking this PC for Windows Sandbox...\n');
   const facts = gatherFacts(ctx.storageRoot);
   let checks = buildChecks(facts);
@@ -160,7 +160,7 @@ export const setup = async (ctx: Context): Promise<number> => {
     if (await askYesNo('Turn on Windows Sandbox now? Windows will ask for admin permission.')) {
       console.log('Enabling Windows Sandbox (this can take a minute)...');
       if (!enableFeature()) fail('Windows Sandbox could not be enabled (or the admin prompt was declined).', 'In an admin PowerShell run: ' + ENABLE_COMMAND + ', then restart Windows.');
-      console.log('Done. Restart Windows to finish, then run agent-sandbox setup again.\n');
+      console.log('Done. Restart Windows to finish, then run sandbox setup again.\n');
       checks = buildChecks(gatherFacts(ctx.storageRoot));
       print(checks);
     } else console.log('To do it yourself, in an admin PowerShell run:\n  ' + ENABLE_COMMAND + '\nthen restart Windows.');

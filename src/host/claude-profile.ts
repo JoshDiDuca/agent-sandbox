@@ -34,7 +34,7 @@ export const hostGlobalStateFile = (settings: ClaudeProfileConfig): string => {
  */
 /**
  * What of your .claude.json the sandbox gets: everything except secrets and other projects. API keys and the account
- * block stay on this PC (logins travel only through `agent-sandbox account`), and of the per-project entries only
+ * block stay on this PC (logins travel only through `sandbox account`), and of the per-project entries only
  * this workspace's (with its MCP servers) is kept; other projects' entries can hold their MCP servers' tokens.
  */
 export const sandboxGlobalState = (state: Record<string, unknown>, workspaceHost: string): Record<string, unknown> => {

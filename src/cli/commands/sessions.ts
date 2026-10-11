@@ -51,7 +51,7 @@ export const status = async (ctx: Context): Promise<number> => {
 
 export const exec = async (ctx: Context): Promise<number> => {
   const command = [...ctx.options.positionals, ...ctx.options.passthrough];
-  if (command.length === 0) fail('No command given.', 'Usage: agent-sandbox exec [--timeout <s>] -- <command> [args...]');
+  if (command.length === 0) fail('No command given.', 'Usage: sandbox exec [--timeout <s>] -- <command> [args...]');
   requireRunning();
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   const result = await execInSandbox(ctx.dataPath, command, currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace), ctx.options.timeout, sandboxAlive);

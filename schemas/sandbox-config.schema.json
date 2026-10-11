@@ -748,7 +748,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Allow claude-sbx --terminal / agent-sandbox attach from this PC."
+          "description": "Allow claude-sbx --terminal / sandbox attach from this PC."
         },
         "reuseSession": {
           "type": "boolean",
@@ -788,7 +788,7 @@
         },
         "copyCredentials": {
           "type": "boolean",
-          "description": "Copy your Claude LOGIN into the sandbox. Prefer agent-sandbox account instead."
+          "description": "Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead."
         },
         "syncHistory": {
           "type": "boolean",

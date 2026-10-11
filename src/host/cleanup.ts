@@ -1,4 +1,4 @@
-// Keeps storage from growing forever. Runs automatically on every launch and via `agent-sandbox clean`.
+// Keeps storage from growing forever. Runs automatically on every launch and via `sandbox clean`.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';

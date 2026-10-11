@@ -168,7 +168,7 @@ const Secrets = z.strictObject({
   warnFiles: z.boolean().describe('Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder.'),
 });
 const Attach = z.strictObject({
-  enabled: z.boolean().describe('Allow claude-sbx --terminal / agent-sandbox attach from this PC.'),
+  enabled: z.boolean().describe('Allow claude-sbx --terminal / sandbox attach from this PC.'),
   reuseSession: z.boolean().describe('claude-sbx -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
 });
 const ClaudeProfile = z.strictObject({
@@ -176,7 +176,7 @@ const ClaudeProfile = z.strictObject({
   hostDir: z.string().describe('Your Claude folder, or "auto" (~/.claude or CLAUDE_CONFIG_DIR).'),
   include: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).describe('Files and folders copied from it.'),
   globalStateFile: z.string().describe('Your .claude.json, or "auto". Empty string = do not copy.'),
-  copyCredentials: z.boolean().describe('Copy your Claude LOGIN into the sandbox. Prefer agent-sandbox account instead.'),
+  copyCredentials: z.boolean().describe('Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead.'),
   overwrite: z.boolean().describe('Refresh these settings from this PC on every launch.'),
   syncHistory: z.boolean().describe('Bring all conversation history in, and sync new history back (path-translated).'),
   syncClaudeMem: z.boolean().describe('Bring claude-mem data in, and its database back when the sandbox closes.'),
@@ -184,7 +184,7 @@ const ClaudeProfile = z.strictObject({
 
 export const Config = z.strictObject({
   $schema: SchemaRef.optional(),
-  defaultHarness: Name.describe('Agent started by `agent-sandbox launch` (claude-sbx always runs claude).'),
+  defaultHarness: Name.describe('Agent started by `sandbox launch` (claude-sbx always runs claude).'),
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map the workspace read-only.'),
   mappings: z.array(Mapping).describe('Extra folders from this PC.'),

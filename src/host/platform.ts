@@ -56,9 +56,9 @@ export const isSandboxRunning = (): boolean => {
 export const sandboxFeatureInstalled = (): boolean => isWin && fileExists(path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'WindowsSandbox.exe'));
 
 export const assertCanLaunch = (): void => {
-  if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Use agent-sandbox generate to only write the files.');
+  if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Use sandbox generate to only write the files.');
   if (!sandboxFeatureInstalled()) fail('Windows Sandbox is not enabled on this PC.', 'Run in an admin PowerShell, then reboot: Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All  (needs Windows Pro, Enterprise or Education)');
-  if (isSandboxRunning()) fail('A Windows Sandbox is already running (Windows allows one at a time).', 'Attach to it with claude-sbx -t, show it with sbx-show, or shut it down with agent-sandbox stop.');
+  if (isSandboxRunning()) fail('A Windows Sandbox is already running (Windows allows one at a time).', 'Attach to it with claude-sbx -t, show it with sbx-show, or shut it down with sandbox stop.');
 };
 
 export const startSandbox = (wsbPath: string): void => {
@@ -90,7 +90,7 @@ export const hostClaude = (storageRoot: string, personal: boolean, args: string[
 export const doctorRows = (config: Config, harnessName: string, storageRoot: string, configPath: string | null): [string, string][] => {
   const probe = probeHost(config, harnessName);
   return [
-    ['Config file', configPath ?? '(none; built-in defaults; create one with: agent-sandbox config init)'],
+    ['Config file', configPath ?? '(none; built-in defaults; create one with: sandbox config init)'],
     ['Windows', isWin ? 'yes' : 'NO (launch needs Windows)'],
     ['Windows Sandbox feature', sandboxFeatureInstalled() ? 'enabled' : 'NOT enabled'],
     ['Sandbox running', isSandboxRunning() ? 'YES' : 'no'],

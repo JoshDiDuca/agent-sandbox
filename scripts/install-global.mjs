@@ -11,6 +11,9 @@ fs.mkdirSync(out);
 execSync('npm pack --silent --pack-destination "' + out + '"', { stdio: ['ignore', 'ignore', 'inherit'] });
 const tarball = fs.readdirSync(out).find((f) => f.endsWith('.tgz'));
 if (!tarball) throw new Error('npm pack did not produce a package in ' + out);
+// The package used to be called agent-sandbox; both ship the same commands, so npm refuses to install over it.
+const globals = JSON.parse(execSync('npm ls -g --depth=0 --json', { encoding: 'utf8' }) || '{}').dependencies ?? {};
+if (globals['agent-sandbox']) { console.log('Removing the old agent-sandbox package (now windows-development-sandbox) ...'); execSync('npm uninstall -g agent-sandbox', { stdio: 'inherit' }); }
 execSync('npm install -g "' + path.join(out, tarball) + '" --no-fund --no-audit', { stdio: 'inherit' });
 fs.rmSync(out, { recursive: true, force: true });
 console.log('\nInstalled ' + tarball + ' globally as a copy. Review what changed before you run this again.');

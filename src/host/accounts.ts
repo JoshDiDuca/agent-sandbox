@@ -91,7 +91,7 @@ const writeSandboxJson = (file: string, value: unknown): void => {
  * current tokens are saved back first; otherwise its stored refresh token could already be invalid.
  */
 export const activateAccount = (storageRoot: string, dataPath: string, name: string): Account => {
-  const account = readAccount(storageRoot, name) ?? fail('Unknown account "' + name + '".', 'Saved accounts: ' + (listAccounts(storageRoot, dataPath).map((a) => a.name).join(', ') || 'none yet; save one with agent-sandbox account save <name>'));
+  const account = readAccount(storageRoot, name) ?? fail('Unknown account "' + name + '".', 'Saved accounts: ' + (listAccounts(storageRoot, dataPath).map((a) => a.name).join(', ') || 'none yet; save one with sandbox account save <name>'));
   const { claudeDir, globalStateFile } = sandboxLogin(dataPath);
   const outgoing = activeAccount(dataPath);
   if (outgoing && outgoing !== name && readAccount(storageRoot, outgoing) && fileExists(path.join(claudeDir, '.credentials.json'))) {
@@ -108,12 +108,12 @@ export const activateAccount = (storageRoot: string, dataPath: string, name: str
 };
 
 export const setDefaultAccount = (storageRoot: string, name: string | null): void => {
-  if (name !== null && !readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: agent-sandbox account list');
+  if (name !== null && !readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
   updateIndex(storageRoot, (i) => ({ ...i, default: name ?? undefined }));
 };
 
 export const removeAccount = (storageRoot: string, name: string): void => {
-  if (!readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: agent-sandbox account list');
+  if (!readAccount(storageRoot, name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
   fs.rmSync(accountFile(storageRoot, name));
   if (defaultAccount(storageRoot) === name) setDefaultAccount(storageRoot, null);
 };

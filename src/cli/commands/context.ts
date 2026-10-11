@@ -49,7 +49,7 @@ export const requireRunning = (hint = ''): void => { if (!isSandboxRunning()) fa
 
 /** Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist there). */
 export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorkspace: string): string => {
-  if (!isInsideOrEqual(workspaceHost, hostDir)) fail('The running sandbox works on ' + workspaceHost + ', and Windows Sandbox cannot add folders while it runs.', 'Run from inside that folder, or stop the sandbox (agent-sandbox stop) and launch again from ' + hostDir + '.');
+  if (!isInsideOrEqual(workspaceHost, hostDir)) fail('The running sandbox works on ' + workspaceHost + ', and Windows Sandbox cannot add folders while it runs.', 'Run from inside that folder, or stop the sandbox (sandbox stop) and launch again from ' + hostDir + '.');
   const rel = path.relative(workspaceHost, hostDir);
   return rel ? path.win32.join(guestWorkspace, rel) : guestWorkspace;
 };

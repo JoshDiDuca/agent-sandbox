@@ -1,7 +1,7 @@
 {
-  "name": "agent-sandbox",
+  "name": "windows-development-sandbox",
   "version": "3.0.0",
-  "description": "Run Claude Code (or Codex / Gemini) inside Windows Sandbox with the folder you run it from as the workspace: full toolchains, multiple sessions, attach from your own terminal, account switching and two-way history sync.",
+  "description": "A disposable Windows Sandbox for development, with or without an AI agent (Claude Code, Codex, Gemini, opencode, ...): the folder you run it from is the workspace, toolchains and databases for your project install themselves, and nothing else on your PC is reachable.",
   "type": "module",
   "license": "MIT",
   "os": [
@@ -11,10 +11,15 @@
     "node": ">=20"
   },
   "bin": {
+    "sandbox": "dist/bin/sandbox.js",
+    "windows-development-sandbox": "dist/bin/sandbox.js",
     "agent-sandbox": "dist/bin/agent-sandbox.js",
     "claude-sbx": "dist/bin/claude-sbx.js",
+    "claude-sandbox": "dist/bin/claude-sbx.js",
     "codex-sbx": "dist/bin/codex-sbx.js",
+    "codex-sandbox": "dist/bin/codex-sbx.js",
     "gemini-sbx": "dist/bin/gemini-sbx.js",
+    "gemini-sandbox": "dist/bin/gemini-sbx.js",
     "claude-host": "dist/bin/claude-host.js",
     "sbx-show": "dist/bin/sbx-show.js",
     "sbx-hide": "dist/bin/sbx-hide.js"
@@ -57,9 +62,14 @@
     "sandbox",
     "agent",
     "codex",
-    "gemini"
+    "gemini",
+    "development",
+    "opencode",
+    "databases",
+    "dynamodb"
   ],
   "dependencies": {
+    "@inquirer/prompts": "^7.10.1",
     "commander": "^14.0.3",
     "jsonc-parser": "^3.3.1",
     "lodash": "^4.18.1",
@@ -70,5 +80,13 @@
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.2",
     "typescript": "^5.8.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoshDiDuca/windows-development-sandbox.git"
+  },
+  "homepage": "https://github.com/JoshDiDuca/windows-development-sandbox#readme",
+  "bugs": {
+    "url": "https://github.com/JoshDiDuca/windows-development-sandbox/issues"
   }
 }

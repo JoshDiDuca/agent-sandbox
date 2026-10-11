@@ -17,7 +17,7 @@ const hostLogin = (ctx: Context): { claudeDir: string; globalStateFile: string }
 const list = (ctx: Context): number => {
   const rows = listAccounts(ctx.storageRoot, ctx.dataPath);
   if (printJson(ctx, rows)) return 0;
-  if (rows.length === 0) { console.log('No saved accounts. Sign in inside the sandbox, then: agent-sandbox account save <name>   (or --from-host to save this PC\'s login)'); return 0; }
+  if (rows.length === 0) { console.log('No saved accounts. Sign in inside the sandbox, then: sandbox account save <name>   (or --from-host to save this PC\'s login)'); return 0; }
   table([['', 'NAME', 'EMAIL', 'SAVED'], ...rows.map((a) => [(a.isActive ? '*' : ' ') + (a.isDefault ? 'D' : ' '), a.name, a.email ?? '-', a.savedAt.slice(0, 16).replace('T', ' ')])]);
   console.log('\n* = active in the sandbox   D = default for new launches');
   return 0;
@@ -32,13 +32,13 @@ const use = async (ctx: Context, name: string): Promise<number> => {
 
 export const account = async (ctx: Context): Promise<number> => {
   const [action = 'list', name] = ctx.options.positionals;
-  const needName = (): string => name ?? fail('Missing account name.', 'Usage: agent-sandbox account ' + action + ' <name>');
+  const needName = (): string => name ?? fail('Missing account name.', 'Usage: sandbox account ' + action + ' <name>');
   switch (action) {
     case 'list': return list(ctx);
     case 'save': console.log('Saved account ' + label(saveAccount(ctx.storageRoot, ctx.dataPath, needName(), ctx.options.fromHost ? hostLogin(ctx) : null)) + '.'); return 0;
     case 'use': return use(ctx, needName());
     case 'default': setDefaultAccount(ctx.storageRoot, needName()); console.log('Default account: ' + name); return 0;
     case 'remove': removeAccount(ctx.storageRoot, needName()); console.log('Removed account ' + name); return 0;
-    default: fail('Unknown account action "' + action + '".', 'Use one of: agent-sandbox account list | save <name> | use <name> | default <name> | remove <name>');
+    default: fail('Unknown account action "' + action + '".', 'Use one of: sandbox account list | save <name> | use <name> | default <name> | remove <name>');
   }
 };

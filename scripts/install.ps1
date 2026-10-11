@@ -128,6 +128,8 @@
   Step 'Installing windows-development-sandbox'
   Write-Host "   npm install -g $package"
   # npm.cmd, not npm: the npm.ps1 shim is blocked when scripts are disabled on this PC.
+  # The old agent-sandbox package ships the same commands; npm will not install over it.
+  if ((& npm.cmd ls -g --depth=0 agent-sandbox 2>$null) -match 'agent-sandbox@') { Write-Host '   Removing the old agent-sandbox package (it is now windows-development-sandbox) ...'; & npm.cmd uninstall -g agent-sandbox | Out-Null }
   & npm.cmd install -g $package
   if ($LASTEXITCODE -ne 0) {
     Problem "npm could not install the package (exit code $LASTEXITCODE)."

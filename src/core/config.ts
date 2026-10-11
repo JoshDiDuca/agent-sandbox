@@ -91,7 +91,7 @@ export const loadConfig = (explicitPath?: string): LoadedConfig => {
   const requested = explicitPath ?? process.env.AGENT_SANDBOX_CONFIG;
   const full = path.resolve(requested ?? userConfigPath());
   if (!fs.existsSync(full)) {
-    if (requested) fail('Config file not found: ' + full, 'Check the --config path or AGENT_SANDBOX_CONFIG, or create one with: agent-sandbox config init');
+    if (requested) fail('Config file not found: ' + full, 'Check the --config path or AGENT_SANDBOX_CONFIG, or create one with: sandbox config init');
     return { config: structuredClone(DEFAULTS), configPath: null, base: userDir() };
   }
   return { config: validateConfig(mergeConfig(DEFAULTS, readJsonc<unknown>(full)), full), configPath: full, base: path.dirname(full) };

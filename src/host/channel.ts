@@ -33,10 +33,10 @@ const until = async <T>(timeoutMs: number, isAlive: () => boolean, poll: () => T
   while (Date.now() < deadline) {
     const value = poll();
     if (value !== null && value !== undefined) return value;
-    if (!isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with claude-sbx; agent-sandbox logs shows what happened.');
+    if (!isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with claude-sbx; sandbox logs shows what happened.');
     await sleep(500);
   }
-  fail(timeoutMessage, 'Check what the sandbox is doing with agent-sandbox logs -f (or sbx-show to see its window).');
+  fail(timeoutMessage, 'Check what the sandbox is doing with sandbox logs -f (or sbx-show to see its window).');
 };
 
 /** Waits until the sandbox finished provisioning, printing each boot step. */
@@ -46,7 +46,7 @@ export const waitForReady = (dataPath: string, launchId: string | null, isAlive:
     const status = readSandboxStatus(dataPath);
     if (!status || (launchId !== null && status.launchId !== launchId)) return null;
     if (status.message !== last) { console.log('  [sandbox] ' + safeText(status.message).slice(0, 300)); last = status.message; }
-    if (status.phase === 'failed') fail('The sandbox failed to start: ' + status.message, 'See agent-sandbox logs for details; the sandbox window shows the error too (sbx-show if headless).');
+    if (status.phase === 'failed') fail('The sandbox failed to start: ' + status.message, 'See sandbox logs for details; the sandbox window shows the error too (sbx-show if headless).');
     return status.phase === 'ready' ? status : null;
   }, 'Timed out waiting for the sandbox to finish provisioning.');
 };
@@ -75,8 +75,8 @@ export const waitForSession = (dataPath: string, sessionId: string, isAlive: () 
     const session = readSession(dataPath, sessionId);
     if (!session) return null;
     if (session.message !== last) { console.log('  [session] ' + safeText(session.message).slice(0, 300)); last = session.message; }
-    if (session.phase === 'failed') fail('The agent session failed to start: ' + session.message, 'See agent-sandbox logs for details.');
-    if (session.phase === 'exited') fail('The agent exited right away (code ' + session.exitCode + ').', 'Check agent-sandbox logs; a wrong agent argument is the usual cause.');
+    if (session.phase === 'failed') fail('The agent session failed to start: ' + session.message, 'See sandbox logs for details.');
+    if (session.phase === 'exited') fail('The agent exited right away (code ' + session.exitCode + ').', 'Check sandbox logs; a wrong agent argument is the usual cause.');
     return session.phase === 'running' ? session : null;
   }, 'Timed out waiting for the session to start.');
 };
@@ -108,7 +108,7 @@ export const pickSession = (dataPath: string, sessionId?: string): SessionStatus
   const running = runningSessions(dataPath);
   if (running.length === 0) fail('No agent session is running in the sandbox.', 'Start one with claude-sbx (it opens a new session in the running sandbox).');
   if (!sessionId) return running[running.length - 1];
-  return running.find((s: SessionStatus) => s.id === sessionId || s.id.startsWith(sessionId)) ?? fail('No running session "' + sessionId + '".', 'Running sessions: ' + running.map((s) => s.id).join(', ') + ' (agent-sandbox sessions lists them).');
+  return running.find((s: SessionStatus) => s.id === sessionId || s.id.startsWith(sessionId)) ?? fail('No running session "' + sessionId + '".', 'Running sessions: ' + running.map((s) => s.id).join(', ') + ' (sandbox sessions lists them).');
 };
 
 /** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
@@ -137,15 +137,15 @@ export const findUnwatchedSession = async (dataPath: string, harness: string, cw
 export const attachTerminal = async (session: SessionStatus): Promise<number> => {
   if (!process.stdin.isTTY || !process.stdout.isTTY) fail('--terminal / attach needs an interactive terminal.', 'Run it directly in Windows Terminal or PowerShell, not through a pipe or script.');
   if (!session.attach) fail('This session cannot be attached to: networking or attach is disabled for this sandbox.', 'Set sandbox.networking and attach.enabled to true, then start a new sandbox.');
-  const endpoint = hostEndpoint(session) ?? fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run agent-sandbox doctor.');
+  const endpoint = hostEndpoint(session) ?? fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run sandbox doctor.');
   const socket = await connect(endpoint);
   console.log('Attaching to ' + session.harness + ' session ' + session.id + ' (' + session.cwd + '). Detach any time with Ctrl+]');
   await sleep(400);
   const result = await runTerminalClient(socket, session.attach.token, { detachKey: DETACH_KEY });
   switch (result.reason) {
-    case 'detach': console.log('Detached. The session keeps running; reattach with: agent-sandbox attach ' + session.id); return 0;
+    case 'detach': console.log('Detached. The session keeps running; reattach with: sandbox attach ' + session.id); return 0;
     case 'exit': console.log(session.harness + ' exited with code ' + result.exitCode + '.'); return result.exitCode;
-    case 'error': fail('The sandbox refused the connection: ' + result.message, 'Try agent-sandbox attach again; the session may have restarted.');
+    case 'error': fail('The sandbox refused the connection: ' + result.message, 'Try sandbox attach again; the session may have restarted.');
     default: console.log('Connection to the sandbox closed.'); return 1;
   }
 };

@@ -10,7 +10,7 @@
     "defaultHarness": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]+$",
-      "description": "Agent started by `agent-sandbox launch` (claude-sbx always runs claude)."
+      "description": "Agent started by `sandbox launch` (claude-sbx always runs claude)."
     },
     "guestWorkspace": {
       "anyOf": [
@@ -758,7 +758,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Allow claude-sbx --terminal / agent-sandbox attach from this PC."
+          "description": "Allow claude-sbx --terminal / sandbox attach from this PC."
         },
         "reuseSession": {
           "type": "boolean",
@@ -830,7 +830,7 @@
         },
         "copyCredentials": {
           "type": "boolean",
-          "description": "Copy your Claude LOGIN into the sandbox. Prefer agent-sandbox account instead."
+          "description": "Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead."
         },
         "overwrite": {
           "type": "boolean",

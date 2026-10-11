@@ -62,7 +62,7 @@ const initConfig = (): number => {
   writeJson(file, { $schema: './config.schema.json', ...DEFAULTS });
   console.log('Created ' + file + '. It lists every setting with its default; delete the ones you do not change.');
   console.log('Your own hook scripts go in ' + path.join(userDir(), 'hooks') + '\\{pre-provision,pre-agent,post-agent}.');
-  console.log('For editor help in every project\'s .sandbox-config.json, run: agent-sandbox config schema');
+  console.log('For editor help in every project\'s .sandbox-config.json, run: sandbox config schema');
   return 0;
 };
 
@@ -91,7 +91,7 @@ export const config = (ctx: Context): number => {
     case 'init': return initConfig();
     case 'show': console.log(JSON.stringify(ctx.loaded.config, null, 2)); return 0;
     case 'schema': return printSchemaSettings();
-    default: fail('Unknown config action "' + action + '".', 'Use one of: agent-sandbox config show | path | init | schema');
+    default: fail('Unknown config action "' + action + '".', 'Use one of: sandbox config show | path | init | schema');
   }
 };
 
