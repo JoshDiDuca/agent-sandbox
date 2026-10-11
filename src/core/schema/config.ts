@@ -8,6 +8,7 @@ import { Harness } from './harness.js';
 import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
 import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
+import { Projects } from './projects.js';
 
 export const Config = z.strictObject({
   $schema: SchemaRef.optional(),
@@ -33,6 +34,7 @@ export const Config = z.strictObject({
   claudeProfile: ClaudeProfile,
   harnesses: z.record(Name, Harness).describe('Agents that can run in the sandbox.'),
   hooks: z.strictObject({ failFast: z.boolean().describe('Stop when a hook script fails.') }),
+  projects: Projects.describe('Several projects in one sandbox: folders of projects mapped at every start, and adding folders while it runs.'),
 }).refine((c) => c.harnesses[c.defaultHarness] !== undefined, { message: 'defaultHarness must be one of the configured harnesses', path: ['defaultHarness'] });
 
 /**

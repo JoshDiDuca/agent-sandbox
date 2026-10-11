@@ -1,5 +1,7 @@
 // `sbx-db`: list, start and stop the sandbox's databases from a terminal inside it (`sandbox db` on the PC runs it too).
 // Usage: sbx-db [list] | sbx-db start <name> | sbx-db stop <name>
+import fs from 'node:fs';
+import { ProjectSpec } from '../shared/schema.js';
 import { portOpen } from './ports.js';
 import { DATABASE_NAMES, setupDatabase, stopDatabase } from './toolchains/databases/index.js';
 import { emptyEnv } from './toolchains/common.js';
@@ -9,9 +11,16 @@ import type { DatabasePlan } from '../core/types.js';
 
 const USAGE = 'Usage: sbx-db [list] | sbx-db start <name> | sbx-db stop <name>';
 
-/** Boot's own plans first (their versions and ports were chosen for this project), then everything else. */
+/** In a project registered after boot (its terminals and exec have AGENT_PROJECT_FILE): that project's database plan. */
+const projectPlans = (): DatabasePlan[] | null => {
+  const file = process.env.AGENT_PROJECT_FILE;
+  if (!file) return null;
+  try { return ProjectSpec.safeParse(JSON.parse(fs.readFileSync(file, 'utf8'))).data?.databases ?? null; } catch { return null; }
+};
+
+/** The project's own plans first (their versions and ports were chosen for it), then everything else. */
 const plans = (): DatabasePlan[] => {
-  const boot = session.databases ?? [];
+  const boot = projectPlans() ?? session.databases ?? [];
   return [...boot, ...(session.databaseCatalog ?? []).filter((c) => !boot.some((b) => b.database === c.database))];
 };
 

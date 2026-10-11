@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { installArchive, latestGithubTag } from '../../shared/download.js';
-import { dryRun, errMsg, execAsync, exists, log, mkdirp, session, warn, workspace } from '../env.js';
+import { dryRun, errMsg, execAsync, exists, log, mkdirp, session, warn } from '../env.js';
+import { projectWorkspace } from '../project-context.js';
 import { arch, installFromGithub, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
 
 /** The "volta" block of the workspace's package.json ({ node, npm, yarn, pnpm }), if any. */
 export const voltaPins = (): Record<string, string> => {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8').replace(/^﻿/, '')) as { volta?: Record<string, unknown> };
+    const pkg = JSON.parse(fs.readFileSync(path.join(projectWorkspace(), 'package.json'), 'utf8').replace(/^﻿/, '')) as { volta?: Record<string, unknown> };
     return Object.fromEntries(Object.entries(pkg.volta ?? {}).filter((e): e is [string, string] => ['node', 'npm', 'yarn', 'pnpm'].includes(e[0]) && typeof e[1] === 'string'));
   } catch { return {}; }
 };
@@ -43,7 +44,7 @@ export const setupVolta = async (env: ToolEnv): Promise<void> => {
   const volta = path.join(dir, 'volta.exe');
   // `volta install` fetches the pinned versions now (not on the agent's first `node`) and makes them the defaults.
   for (const [toolName, version] of Object.entries(pins)) {
-    try { await execAsync(volta, ['install', toolName + '@' + version], { env: { ...process.env, ...vars }, cwd: workspace, stdio: 'ignore' }); }
+    try { await execAsync(volta, ['install', toolName + '@' + version], { env: { ...process.env, ...vars }, cwd: projectWorkspace(), stdio: 'ignore' }); }
     catch (e) { warn('Volta could not install ' + toolName + '@' + version + ': ' + errMsg(e)); }
   }
   const pinned = Object.entries(pins).map(([k, v]) => k + '@' + v);

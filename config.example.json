@@ -335,5 +335,13 @@
   },
   "hooks": {
     "failFast": false
+  },
+  "projects": {
+    "all": false,
+    "exclude": [],
+    "roots": [],
+    "askToAddRoot": true,
+    "declinedRoots": [],
+    "wsbShare": true
   }
 }

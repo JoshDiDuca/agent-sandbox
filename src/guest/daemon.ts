@@ -7,7 +7,7 @@ import type { GuestRequest } from '../core/types.js';
 import { readSession, scanRequests } from '../shared/rundir.js';
 import { saveClaudeMem } from './setup/claude.js';
 import { execCommand } from './daemon/exec.js';
-import { restartSessions, startSession } from './daemon/session.js';
+import { prepareProject, restartSessions, startSession } from './daemon/session.js';
 import { live, respond, safely } from './daemon/state.js';
 import { dataDir, errMsg, log, run, warn } from './env.js';
 
@@ -19,6 +19,7 @@ process.on('unhandledRejection', (e) => warn('daemon: unexpected error (continui
 const handle = (req: GuestRequest): Promise<void> | void => {
   switch (req.kind) {
     case 'session': return startSession(req);
+    case 'project': return prepareProject(req);
     case 'exec': return execCommand(req);
     case 'restart': return restartSessions(req);
     case 'ping': return respond(req.id, { ok: true, message: 'pong (' + live.size + ' session(s) running)' });

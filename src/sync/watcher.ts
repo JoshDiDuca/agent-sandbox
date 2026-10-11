@@ -22,7 +22,21 @@ const guestMem = (dataPath: string): string => path.join(dataPath, 'state', 'cla
 /** Sync paths for the sandbox side, after checking nothing on the way there is a link planted by the sandbox. */
 const toPaths = (state: SyncState, dataPath: string): SyncPaths => {
   assertNoLinks(dataPath, guestClaude(dataPath));
-  return { hostClaudeDir: state.hostClaudeDir, guestClaudeDir: guestClaude(dataPath), hostWorkspace: state.hostWorkspace, guestWorkspace: state.guestWorkspace };
+  return { hostClaudeDir: state.hostClaudeDir, guestClaudeDir: guestClaude(dataPath), hostWorkspace: state.hostWorkspace, guestWorkspace: state.guestWorkspace, extra: state.projects ?? [] };
+};
+
+/**
+ * A project registered while the sandbox runs: its history comes in now (the sandbox's copy only gains files), and
+ * from now on syncs back to its own folder on this PC.
+ */
+export const syncProjectIn = (dataPath: string, project: { hostWorkspace: string; guestWorkspace: string }): number => {
+  const state = readSyncState(dataPath);
+  if (!state) return 0;
+  const projects = [...(state.projects ?? []).filter((p) => p.hostWorkspace.toLowerCase() !== project.hostWorkspace.toLowerCase()), project];
+  const next: SyncState = { ...state, projects };
+  writeSyncState(dataPath, next);
+  // Prompt history is left alone: sessions are appending to the sandbox's copy right now.
+  return state.syncHistory ? syncHistoryIn(toPaths(next, dataPath), { promptHistory: false }) : 0;
 };
 
 const memSync = (dataPath: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
@@ -39,7 +53,7 @@ export const syncBeforeLaunch = (config: Config, dataPath: string, hostWorkspace
   if (!config.storage.persistAgentState) return summary;
   const previous = readSyncState(dataPath);
   if (previous?.syncHistory) syncHistoryOut(toPaths(previous, dataPath));
-  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace, syncHistory: profile.syncHistory, syncClaudeMem: profile.syncClaudeMem };
+  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace, syncHistory: profile.syncHistory, syncClaudeMem: profile.syncClaudeMem, projects: [] };
   if (profile.syncHistory) summary.history = syncHistoryIn(toPaths(state, dataPath));
   if (profile.syncClaudeMem) {
     if (previous?.syncClaudeMem) memSync(dataPath, state, 'out');

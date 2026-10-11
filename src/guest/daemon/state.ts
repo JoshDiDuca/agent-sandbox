@@ -3,7 +3,8 @@ import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { GuestResponse, SessionStatus } from '../../core/types.js';
 import { now, writeJsonAtomic } from '../../shared/rundir.js';
-import { errMsg, run, warn, workspace } from '../env.js';
+import { insideProjects } from '../../shared/projects.js';
+import { errMsg, run, session, warn, workspace } from '../env.js';
 
 const MAX_MESSAGE = 3500;
 
@@ -11,10 +12,15 @@ export const live = new Map<string, { status: SessionStatus; child: ChildProcess
 /** Sessions being started right now (a headless sandbox must not shut down under them). */
 export const pending = { starting: 0 };
 
-export const insideWorkspace = (cwd: string): boolean => {
+/** Inside the launch folder's workspace. */
+export const insidePrimary = (cwd: string): boolean => {
   const rel = path.relative(workspace.toLowerCase(), path.resolve(cwd).toLowerCase());
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
+
+/** Inside any project of this sandbox: the launch folder, a project root, or C:\Projects\<name> (older launch folders: only the first). */
+export const insideWorkspace = (cwd: string): boolean =>
+  insidePrimary(cwd) || (session.projectsDir !== undefined && insideProjects(path.resolve(cwd), session.roots ?? [], session.projectsDir));
 
 /** Status/response writes are best-effort: a briefly locked file (antivirus, the host's sync) must not kill the daemon. */
 const tryWrite = (file: string, value: unknown): void => { try { writeJsonAtomic(file, value); } catch (e) { warn('Could not write ' + file + ': ' + errMsg(e)); } };

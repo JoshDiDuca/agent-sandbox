@@ -4,7 +4,7 @@ The sandbox is treated as hostile and your PC as precious.
 
 ## Containment
 
-- The agent writes only your project folder and its own storage.
+- The agent writes only your project folder (and the other projects you map, see [several projects](#several-projects)) and its own storage.
 - Drive roots, your user profile, system folders and this tool's folders are refused as workspaces.
 - Your LAN is blocked from inside the sandbox (DNS excepted). `sandbox.networking: false` cuts all network access.
 - vGPU is off by default.
@@ -73,6 +73,25 @@ forwarding commands it wrote; `off` removes them and the entry. A repo's `.sandb
 | `full` (default) | git as normal |
 | `readonly` | status, log, diff, show, blame and listing branches/tags only |
 | `none` | no git; the repository is invisible to it |
+
+## Several projects
+
+**Every project mapped into a sandbox is visible to every agent in it**, read and write: the launch folder, every
+folder inside your `projects.roots`, every project mapped with `projects.all`, and every project added while it runs.
+An agent you start for project A can read and change project B. Keep untrusted repos out of your roots and out of
+`projects.all` (`sandbox projects exclude <folder>`), or give them their own sandbox and `storage.dataName`.
+
+- Only your own config can map more folders; a project's `.sandbox-config.json` cannot set `projects.*`.
+- Every one of them passes the launch-folder checks (no drives, your profile, system or tool folders).
+- Machine-wide protections (network, LAN block, git access, clipboard and the other `.wsb` settings) are fixed when
+  the sandbox starts. A project needing a stricter value cannot join a sandbox that has a looser one (you are told
+  which setting); a project asking for a looser one gets the sandbox's stricter value. Nothing is ever loosened.
+- The repo guard covers every project the sandbox can write. A project that appears inside a root after the start
+  has no "before" picture, so any git hook, program-running git config (`core.hooksPath`, `core.fsmonitor`, ...) or
+  planted command in it is neutralised as if the sandbox had added it.
+- A restart that adds a project only ever happens with your consent (a prompt, or `--yes`).
+- `wsb share` (Windows 11 24H2+) is used only to add a folder to the running sandbox; it is untested, and any error
+  falls back to the restart offer.
 
 ## Shared tools
 

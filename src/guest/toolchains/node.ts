@@ -8,6 +8,7 @@ import { fetchJson, githubAsset, installArchive } from '../../shared/download.js
 import { safeRemove } from '../../shared/safe-remove.js';
 import { copyNode, dryRun, errMsg, execAsync, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
 import { arch, installOnce, resolveCached, tool, type ToolEnv } from './common.js';
+import { duringSession } from '../project-context.js';
 import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
 
 const NVM_HOME = tool('nvm');
@@ -92,9 +93,11 @@ export const setupNode = async (env: ToolEnv, versions: ToolVersions, config: To
   for (const version of pickSpreadVersions(hostNvmVersions(), main, HOST_VERSIONS_MAX).slice(1)) {
     try { await installNodeVersion(version); } catch (e) { warn('Node ' + version + ' from this PC: ' + errMsg(e)); }
   }
-  await activate(main);
   Object.assign(env.vars, { NVM_HOME, NVM_SYMLINK });
-  env.prepend.push(NVM_HOME, NVM_SYMLINK);
+  // At boot, nvm's symlink selects the version. A project added later must not switch it under the sessions already
+  // running: its own version's folder goes first on its sessions' PATH instead.
+  if (duringSession()) env.prepend.push(path.join(NVM_HOME, 'v' + main), NVM_HOME, NVM_SYMLINK);
+  else { await activate(main); env.prepend.push(NVM_HOME, NVM_SYMLINK); }
   env.summary.push('node: ' + main + ' (from ' + versions.node.source + ', switch with nvm use)');
   await packageManagers(env, config, main);
 };
@@ -112,6 +115,8 @@ const packageManagers = async (env: ToolEnv, config: Toolchains['node'], version
   // Without a packageManager pin, corepack's own known-good versions: the newest pnpm can be one this corepack cannot
   // start. Mapped folders allow no symlinks, so pnpm uses a flat (hoisted) node_modules instead of its linked layout.
   Object.assign(env.vars, { COREPACK_HOME: tool('corepack'), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0', COREPACK_DEFAULT_TO_LATEST: '0', npm_config_node_linker: 'hoisted' });
+  // The shims are shared by every session: a project added later keeps the ones made at boot.
+  if (duringSession() && exists(tool('bin', 'pnpm.cmd'))) { env.summary.push('pnpm, yarn: via corepack'); return; }
   try {
     await execAsync(path.join(dir, 'node.exe'), [corepackJs, 'enable', '--install-directory', mkdirp(tool('bin')), 'pnpm', 'yarn'], { env: nodeEnv, stdio: 'ignore' });
     env.summary.push('pnpm, yarn: via corepack (package.json "packageManager" picks the version)');

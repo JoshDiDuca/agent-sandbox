@@ -5,7 +5,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { download, githubAsset, installArchive, type ReleaseAsset } from '../../shared/download.js';
 import { writeJsonAtomic } from '../../shared/rundir.js';
-import { errMsg, execOutput, exists, log, session, toolsDir, warn, workspace } from '../env.js';
+import { errMsg, execOutput, exists, log, session, toolsDir, warn } from '../env.js';
+import { projectWorkspace } from '../project-context.js';
 import { MARKERS } from '../../core/detect-toolchains.js';
 import { projectUses, specFromVersionFile } from './versions.js';
 
@@ -93,17 +94,20 @@ export const step = async (name: string, env: ToolEnv, work: () => Promise<void>
 // ---- which toolchains a project needs ------------------------------------------------------------------------------
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'target', 'bin', 'obj', 'dist', 'build', 'vendor', '.venv', 'venv']);
-let entries: string[] | null = null;
+const entries = new Map<string, string[]>();
 
-/** File names in the workspace and its direct sub-folders ("api/go.mod"); read once per boot. */
+/** File names in the project's folder and its direct sub-folders ("api/go.mod"); read once per project. */
 export const workspaceEntries = (): string[] => {
-  if (entries) return entries;
+  const workspace = projectWorkspace();
+  const known = entries.get(workspace.toLowerCase());
+  if (known) return known;
   const list = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
   const top = list(workspace);
   const below = top.filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP_DIRS.has(d.name.toLowerCase()))
     .flatMap((d) => list(path.join(workspace, d.name)).filter((f) => f.isFile()).map((f) => d.name + '/' + f.name));
-  entries = [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
-  return entries;
+  const found = [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
+  entries.set(workspace.toLowerCase(), found);
+  return found;
 };
 
 /**
@@ -116,7 +120,7 @@ export const wanted = (setting: boolean | 'auto', toolchain: string): boolean =>
 /** The first of these version files in the workspace root, parsed (e.g. .ruby-version "3.3.1"). */
 export const versionFromFiles = (files: string[], parse: (text: string, name: string) => string | null = (t) => specFromVersionFile(t)): { spec: string; source: string } | null => {
   for (const name of files) {
-    const file = path.join(workspace, name);
+    const file = path.join(projectWorkspace(), name);
     if (!exists(file)) continue;
     const spec = parse(fs.readFileSync(file, 'utf8'), name);
     if (spec) return { spec, source: name };
