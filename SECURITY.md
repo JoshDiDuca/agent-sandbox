@@ -5,7 +5,7 @@
 Please report security problems privately, not in a public issue.
 
 - Use GitHub's **Report a vulnerability** button on the repository's Security tab
-  (<https://github.com/JoshDiDuca/agent-sandbox/security/advisories/new>).
+  (<https://github.com/JoshDiDuca/windows-development-sandbox/security/advisories/new>).
 - Include what you did, what happened, and the version (`npm ls -g windows-development-sandbox`).
 
 You should get a first answer within a few days. Fixes ship as a normal release, with credit if you want it.

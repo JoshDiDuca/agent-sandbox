@@ -7,8 +7,8 @@ Thanks for helping. Bug reports, ideas and pull requests are all welcome.
 You need Windows 10/11 Pro, Enterprise or Education, and Node.js 22 or newer (CI also tests 22.0.0).
 
 ```powershell
-git clone https://github.com/JoshDiDuca/agent-sandbox
-cd agent-sandbox
+git clone https://github.com/JoshDiDuca/windows-development-sandbox
+cd windows-development-sandbox
 npm ci            # installs and builds
 npm test          # must end with ALL TESTS PASSED
 ```
