@@ -181,6 +181,8 @@ sealed class Client
     public readonly NetworkStream Stream;
     public readonly BlockingCollection<byte[]> Outbox = new BlockingCollection<byte[]>(4096);
     public readonly bool Remote;
+    /** Set by the writer thread once everything queued has been written and the connection is closed. */
+    public readonly ManualResetEvent Finished = new ManualResetEvent(false);
     public bool ControlOnly, Query;
     public short Cols, Rows;
     long lastSeen = DateTime.UtcNow.Ticks;
@@ -203,7 +205,11 @@ sealed class Client
     {
         try { foreach (byte[] frame in Outbox.GetConsumingEnumerable()) Stream.Write(frame, 0, frame.Length); }
         catch (Exception) { }
-        finally { try { Tcp.Close(); } catch (Exception) { } }
+        finally
+        {
+            try { Tcp.Close(); } catch (Exception) { }
+            Finished.Set();
+        }
     }
 }
 
@@ -323,7 +329,7 @@ sealed class ClientHub
         var everyone = Snapshot();
         foreach (Client c in everyone) { Send(c, Frame.Exit, code); Retire(c); }
         // Give the writer threads a moment to deliver the EXIT frame before the process ends.
-        foreach (Client c in everyone) for (int i = 0; i < 20 && c.Outbox.Count > 0; i++) Thread.Sleep(50);
+        foreach (Client c in everyone) c.Finished.WaitOne(1000);
     }
 
     /** Stops sending to a client after what is already queued (its writer closes the connection when done). */
@@ -343,11 +349,16 @@ sealed class ClientHub
         if (next != null) TakeOwnership(next);
     }
 
-    /** Disconnects a client (after at most half a second for frames already queued, e.g. "access denied"). */
+    /**
+     * Disconnects a client. Frames already queued (e.g. "access denied", STATUS) are written first: the client's writer
+     * thread closes the connection when it is done, so wait for that rather than for an empty queue (the writer takes a
+     * frame off the queue before it has written it, so an empty queue does not mean "sent"), and only force the close
+     * if the peer is not reading.
+     */
     public void Kill(Client client)
     {
         Retire(client);
-        for (int i = 0; i < 20 && client.Outbox.Count > 0; i++) Thread.Sleep(25);
+        client.Finished.WaitOne(3000);
         try { client.Tcp.Close(); } catch (Exception) { }
     }
 
