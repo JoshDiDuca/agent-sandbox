@@ -43,6 +43,7 @@
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
     "release:major": "npm version major && git push --follow-tags",
+    "install:global": "node scripts/install-global.mjs",
     "doctor": "node dist/bin/agent-sandbox.js doctor"
   },
   "publishConfig": {

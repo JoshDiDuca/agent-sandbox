@@ -34,7 +34,7 @@ export const assertSafeWorkspace = (workspace: string, packageRoot: string, stor
   if (isRootPath(workspace)) fail('A whole drive cannot be the workspace: ' + workspace, 'Run claude-sbx from a project folder (or pass --workspace <folder>).');
   if (isUserProfile(workspace)) fail('Your whole user profile cannot be the workspace: ' + workspace, 'Run claude-sbx from a project folder (or pass --workspace <folder>).');
   for (const [label, dir] of protectedFolders(packageRoot, storageRoot)) {
-    if (isInsideOrEqual(dir, workspace)) fail(workspace + ' cannot be the workspace: it is inside ' + label + ' (' + dir + ').', 'Run claude-sbx from a project folder somewhere else.');
+    if (isInsideOrEqual(dir, workspace)) fail(workspace + ' cannot be the workspace: it is inside ' + label + ' (' + dir + '), so the agent could change the code that runs on this PC.', dir === packageRoot ? 'Developing agent-sandbox itself? Install it as a copy instead of a link: run `npm run install:global` in the repository, then claude-sbx works there.' : 'Run claude-sbx from a project folder somewhere else.');
     if (isInsideOrEqual(workspace, dir)) fail(workspace + ' cannot be the workspace: it contains ' + label + ' (' + dir + '), which the agent must not be able to change.', 'Run claude-sbx from a project folder that does not contain it.');
   }
   for (const name of ['WINDIR', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData']) {

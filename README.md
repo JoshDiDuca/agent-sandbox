@@ -187,6 +187,14 @@ folders older than 7 days, logs older than 14 days and interrupted downloads; `a
 ```powershell
 npm install               # dependencies + build
 npm test                  # offline, security and live ConPTY/daemon/git tests; ends with ALL TESTS PASSED
+npm run install:global    # install this checkout globally as a COPY, so you can run claude-sbx inside the repo
+```
+
+To develop agent-sandbox with Claude in its own sandbox, install it as a copy (`npm run install:global`), not with
+`npm install -g .`: a linked install would let the sandboxed agent edit the code your PC runs. With a copy, the
+agent's changes only reach your PC when you review them and run `npm run install:global` again.
+
+```powershell
 npm run release:patch     # bump the version and push a tag: GitHub Actions tests, packs and publishes a release
 ```
 
