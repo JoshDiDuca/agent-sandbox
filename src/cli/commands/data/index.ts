@@ -5,13 +5,14 @@ import _ from 'lodash';
 import { diskUsage, humanBytes } from '../../../core/disk.js';
 import { fail } from '../../../core/util.js';
 import { printJson, table, type Context } from '../context.js';
+import { working } from '../../progress.js';
 import { dataClean } from './clean.js';
 import { collectDataEntries, type DataArea } from './collect.js';
 
 const AREA_LABEL: Record<DataArea, string> = { tools: 'Toolchains', databases: 'Databases', state: 'Agent state', logs: 'Logs', data: 'Other', host: 'On this PC' };
 
-export const dataInfo = (ctx: Context): number => {
-  const entries = collectDataEntries(ctx.dataPath, ctx.storageRoot);
+export const dataInfo = async (ctx: Context): Promise<number> => {
+  const entries = await working('Measuring the saved data (big folders take a moment)', () => collectDataEntries(ctx.dataPath, ctx.storageRoot), !ctx.options.json);
   const total = _.sumBy(entries, 'bytes');
   const disks = diskUsage(ctx.storageRoot);
   if (printJson(ctx, { dataPath: ctx.dataPath, storageRoot: ctx.storageRoot, totalBytes: total, entries, disks })) return 0;

@@ -10,7 +10,7 @@ import { DEFAULTS, loadConfig, userConfigPath } from '../../core/config.js';
 import { LOCAL_CONFIG_NAME, NEVER_LOOSER } from '../../core/local-config.js';
 import { Config as ConfigSchema, LocalOverrides } from '../../core/schema.js';
 import type { Config } from '../../core/types.js';
-import { c } from '../colors.js';
+import { c, clearScreen, pageSizeFor, shortenMiddle, termWidth } from '../colors.js';
 import { editConfigText, fileValue, type SettingsTarget } from './edit.js';
 import { askValue } from './prompts.js';
 import { childrenOf, describeSetting, isSection, unwrap, type Schema } from './schema.js';
@@ -76,15 +76,17 @@ const browse = async (session: Session, schema: Schema, key: string[]): Promise<
     const config = userConfig(session.target === 'user' ? session.file : userConfigPath());
     const entries = childrenOf(schema);
     const text = readText(session.file);
+    clearScreen();
+    console.log(c.dim('Editing ' + shortenMiddle(session.file, termWidth() - 10)) + '\n' + c.dim('Values in ') + c.yellow('yellow') + c.dim(' (marked *) are set in that file; the rest are defaults.') + '\n');
     const pickName = await select<string>({
-      message: key.length ? key.join('.') : 'Settings ' + c.dim('(saved to ' + session.file + ')'),
-      pageSize: 18,
+      message: key.length ? key.join('.') : 'Settings',
+      pageSize: pageSizeFor(18),
       choices: [
         ...entries.map(([name, s]) => {
           const full = [...key, name];
           const changed = fileValue(text, full) !== undefined;
           const shown = show(currentValue(session, full, text, config));
-          const label = isSection(s) ? (key.length ? name : SECTION_TITLES[name] ?? name) + c.dim(' ...') : name.padEnd(18) + ' ' + (changed ? c.yellow(shown) : shown);
+          const label = isSection(s) ? (key.length ? name : SECTION_TITLES[name] ?? name) + c.dim(' ...') : name.padEnd(18) + ' ' + (changed ? c.yellow(shown) + ' *' : shown);
           return { name: label, value: name, description: describeSetting(s) };
         }),
         new Separator(),
@@ -108,11 +110,12 @@ export const settingsMenu = async (configPath: string | null, projectDir: string
     project: { target: 'project', file: path.join(projectDir, LOCAL_CONFIG_NAME), schema: LocalOverrides as unknown as Schema },
   };
   for (;;) {
+    clearScreen();
     const which = await select<string>({
       message: 'Which settings?',
       choices: [
-        { name: 'Your settings (all projects) ' + c.dim(sessions.user.file), value: 'user' },
-        { name: 'This project ' + c.dim(sessions.project.file + ' (only what a project may set; needs your approval at launch)'), value: 'project' },
+        { name: 'Your settings (all projects)', description: sessions.user.file, value: 'user' },
+        { name: 'This project', description: sessions.project.file + ' (only what a project may set; needs your approval at launch)', value: 'project' },
         new Separator(),
         { name: c.dim('< back'), value: '@back' },
       ],

@@ -71,7 +71,7 @@ export const dataClean = async (ctx: Context): Promise<number> => {
   if (!yes) {
     const ok = sized.some((t) => t.target === 'all')
       ? await askTyped('This cannot be undone; the next sandbox starts from scratch and reinstalls everything.', 'all')
-      : await askYesNo('Remove ' + (sized.length === 1 ? 'this' : 'these ' + sized.length) + ' (' + humanBytes(total) + ')?');
+      : await askYesNo('Delete ' + sized.map((t) => t.target).join(', ') + ' (' + humanBytes(total) + ')? This cannot be undone.');
     if (!ok) { console.log('Nothing removed.' + (process.stdin.isTTY ? '' : ' Pass --yes to confirm without a prompt.')); return 1; }
   }
   const failed: string[] = [];

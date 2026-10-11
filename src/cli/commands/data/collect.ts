@@ -45,3 +45,12 @@ export const collectDataEntries = (dataPath: string, storageRoot: string): DataE
   ].filter((r) => fs.existsSync(r.path));
   return _.sortBy([...rows, ...host], (r) => AREA_ORDER.indexOf(r.area), (r) => -r.bytes, (r) => r.name.toLowerCase());
 };
+
+/** The `sandbox data clean` target for a listed row, or null when that row is not removable (kept on this PC on purpose). */
+export const cleanTargetOf = (entry: DataEntry): string | null => {
+  if (entry.area === 'tools') return entry.name.startsWith('(') ? null : 'tools/' + entry.name;
+  if (entry.area === 'databases' || entry.area === 'state') return entry.name;
+  if (entry.area === 'logs') return 'logs';
+  if (entry.area === 'host' && entry.name === 'launches') return 'launches';
+  return null;
+};

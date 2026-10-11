@@ -45,6 +45,7 @@ export const logs = async (ctx: Context): Promise<number> => {
     printed = from + buffer.length;
   };
   print();
+  if (ctx.options.follow) console.error('(following; Ctrl+C to stop)');
   while (ctx.options.follow) { await sleep(1000); print(); }
   return 0;
 };
@@ -101,8 +102,17 @@ const checkLocalConfig = (ctx: Context): number => {
 };
 
 export const config = (ctx: Context): number => {
-  const [action = 'show'] = ctx.options.positionals;
+  const [action = 'summary'] = ctx.options.positionals;
   switch (action) {
+    case 'summary':
+      table([
+        ['Settings file', ctx.loaded.configPath ?? userConfigPath() + '  (does not exist yet; sandbox config init creates it)'],
+        ['Default agent', ctx.loaded.config.defaultHarness],
+        ['Storage', ctx.storageRoot],
+        ['Memory', String(ctx.loaded.config.sandbox.memoryMb) + (ctx.loaded.config.sandbox.memoryMb === 'auto' ? '' : ' MB')],
+      ]);
+      console.log('\nChange settings in the menu (sandbox > Settings). All of them as JSON: sandbox config show');
+      return 0;
     case 'path': console.log(ctx.loaded.configPath ?? userConfigPath() + '  (does not exist yet)'); return 0;
     case 'init': return initConfig();
     case 'show': console.log(JSON.stringify(ctx.loaded.config, null, 2)); return 0;

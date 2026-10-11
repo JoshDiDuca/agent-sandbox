@@ -15,6 +15,8 @@ import { watcherRunning } from '../../sync/watcher.js';
 import { errMsg, fail, safeText, sleep } from '../../core/util.js';
 import { currentGuestDir, printJson, requireOnPc, requireRunning, sandboxAlive, table, type Context } from './context.js';
 import { attachHere } from './launch.js';
+import { working } from '../progress.js';
+import { ago } from '../colors.js';
 
 export const attach = async (ctx: Context): Promise<number> => {
   requireOnPc('attach');
@@ -29,7 +31,7 @@ type Listed = SessionStatus & { viewers?: Viewers | null };
 
 const viewerText = (v: Viewers | null | undefined): string => (v === undefined ? '-' : v === null ? 'unknown (older session)' : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox');
 // harness, cwd and times are written by the sandbox: printed through safeText.
-const sessionRow = (s: Listed): string[] => [s.id, safeText(s.harness), s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), safeText(s.cwd), safeText(new Date(s.startedAt).toLocaleTimeString())];
+const sessionRow = (s: Listed): string[] => [s.id, safeText(s.harness), s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), safeText(s.cwd), ago(s.startedAt)];
 
 export const sessions = async (ctx: Context): Promise<number> => {
   // Who is attached comes from each session itself, so a terminal that was closed is never counted.
@@ -38,7 +40,7 @@ export const sessions = async (ctx: Context): Promise<number> => {
   const ask = new Set(live ? currentSessions(ctx.dataPath).map((s) => s.id) : []);
   const list: Listed[] = await Promise.all(listSessions(ctx.dataPath).map(async (s) => (ask.has(s.id) ? { ...s, viewers: await sessionViewers(s) } : s)));
   if (printJson(ctx, list.map((s) => _.omit(s, 'attach')))) return 0;
-  if (list.length === 0) console.log('No sessions.');
+  if (list.length === 0) console.log('No sessions. Start one with: sandbox claude');
   else table([['ID', 'AGENT', 'STATE', 'ATTACHED', 'FOLDER', 'STARTED'], ...list.map(sessionRow)]);
   return 0;
 };
@@ -53,7 +55,7 @@ export const status = async (ctx: Context): Promise<number> => {
     daemon, account: activeAccount(ctx.dataPath), sessions: running ? runningSessions(ctx.dataPath).length : 0, syncWatcher: watcherRunning(ctx.dataPath),
     repoGuard: findings.length ? findings.map((x) => x.kind + ': ' + x.detail).join('; ') : 'nothing from the sandbox needed neutralising',
   };
-  if (!printJson(ctx, info)) table(Object.entries(info).map(([k, v]) => [_.startCase(k), safeText(String(v ?? '-'))]));
+  if (!printJson(ctx, info)) table(Object.entries(info).map(([k, v]) => [_.startCase(k), safeText(typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v ?? '-'))]));
   return 0;
 };
 
@@ -85,7 +87,7 @@ export const db = async (ctx: Context): Promise<number> => {
   requireRunning('Start one with: sandbox start --database <name>');
   const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
   // Starting can download the database the first time.
-  const result = await execInSandbox(ctx.dataPath, ['sbx-db', action, ...(name ? [name] : [])], ready.guestWorkspace, 1800, sandboxAlive);
+  const result = await working((action === 'list' ? 'Asking' : action === 'start' ? 'Starting' : 'Stopping') + ' the database' + (name ? ' ' + name : 's') + ' in the sandbox', () => execInSandbox(ctx.dataPath, ['sbx-db', action, ...(name ? [name] : [])], ready.guestWorkspace, 1800, sandboxAlive));
   printExecResult(result);
   return result.exitCode ?? 1;
 };
@@ -93,7 +95,7 @@ export const db = async (ctx: Context): Promise<number> => {
 export const restart = async (ctx: Context): Promise<number> => {
   requireOnPc('restart');
   requireRunning();
-  console.log((await restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive)).message);
+  console.log((await working('Restarting the agents', () => restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive))).message);
   return 0;
 };
 
@@ -101,7 +103,7 @@ export const stop = async (ctx: Context): Promise<number> => {
   requireOnPc('stop');
   if (!isSandboxRunning()) { console.log('No Windows Sandbox is running.'); return 0; }
   const sandbox = readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
-  await execInSandbox(ctx.dataPath, ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive);
+  await working('Asking the sandbox to shut down', () => execInSandbox(ctx.dataPath, ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive));
   console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');
   return 0;
 };

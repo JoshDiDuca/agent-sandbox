@@ -4,7 +4,11 @@ import path from 'node:path';
 import { buildProgram, parseCli } from '../cli/args.js';
 import { COMMANDS } from '../cli/manifest.js';
 import { commandLine, readHistory, recordHistory } from '../cli/history.js';
-import { splitArgs } from '../cli/menu.js';
+import { optionProblem, splitArgs } from '../cli/menu.js';
+import { cleanTargetOf, type DataEntry } from '../cli/commands/data/collect.js';
+import { ago, colorEnabled, shorten, shortenMiddle } from '../cli/colors.js';
+import { hoistConfig, withoutConfig } from '../cli/index.js';
+import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
 import { editConfigText, SECTION_TITLES } from '../cli/settings/index.js';
 import { childrenOf, isSection, jsonExample, leavesOf, promptKind, type Schema } from '../cli/settings/schema.js';
 import { Config, LocalOverrides } from '../core/schema.js';
@@ -46,6 +50,20 @@ export const cliTests = (t: Harness): void => {
   const projectEdit = editConfigText('{}', ['downloads', 'requireChecksum'], true, 'project');
   const projectBad = editConfigText('{}', ['storage', 'root'], 'C:\\x', 'project');
   check('text' in projectEdit && projectEdit.text.includes('requireChecksum') && 'problems' in projectBad, 'settings screen: a project file is validated against the project schema (storage cannot be set there)');
+  check(colorEnabled({}, true) && !colorEnabled({}, false) && !colorEnabled({ NO_COLOR: '1' }, true) && !colorEnabled({ TERM: 'dumb' }, true) && colorEnabled({ FORCE_COLOR: '1' }, false) && !colorEnabled({ FORCE_COLOR: '0' }, true),
+    'colours: on for a terminal, off for NO_COLOR, TERM=dumb and pipes, FORCE_COLOR overrides');
+  check(shorten('abcdefghij', 6) === 'abcde…' && shortenMiddle('C:\\Users\\me\\project', 11) === 'C:\\Us…oject' && ago(0, 10 * 60 * 1000) === '10 min ago' && ago(0, 5000) === 'just now' && ago(0, 3 * 86400 * 1000) === '3 d ago', 'text helpers: shorten, shorten in the middle, relative time');
+  check(JSON.stringify(hoistConfig(['--config', 'a.json', 'status', '--json'])) === '["status","--config","a.json","--json"]' && JSON.stringify(hoistConfig(['--config=a.json'])) === '["menu","--config","a.json"]' && JSON.stringify(withoutConfig(['status', '--config', 'a.json', '--json'])) === '["status","--json"]',
+    '--config before the command is moved behind it; history drops it');
+  check(validNodeSpec('22') && validNodeSpec('v22.1.0') && validNodeSpec('lts/*') && !validNodeSpec('abc') && validPythonSpec('3.12') && !validPythonSpec('2.7') && closest('cluade', ['claude', 'codex']) === 'claude' && closest('zzzzzz', ['claude']) === undefined,
+    'validation: node/python version syntax, did-you-mean for agent names');
+  const optionOf = (flag: string) => COMMANDS.flatMap((cmd) => cmd.options).find((o) => o.flag === flag)!;
+  check(optionProblem(optionOf('--node'), 'abc') !== undefined && optionProblem(optionOf('--node'), '22') === undefined && optionProblem(optionOf('--workspace'), path.join(t.packageRoot, 'no-such-folder-here')) !== undefined && optionProblem(optionOf('--workspace'), t.packageRoot) === undefined && optionProblem(optionOf('--days'), '0') !== undefined,
+    'menu: version, folder and number answers are checked while typing');
+  const rowOf = (area: DataEntry['area'], name: string): DataEntry => ({ area, name, path: 'x', bytes: 1 });
+  check(cleanTargetOf(rowOf('tools', 'go')) === 'tools/go' && cleanTargetOf(rowOf('tools', 'agents/claude')) === 'tools/agents/claude' && cleanTargetOf(rowOf('databases', 'databases/pg')) === 'databases/pg' && cleanTargetOf(rowOf('host', 'launches')) === 'launches' && cleanTargetOf(rowOf('host', 'accounts')) === null && cleanTargetOf(rowOf('tools', '(files in tools)')) === null,
+    'data menu: only removable rows become checkbox targets (accounts are never offered)');
+  check(COMMANDS.find((cmd) => cmd.name === 'data')!.options.find((o) => o.flag === '--yes')?.noMenu === true, 'data menu: --yes is never offered');
   recordHistory(['launch', '--harness', 'claude']);
   recordHistory(['status']);
   recordHistory(['launch', '--harness', 'claude']);

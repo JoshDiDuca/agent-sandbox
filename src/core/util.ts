@@ -100,7 +100,8 @@ export const assertNoLinks = (root: string, target: string): void => {
 const powerShellArgs = (script: string): string[] => {
   const prelude = "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false\n$ProgressPreference = 'SilentlyContinue'\n";
   const encoded = Buffer.from(prelude + script, 'utf16le').toString('base64');
-  return ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded];
+  // -OutputFormat Text: with redirected output PowerShell would otherwise print its progress stream as "#< CLIXML" XML.
+  return ['-NoLogo', '-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded];
 };
 
 /** Runs a PowerShell script and returns its exit code (and stdout when `capture`). */

@@ -15,6 +15,10 @@ export const OptionSpec = z.strictObject({
   choices: Choices.optional(),
   /** Advanced options are only asked in the menu after "Show advanced options". */
   advanced: z.boolean().optional(),
+  /** Only asked in the menu when the command's first argument has this value (account save: --from-host). */
+  when: z.string().optional(),
+  /** Never offered in the menu (dangerous shortcuts such as --yes); typing it on the command line still works. */
+  noMenu: z.boolean().optional(),
 });
 
 export const ArgSpec = z.strictObject({
@@ -23,6 +27,8 @@ export const ArgSpec = z.strictObject({
   required: z.boolean(),
   variadic: z.boolean().optional(),
   choices: Choices.optional(),
+  /** Only asked in the menu when the command's first argument has this value (data clean: targets). */
+  when: z.string().optional(),
 });
 
 export const Group = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
@@ -55,7 +61,7 @@ const SANDBOX_OPTIONS: OptionSpecT[] = [
   text('--workspace', 'dir', 'use this folder instead of the current one'),
   text('--node', 'version', 'Node version for nvm (default: .sandbox-config.json > .nvmrc > this PC)', { advanced: true }),
   text('--python', 'version', 'Python 3 version (default: .sandbox-config.json > .python-version > config)', { advanced: true }),
-  { flag: '--database', type: 'list', value: 'name', description: 'also start this database (postgres, mysql, mongodb, redis, dynamodb; repeatable)', advanced: true },
+  { flag: '--database', type: 'list', value: 'name', description: 'also start this database (postgres, mysql, mongodb, redis, dynamodb; repeatable)', choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'], advanced: true },
   { flag: '--script', type: 'list', value: 'file', description: 'run this .ps1/.mjs/.cmd inside the sandbox first (repeatable)', advanced: true },
   bool('--window', 'show the sandbox window even if config says headless', { advanced: true }),
   bool('--trust-config', 'approve the folder\'s .sandbox-config.json without asking', { advanced: true }),
@@ -82,8 +88,8 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'stop', summary: 'shut the sandbox down', group: 'Sandbox', args: [], options: [] },
   { name: 'show', summary: 'show the sandbox window', group: 'Sandbox', args: [], options: [] },
   { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sandbox', args: [], options: [] },
-  { name: 'account', summary: 'Claude logins: list, save, use, set the default, remove', group: 'Accounts', args: [{ name: 'action', description: 'what to do', required: false, choices: ['list', 'save', 'use', 'default', 'remove'] }, { name: 'name', description: 'account name', required: false, choices: 'accounts' }], options: [bool('--from-host', '(save) save this PC\'s login instead of the sandbox\'s'), bool('--no-restart', '(use) do not restart running sessions')], json },
-  { name: 'data', summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it', group: 'Data', args: [{ name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] }, { name: 'targets', description: 'what to clean, e.g. tools/go databases logs', required: false, variadic: true }], options: [bool('--yes', 'do not ask before deleting')], json },
+  { name: 'account', summary: 'Claude logins: list, save, use, set the default, remove', group: 'Accounts', args: [{ name: 'action', description: 'what to do', required: false, choices: ['list', 'save', 'use', 'default', 'remove'] }, { name: 'name', description: 'account name', required: false, choices: 'accounts' }], options: [bool('--from-host', '(save) save this PC\'s login instead of the sandbox\'s', { when: 'save' }), bool('--no-restart', '(use) do not restart running sessions', { when: 'use' })], json },
+  { name: 'data', summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it', group: 'Data', args: [{ name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] }, { name: 'targets', description: 'what to clean, e.g. tools/go databases logs', required: false, variadic: true, when: 'clean' }], options: [bool('--yes', 'do not ask before deleting', { noMenu: true })], json },
   { name: 'clean', summary: 'delete old launch folders, logs and leftovers', group: 'Data', args: [], options: [{ flag: '--days', type: 'number', value: 'n', description: 'launch folders older than this many days', default: 7 }] },
   { name: 'sync', summary: 'copy conversation history back to this PC now', group: 'Data', args: [], options: [] },
   { name: 'logs', summary: 'print the newest sandbox log', group: 'Health', args: [], options: [bool('--follow', 'keep printing new lines', { short: '-f' })] },
