@@ -1,5 +1,5 @@
 // Command-line parsing with commander. parseCli() only parses (no side effects), so it is easy to test; cli/index.ts
-// dispatches the result. claude-sbx & co parse as `launch`: every option launch does not own goes to the agent, in order.
+// dispatches the result. sandbox claude & co parse as `launch`: every option launch does not own goes to the agent, in order.
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { fail } from '../core/util.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';

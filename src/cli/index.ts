@@ -46,7 +46,7 @@ export interface Preset { harness?: string; command?: string }
 const runFromMenu = (argv: string[]): Promise<number> => main(argv).catch((e: unknown) => report(e));
 
 /**
- * CLI entry. `preset` lets wrapper binaries fix the command/agent (claude-sbx = launch --harness claude). No arguments
+ * CLI entry. `preset` lets wrapper binaries fix the command/agent (sandbox claude = launch --harness claude). No arguments
  * opens the menu; `sandbox <agent> [agent args]` starts that agent.
  */
 export const main = async (argv: string[], preset: Preset = {}): Promise<number> => {

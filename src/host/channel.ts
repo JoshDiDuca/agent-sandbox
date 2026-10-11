@@ -34,7 +34,7 @@ const until = async <T>(timeoutMs: number, isAlive: () => boolean, poll: () => T
   for (let round = 0; Date.now() < deadline; round++) {
     const value = poll();
     if (value !== null && value !== undefined) return value;
-    if (round % 10 === 0 && !isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with claude-sbx; sandbox logs shows what happened.');
+    if (round % 10 === 0 && !isAlive()) fail('Windows Sandbox closed (or is not running).', 'Start it again with sandbox claude; sandbox logs shows what happened.');
     await sleep(500);
   }
   fail(timeoutMessage, 'Check what the sandbox is doing with sandbox logs -f (or sbx-show to see its window).');
@@ -116,7 +116,7 @@ export const currentSessions = (dataPath: string): SessionStatus[] => {
 /** The session with this id (or id prefix), else the most recently started running one. */
 export const pickSession = (dataPath: string, sessionId?: string): SessionStatus => {
   const running = runningSessions(dataPath);
-  if (running.length === 0) fail('No agent session is running in the sandbox.', 'Start one with claude-sbx (it opens a new session in the running sandbox).');
+  if (running.length === 0) fail('No agent session is running in the sandbox.', 'Start one with sandbox claude (it opens a new session in the running sandbox).');
   if (!sessionId) return running[running.length - 1];
   return running.find((s: SessionStatus) => s.id === sessionId || s.id.startsWith(sessionId)) ?? fail('No running session "' + sessionId + '".', 'Running sessions: ' + running.map((s) => s.id).join(', ') + ' (sandbox sessions lists them).');
 };
@@ -136,7 +136,7 @@ export const sessionViewers = (session: SessionStatus): Promise<Viewers | null> 
 
 /**
  * The newest running session of this agent in exactly this folder that no terminal on this PC is attached to, so
- * claude-sbx -t picks it back up instead of starting another. A session that cannot answer is never reused.
+ * sandbox claude -t picks it back up instead of starting another. A session that cannot answer is never reused.
  */
 export const findUnwatchedSession = async (dataPath: string, harness: string, cwd: string): Promise<SessionStatus | null> => {
   const candidates = currentSessions(dataPath).filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase()).reverse().slice(0, 8);

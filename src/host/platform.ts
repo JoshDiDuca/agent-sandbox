@@ -69,7 +69,7 @@ export const sandboxFeatureInstalled = (): boolean => isWin && fileExists(path.j
 export const assertCanLaunch = (): void => {
   if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Use sandbox generate to only write the files.');
   if (!sandboxFeatureInstalled()) fail('Windows Sandbox is not enabled on this PC.', 'Run in an admin PowerShell, then reboot: Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All  (needs Windows Pro, Enterprise or Education)');
-  if (isSandboxRunning()) fail('A Windows Sandbox is already running (Windows allows one at a time).', 'Attach to it with claude-sbx -t, show it with sbx-show, or shut it down with sandbox stop.');
+  if (isSandboxRunning()) fail('A Windows Sandbox is already running (Windows allows one at a time).', 'Attach to it with sandbox claude -t, show it with sbx-show, or shut it down with sandbox stop.');
 };
 
 export const startSandbox = (wsbPath: string): void => {

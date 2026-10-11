@@ -170,8 +170,8 @@ const Secrets = z.strictObject({
   warnFiles: z.boolean().describe('Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder.'),
 });
 const Attach = z.strictObject({
-  enabled: z.boolean().describe('Allow claude-sbx --terminal / sandbox attach from this PC.'),
-  reuseSession: z.boolean().describe('claude-sbx -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
+  enabled: z.boolean().describe('Allow sandbox claude --terminal / sandbox attach from this PC.'),
+  reuseSession: z.boolean().describe('sandbox claude -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
 });
 const ClaudeProfile = z.strictObject({
   enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),
@@ -186,7 +186,7 @@ const ClaudeProfile = z.strictObject({
 
 export const Config = z.strictObject({
   $schema: SchemaRef.optional(),
-  defaultHarness: Name.describe('Agent started by `sandbox launch` (claude-sbx always runs claude).'),
+  defaultHarness: Name.describe('Agent started by `sandbox launch` (sandbox claude always runs claude).'),
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map the workspace read-only.'),
   mappings: z.array(Mapping).describe('Extra folders from this PC.'),

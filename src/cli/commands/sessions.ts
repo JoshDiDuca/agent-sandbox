@@ -13,7 +13,7 @@ import { errMsg, fail, safeText, sleep } from '../../core/util.js';
 import { currentGuestDir, printJson, requireRunning, sandboxAlive, table, type Context } from './context.js';
 
 export const attach = async (ctx: Context): Promise<number> => {
-  requireRunning('Start one with: claude-sbx --terminal');
+  requireRunning('Start one with: sandbox claude --terminal');
   await waitForReady(ctx.dataPath, null, sandboxAlive);
   const id = ctx.options.positionals[0];
   if (!id && runningSessions(ctx.dataPath).length === 0) await sleep(1500);

@@ -10,7 +10,7 @@
     "defaultHarness": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]+$",
-      "description": "Agent started by `sandbox launch` (claude-sbx always runs claude)."
+      "description": "Agent started by `sandbox launch` (sandbox claude always runs claude)."
     },
     "guestWorkspace": {
       "anyOf": [
@@ -782,11 +782,11 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Allow claude-sbx --terminal / sandbox attach from this PC."
+          "description": "Allow sandbox claude --terminal / sandbox attach from this PC."
         },
         "reuseSession": {
           "type": "boolean",
-          "description": "claude-sbx -t in a running sandbox reattaches to this folder's session when no terminal on this PC is attached to it (--new always starts another)."
+          "description": "sandbox claude -t in a running sandbox reattaches to this folder's session when no terminal on this PC is attached to it (--new always starts another)."
         }
       },
       "additionalProperties": false

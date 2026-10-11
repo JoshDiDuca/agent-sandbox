@@ -1,7 +1,8 @@
 # Commands
 
-`sandbox`, `windows-development-sandbox` and `agent-sandbox` are the same command. `claude-sbx` / `claude-sandbox`
-(and `codex-*`, `gemini-*`) start that agent; `sandbox <agent>` starts any configured agent.
+`sandbox` (also `windows-development-sandbox`) is the command. `sandbox <agent>` starts any configured agent;
+`claude-sandbox`, `codex-sandbox` and `gemini-sandbox` are shortcuts. The old names `agent-sandbox`, `claude-sbx`,
+`codex-sbx` and `gemini-sbx` still work for now.
 
 ## The menu
 
@@ -19,9 +20,9 @@ as lists. It then shows the exact command line and runs it.
 
 | | |
 |---|---|
-| `claude-sbx` | start Claude in a sandbox for this folder, in Windows Terminal inside it |
+| `sandbox claude` | start Claude in a sandbox for this folder, in Windows Terminal inside it (also `claude-sandbox`) |
 | `sandbox start` | the sandbox without an agent |
-| `sandbox launch` | the same as `claude-sbx`, with any `--harness` |
+| `sandbox launch` | the same, with any `--harness` |
 
 Options:
 
@@ -36,7 +37,7 @@ Options:
 | `--script <file>` | run a `.ps1`/`.mjs`/`.cmd` inside before the agent (repeatable) |
 | `--no-agent`, `--trust-config`, `--no-local-config` | no agent, approve the project file, ignore the project file |
 
-Anything else goes to the agent: `claude-sbx --continue`. If an agent has a flag with the same name as ours, use
+Anything else goes to the agent: `sandbox claude --continue`. If an agent has a flag with the same name as ours, use
 `--sbx-<flag>` for ours or put the agent's flags after `--`.
 
 ## A running sandbox

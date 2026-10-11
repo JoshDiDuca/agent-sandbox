@@ -32,7 +32,7 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
   const dataPath = path.join(expandPath(loaded.config.storage.root, loaded.base), 'data', loaded.config.storage.dataName);
   const alive = isSandboxRunning;
   // async: no sandbox is a rejected promise like every other failure, not a synchronous throw.
-  const ready = async (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.', 'Start one first, e.g. claude-sbx --headless.'));
+  const ready = async (): Promise<SandboxStatus> => (alive() ? waitForReady(dataPath, null, alive) : fail('No Windows Sandbox is running.', 'Start one first, e.g. sandbox claude --headless.'));
   return {
     isRunning: alive,
     status: () => readSandboxStatus(dataPath),

@@ -166,6 +166,6 @@ export const setup = async (ctx: Context): Promise<number> => {
     } else console.log('To do it yourself, in an admin PowerShell run:\n  ' + ENABLE_COMMAND + '\nthen restart Windows.');
   }
   const todo = checks.filter((c) => c.status === 'action').length;
-  console.log('\n' + (todo ? todo + ' thing(s) to fix before the sandbox can start (see ACTION NEEDED above).' : 'This PC is ready. cd into a project and run claude-sbx (or sandbox for no agent).'));
+  console.log('\n' + (todo ? todo + ' thing(s) to fix before the sandbox can start (see ACTION NEEDED above).' : 'This PC is ready. cd into a project and run sandbox claude (or sandbox for no agent).'));
   return todo ? 1 : 0;
 };

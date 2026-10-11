@@ -30,13 +30,16 @@ Needs Windows 10/11 **Pro, Enterprise or Education**. [Other ways to install](do
 cd C:\code\my-app
 
 sandbox            # menu: start an agent, a plain sandbox, diagnostics, cleanup ...
-claude-sbx         # Claude Code in a sandbox for this folder
-claude-sbx -t      # ... in this terminal (Ctrl+] detaches, the session keeps running)
+sandbox claude     # Claude Code in a sandbox for this folder (or: claude-sandbox)
+sandbox claude -t  # ... in this terminal (Ctrl+] detaches, the session keeps running)
 sandbox start      # just the sandbox, no agent
 sandbox opencode   # any supported agent by name
 ```
 
 The first start downloads what the project needs (a few minutes, once). After that, starts take seconds.
+
+> `claude-sbx`, `codex-sbx`, `gemini-sbx` and `agent-sandbox` are the old command names. They still work for now; use
+> `sandbox <agent>` / `claude-sandbox` and `sandbox` instead.
 
 ## What you get
 
@@ -54,7 +57,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 | Command | |
 |---|---|
 | `sandbox` | the interactive menu (repeats your last command, asks for every option) |
-| `claude-sbx`, `sandbox <agent>` | start an agent; `-t` for this terminal, `--headless` for no window |
+| `sandbox <agent>`, `claude-sandbox` | start an agent; `-t` for this terminal, `--headless` for no window |
 | `sandbox start` | the sandbox without an agent |
 | `sandbox attach` / `sessions` / `status` | work with a running sandbox |
 | `sandbox exec -- <cmd>` | run a command inside |

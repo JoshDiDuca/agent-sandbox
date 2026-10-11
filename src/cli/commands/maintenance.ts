@@ -27,7 +27,7 @@ const newestLog = (dir: string): string | null => {
 
 export const logs = async (ctx: Context): Promise<number> => {
   const dir = path.join(ctx.dataPath, 'logs');
-  const file = newestLog(dir) ?? fail('No sandbox logs yet in ' + dir + '.', 'Logs appear after the first start (claude-sbx).');
+  const file = newestLog(dir) ?? fail('No sandbox logs yet in ' + dir + '.', 'Logs appear after the first start (sandbox claude).');
   console.log('== ' + file + ' ==');
   let printed = 0;
   // The log is written inside the sandbox: read only its tail, and make it safe for your terminal.
