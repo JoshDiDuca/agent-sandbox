@@ -76,6 +76,16 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
 - Inside a sandbox, `sandbox launch/claude/attach` try to start a nested sandbox and fail. Test CLI behaviour with
   unit tests, `--help`, `config`, `data` and `doctor`.
 
+## Databases on demand
+`sbx-db` is `src/guest/db.ts` (bundled to `dist/runtime/db.js`). It reads `session.json`: `databases` are the plans for
+this project, `databaseCatalog` lists every database it may start later. `sandbox db` runs it directly inside a sandbox
+and through the exec channel from the PC; `--database <name>` adds plans at launch.
+
+## Workflows
+- In `release.yml` / `ci.yml`, a `pwsh` step ends with the exit code of its last native command. End steps with
+  `exit 0` after native commands that may return non-zero on purpose (git rev-parse, npm view ...).
+- CI also builds on the official Node 22.0.0 zip (setup-node's 22.0.0 has a broken npm). Releases run no tests.
+
 ## Releasing
 Bump `version` in `package.json` and push to master. CI tags `v<version>` and publishes to GitHub Releases, GitHub
 Packages and npm. The first npm publish is done once from the PC with `npm run publish:npm` (builds, packs, publishes;

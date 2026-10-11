@@ -89,6 +89,9 @@ the agent exiting does.
 | `sandbox config check [--workspace <dir>]` | check a project's `.sandbox-config.json` and list what it changes, without starting anything |
 | `sandbox host-claude` (or `claude-host`) | Claude on this PC, **not** sandboxed, with its own profile (`--personal` uses your normal one) |
 
+`sandbox --version` (or `-v`) prints the version. Inside a sandbox, commands that control it from outside (`launch`,
+`attach`, `exec`, `stop`, `show`, `hide`, `restart`) say so and do nothing; `sandbox db` runs `sbx-db` right there.
+
 Every command also takes `--config <file>` to use another settings file. The environment variables `AGENT_SANDBOX_CONFIG`
 (settings file) and `AGENT_SANDBOX_HOME` (folder for settings and history, default `~/.agent-sandbox`) do the same.
 Commands that print data take `--json`.

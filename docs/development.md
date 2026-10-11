@@ -8,7 +8,10 @@ npm run install:global    # install this checkout globally as a COPY
 
 The self-test refuses to run on a normal PC: it only runs inside a Windows Sandbox (run `sandbox start`, then `npm test`
 in it) or on GitHub Actions, because the live tests create files, links and processes. The live tests can flake under
-load; run them once more before assuming a real failure.
+load; run them once more before assuming a real failure. `sandbox self-test` is the same thing.
+
+CI builds on Node 22 and on the official Node 22.0.0 zip (the oldest Node users run it on, so dependencies must not
+need newer), and runs the self-test as information only. Releases and `npm run publish:npm` run no tests.
 
 To work on this tool with an agent in its own sandbox, install it as a copy (`npm run install:global`), not with
 `npm install -g .`. A linked install would let the sandboxed agent edit the code your PC runs. With a copy, the
