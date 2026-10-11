@@ -41,6 +41,11 @@ export interface Harness {
   /** Writes `value` as JSON and returns the path. */
   writeJson: (file: string, value: unknown) => string;
   readJson: <T = any>(file: string) => T;
+  /**
+   * Sets a file's modified time to `secondsFromNow` (default: 10 s ahead). Sync decides what changed by comparing
+   * modified times, so tests make a change clearly newer this way instead of sleeping.
+   */
+  touch: (file: string, secondsFromNow?: number) => void;
 
   /**
    * Polls `read` every `everyMs` until it returns something truthy and returns that, or returns null after `ms`.
@@ -109,6 +114,7 @@ export const createHarness = (packageRoot: string): RunningHarness => {
     write,
     writeJson: (file, value) => write(file, JSON.stringify(value)),
     readJson: (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
+    touch: (file, secondsFromNow = 10) => { const when = new Date(Date.now() + secondsFromNow * 1000); fs.utimesSync(file, when, when); },
     waitFor: async (read, ms = 30000, everyMs = 100) => {
       const end = Date.now() + ms;
       for (;;) {

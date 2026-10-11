@@ -1,12 +1,10 @@
 // A fake "host PC" inside the temp folder: Node, claude.exe, a ~/.claude profile, workspaces, and helpers to resolve a
 // run, generate the sandbox for it, run the guest against it and start the CLI. Shared by all suites.
-import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { Config, HostProbe, ResolvedRun, RunRequest } from '../core/types.js';
 import { DEFAULTS } from '../core/config.js';
 import { generateSandbox } from '../host/generate.js';
-import { ensureDir } from '../core/util.js';
 import { resolveRun } from '../core/workspace.js';
 import type { Harness } from './harness.js';
 
@@ -109,12 +107,3 @@ export const createFixtures = (t: Harness) => {
 };
 
 export type Fixtures = ReturnType<typeof createFixtures>;
-
-/** Creates a folder with the given files (relative path -> content) and returns its path. */
-export const makeTree = (t: Harness, root: string, files: Record<string, string>): string => {
-  ensureDir(root);
-  for (const [file, content] of Object.entries(files)) t.write(path.join(root, file), content);
-  return root;
-};
-
-export const exists = (...parts: string[]): boolean => fs.existsSync(path.join(...parts));

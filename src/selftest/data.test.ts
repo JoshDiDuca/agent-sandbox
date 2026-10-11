@@ -1,69 +1,77 @@
-// `sandbox data` target resolution and `sandbox repair` detection (half-installed toolchains, leftovers, links).
+// `sandbox data` and `sandbox clean`: what a clean target may name, how sizes and removal treat links, and which old
+// launch folders, logs and downloads are pruned.
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveCleanTargets } from '../cli/commands/data/clean.js';
 import { removeTree } from '../cli/commands/data/remove.js';
-import { deadPidFiles, findHalfInstalled, findLinks, findStagingLeftovers, globalPackages, resolvedVersionsValid } from '../cli/commands/repair/finders.js';
+import { findLinks } from '../cli/commands/repair/finders.js';
 import { humanBytes, sizeOf } from '../core/disk.js';
-import { ensureDir, errMsg } from '../core/util.js';
-import type { Harness } from './harness.js';
+import { pruneStorage } from '../host/cleanup.js';
+import type { Suite } from './suite.js';
 
-export const dataTests = (t: Harness): void => {
-  const { check, write } = t;
+export const dataSuite: Suite = {
+  name: 'data',
+  title: 'data clean targets, sizes and removal with links, storage cleanup',
+  run: async (t) => {
+    t.section('clean targets');
+    const storage = t.at('data-store');
+    const dataPath = path.join(storage, 'data', 'default');
+    const resolve = (...inputs: string[]): string[] => resolveCleanTargets(inputs, dataPath, storage).map((r) => path.relative(storage, r.path));
+    const inData = (...parts: string[]): string => path.join('data', 'default', ...parts);
+    t.equal(resolve('tools/go'), [inData('tools', 'go')], 'tools/<name> resolves inside the data folder');
+    t.equal(resolve('tools\\go'), [inData('tools', 'go')], 'either slash works');
+    t.equal(resolve('Tools/agents/claude'), [inData('tools', 'agents', 'claude')], 'tools/agents/<name> resolves, whatever the case');
+    t.equal(resolve('databases/postgres-18'), [inData('databases', 'postgres-18')], 'databases/<name> resolves');
+    t.equal(resolve('logs'), [inData('logs')], 'logs resolves');
+    t.equal(resolve('launches'), ['launches'], 'launches resolves to the storage folder\'s launches');
+    t.equal(resolve('state/claude'), [inData('state', 'claude')], 'state/<agent> resolves');
+    t.equal(resolve('tools', 'tools/go', 'tools/go'), [inData('tools')], 'nested and repeated targets collapse');
+    t.equal(resolve('all', 'logs'), [inData(), 'launches'], '`all` is the data folder plus launches');
+    t.check(Boolean(resolveCleanTargets(['state/claude'], dataPath, storage)[0].warning?.includes('login')), 'cleaning state warns about the login');
+    t.check(Boolean(resolveCleanTargets(['all'], dataPath, storage)[0].warning), 'cleaning everything carries a warning');
+    const badTargets = ['', '..', 'tools/..', 'tools/../../x', '../data', 'C:\\Windows', 'C:tools', '/etc', '\\\\server\\share', 'tools/*', 'tools/go:stream', 'tools/a/b', 'tools/agents/a/b', 'logs/guest.log', 'accounts', 'sync', 'windows', 'tools/.', 'tools/go.'];
+    const accepted = badTargets.filter((target) => {
+      try { resolveCleanTargets([target], dataPath, storage); return true; } catch { return false; }
+    });
+    t.equal(accepted, [], 'rejected: .., absolute paths, drive letters, UNC, wildcards, streams, too deep, unknown areas');
+    await t.throws(() => resolveCleanTargets([], dataPath, storage), '', 'rejected: no target at all (that is not "everything")');
 
-  t.section('data: clean targets');
-  const storage = path.join(t.temp, 'data-store');
-  const dataPath = path.join(storage, 'data', 'default');
-  const resolve = (...inputs: string[]): string[] => resolveCleanTargets(inputs, dataPath, storage).map((r) => path.relative(storage, r.path));
-  const rejected = (...inputs: string[]): boolean => { try { resolveCleanTargets(inputs, dataPath, storage); return false; } catch (e) { return errMsg(e).length > 0; } };
-  const d = (...parts: string[]): string => path.join('data', 'default', ...parts);
-  check(resolve('tools/go').join() === d('tools', 'go') && resolve('tools\\go').join() === d('tools', 'go') && resolve('Tools/agents/claude').join() === d('tools', 'agents', 'claude'), 'clean: tools/<name> and tools/agents/<name> resolve inside the data folder (either slash)');
-  check(resolve('databases/postgres-18').join() === d('databases', 'postgres-18') && resolve('logs').join() === d('logs') && resolve('launches').join() === 'launches' && resolve('state/claude').join() === d('state', 'claude'), 'clean: databases/<name>, logs, launches, state/<agent>');
-  check(resolve('tools', 'tools/go', 'tools/go').join() === d('tools') && resolve('all', 'logs').join() === [d(), 'launches'].join(), 'clean: nested and repeated targets collapse; all = the data folder + launches');
-  check(Boolean(resolveCleanTargets(['state/claude'], dataPath, storage)[0].warning?.includes('login')) && Boolean(resolveCleanTargets(['all'], dataPath, storage)[0].warning), 'clean: state and all carry a warning');
-  const bad = ['', '..', 'tools/..', 'tools/../../x', '../data', 'C:\\Windows', 'C:tools', '/etc', '\\\\server\\share', 'tools/*', 'tools/go:stream', 'tools/a/b', 'tools/agents/a/b', 'logs/guest.log', 'accounts', 'sync', 'windows', 'tools/.', 'tools/go.'];
-  const accepted = bad.filter((b) => !rejected(b));
-  check(accepted.length === 0 && rejected(), 'clean: rejects .., absolute paths, drive letters, UNC, wildcards, streams, too deep, unknown areas, nothing (accepted: ' + JSON.stringify(accepted) + ')');
+    t.section('sizes and removal never follow links');
+    const sized = t.at('sized');
+    t.write(path.join(sized, 'a.bin'), 'x'.repeat(1000));
+    t.write(path.join(sized, 'sub', 'b.bin'), 'y'.repeat(24));
+    const outside = t.at('outside');
+    t.write(path.join(outside, 'keep.txt'), 'z'.repeat(5000));
+    let linked = false;
+    try { fs.symlinkSync(outside, path.join(sized, 'sub', 'escape'), 'junction'); linked = true; } catch { /* no junctions here */ }
+    t.equal(sizeOf(sized), 1024, 'sizes count real files only' + (linked ? ' (a junction counts 0)' : ''));
+    t.equal([humanBytes(1536), humanBytes(0), humanBytes(3 * 1024 ** 3)], ['1.5 KB', '0 B', '3.0 GB'], 'sizes are shown in readable units');
+    if (linked) t.equal(findLinks(sized).length, 1, 'repair finds a junction planted in the data folder');
+    removeTree(sized, t.temp);
+    t.check(!fs.existsSync(sized), 'a folder is removed');
+    t.check(fs.existsSync(path.join(outside, 'keep.txt')), 'removing a folder never deletes what a link inside points to');
 
-  t.section('data: sizes and removal never follow links');
-  const sized = path.join(t.temp, 'sized');
-  write(path.join(sized, 'a.bin'), 'x'.repeat(1000));
-  write(path.join(sized, 'sub', 'b.bin'), 'y'.repeat(24));
-  const outside = path.join(t.temp, 'outside');
-  write(path.join(outside, 'keep.txt'), 'z'.repeat(5000));
-  let linked = false;
-  try { fs.symlinkSync(outside, path.join(sized, 'sub', 'escape'), 'junction'); linked = true; } catch { /* no junctions here */ }
-  check(sizeOf(sized) === 1024 && humanBytes(1536) === '1.5 KB' && humanBytes(0) === '0 B' && humanBytes(3 * 1024 ** 3) === '3.0 GB', 'data: sizes count real files only' + (linked ? ' (a junction counts 0)' : ''));
-  if (linked) check(findLinks(sized).length === 1, 'repair: finds a junction planted in the data folder');
-  removeTree(sized, t.temp);
-  check(!fs.existsSync(sized) && fs.existsSync(path.join(outside, 'keep.txt')), 'data: removing a folder never deletes what a link inside points to');
-
-  t.section('repair: detection');
-  const tools = path.join(t.temp, 'repair', 'tools');
-  write(path.join(tools, 'go', '1.23.2', 'bin', 'go.exe'), 'x');
-  ensureDir(path.join(tools, 'go', '1.22.8', 'src'));
-  write(path.join(tools, 'java', 'jdk-21', 'bin', 'java.exe'), 'x');
-  ensureDir(path.join(tools, 'java', 'jdk-17', 'lib'));
-  write(path.join(tools, 'python', 'python-3.12.7', 'python.exe'), 'x');
-  write(path.join(tools, 'nvm', 'settings.txt'), 'x');
-  write(path.join(tools, 'nvm', 'v22.11.0', 'node.exe'), 'x');
-  ensureDir(path.join(tools, 'nvm', 'v20.18.0'));
-  write(path.join(tools, 'git', 'bin', 'bash.exe'), 'x');
-  ensureDir(path.join(tools, 'dotnet', 'sdk'));
-  ensureDir(path.join(tools, 'go', '1.24.0.staging-ab12cd'));
-  ensureDir(path.join(tools, 'node-staging'));
-  ensureDir(path.join(tools, 'rust.staging-0f'));
-  const half = findHalfInstalled(tools).map((h) => path.relative(tools, h.path)).sort();
-  check(half.join() === ['dotnet', 'java\\jdk-17', 'go\\1.22.8', 'nvm', 'nvm\\v20.18.0'].map((p) => p.split('\\').join(path.sep)).sort().join(), 'repair: half-installed toolchains = folder without its program (got ' + half.join(', ') + ')');
-  const staging = findStagingLeftovers(tools).map((p) => path.relative(tools, p)).sort();
-  check(staging.join() === [path.join('go', '1.24.0.staging-ab12cd'), 'node-staging', 'rust.staging-0f'].sort().join(), 'repair: interrupted downloads in tools and one level down (got ' + staging.join(', ') + ')');
-  check(resolvedVersionsValid('{"go":"1.23.2"}') && resolvedVersionsValid('\uFEFF{}') && !resolvedVersionsValid('{"go":') && !resolvedVersionsValid('[1]'), 'repair: resolved-versions.json must be a JSON object');
-  check(globalPackages('{"dependencies":{"agent-sandbox":{"version":"1.0.0"},"npm":{}}}').join() === 'agent-sandbox,npm' && globalPackages('nope').length === 0 && globalPackages('{"dependencies":3}').length === 0, 'repair: reads npm ls -g --json');
-  const run = path.join(t.temp, 'repair', 'run');
-  write(path.join(run, 'watcher-default.pid'), '4242');
-  write(path.join(run, 'watcher-other.pid'), String(process.pid));
-  write(path.join(run, 'watcher-junk.pid'), 'not a pid');
-  write(path.join(run, 'hidden-windows.json'), '[]');
-  const dead = deadPidFiles(run, (pid) => pid === process.pid).map((f) => path.basename(f)).sort();
-  check(dead.join() === 'watcher-default.pid,watcher-junk.pid', 'repair: stale watcher pid files (dead process or junk) are found; a live one is kept');
+    t.section('storage cleanup');
+    const store = t.at('prune');
+    const aged = (p: string, days: number): void => { const d = new Date(Date.now() - days * 86400000); fs.utimesSync(p, d, d); };
+    for (const [name, days] of [['old', 9], ['kept', 30], ['new', 1]] as const) {
+      aged(t.write(path.join(store, 'launches', name, 'agent.wsb'), 'x'), days);
+      aged(path.join(store, 'launches', name), days);
+    }
+    aged(t.write(path.join(store, 'data', 'd', 'logs', 'guest-old.log'), 'x'), 20);
+    t.write(path.join(store, 'data', 'd', 'logs', 'guest-new.log'), 'x');
+    const staging = t.dir('prune', 'data', 'd', 'tools', 'git.staging-ab12');
+    aged(staging, 2);
+    t.dir('prune', 'data', 'd', 'tools', 'node');
+    const pruned = pruneStorage(store, { keep: ['kept'] });
+    const left = (p: string): boolean => fs.existsSync(path.join(store, p));
+    t.equal(pruned.launches, 1, 'cleanup removes one launch folder');
+    t.equal(
+      { old: left('launches/old'), kept: left('launches/kept'), new: left('launches/new') },
+      { old: false, kept: true, new: true },
+      'cleanup: launch folders older than 7 days go; the running launch and recent ones stay',
+    );
+    t.equal({ oldLog: left('data/d/logs/guest-old.log'), newLog: left('data/d/logs/guest-new.log') }, { oldLog: false, newLog: true }, 'cleanup: logs older than 14 days go');
+    t.equal({ interrupted: left('data/d/tools/git.staging-ab12'), realTool: left('data/d/tools/node') }, { interrupted: false, realTool: true }, 'cleanup: interrupted downloads go; real tools stay');
+  },
 };

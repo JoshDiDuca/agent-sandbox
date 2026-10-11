@@ -110,7 +110,7 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'setup', summary: 'check this PC can run Windows Sandbox and offer to turn it on', group: 'Health', args: [], options: [] },
   { name: 'doctor', summary: 'check this PC and show what will be copied or downloaded', group: 'Health', args: [], options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })] },
   { name: 'repair', summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)', group: 'Health', args: [], options: [] },
-  { name: 'self-test', summary: 'run the built-in tests', group: 'Health', args: [], options: [] },
+  { name: 'self-test', summary: 'run the built-in tests', group: 'Health', args: [{ name: 'suite', description: 'run only these test suites, e.g. config live-daemon (default: all)', required: false, variadic: true }], options: [] },
   { name: 'config', summary: 'show or create your settings file, or check a project\'s .sandbox-config.json', group: 'Config', args: [{ name: 'action', description: 'what to do', required: false, choices: ['show', 'path', 'init', 'schema', 'check'] }], options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')] },
   { name: 'agent-commands', summary: '(Beta) make claude, codex ... on this PC start in a hidden sandbox and attach', group: 'Agents', args: [{ name: 'action', description: 'on, off or status', required: false, choices: ['status', 'on', 'off'] }], options: [] },
   { name: 'host-claude', summary: 'run Claude on this PC, NOT sandboxed, with its own profile', group: 'Agents', args: [], options: [bool('--personal', 'use your normal Claude profile')], passthrough: 'agent', interactive: true },

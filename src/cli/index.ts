@@ -82,7 +82,7 @@ export const main = async (rawArgv: string[], preset: Preset = {}): Promise<numb
   const typed = preset.harness ? ['launch', '--harness', preset.harness, ...argv] : preset.command ? [preset.command, ...argv] : argv;
   if (options.command === 'menu') return menu(commands.createContext(packageRoot, entry, options), runFromMenu(options.config));
   // Loaded only when asked for: normal commands never load test code.
-  if (options.command === 'self-test') return (await import('../selftest/index.js')).selfTest(packageRoot);
+  if (options.command === 'self-test') return (await import('../selftest/index.js')).selfTest(packageRoot, options.positionals);
   // repair must run even when the config file is broken (createContext would refuse it).
   if (options.command === 'repair') { recordHistory(withoutConfig(typed)); return commands.repairCommand(packageRoot, entry, options); }
   const handler = HANDLERS[options.command];
