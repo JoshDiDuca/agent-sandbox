@@ -80,12 +80,16 @@ export const findFile = (root: string, name: string, maxDepth = 4): string | nul
   return null;
 };
 
-/** Downloads + extracts into `destination` atomically (staging folder, then rename), keeping `inner` (a sub-folder) if given. */
-export const installArchive = async (url: string, destination: string, options: { sha256?: string | null; locate?: string; fileName?: string } = {}): Promise<void> => {
+/**
+ * Downloads + extracts into `destination` atomically (staging folder, then rename). With `locate`, only the folder holding
+ * that file is kept (`up` folders above it, e.g. locate ruby.exe with up 1 keeps the folder around bin).
+ */
+export const installArchive = async (url: string, destination: string, options: { sha256?: string | null; sha512?: string | null; locate?: string; up?: number; fileName?: string } = {}): Promise<void> => {
   const work = destination + '.staging-' + crypto.randomBytes(3).toString('hex');
   try {
     const archive = path.join(work, options.fileName ?? path.basename(new URL(url).pathname));
     await download(url, archive, options.sha256);
+    if (options.sha512 && crypto.createHash('sha512').update(fs.readFileSync(archive)).digest('hex') !== options.sha512.trim().toLowerCase()) throw new Error('Checksum mismatch for ' + url);
     const extracted = path.join(work, 'x');
     extractArchive(archive, extracted);
     let root = extracted;
@@ -93,6 +97,7 @@ export const installArchive = async (url: string, destination: string, options: 
       const found = findFile(extracted, options.locate);
       if (!found) throw new Error(options.locate + ' not found in ' + url);
       root = path.dirname(found);
+      for (let i = 0; i < (options.up ?? 0) && path.dirname(root).startsWith(extracted); i++) root = path.dirname(root);
     }
     fs.rmSync(destination, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(destination), { recursive: true });

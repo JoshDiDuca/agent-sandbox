@@ -15,7 +15,7 @@ export const configTests = async (t: Harness, f: Fixtures): Promise<void> => {
   const builtIn = loadConfig();
   check(builtIn.configPath === null && builtIn.config.guestWorkspace === 'auto' && !builtIn.config.sandbox.headless && !builtIn.config.sandbox.vGpu && builtIn.config.provisioning.git.access === 'full', 'no user config: built-in defaults (auto guest folder, headless off, vGPU off, git full)');
   const custom = loadConfig(write(path.join(temp, 'cfg.json'), JSON.stringify({ sandbox: { headless: true }, toolchains: { rust: { enabled: false } }, mappings: [{ host: 'rel-folder', guest: 'C:\\Rel', readOnly: true }] })));
-  check(custom.config.sandbox.headless && !custom.config.toolchains.rust.enabled && custom.config.toolchains.python.enabled, 'a config file only needs the keys it changes (deep merge over defaults)');
+  check(custom.config.sandbox.headless && custom.config.toolchains.rust.enabled === false && custom.config.toolchains.python.enabled === true, 'a config file only needs the keys it changes (deep merge over defaults)');
   check(await rejects(() => loadConfig(path.join(temp, 'missing.json')), 'Config file not found'), 'an explicit --config that does not exist is an error');
   check(loadConfig(path.join(t.packageRoot, 'config.example.json')).config.defaultHarness === 'claude', 'config.example.json is valid');
   ensureDir(path.join(temp, 'rel-folder'));

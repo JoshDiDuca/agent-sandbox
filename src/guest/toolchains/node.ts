@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { ToolVersions } from '../../core/types.js';
+import type { Toolchains, ToolVersions } from '../../core/types.js';
 import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
-import { copyNode, dryRun, errMsg, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
-import { arch, resolveCached, tool, type ToolEnv } from './common.js';
+import { copyNode, dryRun, errMsg, exec, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
+import { arch, installOnce, resolveCached, tool, type ToolEnv } from './common.js';
 import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
 
 
@@ -65,7 +65,7 @@ const activate = (version: string): void => {
   fs.symlinkSync(path.join(NVM_HOME, 'v' + version), NVM_SYMLINK, 'junction');
 };
 
-export const setupNode = async (env: ToolEnv, versions: ToolVersions): Promise<void> => {
+export const setupNode = async (env: ToolEnv, versions: ToolVersions, config: Toolchains['node']): Promise<void> => {
   if (dryRun) { log('(dry run) would provision nvm and Node ' + versions.node.spec + ' (from ' + versions.node.source + ')'); return; }
   await ensureNvm();
   fs.writeFileSync(path.join(NVM_HOME, 'settings.txt'), ['root: ' + NVM_HOME, 'path: ' + NVM_SYMLINK, 'arch: ' + (arch === 'arm64' ? 'arm64' : '64'), 'proxy: none', ''].join('\r\n'));
@@ -83,4 +83,22 @@ export const setupNode = async (env: ToolEnv, versions: ToolVersions): Promise<v
   Object.assign(env.vars, { NVM_HOME, NVM_SYMLINK });
   env.prepend.push(NVM_HOME, NVM_SYMLINK);
   env.summary.push('node: ' + main + ' (from ' + versions.node.source + ', switch with nvm use)');
+  packageManagers(env, config, main);
+};
+
+/** Global npm packages (per Node version, like nvm keeps them) and pnpm/yarn through corepack. */
+const packageManagers = (env: ToolEnv, config: Toolchains['node'], version: string): void => {
+  const dir = path.join(NVM_HOME, 'v' + version);
+  const nodeEnv = { ...process.env, PATH: dir + path.delimiter + (process.env.PATH ?? '') };
+  const npm = (args: string[]): void => exec(path.join(dir, 'node.exe'), [path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), ...args], { env: nodeEnv, stdio: 'ignore' });
+  const corepackJs = path.join(dir, 'node_modules', 'corepack', 'dist', 'corepack.js');
+  // Versions copied from this PC come without their global packages, corepack included, and Node 25+ dropped it.
+  const extra = config.corepack && !exists(corepackJs) ? ['corepack'] : [];
+  installOnce(env, 'npm@' + version, [...extra, ...config.globalPackages], (pkg) => npm(['install', '--global', pkg, '--no-fund', '--no-audit']));
+  if (!config.corepack) return;
+  Object.assign(env.vars, { COREPACK_HOME: tool('corepack'), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' });
+  try {
+    exec(path.join(dir, 'node.exe'), [corepackJs, 'enable', '--install-directory', mkdirp(tool('bin')), 'pnpm', 'yarn'], { env: nodeEnv, stdio: 'ignore' });
+    env.summary.push('pnpm, yarn: via corepack (package.json "packageManager" picks the version)');
+  } catch (e) { warn('corepack enable failed: ' + errMsg(e)); }
 };

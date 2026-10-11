@@ -40,26 +40,64 @@
   "toolchains": {
     "node": {
       "version": "host",
-      "extraVersions": []
+      "extraVersions": [],
+      "corepack": true,
+      "globalPackages": []
     },
     "python": {
       "enabled": true,
       "version": "3",
-      "python2": true
+      "python2": true,
+      "tools": []
     },
     "rust": {
       "enabled": true,
       "toolchain": "stable",
-      "host": "x86_64-pc-windows-gnu"
+      "host": "x86_64-pc-windows-gnu",
+      "components": [],
+      "targets": [],
+      "crates": []
     },
     "cpp": {
-      "enabled": true
+      "enabled": true,
+      "flexBison": true
     },
     "dotnet": {
       "enabled": true,
       "channels": [
         "LTS"
-      ]
+      ],
+      "tools": [],
+      "workloads": [],
+      "frameworkTargets": [
+        "net48",
+        "net472"
+      ],
+      "netfx35": false
+    },
+    "go": {
+      "enabled": "auto",
+      "version": "stable",
+      "tools": []
+    },
+    "java": {
+      "enabled": "auto",
+      "version": "lts",
+      "maven": true,
+      "gradle": true
+    },
+    "ruby": {
+      "enabled": "auto",
+      "version": "3",
+      "gems": []
+    },
+    "php": {
+      "enabled": "auto",
+      "version": "8",
+      "composer": true
+    },
+    "deno": {
+      "enabled": "auto"
     },
     "bun": {
       "enabled": true
@@ -67,9 +105,16 @@
     "uv": {
       "enabled": true
     },
+    "vcRuntime": {
+      "enabled": false
+    },
+    "mesa": {
+      "enabled": false
+    },
     "vscode": {
       "enabled": true
-    }
+    },
+    "environment": {}
   },
   "attach": {
     "enabled": true,

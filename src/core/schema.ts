@@ -1,6 +1,7 @@
 // Every setting, defined once with zod: the user config (~/.agent-sandbox/config.json) and the much smaller subset a
 // project's .sandbox-config.json may change. Types are inferred from these schemas, and the JSON Schema files in
 // schemas/ (editor autocomplete and docs via "$schema") are generated from them at build time.
+import _ from 'lodash';
 import { z } from 'zod';
 
 const RESERVED_GUEST = /^C:\\(?:Windows|Program Files|Program Files \(x86\)|ProgramData|Users|AgentLaunch|AgentData|HostTools|nvm)(?:\\|$)/i;
@@ -58,26 +59,72 @@ const Provisioning = z.strictObject({
   git: Git,
   terminal: toggle('Windows Terminal as the sandbox window (downloaded once).'),
 });
+/** true, false, or "auto": only when the project uses it (found from files like go.mod in the workspace or one level down). */
+export const Enabled = z.union([z.boolean(), z.literal('auto')]);
+const enabled = (what: string, markers: string) => Enabled.describe(what + ' true, false, or "auto" = only when the project has ' + markers + '.');
+const Packages = (what: string, example: string) => Strings.describe(what + ', installed once and kept (e.g. ' + example + ').');
+
 const Toolchains = z.strictObject({
   node: z.strictObject({
     version: z.string().min(1).describe('Default Node version for nvm. "host" = the Node on this PC. A project\'s .nvmrc / .node-version wins.'),
     extraVersions: Strings.describe('More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC\'s nvm, not counted towards that limit.'),
+    corepack: z.boolean().describe('pnpm and yarn through corepack (a project\'s "packageManager" in package.json picks the version).'),
+    globalPackages: Packages('npm packages installed globally into the default Node version', '["typescript", "npm-check-updates"]'),
   }),
   python: z.strictObject({
-    enabled: z.boolean().describe('Python 3 (CPython with pip).'),
+    enabled: enabled('Python 3 (CPython with pip).', 'pyproject.toml, requirements.txt, setup.py, Pipfile or .python-version'),
     version: z.string().min(1).describe('Python 3 version prefix, e.g. "3" or "3.12". A project\'s .python-version wins.'),
     python2: z.boolean().describe('Also install Python 2.7 as python2 / pip2.'),
+    tools: Packages('Python command-line tools installed with `uv tool install` (needs uv)', '["poetry", "ruff", "pre-commit"]'),
   }),
   rust: z.strictObject({
-    enabled: z.boolean().describe('Rust via rustup (cargo, rustc).'),
+    enabled: enabled('Rust via rustup (cargo, rustc).', 'Cargo.toml or rust-toolchain(.toml)'),
     toolchain: z.string().min(1).describe('Default toolchain, e.g. "stable". rust-toolchain.toml in a project wins.'),
     host: z.string().min(1).describe('Host triple. The GNU host needs no Visual Studio; MinGW (cpp) is its linker.'),
+    components: Packages('Extra rustup components', '["rust-src", "llvm-tools"]'),
+    targets: Packages('Extra rustup targets', '["wasm32-unknown-unknown"]'),
+    crates: Packages('Binaries built with `cargo install` (compiled once, slow the first time)', '["cargo-watch"]'),
   }),
-  cpp: toggle('MinGW-w64 GCC: gcc, g++, mingw32-make.'),
-  dotnet: z.strictObject({ enabled: z.boolean().describe('.NET SDK (C#).'), channels: Strings.describe('SDK channels, e.g. ["LTS", "8.0"]. A project\'s global.json is installed too.') }),
-  bun: toggle('Bun runtime.'),
-  uv: toggle('uv (Python package manager).'),
+  cpp: z.strictObject({
+    enabled: enabled('MinGW-w64 GCC with CMake, Ninja, premake5 and mingw32-make (also Rust\'s linker).', 'CMakeLists.txt, Makefile, meson.build, premake5.lua or Cargo.toml'),
+    flexBison: z.boolean().describe('win_flex / win_bison, the parser generators many C/C++ projects (game engines among them) need; CMake finds them.'),
+  }),
+  dotnet: z.strictObject({
+    enabled: enabled('.NET SDK (C#, F#).', 'a .sln, .slnx, .csproj, .fsproj or global.json'),
+    channels: Strings.describe('SDK channels, e.g. ["LTS", "8.0"]. A project\'s global.json is installed too.'),
+    tools: Packages('Global .NET tools (`dotnet tool install -g`)', '["dotnet-ef", "csharpier"]'),
+    workloads: Packages('SDK workloads (`dotnet workload install`)', '["aspire", "wasm-tools"]'),
+    frameworkTargets: Strings.describe('.NET Framework reference assemblies (targeting packs) from NuGet, so net4x and old-style .csproj projects build without Visual Studio, e.g. ["net48", "net472", "net462"]. The 4.8 runtime itself ships with Windows.'),
+    netfx35: z.boolean().describe('.NET Framework 3.5 runtime (a Windows feature, enabled from Windows Update on every boot; a few minutes).'),
+  }),
+  go: z.strictObject({
+    enabled: enabled('Go.', 'go.mod or go.work'),
+    version: z.string().min(1).describe('"stable" or a version prefix such as "1.23". A go.mod asking for newer fetches it itself (GOTOOLCHAIN=auto).'),
+    tools: Packages('Go tools (`go install <path>@<version>`)', '["golang.org/x/tools/gopls@latest"]'),
+  }),
+  java: z.strictObject({
+    enabled: enabled('Java: Eclipse Temurin JDK.', 'pom.xml, build.gradle(.kts), settings.gradle(.kts), mvnw, gradlew or .java-version'),
+    version: z.string().min(1).describe('"lts" (newest LTS) or a major version such as "21". A project\'s .java-version or .sdkmanrc wins.'),
+    maven: z.boolean().describe('Apache Maven (mvn). A project\'s mvnw works either way.'),
+    gradle: z.boolean().describe('Gradle (gradle). A project\'s gradlew works either way.'),
+  }),
+  ruby: z.strictObject({
+    enabled: enabled('Ruby (RubyInstaller, with gem and bundler). Gems with C extensions need MSYS2, which is not included.', 'Gemfile, a .gemspec or .ruby-version'),
+    version: z.string().min(1).describe('Version prefix, e.g. "3" or "3.3". A project\'s .ruby-version wins.'),
+    gems: Packages('Gems installed globally', '["rubocop"]'),
+  }),
+  php: z.strictObject({
+    enabled: enabled('PHP (with the Visual C++ runtime it needs, installed on every boot).', 'composer.json, artisan or .php-version'),
+    version: z.string().min(1).describe('Version prefix, e.g. "8" or "8.3". A project\'s .php-version wins.'),
+    composer: z.boolean().describe('Composer.'),
+  }),
+  deno: z.strictObject({ enabled: enabled('Deno.', 'deno.json, deno.jsonc or deno.lock') }),
+  bun: toggle('Bun runtime (claude-mem needs it).'),
+  uv: toggle('uv, the Python package manager (claude-mem needs it).'),
+  vcRuntime: toggle('Microsoft Visual C++ runtime for tools that need it (a real installer, so it runs on every boot, ~15 s). PHP installs it regardless.'),
+  mesa: toggle('Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program\'s .exe.'),
   vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
+  environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'letters, digits and _ only'), z.string()).describe('Extra environment variables for the agent and every terminal, e.g. registry mirrors: {"NPM_CONFIG_REGISTRY": "https://...", "PIP_INDEX_URL": "https://..."}.'),
 });
 const Attach = z.strictObject({
   enabled: z.boolean().describe('Allow claude-sbx --terminal / agent-sandbox attach from this PC.'),
@@ -130,9 +177,10 @@ export const LocalOverrides = z.strictObject({
   sandbox: Sandbox.partial(),
   network: z.strictObject({ blockPrivateRanges: z.boolean() }).partial(),
   provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true }).extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() }).partial(),
+  // Every toolchain setting, each one optional (a project usually only switches languages on or pins a version).
   toolchains: z.strictObject({
-    node: Toolchains.shape.node.partial(), python: Toolchains.shape.python.partial(), rust: Toolchains.shape.rust.partial(),
-    cpp: Toolchains.shape.cpp.partial(), dotnet: Toolchains.shape.dotnet.partial(), bun: Toolchains.shape.bun.partial(), uv: Toolchains.shape.uv.partial(), vscode: Toolchains.shape.vscode.partial(),
+    ..._.mapValues(_.omit(Toolchains.shape, 'environment'), (shape) => shape.partial()),
+    environment: Toolchains.shape.environment,
   }).partial(),
   attach: Attach.partial(),
   personalization: toggle('Copy your desktop look into the sandbox.').partial(),

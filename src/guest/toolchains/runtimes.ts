@@ -1,4 +1,4 @@
-// Bun and uv: single-binary tools from GitHub releases (claude-mem needs both; handy on their own too).
+// Bun, uv and Deno: single-binary tools from GitHub releases (claude-mem needs Bun and uv).
 import path from 'node:path';
 import { githubAsset, installArchive } from '../../shared/download.js';
 import { dryRun, exists, log } from '../env.js';
@@ -18,6 +18,12 @@ const setupSingleExe = async (env: ToolEnv, name: string, repo: string, pattern:
 export const setupBun = async (env: ToolEnv): Promise<void> => {
   await setupSingleExe(env, 'bun', 'oven-sh/bun', arch === 'arm64' ? /^bun-windows-aarch64\.zip$/ : /^bun-windows-x64\.zip$/, 'bun.exe', tool('bun', 'bin'));
   env.vars.BUN_INSTALL = tool('bun');
+};
+
+export const setupDeno = async (env: ToolEnv): Promise<void> => {
+  await setupSingleExe(env, 'deno', 'denoland/deno', arch === 'arm64' ? /^deno-aarch64-pc-windows-msvc[.]zip$/ : /^deno-x86_64-pc-windows-msvc[.]zip$/, 'deno.exe', tool('deno', 'bin'));
+  // `deno install` puts commands in DENO_INSTALL_ROOT/bin: the folder deno.exe is in, already on PATH.
+  Object.assign(env.vars, { DENO_DIR: tool('deno-cache'), DENO_INSTALL_ROOT: tool('deno'), DENO_NO_UPDATE_CHECK: '1' });
 };
 
 export const setupUv = async (env: ToolEnv): Promise<void> => {

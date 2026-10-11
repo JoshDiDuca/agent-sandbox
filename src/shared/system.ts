@@ -17,4 +17,5 @@ export const SYSTEM = {
   ipconfig: (): string => system32('ipconfig.exe'),
   robocopy: (): string => system32('Robocopy.exe'),
   shutdown: (): string => system32('shutdown.exe'),
+  dism: (): string => system32('Dism.exe'),
 } as const;

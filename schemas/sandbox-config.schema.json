@@ -204,6 +204,17 @@
                 "type": "string"
               },
               "description": "More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC's nvm, not counted towards that limit."
+            },
+            "corepack": {
+              "type": "boolean",
+              "description": "pnpm and yarn through corepack (a project's \"packageManager\" in package.json picks the version)."
+            },
+            "globalPackages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "npm packages installed globally into the default Node version, installed once and kept (e.g. [\"typescript\", \"npm-check-updates\"])."
             }
           },
           "additionalProperties": false
@@ -212,8 +223,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": "Python 3 (CPython with pip)."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Python 3 (CPython with pip). true, false, or \"auto\" = only when the project has pyproject.toml, requirements.txt, setup.py, Pipfile or .python-version."
             },
             "version": {
               "type": "string",
@@ -223,6 +242,13 @@
             "python2": {
               "type": "boolean",
               "description": "Also install Python 2.7 as python2 / pip2."
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Python command-line tools installed with `uv tool install` (needs uv), installed once and kept (e.g. [\"poetry\", \"ruff\", \"pre-commit\"])."
             }
           },
           "additionalProperties": false
@@ -231,8 +257,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": "Rust via rustup (cargo, rustc)."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Rust via rustup (cargo, rustc). true, false, or \"auto\" = only when the project has Cargo.toml or rust-toolchain(.toml)."
             },
             "toolchain": {
               "type": "string",
@@ -243,6 +277,27 @@
               "type": "string",
               "minLength": 1,
               "description": "Host triple. The GNU host needs no Visual Studio; MinGW (cpp) is its linker."
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra rustup components, installed once and kept (e.g. [\"rust-src\", \"llvm-tools\"])."
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra rustup targets, installed once and kept (e.g. [\"wasm32-unknown-unknown\"])."
+            },
+            "crates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Binaries built with `cargo install` (compiled once, slow the first time), installed once and kept (e.g. [\"cargo-watch\"])."
             }
           },
           "additionalProperties": false
@@ -251,8 +306,20 @@
           "type": "object",
           "properties": {
             "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "MinGW-w64 GCC with CMake, Ninja, premake5 and mingw32-make (also Rust's linker). true, false, or \"auto\" = only when the project has CMakeLists.txt, Makefile, meson.build, premake5.lua or Cargo.toml."
+            },
+            "flexBison": {
               "type": "boolean",
-              "description": "MinGW-w64 GCC: gcc, g++, mingw32-make."
+              "description": "win_flex / win_bison, the parser generators many C/C++ projects (game engines among them) need; CMake finds them."
             }
           },
           "additionalProperties": false
@@ -261,8 +328,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": ".NET SDK (C#)."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": ".NET SDK (C#, F#). true, false, or \"auto\" = only when the project has a .sln, .slnx, .csproj, .fsproj or global.json."
             },
             "channels": {
               "type": "array",
@@ -270,6 +345,167 @@
                 "type": "string"
               },
               "description": "SDK channels, e.g. [\"LTS\", \"8.0\"]. A project's global.json is installed too."
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Global .NET tools (`dotnet tool install -g`), installed once and kept (e.g. [\"dotnet-ef\", \"csharpier\"])."
+            },
+            "workloads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "SDK workloads (`dotnet workload install`), installed once and kept (e.g. [\"aspire\", \"wasm-tools\"])."
+            },
+            "frameworkTargets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": ".NET Framework reference assemblies (targeting packs) from NuGet, so net4x and old-style .csproj projects build without Visual Studio, e.g. [\"net48\", \"net472\", \"net462\"]. The 4.8 runtime itself ships with Windows."
+            },
+            "netfx35": {
+              "type": "boolean",
+              "description": ".NET Framework 3.5 runtime (a Windows feature, enabled from Windows Update on every boot; a few minutes)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "go": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Go. true, false, or \"auto\" = only when the project has go.mod or go.work."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"stable\" or a version prefix such as \"1.23\". A go.mod asking for newer fetches it itself (GOTOOLCHAIN=auto)."
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Go tools (`go install <path>@<version>`), installed once and kept (e.g. [\"golang.org/x/tools/gopls@latest\"])."
+            }
+          },
+          "additionalProperties": false
+        },
+        "java": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Java: Eclipse Temurin JDK. true, false, or \"auto\" = only when the project has pom.xml, build.gradle(.kts), settings.gradle(.kts), mvnw, gradlew or .java-version."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"lts\" (newest LTS) or a major version such as \"21\". A project's .java-version or .sdkmanrc wins."
+            },
+            "maven": {
+              "type": "boolean",
+              "description": "Apache Maven (mvn). A project's mvnw works either way."
+            },
+            "gradle": {
+              "type": "boolean",
+              "description": "Gradle (gradle). A project's gradlew works either way."
+            }
+          },
+          "additionalProperties": false
+        },
+        "ruby": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Ruby (RubyInstaller, with gem and bundler). Gems with C extensions need MSYS2, which is not included. true, false, or \"auto\" = only when the project has Gemfile, a .gemspec or .ruby-version."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Version prefix, e.g. \"3\" or \"3.3\". A project's .ruby-version wins."
+            },
+            "gems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Gems installed globally, installed once and kept (e.g. [\"rubocop\"])."
+            }
+          },
+          "additionalProperties": false
+        },
+        "php": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "PHP (with the Visual C++ runtime it needs, installed on every boot). true, false, or \"auto\" = only when the project has composer.json, artisan or .php-version."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Version prefix, e.g. \"8\" or \"8.3\". A project's .php-version wins."
+            },
+            "composer": {
+              "type": "boolean",
+              "description": "Composer."
+            }
+          },
+          "additionalProperties": false
+        },
+        "deno": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Deno. true, false, or \"auto\" = only when the project has deno.json, deno.jsonc or deno.lock."
             }
           },
           "additionalProperties": false
@@ -279,7 +515,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "description": "Bun runtime."
+              "description": "Bun runtime (claude-mem needs it)."
             }
           },
           "additionalProperties": false
@@ -289,7 +525,27 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "description": "uv (Python package manager)."
+              "description": "uv, the Python package manager (claude-mem needs it)."
+            }
+          },
+          "additionalProperties": false
+        },
+        "vcRuntime": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Microsoft Visual C++ runtime for tools that need it (a real installer, so it runs on every boot, ~15 s). PHP installs it regardless."
+            }
+          },
+          "additionalProperties": false
+        },
+        "mesa": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program's .exe."
             }
           },
           "additionalProperties": false
@@ -303,6 +559,17 @@
             }
           },
           "additionalProperties": false
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra environment variables for the agent and every terminal, e.g. registry mirrors: {\"NPM_CONFIG_REGISTRY\": \"https://...\", \"PIP_INDEX_URL\": \"https://...\"}."
         }
       },
       "additionalProperties": false

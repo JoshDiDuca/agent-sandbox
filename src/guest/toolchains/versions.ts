@@ -35,3 +35,34 @@ export const pickPackageVersion = (all: string[], spec: string): string | null =
   const stable = all.filter((v) => /^\d+(\.\d+)*$/.test(v)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   return stable.find((v) => v === s || v.startsWith(s + '.')) ?? null;
 };
+
+/** Version spec from a version file's text (.ruby-version "ruby-3.3.1", .java-version "temurin-21", ...): its first x[.y[.z]]. */
+export const specFromVersionFile = (text: string): string | null => /(\d+(?:\.\d+){0,2})/.exec(text.split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).find(Boolean) ?? '')?.[1] ?? null;
+
+/** Java major version from .java-version ("21", "17.0.9", "1.8", "temurin-21") or .sdkmanrc ("java=21.0.2-tem"). */
+export const javaMajorFrom = (text: string, sdkmanrc = false): string | null => {
+  const line = sdkmanrc ? /^\s*java\s*=\s*(.+)$/m.exec(text)?.[1] : text;
+  const spec = line ? specFromVersionFile(line) : null;
+  if (!spec) return null;
+  const [major, minor] = spec.split('.');
+  return major === '1' && minor ? minor : major;
+};
+
+export interface GoRelease { version: string; stable: boolean; files: { filename: string; os: string; arch: string; kind: string; sha256: string }[] }
+
+/** "stable" / "latest" -> newest stable release; "1.23" -> newest 1.23.x; "1.23.2" -> exactly that. Returns go.dev's entry. */
+export const pickGoRelease = (releases: GoRelease[], spec: string): GoRelease | null => {
+  const s = spec.trim().toLowerCase().replace(/^go/, '');
+  const stable = releases.filter((r) => r.stable);
+  if (s === 'stable' || s === 'latest') return stable[0] ?? null;
+  return stable.find((r) => r.version === 'go' + s || r.version.startsWith('go' + s + '.')) ?? null;
+};
+
+/**
+ * Does the project use a language? `entries` are file names in the workspace root and one folder down ("api/go.mod");
+ * markers are exact names or "*.ext".
+ */
+export const projectUses = (entries: string[], markers: string[]): boolean => entries.some((entry) => {
+  const name = entry.split(/[\/]/).pop()!.toLowerCase();
+  return markers.some((m) => (m.startsWith('*.') ? name.endsWith(m.slice(1).toLowerCase()) : name === m.toLowerCase()));
+});
