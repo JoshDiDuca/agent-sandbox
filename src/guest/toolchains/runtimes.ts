@@ -1,8 +1,7 @@
 // Bun, uv and Deno: single-binary tools from GitHub releases (claude-mem needs Bun and uv).
 import path from 'node:path';
-import { githubAsset, installArchive } from '../../shared/download.js';
 import { dryRun, exists, localDir, log } from '../env.js';
-import { arch, tool, versionOf, type ToolEnv } from './common.js';
+import { arch, installFromGithub, tool, versionOf, type ToolEnv } from './common.js';
 
 export interface SingleExeOptions {
   /** Download again even when installed (provisioning.refresh). */
@@ -22,9 +21,8 @@ export const setupSingleExe = async (env: ToolEnv, name: string, repo: string, p
   const bin = options.subdir ? path.join(dir, options.subdir) : dir;
   const exe = path.join(bin, exeName);
   if (!exists(exe) || options.refresh) {
-    const asset = await githubAsset(repo, pattern);
-    log('Downloading ' + name + ' (' + asset.name + (options.size ? ', ~' + options.size : '') + ' once) ...');
-    await installArchive(asset.url, dir, { sha256: asset.sha256, fileName: asset.name, ...(options.subdir ? {} : { locate: exeName }) });
+    const size = options.size ? ', ~' + options.size : '';
+    await installFromGithub(repo, pattern, { dest: dir, what: (a) => name + ' (' + a.name + size + ' once)', ...(options.subdir ? {} : { locate: exeName }) });
   }
   if (!exists(exe)) throw new Error(exeName + ' missing after installing ' + name);
   env.prepend.push(bin);

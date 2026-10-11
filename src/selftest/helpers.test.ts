@@ -48,7 +48,7 @@ export const helperTests = (t: Harness): void => {
     'const m = await import(process.argv[1]); const [cmd, tricky] = JSON.parse(process.argv[2]);',
     'console.log(JSON.stringify({ normal: m.commandLine("C:\\\\W\\\\cmd.exe", ["/d", "/c", "C:\\\\a\\\\agent.cmd", "--model", "big one", "plain", ""]), direct: m.commandLine("C:\\\\a\\\\agent.exe", ["a&b", "50%"]),',
     '  url: m.cmdArgs(["https://x?a=1&b=2"]), pct: m.cmdArgs(["50%"]), live: m.commandLine("cmd.exe", ["/d", "/c", cmd, ...tricky]).slice(8) }));',
-  ].join('\n'), pathToFileURL(path.join(t.packageRoot, 'dist', 'guest', 'ptyhost.js')).href, JSON.stringify([agentCmd, tricky])], {
+  ].join('\n'), pathToFileURL(path.join(t.packageRoot, 'dist', 'guest', 'cmdline.js')).href, JSON.stringify([agentCmd, tricky])], {
     encoding: 'utf8', env: { ...process.env, AGENT_LAUNCH_DIR: path.join(quoteDir, 'launch'), AGENT_DATA_DIR: path.join(quoteDir, 'data') },
   });
   const quoting = ((): Record<string, string> => { try { return JSON.parse(probe.stdout) as Record<string, string>; } catch { return {}; } })();

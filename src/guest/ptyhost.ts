@@ -1,71 +1,12 @@
-// Builds the sandbox's small C# helpers (ptyhost.cs, gitshim.cs) with the .NET Framework compiler that ships with
-// Windows, and starts one ptyhost per agent session.
-//
-// The helpers are compiled onto the sandbox's own disk (wiped on close) on every boot, never cached in persistent
-// storage: a tampered ptyhost.exe there would survive the wipe and see every keystroke typed from this PC.
+// Starts one ptyhost (the ConPTY bridge, sandbox/ptyhost.cs) per agent session and waits for it to listen.
 import fs from 'node:fs';
-import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { safeRemove } from '../shared/safe-remove.js';
-import { exists, launchDir, logsDir, mkdirp, toolsDir } from './env.js';
-
-const CSC = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
-
-const quoted = (arg: string): string => '"' + arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"';
-export const quoteArg = (arg: string): string => (arg !== '' && !/[\s"]/.test(arg) ? arg : quoted(arg));
-
-/**
- * Arguments on a `cmd /d /c <agent>.cmd ...` line (npm agents). cmd parses them twice: the /c line, then the .cmd's %*.
- * & | < > ^ are literal inside quotes, so arguments with them are quoted (https://x?a=1&b=2 survives). % expands even
- * inside quotes, so each one sits between quoted pieces ("50"%" off"): every %name% cmd could see then starts with a
- * quote, and no variable is called that. cmd's quote state runs across the whole line (an embedded \" toggles it too),
- * so a metacharacter it would see outside quotes gets ^^^ (one caret left after each parse). Arguments without any
- * of these are quoted as usual.
- */
-export const cmdArgs = (args: string[]): string => {
-  const pieces = args.map((arg) => (/[&|<>^%]/.test(arg) ? arg.split('%').map(quoted).join('%') : quoteArg(arg))).join(' ');
-  let inQuotes = false;
-  return [...pieces].map((c) => {
-    if (c === '"') inQuotes = !inQuotes;
-    return !inQuotes && /[&|<>^]/.test(c) ? '^^^' + c : c;
-  }).join('');
-};
-
-/** The command line ptyhost starts; when the program is cmd.exe its arguments are quoted for cmd (cmdArgs). */
-export const commandLine = (file: string, args: string[]): string =>
-  path.win32.basename(file).toLowerCase() === 'cmd.exe' ? [quoteArg(file), cmdArgs(args)].filter(Boolean).join(' ') : [file, ...args].map(quoteArg).join(' ');
-
-export type Helper = 'ptyhost' | 'gitshim' | 'vswhere' | 'openssl';
-
-const sourceHash = (name: Helper): string => crypto.createHash('sha256').update(fs.readFileSync(path.join(launchDir, 'sandbox', name + '.cs'))).digest('hex').slice(0, 12);
-
-/** %TEMP%\agent-sandbox\<name>-<hash>.exe, compiled from this launch's sandbox\<name>.cs the first time it is needed. */
-export const ensureCompiled = (name: Helper): string => {
-  const exe = path.join(os.tmpdir(), 'agent-sandbox', name + '-' + sourceHash(name) + '.exe');
-  if (exists(exe)) return exe;
-  if (!exists(CSC)) throw new Error('The .NET Framework C# compiler was not found at ' + CSC + ' (it ships with Windows 10/11).');
-  mkdirp(path.dirname(exe));
-  const result = spawnSync(CSC, ['/nologo', '/optimize', '/target:exe', '/out:' + exe, path.join(launchDir, 'sandbox', name + '.cs')], { encoding: 'utf8', windowsHide: true });
-  if (result.status !== 0) throw new Error('Compiling ' + name + ' failed: ' + ((result.stdout ?? '') + (result.stderr ?? '')).trim().slice(0, 1500));
-  return exe;
-};
+import { spawn, type ChildProcess } from 'node:child_process';
+import { ensureCompiled } from './helpers.js';
+import { portOpen } from './ports.js';
+import { logsDir } from './env.js';
 
 export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
-
-export const freePort = (): Promise<number> => new Promise((resolve, reject) => {
-  const server = net.createServer();
-  server.once('error', reject);
-  // Loopback: finding a port must not count as "node listens on the network" (that is what raises firewall prompts).
-  server.listen(0, '127.0.0.1', () => { const { port } = server.address() as net.AddressInfo; server.close(() => resolve(port)); });
-});
-
-const portOpen = (port: number): Promise<boolean> => new Promise((resolve) => {
-  const socket = net.connect({ host: '127.0.0.1', port }, () => { socket.destroy(); resolve(true); });
-  socket.once('error', () => resolve(false));
-});
 
 /** Resolves when ptyhost listens; rejects early if it exits first (e.g. the agent could not be started). */
 export const waitForPtyHost = async (child: ChildProcess, port: number, timeoutMs: number): Promise<void> => {
@@ -94,15 +35,3 @@ export const startPtyHost = (o: PtyHostOptions): ChildProcess =>
   spawn(o.exe, [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand], {
     cwd: o.cwd, env: { ...o.env, PTYHOST_BIND: o.remote ? 'any' : 'loopback' }, detached: true, stdio: 'ignore', windowsHide: true,
   });
-
-/** Removes helper builds older versions left in persistent storage, and interrupted downloads in the tools folder. */
-export const pruneToolLeftovers = (): void => {
-  for (const legacy of ['ptyhost', 'gitshim']) safeRemove(path.join(toolsDir, legacy), toolsDir);
-  const folders = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
-  // Staging folders sit next to their destination: tools\x.staging-ab12 and one level down (tools\nvm\v22.staging-ab12).
-  for (const top of folders(toolsDir)) {
-    const dir = path.join(toolsDir, top.name);
-    if (/\.staging-[0-9a-f]+$/i.test(top.name)) safeRemove(dir, toolsDir);
-    else if (top.isDirectory()) for (const sub of folders(dir).filter((e) => /\.staging-[0-9a-f]+$/i.test(e.name))) safeRemove(path.join(dir, sub.name), dir);
-  }
-};

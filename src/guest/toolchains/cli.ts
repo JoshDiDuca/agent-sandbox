@@ -7,7 +7,7 @@ import { dryRun, errMsg, exists, log, mkdirp, stateDir, warn, workspace } from '
 import { CLI_TOOLS, decideCli, type CliName, type CliSettings, type CliTool } from './catalogue.js';
 import { arch, tool, type ToolEnv } from './common.js';
 import { setupSingleExe } from './runtimes.js';
-import { ensureCompiled } from '../ptyhost.js';
+import { ensureCompiled } from '../helpers.js';
 
 /** gh keeps `gh auth login` here, under the agent state (persists like Claude's own login; never copied from the PC). */
 export const ghConfigDir = (): string => path.join(stateDir, 'gh');

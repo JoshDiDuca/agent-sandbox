@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { Toolchains } from '../../../core/types.js';
-import { download, fetchJson, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download.js';
 import { readJsonFile, writeJsonAtomic } from '../../../shared/rundir.js';
 import { safeRemove } from '../../../shared/safe-remove.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../../env.js';
-import { installOnce, tool, type ToolEnv } from '../common.js';
+import { downloadFile, installOnce, tool, type ToolEnv } from '../common.js';
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
 const DotnetMarker = z.record(z.string(), z.boolean());
@@ -29,7 +29,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   ];
   for (const [key, args] of installs.filter(([k]) => !done[k])) {
     // Fetched every time something is installed (it is small): an interrupted earlier download must not be run.
-    await download('https://dot.net/v1/dotnet-install.ps1', script);
+    await downloadFile('https://dot.net/v1/dotnet-install.ps1', script);
     log('Installing the .NET SDK ' + (key.startsWith('channel:') ? key.slice(8) : 'pinned in global.json') + ' (~250 MB once) ...');
     await execAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
     done[key] = true;

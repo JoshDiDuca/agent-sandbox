@@ -3,10 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SpawnOptions } from 'node:child_process';
-import { githubAsset, installArchive } from '../../../shared/download.js';
 import { errMsg, execAsync, exists, log, warn } from '../../env.js';
 import { binstallAsset } from '../catalogue.js';
-import { arch, tool } from '../common.js';
+import { arch, installFromGithub, tool } from '../common.js';
 
 /**
  * cargo-binstall.exe into CARGO_HOME\bin (so `cargo binstall` works for the agent too). Downloaded into its own
@@ -18,9 +17,7 @@ const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
   try {
     const dir = tool('cargo-binstall');
     if (!exists(path.join(dir, 'cargo-binstall.exe'))) {
-      const asset = await githubAsset('cargo-bins/cargo-binstall', binstallAsset(arch));
-      log('Downloading cargo-binstall for prebuilt Rust tools (~10 MB once) ...');
-      await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'cargo-binstall.exe', fileName: asset.name });
+      await installFromGithub('cargo-bins/cargo-binstall', binstallAsset(arch), { dest: dir, what: 'cargo-binstall for prebuilt Rust tools (~10 MB once)', locate: 'cargo-binstall.exe' });
     }
     fs.copyFileSync(path.join(dir, 'cargo-binstall.exe'), target);
     return true;

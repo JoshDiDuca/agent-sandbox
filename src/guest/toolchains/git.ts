@@ -6,7 +6,7 @@ import type { GitAccess } from '../../core/types.js';
 import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
 import { safeRemove } from '../../shared/safe-remove.js';
 import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, toolsDir, warn } from '../env.js';
-import { ensureCompiled } from '../ptyhost.js';
+import { ensureCompiled } from '../helpers.js';
 import { arch, tool, type ToolEnv } from './common.js';
 
 const BLOCKED_HOOKS = ['pre-commit', 'commit-msg', 'pre-merge-commit', 'pre-push', 'pre-rebase', 'pre-applypatch', 'applypatch-msg'];

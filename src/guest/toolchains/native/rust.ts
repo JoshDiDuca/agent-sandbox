@@ -1,11 +1,10 @@
 // Rust: rustup + cargo, with crates installed prebuilt where possible (binstall.ts).
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { download } from '../../../shared/download.js';
 import { dryRun, execAsync, exists, log } from '../../env.js';
-import { arch, installOnce, tool, versionOf, type ToolEnv } from '../common.js';
+import { arch, downloadFile, installOnce, tool, versionOf, type ToolEnv } from '../common.js';
 import { crateInstaller } from './binstall.js';
-import { installedMsvcEnv } from './msvc.js';
+import { installedMsvcEnv } from './msvc/index.js';
 
 export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refresh: boolean): Promise<void> => {
   const RUSTUP_HOME = tool('rust', 'rustup');
@@ -16,7 +15,7 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
   if (!exists(rustup)) {
     const init = tool('rust', 'rustup-init.exe');
     log('Installing Rust with rustup (~300 MB once; the toolchain downloads after rustup itself) ...');
-    await download('https://static.rust-lang.org/rustup/dist/' + (arch === 'arm64' ? 'aarch64' : 'x86_64') + '-pc-windows-msvc/rustup-init.exe', init);
+    await downloadFile('https://static.rust-lang.org/rustup/dist/' + (arch === 'arm64' ? 'aarch64' : 'x86_64') + '-pc-windows-msvc/rustup-init.exe', init);
     await execAsync(init, ['-y', '--no-modify-path', '--profile', 'default', '--default-host', config.host, '--default-toolchain', config.toolchain], rustEnv);
   } else {
     // The host can change (GNU <-> msvc with toolchains.msvc): install the toolchain for it; a no-op when it is there.

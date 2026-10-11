@@ -4,7 +4,8 @@ import type { DatabasePlan } from '../../../core/types.js';
 import { fetchJson, installArchive } from '../../../shared/download.js';
 import { execAsync, exists, log, logsDir } from '../../env.js';
 import { resolveCached, tool, type ToolEnv } from '../common.js';
-import { clearStaleLocks, createOnce, dataFor, portOpen } from './server.js';
+import { portOpen } from '../../ports.js';
+import { clearStaleLocks, createOnce, dataFor } from './server.js';
 
 interface PgVersion { major: string; latestMinor: string; supported: boolean; current: boolean }
 
@@ -22,7 +23,9 @@ export const setupPostgres = async (env: ToolEnv, plan: DatabasePlan): Promise<v
   if (!exists(path.join(bin, 'pg_ctl.exe'))) {
     log('Downloading PostgreSQL ' + exact + ' (~330 MB once) ...');
     // EDB publishes no checksums; the download is HTTPS from EnterpriseDB, PostgreSQL's official Windows packager.
-    await installArchive('https://get.enterprisedb.com/postgresql/postgresql-' + exact + '-1-windows-x64-binaries.zip', home, { locate: 'pg_ctl.exe', up: 1, fileName: 'postgresql-' + exact + '.zip', members: ['pgsql/bin', 'pgsql/lib', 'pgsql/share', 'pgsql/include'] });
+    await installArchive('https://get.enterprisedb.com/postgresql/postgresql-' + exact + '-1-windows-x64-binaries.zip', home, {
+      locate: 'pg_ctl.exe', up: 1, fileName: 'postgresql-' + exact + '.zip', members: ['pgsql/bin', 'pgsql/lib', 'pgsql/share', 'pgsql/include'],
+    });
   }
   const data = postgresData(exact);
   await createOnce(data, 'PG_VERSION', async () => {
