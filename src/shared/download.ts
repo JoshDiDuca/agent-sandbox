@@ -48,7 +48,7 @@ export interface Checksums { sha256?: string | null; sha512?: string | null }
 
 /**
  * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
- * event loop stays free so other toolchains keep downloading meanwhile. A mismatch deletes the file.
+ * event loop stays free so other toolchains keep downloading meanwhile. A mismatch (or any failure) leaves no file behind.
  */
 export const download = async (url: string, destination: string, expected: string | null | Checksums = null): Promise<void> => {
   const sums: Checksums = typeof expected === 'string' || expected === null ? { sha256: expected } : expected;
@@ -61,8 +61,18 @@ export const download = async (url: string, destination: string, expected: strin
     return want ? [{ want, hash: crypto.createHash(kind) }] : [];
   });
   const tap = new Transform({ transform(chunk: Buffer, _encoding, done) { for (const c of checks) c.hash.update(chunk); done(null, chunk); } });
-  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), tap, fs.createWriteStream(destination));
-  if (checks.some((c) => c.hash.digest('hex') !== c.want)) { fs.rmSync(destination, { force: true }); throw new Error('Checksum mismatch for ' + url); }
+  // Written to <destination>.part and moved into place only once complete and verified, so an interrupted download never
+  // leaves a partial file under the real name.
+  const partial = destination + '.part';
+  try {
+    await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), tap, fs.createWriteStream(partial));
+    if (checks.some((c) => c.hash.digest('hex') !== c.want)) throw new Error('Checksum mismatch for ' + url);
+    // Mapped folders refuse rename-over, so the old file goes first.
+    fs.rmSync(destination, { force: true });
+    fs.renameSync(partial, destination);
+  } finally {
+    fs.rmSync(partial, { force: true });
+  }
 };
 
 /** Runs a program without blocking the event loop (parallel downloads keep going); resolves with its exit code. */
