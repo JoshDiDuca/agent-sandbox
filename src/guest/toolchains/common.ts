@@ -50,14 +50,14 @@ export const resolveCached = async (key: string, resolve: () => Promise<string>)
   } catch (e) {
     if (networkError(e)) offline = true;
     if (!cached) throw e;
-    warn('Could not look up ' + key + ' online (' + errMsg(e) + '); using ' + cached.value + ' from an earlier boot.');
+    warn('Could not look up the latest ' + key + ' online (' + errMsg(e) + '); using ' + cached.value + ' from an earlier start.');
     return cached.value;
   }
 };
 
 /** Runs one installer; a failure is reported and skipped so it never blocks the other toolchains. */
 export const step = async (name: string, env: ToolEnv, work: () => Promise<void>): Promise<void> => {
-  try { await work(); } catch (e) { warn(name + ' setup failed (continuing without it): ' + errMsg(e)); env.summary.push(name + ': FAILED'); }
+  try { await work(); } catch (e) { warn(name + ' could not be set up and is skipped; everything else still works, and the next start tries again. Reason: ' + errMsg(e)); env.summary.push(name + ': FAILED'); }
 };
 
 // ---- which toolchains a project needs ------------------------------------------------------------------------------
@@ -110,7 +110,7 @@ export const installOnce = async (env: ToolEnv, group: string, packages: string[
       log('Installing ' + pkg + ' (' + group + ') ...');
       await install(pkg);
       writeJsonAtomic(installedFile(), { ...installed(), [group + ':' + pkg]: new Date().toISOString() });
-    } catch (e) { warn(group + ' package ' + pkg + ' failed: ' + errMsg(e)); }
+    } catch (e) { warn(pkg + ' (' + group + ') could not be installed and is skipped; the next start tries again. Reason: ' + errMsg(e)); }
   }
   const ok = packages.filter((p) => installed()[group + ':' + p]);
   if (ok.length) env.summary.push(group.split('@')[0] + ' packages: ' + ok.join(', '));

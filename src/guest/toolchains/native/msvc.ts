@@ -6,15 +6,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import type { Toolchains } from '../../core/types.js';
-import { writeJsonAtomic } from '../../shared/rundir.js';
-import { download, extractArchive, fetchJson } from '../../shared/download.js';
-import { safeRemove } from '../../shared/safe-remove.js';
-import { system32 } from '../../shared/system.js';
-import { dryRun, errMsg, execAsync, exists, log, mkdirp, warn } from '../env.js';
-import { ensureCompiled } from '../ptyhost.js';
-import { tool, type ToolEnv } from './common.js';
-import { msiCabs, pickMsvcVersion, pickWindowsSdk } from './versions.js';
+import type { Toolchains } from '../../../core/types.js';
+import { download, extractArchive, fetchJson } from '../../../shared/download.js';
+import { writeJsonAtomic } from '../../../shared/rundir.js';
+import { safeRemove } from '../../../shared/safe-remove.js';
+import { system32 } from '../../../shared/system.js';
+import { dryRun, errMsg, execAsync, exists, log, mkdirp, warn } from '../../env.js';
+import { ensureCompiled } from '../../ptyhost.js';
+import { tool, type ToolEnv } from '../common.js';
+import { msiCabs, pickMsvcVersion, pickWindowsSdk } from '../versions.js';
 
 interface Payload { fileName: string; url: string; sha256: string; size: number }
 interface Package { id: string; version: string; language?: string; payloads?: Payload[]; dependencies?: Record<string, unknown> }

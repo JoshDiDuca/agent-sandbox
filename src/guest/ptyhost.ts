@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { safeRemove } from '../shared/safe-remove.js';
 import { exists, launchDir, logsDir, mkdirp, toolsDir } from './env.js';
 
 const CSC = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
@@ -96,6 +97,12 @@ export const startPtyHost = (o: PtyHostOptions): ChildProcess =>
 
 /** Removes helper builds older versions left in persistent storage, and interrupted downloads in the tools folder. */
 export const pruneToolLeftovers = (): void => {
-  for (const legacy of ['ptyhost', 'gitshim']) fs.rmSync(path.join(toolsDir, legacy), { recursive: true, force: true });
-  for (const name of fs.readdirSync(toolsDir).filter((n) => /\.staging-[0-9a-f]+$/i.test(n))) fs.rmSync(path.join(toolsDir, name), { recursive: true, force: true });
+  for (const legacy of ['ptyhost', 'gitshim']) safeRemove(path.join(toolsDir, legacy), toolsDir);
+  const folders = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
+  // Staging folders sit next to their destination: tools\x.staging-ab12 and one level down (tools\nvm\v22.staging-ab12).
+  for (const top of folders(toolsDir)) {
+    const dir = path.join(toolsDir, top.name);
+    if (/\.staging-[0-9a-f]+$/i.test(top.name)) safeRemove(dir, toolsDir);
+    else if (top.isDirectory()) for (const sub of folders(dir).filter((e) => /\.staging-[0-9a-f]+$/i.test(e.name))) safeRemove(path.join(dir, sub.name), dir);
+  }
 };

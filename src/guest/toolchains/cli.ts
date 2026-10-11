@@ -51,11 +51,11 @@ export const setupCli = async (env: ToolEnv, settings: CliSettings, gitAccess: G
       Object.assign(env.vars, toolVars[name]?.() ?? {});
     } catch (e) {
       // One tool failing never takes the others down.
-      warn(name + ' setup failed (continuing without it): ' + errMsg(e));
+      warn(name + ' could not be set up and is skipped; the other tools are not affected. Reason: ' + errMsg(e));
       env.summary.push(entry.name + ': FAILED');
     }
   }
   if (decisions.openssl.on) {
-    try { shimOpenssl(env); } catch (e) { warn('openssl setup failed (continuing without it): ' + errMsg(e)); env.summary.push('openssl: FAILED'); }
+    try { shimOpenssl(env); } catch (e) { warn('openssl could not be set up and is skipped (Git Bash still has its own). Reason: ' + errMsg(e)); env.summary.push('openssl: FAILED'); }
   }
 };

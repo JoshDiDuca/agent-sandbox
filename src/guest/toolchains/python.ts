@@ -17,7 +17,7 @@ const installPython = async (pkg: Package, spec: string): Promise<string> => {
   const dir = tool('python', pkg + '-' + version);
   const exe = path.join(dir, 'python.exe');
   if (!exists(exe)) {
-    log('Downloading ' + pkg + ' ' + version + ' ...');
+    log('Downloading Python ' + version + (pkg === 'python2' ? ' (Python 2, ' : ' (') + '~30 MB once) ...');
     await installArchive('https://api.nuget.org/v3-flatcontainer/' + pkg + '/' + version + '/' + pkg + '.' + version + '.nupkg', dir, { locate: 'python.exe', fileName: pkg + '.' + version + '.zip' });
   }
   if (!exists(path.join(dir, 'Scripts', 'pip.exe')) && !exists(path.join(dir, 'Scripts', 'pip2.exe'))) await execAsync(exe, ['-m', 'ensurepip', '--default-pip'], { stdio: 'ignore' });

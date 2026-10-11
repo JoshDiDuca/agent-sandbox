@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { translatePaths } from '../../shared/paths.js';
+import { writeJsonAtomic } from '../../shared/rundir.js';
+import { safeRemove } from '../../shared/safe-remove.js';
 import { claudeDir, dryRun, exists, launchDir, log, mkdirp, robocopy, session, stateDir, warn, workspace } from '../env.js';
 
 /** The sandbox keeps its own login and global state; everything else is refreshed from this PC each boot. */
@@ -39,7 +41,7 @@ export const mergeMcpServers = (hostFile: string, guestFile: string, hostWorkspa
   const guestKey = Object.keys(projects).find((key) => sameFolder(key, guestWorkspace)) ?? guestWorkspace.replace(/\\/g, '/');
   projects[guestKey] = { ...(projects[guestKey] ?? {}), mcpServers: { ...(projects[guestKey]?.mcpServers ?? {}), ...hostProject } };
   const merged: ClaudeState = { ...guest, mcpServers: { ...(guest.mcpServers ?? {}), ...(host.mcpServers ?? {}) }, projects };
-  fs.writeFileSync(guestFile, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+  writeJsonAtomic(guestFile, merged);
   return Object.keys(host.mcpServers ?? {}).length + Object.keys(hostProject).length;
 };
 
@@ -54,7 +56,7 @@ export const syncClaudeProfile = (): void => {
     if (!exists(from)) continue;
     if ((KEEP_SANDBOX_COPY.includes(name) || !profile.overwrite) && exists(to)) { log('Claude settings: kept the sandbox\'s ' + name); continue; }
     // Folders (skills, commands, plugins) are mirrored: what was removed on this PC goes here too.
-    if (fs.statSync(from).isDirectory()) fs.rmSync(to, { recursive: true, force: true });
+    if (fs.statSync(from).isDirectory()) safeRemove(to, claudeDir);
     fs.cpSync(from, to, { recursive: true, force: true });
     log('Claude settings: copied ' + name + ' from this PC');
   }
@@ -73,7 +75,11 @@ export const claudeMemPaths = { store: path.join(stateDir, 'claude-mem'), local:
 const claudeMemEnabled = (): boolean => session.claudeProfile.syncClaudeMem && !dryRun;
 
 export const restoreClaudeMem = (): void => {
-  if (!claudeMemEnabled() || !exists(claudeMemPaths.store)) return;
+  if (!claudeMemEnabled()) return;
+  // A save cut off between its two renames (see saveClaudeMem) leaves only the aside copy: it is the newest data.
+  const previous = claudeMemPaths.store + '.previous';
+  if (!exists(claudeMemPaths.store) && exists(previous)) fs.renameSync(previous, claudeMemPaths.store);
+  if (!exists(claudeMemPaths.store)) return;
   robocopy(claudeMemPaths.store, claudeMemPaths.local);
   log('claude-mem data restored from persistent storage.');
 };

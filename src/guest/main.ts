@@ -52,7 +52,7 @@ const main = async (): Promise<void> => {
   await soft('Personalisation', applyPersonalization);
 
   const gitAccess = session.provisioning.git.access ?? 'full';
-  step(3, 'Toolchains (Git, nvm/Node, Python, Rust, .NET, Bun, uv)');
+  step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
   const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [] });
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
@@ -94,7 +94,8 @@ const main = async (): Promise<void> => {
 main().catch((e: unknown) => {
   const message = errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : '');
   try { setSandboxStatus('failed', errMsg(e)); fs.writeFileSync(path.join(logsDir, 'guest-error.txt'), message); } catch { /* ignore */ }
-  console.error('\n\x1b[31mFATAL: ' + message + '\x1b[0m\nLogs: ' + logsDir);
+  // The window gets the plain message; the stack trace is in guest-error.txt.
+  console.error('\n\x1b[31mThe sandbox could not start: ' + errMsg(e) + '\x1b[0m\nDetails: ' + path.join(logsDir, 'guest-error.txt'));
   process.exitCode = 1;
 });
 

@@ -34,7 +34,7 @@ const setupJdk = async (env: ToolEnv, config: Toolchains['java']): Promise<void>
   const home = tool('java', release.replace(/[^A-Za-z0-9.-]/g, '_'));
   if (!exists(path.join(home, 'bin', 'java.exe'))) {
     const asset = await temurin(major);
-    log('Downloading ' + asset.binary.package.name + ' ...');
+    log('Downloading Java ' + release + ' (JDK, ~200 MB once) ...');
     await installArchive(asset.binary.package.link, home, { sha256: asset.binary.package.checksum, locate: 'release', fileName: asset.binary.package.name });
   }
   env.vars.JAVA_HOME = home;
@@ -63,7 +63,7 @@ const setupMaven = async (env: ToolEnv): Promise<void> => {
   const home = tool('maven', version);
   if (!exists(path.join(home, 'bin', 'mvn.cmd'))) {
     const url = MAVEN + version + '/apache-maven-' + version + '-bin.zip';
-    log('Downloading Maven ' + version + ' ...');
+    log('Downloading Maven ' + version + ' (~10 MB once) ...');
     await installArchive(url, home, { sha512: (await fetchText(url + '.sha512')).trim().split(/\s+/)[0], locate: 'LICENSE' });
   }
   const repo = tool('maven-repository');
@@ -78,7 +78,7 @@ const setupGradle = async (env: ToolEnv): Promise<void> => {
   const home = tool('gradle', version);
   if (!exists(path.join(home, 'bin', 'gradle.bat'))) {
     if (!current || current.version !== version) throw new Error('Gradle ' + version + ' is not installed and cannot be downloaded right now');
-    log('Downloading Gradle ' + version + ' ...');
+    log('Downloading Gradle ' + version + ' (~130 MB once) ...');
     await installArchive(current.downloadUrl, home, { sha256: (await fetchText(current.checksumUrl)).trim(), locate: 'LICENSE', fileName: 'gradle-' + version + '.zip' });
   }
   const userHome = tool('gradle-home');

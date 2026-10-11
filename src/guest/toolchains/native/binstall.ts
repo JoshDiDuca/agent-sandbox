@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SpawnOptions } from 'node:child_process';
-import { githubAsset, installArchive } from '../../shared/download.js';
-import { errMsg, execAsync, exists, log, warn } from '../env.js';
-import { binstallAsset } from './catalogue.js';
-import { arch, tool } from './common.js';
+import { githubAsset, installArchive } from '../../../shared/download.js';
+import { errMsg, execAsync, exists, log, warn } from '../../env.js';
+import { binstallAsset } from '../catalogue.js';
+import { arch, tool } from '../common.js';
 
 /**
  * cargo-binstall.exe into CARGO_HOME\bin (so `cargo binstall` works for the agent too). Downloaded into its own
@@ -19,7 +19,7 @@ const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
     const dir = tool('cargo-binstall');
     if (!exists(path.join(dir, 'cargo-binstall.exe'))) {
       const asset = await githubAsset('cargo-bins/cargo-binstall', binstallAsset(arch));
-      log('Downloading ' + asset.name + ' (prebuilt Rust tools) ...');
+      log('Downloading cargo-binstall for prebuilt Rust tools (~10 MB once) ...');
       await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'cargo-binstall.exe', fileName: asset.name });
     }
     fs.copyFileSync(path.join(dir, 'cargo-binstall.exe'), target);
@@ -40,8 +40,8 @@ export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((cra
   return async (crate) => {
     binstall ??= ensureBinstall(path.join(cargoHome, 'bin'));
     if (await binstall) {
-      try { await execAsync(cargo, ['binstall', '--no-confirm', '--locked', '--disable-strategies', 'compile', crate], binstallEnv); return; } catch (e) {
-        log('No prebuilt ' + crate + ' for Windows (' + errMsg(e) + '); compiling it with cargo install ...');
+      try { await execAsync(cargo, ['binstall', '--no-confirm', '--locked', '--disable-strategies', 'compile', crate], binstallEnv); return; } catch {
+        log('No prebuilt ' + crate + ' for Windows; compiling it with cargo (takes a few minutes) ...');
       }
     }
     await execAsync(cargo, ['install', '--locked', crate], cargoEnv);

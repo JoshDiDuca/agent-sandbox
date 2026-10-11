@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
 import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
-import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, warn } from '../env.js';
+import { safeRemove } from '../../shared/safe-remove.js';
+import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, toolsDir, warn } from '../env.js';
 import { ensureCompiled } from '../ptyhost.js';
 import { arch, tool, type ToolEnv } from './common.js';
 
@@ -14,10 +15,11 @@ const posix = (p: string): string => p.replace(/\\/g, '/');
 const installPortableGit = async (root: string): Promise<void> => {
   const asset = await githubAsset('git-for-windows/git', arch === 'arm64' ? /^PortableGit-[\d.]+-arm64\.7z\.exe$/ : /^PortableGit-[\d.]+-64-bit\.7z\.exe$/);
   const sfx = tool(asset.name);
-  log('Downloading ' + asset.name + ' ...');
-  await download(asset.url, sfx, asset.sha256);
-  await execAsync(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
-  fs.rmSync(sfx, { force: true });
+  log('Downloading Git for Windows (' + asset.name + ', ~60 MB once) ...');
+  try {
+    await download(asset.url, sfx, asset.sha256);
+    await execAsync(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
+  } finally { fs.rmSync(sfx, { force: true }); }
 };
 
 /**
@@ -65,7 +67,7 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
   const bash = path.join(root, 'bin', 'bash.exe');
   const gitExe = path.join(root, 'cmd', 'git.exe');
   const hostGit = path.join(hostToolsDir, 'git');
-  if (exists(root) && !exists(bash)) { log('Replacing the old MinGit (no bash) with full Git for Windows.'); fs.rmSync(root, { recursive: true, force: true }); }
+  if (exists(root) && !exists(bash)) { log('Replacing the old MinGit (no bash) with full Git for Windows.'); safeRemove(root, toolsDir); }
   if (!exists(bash) || refresh) {
     if (dryRun) { log('(dry run) would provision Git for Windows' + (hostCopy ? ' from this PC' : '') + ' (access: ' + access + ')'); return; }
     // Into a staging folder, then renamed: an interrupted copy/extraction must not leave a tools\git that has bash.exe
@@ -76,7 +78,7 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
       else await installPortableGit(work);
       if (!exists(path.join(work, 'bin', 'bash.exe'))) throw new Error('bash.exe missing after installing Git');
       moveIntoPlace(work, root);
-    } finally { fs.rmSync(work, { recursive: true, force: true }); }
+    } finally { safeRemove(work, toolsDir); }
   }
   if (!exists(bash)) throw new Error('bash.exe missing after installing Git');
   pointAtOwnCertificates(root);
