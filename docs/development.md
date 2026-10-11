@@ -67,8 +67,8 @@ npm login
 npm run publish:npm      # builds, packs like CI and publishes (no tests); asks for your 2FA code if you use one
 ```
 
-Then, on npmjs.com, open the package's **Settings > Trusted Publisher**, choose GitHub Actions and enter the repository
-and `release.yml`. From then on every release reaches npm with no token. An `NPM_TOKEN` secret works instead.
-Until the first publish, CI skips npm with a warning.
+Then add an npm automation token as the repository's `NPM_TOKEN` secret. From then on every release reaches npm. Without
+the secret CI skips npm, and a failed npm publish is only a warning: the GitHub release still goes out. Until the first
+publish, CI skips npm with a warning.
 
 The code layout and the rules for contributors (and agents) are in [CLAUDE.md](../CLAUDE.md).

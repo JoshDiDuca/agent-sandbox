@@ -7,7 +7,7 @@ name: Release
 #      npm install -g https://github.com/<owner>/<repo>/releases/latest/download/windows-development-sandbox.tgz
 #  - a GitHub Package (npm.pkg.github.com) named @<owner>/windows-development-sandbox
 #  - npm (registry.npmjs.org): the first version once from your PC (npm run publish:npm), then CI publishes each
-#    release through npm trusted publishing (or an NPM_TOKEN secret)
+#    release when an NPM_TOKEN secret is set (skipped without it; a failed npm publish is only a warning)
 #
 # It also runs on every push to master (and from the Actions tab, "Run workflow"): when package.json has a version
 # that has no release yet, it tags v<version> and releases it. So bumping the version in a normal push is enough.
@@ -101,6 +101,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Only with an NPM_TOKEN secret, and never fails the release: the GitHub release is already out.
+          if (-not $env:NODE_AUTH_TOKEN) { "No NPM_TOKEN secret: skipping npm."; exit 0 }
           $name = (Get-Content package.json | ConvertFrom-Json).name
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $registry = 'https://registry.npmjs.org'
@@ -110,10 +112,11 @@ jobs:
             exit 0
           }
           if (($published | ConvertFrom-Json) -contains $version) { "$name@$version is already on npm."; exit 0 }
-          # Trusted publishing (OIDC from this workflow, set up once on npmjs.com) needs npm 11.5.1+; an NPM_TOKEN secret also works.
-          if ($env:NODE_AUTH_TOKEN) { "//registry.npmjs.org/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc }
+          "//registry.npmjs.org/:_authToken=`${NODE_AUTH_TOKEN}" | Set-Content .npmrc
           npx -y npm@11 publish ${{ steps.pack.outputs.file }} --provenance --access public --registry $registry
-          if ($LASTEXITCODE -ne 0) { throw "npm publish failed: set up the trusted publisher on npmjs.com ($name > Settings) or add an NPM_TOKEN secret" }
+          if ($LASTEXITCODE -ne 0) { "::warning::npm publish failed: check that the NPM_TOKEN secret is valid and can publish $name" }
+          Remove-Item .npmrc
+          exit 0
       - name: Publish to GitHub Packages
         if: steps.version.outputs.release == 'true'
         shell: pwsh

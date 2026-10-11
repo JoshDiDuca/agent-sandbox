@@ -29,6 +29,5 @@ const published = npm(['publish', file, '--access', 'public', '--registry', 'htt
 fs.rmSync(file, { force: true });
 if (published.status !== 0) stop('npm publish failed (see above).');
 console.log('\nPublished: https://www.npmjs.com/package/' + pkg.name);
-console.log('Next: let CI publish the next versions. On npmjs.com: ' + pkg.name + ' > Settings > Trusted Publisher > GitHub Actions,');
 const repo = String(pkg.repository?.url ?? '').replace(/^git\+https:\/\/github\.com\//, '').replace(/\.git$/, '');
-console.log('  repository ' + repo + ', workflow release.yml. No token needed (or add an NPM_TOKEN secret instead).');
+console.log('Next: let CI publish the next versions. Add an npm automation token as the NPM_TOKEN secret of ' + repo + '.');
