@@ -42,7 +42,7 @@ Options:
 | `--database <name>` | also start this database, e.g. `--database postgres,redis` (repeatable) |
 | `--script <file>` | run a `.ps1`/`.mjs`/`.cmd` inside before the agent (repeatable) |
 | `--no-agent`, `--trust-config`, `--no-local-config` | no agent, approve the project file, ignore the project file |
-| `--session <agent>@<folder>` | several sessions at once (repeatable), e.g. `--session claude@C:\code\api --session codex@C:\code\api --session claude@C:\code\web`; one sandbox maps every folder, each session gets its own tab inside, `-t` attaches the first |
+| `--session <agent>@<folder>` | several sessions at once (repeatable), e.g. `--session claude@C:\code\api --session codex@C:\code\api --session claude@C:\code\web`; one sandbox maps every folder, each session gets its own tab inside, `-t` attaches the first. Arguments after `--` go to every session; `"codex@C:codeweb|--model o3"` gives one session its own (`|` can't be in a Windows path) |
 | `--yes` | when this folder is not in the running sandbox and adding it needs a restart, restart without asking |
 
 Anything else goes to the agent: `sandbox claude --continue`. If an agent has a flag with the same name as ours, use

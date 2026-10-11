@@ -14,6 +14,7 @@ import { cleanTargetOf, collectDataEntries } from './commands/data/collect.js';
 import { c, clearScreen, pageSizeFor, shorten, shortenMiddle, termWidth } from './colors.js';
 import { commandLine, readHistory } from './history.js';
 import { settingsMenu } from './settings/index.js';
+import { splitArgs } from './args.js';
 import { syncAgentCommands } from './commands/agent-commands.js';
 import { loadConfig } from '../core/config.js';
 import { askedWhen, COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
@@ -55,7 +56,7 @@ const choicesFor = (ctx: Context, choices: OptionSpecT['choices']): string[] => 
 };
 
 /** Splits "a b 'c d'" like a shell would (enough for agent arguments and exec commands). */
-export const splitArgs = (text: string): string[] => [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+export { splitArgs };
 
 /** What this option accepts, checked while typing (undefined = anything). */
 export const optionProblem =(o: OptionSpecT, v: string): string | undefined => {

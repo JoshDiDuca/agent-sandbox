@@ -73,7 +73,7 @@ const SANDBOX_OPTIONS: OptionSpecT[] = [
 ];
 const AGENT_OPTIONS: OptionSpecT[] = [
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
-  { flag: '--session', type: 'list', value: 'agent@folder', description: 'start several sessions at once, e.g. --session claude@C:\\code\\api --session codex@C:\\code\\web (repeatable; -t attaches the first)', noMenu: true },
+  { flag: '--session', type: 'list', value: 'agent@folder', description: 'start several sessions at once, e.g. --session claude@C:\\code\\api --session "codex@C:\\code\\web|--model o3" (repeatable; after | = that agent\'s own arguments; -t attaches the first)', noMenu: true },
   text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts' }),
   ...SANDBOX_OPTIONS,
   bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true }),

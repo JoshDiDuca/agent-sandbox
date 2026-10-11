@@ -174,6 +174,12 @@ export const projectTests = async (t: Harness, f: Fixtures): Promise<void> => {
   const want = parseSessionWant('claude@C:\\code\\a@b', 'C:\\here');
   check(want.harness === 'claude' && want.folder === 'C:\\code\\a@b' && parseSessionWant('codex', 'C:\\here').folder === 'C:\\here' && parseSessionWant('gemini@sub', 'C:\\here').folder === 'C:\\here\\sub', '--session: the first @ splits; no folder = this one; relative folders become absolute');
   check(await rejects(() => parseSessionWant('@C:\\x'), 'names no agent'), '--session without an agent is refused');
+  const own = parseSessionWant('codex@C:\\code\\web|--model o3 "two words"', 'C:\\here');
+  check(own.harness === 'codex' && own.folder === 'C:\\code\\web' && JSON.stringify(own.args) === '["--model","o3","two words"]' && parseSessionWant('claude@C:\\x').args === undefined,
+    '--session: after | come that agent\'s own arguments (quotes keep words together); none without |');
+  const both = parseCli(['launch', '--session', 'claude@C:\\a|--continue', '--session', 'codex@C:\\b', '--', '--verbose']);
+  check(both.passthrough.join() === '--verbose' && JSON.stringify(both.sessions.map((s) => s.args ?? [])) === '[["--continue"],[]]',
+    'arguments after -- go to every session, arguments after | only to that one');
   const multi = parseCli(['launch', '--session', 'claude@' + f.workA, '--session', 'codex@' + f.workB, '--session', 'claude@' + f.workB, '-t', '--', '--continue']);
   check(multi.command === 'launch' && multi.sessions.length === 3 && multi.terminal && multi.sessions[1].harness === 'codex' && multi.passthrough.join() === '--continue', 'several --session options parse in order, with -t and agent arguments');
   const vctx = (options: ReturnType<typeof parseCli>) => ({ packageRoot: f.install, entry: '', options, loaded: { config: f.baseConfig, configPath: null, base: t.temp }, storageRoot: f.baseConfig.storage.root, dataPath: f.at('vdata') }) as Context;

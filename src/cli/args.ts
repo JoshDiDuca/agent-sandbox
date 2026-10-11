@@ -19,19 +19,26 @@ export interface CliOptions {
   sessions: SessionWant[];
 }
 
-/** One session to start: an agent in a folder. */
-export interface SessionWant { harness: string; folder: string }
+/** One session to start: an agent in a folder, with arguments of its own (after the ones given after --). */
+export interface SessionWant { harness: string; folder: string; args?: string[] }
+
+/** Splits a command line like a shell: "quoted words" and 'quoted words' stay together. */
+export const splitArgs = (text: string): string[] => [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 
 /**
- * `<agent>@<folder>` (the folder may contain '@': only the first one splits), `<agent>` alone = the current folder.
- * Folders become absolute against `cwd`. Pure; validate.ts checks that the agent and folder exist.
+ * `<agent>@<folder>` (the folder may contain '@': only the first one splits), `<agent>` alone = the current folder,
+ * and `|<arguments>` for that session's agent only ('|' cannot be in a Windows path). Folders become absolute against
+ * `cwd`. Pure; validate.ts checks that the agent and folder exist.
  */
-export const parseSessionWant = (text: string, cwd: string = process.cwd()): SessionWant => {
+export const parseSessionWant = (input: string, cwd: string = process.cwd()): SessionWant => {
+  const bar = input.indexOf('|');
+  const text = bar < 0 ? input : input.slice(0, bar);
+  const args = bar < 0 ? [] : splitArgs(input.slice(bar + 1));
   const at = text.indexOf('@');
   const harness = (at < 0 ? text : text.slice(0, at)).trim();
   const folder = at < 0 ? '' : text.slice(at + 1).trim();
   if (!harness) fail('--session "' + text + '" names no agent.', 'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).');
-  return { harness, folder: path.resolve(cwd, folder || '.') };
+  return { harness, folder: path.resolve(cwd, folder || '.'), ...(args.length ? { args } : {}) };
 };
 
 /** This package's version (this file is dist/cli/args.js, two folders below package.json). */

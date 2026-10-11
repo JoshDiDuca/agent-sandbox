@@ -102,12 +102,12 @@ export const openSession = async (ctx: Context, ready: SandboxStatus, joined: Jo
 };
 
 /** The sessions a launch asks for: each --session, else one (the agent, in this folder). */
-const wantedSessions = (ctx: Context): { harness?: string; folder: string }[] =>
+const wantedSessions = (ctx: Context): { harness?: string; folder: string; args?: string[] }[] =>
   ctx.options.sessions.length ? ctx.options.sessions : [{ harness: ctx.options.harness, folder: hereDir(ctx) }];
 
-/** The same command, for one of its sessions (its folder and agent). */
-const contextFor = (ctx: Context, want: { harness?: string; folder: string }): Context =>
-  ({ ...ctx, options: { ...ctx.options, workspace: want.folder, harness: want.harness, sessions: [] } });
+/** The same command, for one of its sessions (its folder, agent, and the arguments after -- plus its own). */
+const contextFor = (ctx: Context, want: { harness?: string; folder: string; args?: string[] }): Context =>
+  ({ ...ctx, options: { ...ctx.options, workspace: want.folder, harness: want.harness, sessions: [], passthrough: [...ctx.options.passthrough, ...(want.args ?? [])] } });
 
 /** Several sessions at once: all requested together (projects set up in parallel), then listed; -t attaches the first. */
 const openSessions = async (ctx: Context, ready: SandboxStatus, list: { ctx: Context; joined: Joined }[]): Promise<number> => {
@@ -115,7 +115,7 @@ const openSessions = async (ctx: Context, ready: SandboxStatus, list: { ctx: Con
   const requests = list.map(({ ctx: at, joined }) => {
     const harness = at.options.harness ?? joined.harness ?? loaded.config.defaultHarness;
     const harnessSpec = loaded.config.harnesses[harness];
-    const id = requestSession(dataPath, harness, options.passthrough, joined.guestDir, { ...(joined.spec ? { project: joined.spec } : {}), ...(harnessSpec ? { harnessSpec } : {}) });
+    const id = requestSession(dataPath, harness, at.options.passthrough, joined.guestDir, { ...(joined.spec ? { project: joined.spec } : {}), ...(harnessSpec ? { harnessSpec } : {}) });
     return { id, harness, folder: at.options.workspace ?? joined.guestDir, cwd: joined.guestDir };
   });
   let started = 0;

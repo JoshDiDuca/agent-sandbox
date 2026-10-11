@@ -209,7 +209,12 @@ export const stop = async (ctx: Context): Promise<number> => {
   const running = currentSessions(ctx.dataPath);
   const others = running.filter((s) => !(here.guestDir && isWithin(here.project?.guest ?? here.guestDir, s.cwd)));
   if (running.length) console.log('Stopping ends ' + running.length + ' session(s): ' + running.map((s) => safeText(s.harness) + ' in ' + safeText(s.project ?? path.win32.basename(s.cwd))).join(', ') + '.');
-  if (others.length && !ctx.options.yes && process.stdin.isTTY && process.stdout.isTTY && !(await askYesNo(others.length + ' of them belong to other projects. Stop the whole sandbox?'))) { console.log('Nothing changed.'); return 1; }
+  if (others.length && !ctx.options.yes) {
+    // A script must never end other projects' sessions by accident: without a terminal to ask in, it needs --yes.
+    const interactive = process.stdin.isTTY && process.stdout.isTTY;
+    if (!interactive) fail(others.length + ' of these sessions belong to other projects, so the sandbox was not stopped.', 'Stop it anyway with: sandbox stop --yes');
+    if (!(await askYesNo(others.length + ' of them belong to other projects. Stop the whole sandbox?'))) { console.log('Nothing changed.'); return 1; }
+  }
   await working('Asking the sandbox to shut down', () => execInSandbox(ctx.dataPath, ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive));
   console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');
   return 0;
