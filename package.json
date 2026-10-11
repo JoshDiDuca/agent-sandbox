@@ -84,10 +84,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JoshDiDuca/agent-sandbox.git"
+    "url": "git+https://github.com/JoshDiDuca/windows-development-sandbox.git"
   },
-  "homepage": "https://github.com/JoshDiDuca/agent-sandbox#readme",
+  "homepage": "https://github.com/JoshDiDuca/windows-development-sandbox#readme",
   "bugs": {
-    "url": "https://github.com/JoshDiDuca/agent-sandbox/issues"
+    "url": "https://github.com/JoshDiDuca/windows-development-sandbox/issues"
   }
 }

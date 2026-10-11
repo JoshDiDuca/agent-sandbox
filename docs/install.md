@@ -10,7 +10,7 @@
 ## One line
 
 ```powershell
-irm https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/install.ps1 | iex
+irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
 It checks the edition, virtualization, RAM and disk, and offers to turn on Windows Sandbox (that step asks for admin
@@ -28,9 +28,9 @@ Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM
 
 # 2. The package: from npm, the latest release, a specific one, or from the repository
 npm install -g windows-development-sandbox
-npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/latest/download/windows-development-sandbox.tgz
-npm install -g https://github.com/JoshDiDuca/agent-sandbox/releases/download/v1.0.0/windows-development-sandbox-1.0.0.tgz
-npm install -g github:JoshDiDuca/agent-sandbox
+npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz
+npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/download/v1.0.0/windows-development-sandbox-1.0.0.tgz
+npm install -g github:JoshDiDuca/windows-development-sandbox
 
 # 3. Check
 sandbox setup     # edition, virtualization, Windows Sandbox, RAM, disk, Node
