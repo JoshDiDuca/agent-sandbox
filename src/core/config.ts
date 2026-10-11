@@ -71,6 +71,7 @@ export const DEFAULTS: Config = {
     aider: { uvPackage: 'aider-chat', uvBin: 'aider', arguments: [], environment: {}, resumeArguments: ['--restore-chat-history'] },
   },
   hooks: { failFast: false },
+  projects: { all: false, exclude: [], roots: [], askToAddRoot: true, declinedRoots: [], wsbShare: true },
 };
 
 /** Per-user folder for config and hooks. Survives reinstalling the npm package. */

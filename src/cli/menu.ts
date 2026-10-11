@@ -16,7 +16,8 @@ import { commandLine, readHistory } from './history.js';
 import { settingsMenu } from './settings/index.js';
 import { syncAgentCommands } from './commands/agent-commands.js';
 import { loadConfig } from '../core/config.js';
-import { COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
+import { askedWhen, COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
+import { askSeveralAgents } from './menu-multi.js';
 import { validNodeSpec, validPythonSpec } from './validate.js';
 
 // ---- the screen ------------------------------------------------------------------------------------------------------
@@ -132,12 +133,12 @@ export const askCommand = async (ctx: Context, spec: CommandSpecT, preset: strin
   }
   let first = '';
   for (const [i, arg] of spec.args.entries()) {
-    if (arg.when && first !== arg.when) continue;
+    if (!askedWhen(arg.when, first)) continue;
     const answer = await askArg(ctx, spec, arg);
     if (i === 0) first = answer[0] ?? '';
     argv.push(...answer);
   }
-  const offered = (o: OptionSpecT): boolean => !o.noMenu && (!o.when || o.when === first);
+  const offered = (o: OptionSpecT): boolean => !o.noMenu && askedWhen(o.when, first);
   const basic = spec.options.filter((o) => !o.advanced && !preset.includes(o.flag) && offered(o));
   const advanced = spec.options.filter((o) => o.advanced && offered(o));
   argv.push(...await askOptions(ctx, basic));
@@ -161,7 +162,7 @@ const agentInstalled = (ctx: Context, name: string): boolean => {
   return Boolean(h) && [h.hostExecutable, h.npmBin && h.npmBin + '.cmd', h.uvBin && h.uvBin + '.exe'].some((f) => f && fs.existsSync(path.join(dir, f)));
 };
 
-type Pick = { kind: 'run'; argv: string[] } | { kind: 'ask'; spec: CommandSpecT; preset?: string[] } | { kind: 'group'; group: string } | { kind: 'exit' };
+type Pick = { kind: 'run'; argv: string[] } | { kind: 'several' } |{ kind: 'ask'; spec: CommandSpecT; preset?: string[] } | { kind: 'group'; group: string } | { kind: 'exit' };
 
 const GROUP_TITLES: Record<string, string> = { Agents: 'Start an agent', Sandbox: 'Sandbox', Sessions: 'Sessions', Accounts: 'Claude accounts', Data: 'Saved data and cleanup', Health: 'Diagnostics and repair', Config: 'Configuration' };
 
@@ -193,6 +194,7 @@ const mainMenu = async (ctx: Context): Promise<Pick> => {
     choices: [
       ...(last ? [{ name: 'Repeat last: ' + c.cyan(shorten(commandLine(last.argv), Math.max(20, termWidth() - 20))), value: { kind: 'run', argv: last.argv } as Pick }] : []),
       { name: 'Start ' + ctx.loaded.config.defaultHarness + ' in this folder', value: { kind: 'ask', spec: COMMANDS.find((s) => s.name === 'launch')!, preset: ['--harness', ctx.loaded.config.defaultHarness] } },
+      { name: 'Start several agents (one or more projects, attach to any)...', value: { kind: 'several' } },
       { name: 'Start another agent...', value: { kind: 'group', group: '@agents' } },
       { name: 'Start a sandbox without an agent', value: { kind: 'ask', spec: COMMANDS.find((s) => s.name === 'start')! } },
       new Separator(),
@@ -232,7 +234,7 @@ export const menu = async (ctx: Context, run: (argv: string[]) => Promise<number
         let argv: string[] | null;
         try {
           clearScreen();
-          argv = pick.kind === 'run' ? pick.argv : await askCommand(ctx, pick.spec, pick.preset);
+          argv = pick.kind === 'run' ? pick.argv : pick.kind === 'several' ? await askSeveralAgents(ctx) : await askCommand(ctx, pick.spec, pick.preset);
         } catch (e) {
           if (e instanceof Error && e.name === 'ExitPromptError') argv = null; else throw e;
         }

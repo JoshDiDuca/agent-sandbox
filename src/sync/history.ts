@@ -31,9 +31,13 @@ const SyncStateSchema = z.object({
   syncHistory: z.boolean().optional(), syncClaudeMem: z.boolean().optional(),
   /** Newest claude-mem database time on each side right after the last sync (detects edits on both sides). */
   memHostStamp: z.number().optional(), memGuestStamp: z.number().optional(),
+  /** Projects registered while the sandbox ran (their history goes back to their own folders). */
+  projects: z.array(z.object({ hostWorkspace: AbsolutePath, guestWorkspace: z.string().max(1024) })).max(256).optional(),
 });
 export type SyncState = z.output<typeof SyncStateSchema>;
-export interface SyncPaths { hostClaudeDir: string; guestClaudeDir: string; hostWorkspace: string; guestWorkspace: string }
+export interface WorkspacePair { hostWorkspace: string; guestWorkspace: string }
+/** extra: projects registered after boot (C:\Projects\<name> -> their real folder on this PC). */
+export interface SyncPaths extends WorkspacePair { hostClaudeDir: string; guestClaudeDir: string; extra?: WorkspacePair[] }
 type Filter = (name: string) => boolean;
 interface CopyOptions { transform?: (text: string) => string; accept?: Filter; skipDirs?: RegExp }
 
@@ -83,19 +87,25 @@ const readLines = (file: string): string[] =>
 const isJsonObject = (line: string): boolean => { try { const v: unknown = JSON.parse(line); return typeof v === 'object' && v !== null && !Array.isArray(v); } catch { return false; } };
 const lineTime = (line: string): number => { try { return Number((JSON.parse(line) as { timestamp?: number }).timestamp) || 0; } catch { return 0; } };
 
+/** Every workspace pair of the sandbox: the launch folder's, then the projects registered later (most specific first). */
+const pairsOf = (p: SyncPaths): WorkspacePair[] => _.sortBy([{ hostWorkspace: p.hostWorkspace, guestWorkspace: p.guestWorkspace }, ...(p.extra ?? [])], (x) => -x.hostWorkspace.length);
+const translateAll = (text: string, pairs: [string, string][]): string => pairs.reduce((out, [from, to]) => translatePaths(out, from, to), text);
+
 /** Brings this PC's history into the sandbox state (run before the sandbox starts). Returns files copied. */
-export const syncHistoryIn = (p: SyncPaths): number => {
+export const syncHistoryIn = (p: SyncPaths, options: { promptHistory?: boolean } = {}): number => {
   assertTestWritable(p.guestClaudeDir);
-  const hostProject = projectFolderName(p.hostWorkspace);
-  const guestProject = projectFolderName(p.guestWorkspace);
-  const transform = (t: string): string => translatePaths(t, p.hostWorkspace, p.guestWorkspace);
+  const pairs = pairsOf(p);
+  const byHost = new Map(pairs.map((x) => [projectFolderName(x.hostWorkspace), projectFolderName(x.guestWorkspace)]));
+  const guestNames = new Set(pairs.map((x) => projectFolderName(x.guestWorkspace)));
+  const transform = (t: string): string => translateAll(t, pairs.map((x) => [x.hostWorkspace, x.guestWorkspace]));
   const hostProjects = path.join(p.hostClaudeDir, 'projects');
-  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => isSafeFileName(name) && (name !== guestProject || hostProject === guestProject)) : [];
-  const projects = _.sumBy(names, (name) => name === hostProject
-    ? copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', guestProject), { transform })
+  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => isSafeFileName(name) && (!guestNames.has(name) || byHost.has(name))) : [];
+  const projects = _.sumBy(names, (name) => byHost.has(name)
+    ? copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', byHost.get(name)!), { transform })
     : copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', name)));
   const sessions = _.sumBy(SESSION_DIRS, (dir) => copyNewer(path.join(p.hostClaudeDir, dir), path.join(p.guestClaudeDir, dir)));
 
+  if (options.promptHistory === false) return projects + sessions;
   // Prompt history: rebuild the sandbox copy from this PC's file plus anything only the sandbox has.
   const target = path.join(p.guestClaudeDir, 'history.jsonl');
   const hostLines = readLines(path.join(p.hostClaudeDir, 'history.jsonl')).map(transform);
@@ -108,15 +118,15 @@ export const syncHistoryIn = (p: SyncPaths): number => {
 /** Copies new sandbox history back to this PC (safe while the sandbox runs: transcripts are append-only). */
 export const syncHistoryOut = (p: SyncPaths): number => {
   assertTestWritable(p.hostClaudeDir);
-  const hostProject = projectFolderName(p.hostWorkspace);
-  // A mirrored workspace on F: really lives at C:\Mirror\F\...; tools that resolve real paths record that one.
-  const guestNames = guestWorkspaceAliases(p.guestWorkspace);
-  const guestProjects = new Set(guestNames.map(projectFolderName));
-  const transform = (t: string): string => guestNames.reduce((out, guest) => translatePaths(out, guest, p.hostWorkspace), t);
+  // A mirrored workspace on F: really lives at C:\Mirror\F\...; tools that resolve real paths record that one. A
+  // project registered later is in the hub (C:\Projects\<name>) and goes back to its real folder on this PC.
+  const pairs = pairsOf(p).flatMap((x) => guestWorkspaceAliases(x.guestWorkspace).map((guest): [string, string] => [guest, x.hostWorkspace]));
+  const byGuest = new Map(pairs.map(([guest, host]) => [projectFolderName(guest), projectFolderName(host)]));
+  const transform = (t: string): string => translateAll(t, pairs);
   const guestProjectsDir = path.join(p.guestClaudeDir, 'projects');
   const names = dirExists(guestProjectsDir) && !isLink(guestProjectsDir) ? fs.readdirSync(guestProjectsDir).filter(isSafeFileName) : [];
-  const projects = _.sumBy(names, (name) => guestProjects.has(name)
-    ? copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', hostProject), { accept: transcript, skipDirs: NO_MEMORY, transform })
+  const projects = _.sumBy(names, (name) => byGuest.has(name)
+    ? copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', byGuest.get(name)!), { accept: transcript, skipDirs: NO_MEMORY, transform })
     : copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
   // Only to-do lists come back besides transcripts; plans and file backups stay in the sandbox.
   const sessions = copyNewer(path.join(p.guestClaudeDir, 'todos'), path.join(p.hostClaudeDir, 'todos'), { accept: json });

@@ -1,6 +1,7 @@
 // The host <-> sandbox channel messages, defined once with zod. Both sides parse what they read: the guest only acts on
 // these request kinds, and the host treats everything the guest writes as untrusted (shapes checked, sizes capped).
 import { z } from 'zod';
+import { Harness, Toolchains } from '../core/schema.js';
 
 export const Id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'invalid id');
 const Text = (max = 4096) => z.string().max(max);
@@ -23,11 +24,39 @@ export const SandboxStatus = z.object({
   headless: z.boolean(),
 });
 
+const Version = z.strictObject({ spec: Text(128), source: Text(256) });
+const DatabasePlan = z.strictObject({
+  database: z.enum(['postgres', 'mysql', 'sqlserver', 'mongodb', 'redis', 'dynamodb']),
+  reasons: z.array(Text(1024)).max(32), version: Text(64), port: z.number().int().min(1024).max(65535), adminPort: z.number().int().min(1024).max(65535).optional(),
+});
+
+/**
+ * A project the host registered after boot (sandbox claude from another folder): everything the guest needs to
+ * provision it and run its sessions with its own environment, resolved on the host exactly like a fresh launch (its
+ * approved .sandbox-config.json, version files, toolchain detection, database plan). Host -> guest only.
+ */
+export const ProjectSpec = z.strictObject({
+  name: Id,
+  /** Inside the sandbox: C:\Projects\<name>. */
+  workspace: Text(1024),
+  workspaceHost: Text(1024),
+  toolchains: Toolchains,
+  versions: z.strictObject({ node: Version, nodeExtra: z.array(Text(128)).max(16), python: Version }),
+  databases: z.array(DatabasePlan).max(8),
+  /** Agents this project may start that the sandbox did not boot with (its .sandbox-config.json "harness"). */
+  harnesses: z.record(Text(64), Harness).refine((h) => Object.keys(h).length <= 8, 'at most 8 agents'),
+  /** Its hooks were staged in C:\AgentLaunch\projects\<name>\hooks. */
+  hooks: z.boolean(),
+});
+
 /** C:\AgentData\run\requests\<id>.json: the ONLY things the host can ask the sandbox to do. */
 export const GuestRequest = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('session'), id: Id, harness: Text(64), args: z.array(Text()).max(256), cwd: Text(), createdAt: Time }),
+  z.strictObject({ kind: z.literal('session'), id: Id, harness: Text(64), args: z.array(Text()).max(256), cwd: Text(), project: ProjectSpec.optional(), harnessSpec: Harness.optional(), createdAt: Time }),
+  /** Provision a registered project without starting an agent (sandbox start / exec / db from its folder). */
+  z.strictObject({ kind: z.literal('project'), id: Id, project: ProjectSpec, createdAt: Time }),
   z.strictObject({ kind: z.literal('exec'), id: Id, command: z.array(Text()).min(1).max(256), cwd: Text(), timeoutSeconds: z.number().positive().max(86400), createdAt: Time }),
-  z.strictObject({ kind: z.literal('restart'), id: Id, harness: Text(64).nullable(), createdAt: Time }),
+  /** cwd: only the sessions in this folder or below (one project's); omitted = every session. */
+  z.strictObject({ kind: z.literal('restart'), id: Id, harness: Text(64).nullable(), cwd: Text().optional(), createdAt: Time }),
   z.strictObject({ kind: z.literal('ping'), id: Id, createdAt: Time }),
 ]);
 
@@ -48,6 +77,8 @@ export const SessionStatus = z.object({
   launchId: Text(64),
   harness: Text(64),
   cwd: Text(),
+  /** The project it runs in: its hub name, or the launch folder's for the first project. */
+  project: Text(64).optional(),
   phase: z.enum(['starting', 'running', 'exited', 'failed']),
   message: Text(),
   updatedAt: Time,
@@ -56,6 +87,19 @@ export const SessionStatus = z.object({
   attach: AttachEndpoint.optional(),
 });
 
+/** C:\AgentData\run\projects\<name>.json: how far a project's provisioning is (guest-written, so validated and capped). */
+export const ProjectStatus = z.object({
+  name: Id,
+  workspace: Text(1024),
+  phase: z.enum(['provisioning', 'ready', 'failed']),
+  message: Text(),
+  updatedAt: Time,
+  databases: z.array(z.object({ database: Text(32), port: z.number().int() })).max(16),
+  summary: z.array(Text(512)).max(64),
+});
+
+export type ProjectSpecT = z.output<typeof ProjectSpec>;
+export type ProjectStatusT = z.output<typeof ProjectStatus>;
 export type AttachEndpointT = z.output<typeof AttachEndpoint>;
 export type SandboxStatusT = z.output<typeof SandboxStatus>;
 export type GuestRequestT = z.output<typeof GuestRequest>;

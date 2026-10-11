@@ -4,9 +4,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { GuestRequest, GuestResponse, Id, SandboxStatus, SessionStatus } from './schema.js';
+import { GuestRequest, GuestResponse, Id, ProjectStatus, SandboxStatus, SessionStatus } from './schema.js';
 import { assertTestWritable } from './test-guard.js';
-import type { GuestRequestT, GuestResponseT, SandboxStatusT, SessionStatusT } from './schema.js';
+import type { GuestRequestT, GuestResponseT, ProjectStatusT, SandboxStatusT, SessionStatusT } from './schema.js';
 
 /** Anything bigger than this from the other side is ignored (a compromised sandbox must not exhaust the host). */
 export const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
@@ -23,9 +23,11 @@ export const runPaths = (dataDir: string) => {
     requests: path.join(run, 'requests'),
     responses: path.join(run, 'responses'),
     sessions: path.join(run, 'sessions'),
+    projects: path.join(run, 'projects'),
     request: file('requests'),
     response: file('responses'),
     session: file('sessions'),
+    project: file('projects'),
   };
 };
 
@@ -82,5 +84,7 @@ export const readSandboxStatus = (dataDir: string): SandboxStatusT | null => rea
 export const readSession = (dataDir: string, id: string): SessionStatusT | null => readValid(SessionStatus, runPaths(dataDir).session(id));
 export const readResponse = (dataDir: string, id: string): GuestResponseT | null => readValid(GuestResponse, runPaths(dataDir).response(id));
 export const listSessions = (dataDir: string): SessionStatusT[] => scan(SessionStatus, runPaths(dataDir).sessions).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+export const readProjectStatus = (dataDir: string, name: string): ProjectStatusT | null => readValid(ProjectStatus, runPaths(dataDir).project(name));
+export const listProjectStatus = (dataDir: string): ProjectStatusT[] => scan(ProjectStatus, runPaths(dataDir).projects).valid.slice(0, 64);
 export const scanRequests = (dataDir: string): { valid: GuestRequestT[]; invalid: string[] } => scan(GuestRequest, runPaths(dataDir).requests);
 export const now = (): string => new Date().toISOString();

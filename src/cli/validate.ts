@@ -43,11 +43,24 @@ export const checkHarness = (name: string | undefined, harnesses: string[]): voi
 /** Commands that read these options; checked only for them (restart/doctor take --harness too). */
 const LAUNCHING = new Set(['launch', 'generate', 'host-claude']);
 
+export const PROJECT_ACTIONS = ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'] as const;
+
+/** `sandbox projects <action> [value] [folder]`: the action, then what it needs. Pure (no file checks). */
+export const validateProjectsArgs = (args: string[]): void => {
+  const [action = 'list', value, folder] = args;
+  if (!(PROJECT_ACTIONS as readonly string[]).includes(action)) unknownValue('projects action', action, PROJECT_ACTIONS, 'sandbox projects with no action lists your projects.');
+  if (['add', 'remove', 'include', 'exclude'].includes(action) && !value) fail('Which folder?', 'Usage: sandbox projects ' + action + ' <folder>   (. = this folder)');
+  if (action === 'all' && value !== undefined && !['on', 'off'].includes(value)) unknownValue('value for projects all', value, ['on', 'off'], 'sandbox projects all on|off');
+  if (action === 'roots' && value !== undefined && !['list', 'add', 'remove'].includes(value)) unknownValue('projects roots action', value, ['list', 'add', 'remove'], 'sandbox projects roots add|remove <folder>');
+  if (action === 'roots' && (value === 'add' || value === 'remove') && !folder) fail('Which folder?', 'Usage: sandbox projects roots ' + value + ' <folder>');
+};
+
 /** Fails with what is wrong and what is valid, before anything is started. */
 export const validateOptions = (ctx: Context): void => {
   const o: CliOptions = ctx.options;
   const harnesses = Object.keys(ctx.loaded.config.harnesses);
   if (['launch', 'generate', 'restart', 'doctor'].includes(o.command)) checkHarness(o.harness, harnesses);
+  if (o.command === 'projects') validateProjectsArgs(o.positionals);
   if (!LAUNCHING.has(o.command)) return;
   if (o.node !== undefined && !validNodeSpec(o.node)) fail('"' + o.node + '" is not a Node version.', 'Use a number like 22 or 22.11.0, or lts, latest.');
   if (o.python !== undefined && !validPythonSpec(o.python)) fail('"' + o.python + '" is not a Python 3 version.', 'Use 3, 3.12 or 3.12.4.');
@@ -58,6 +71,11 @@ export const validateOptions = (ctx: Context): void => {
     const names = listAccounts(ctx.storageRoot, ctx.dataPath).map((a) => a.name);
     if (!names.includes(o.account)) unknownValue('account', o.account, names, names.length ? 'See them with: sandbox account list' : 'None saved yet: sign in inside the sandbox, then run sandbox account save <name>.');
   }
+  for (const s of o.sessions) {
+    checkHarness(s.harness, harnesses);
+    if (!fs.existsSync(s.folder) || !fs.statSync(s.folder).isDirectory()) fail('The folder ' + s.folder + ' (--session ' + s.harness + '@...) does not exist.', 'Check the path after the @.');
+  }
+  if (o.sessions.length && (o.harness !== undefined || o.workspace !== undefined)) fail('--session names the agent and folder of each session, so --harness and --workspace do not apply.', 'Use only --session <agent>@<folder> (repeatable).');
   if (o.workspace !== undefined && !fs.existsSync(path.resolve(o.workspace))) fail('The folder ' + path.resolve(o.workspace) + ' does not exist.', 'Check the --workspace path (or leave it out to use the current folder).');
   for (const script of o.scripts) if (!fs.existsSync(path.resolve(script))) fail('The script ' + path.resolve(script) + ' does not exist.', 'Check the --script path.');
 };

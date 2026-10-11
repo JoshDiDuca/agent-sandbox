@@ -8,6 +8,8 @@ import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.j
 import { readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
 import { dirExists, ensureDir, fail, writeJson } from '../core/util.js';
 import { substDrives } from '../shared/guest-paths.js';
+import { PROJECTS_GUEST, hubName } from '../shared/projects.js';
+import { planBootProjects } from './launch/projects.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
 import { databaseCatalog, planDatabases } from './database-plan.js';
 import { collectMappings } from './launch/mappings.js';
@@ -21,7 +23,7 @@ import { assertTestWritable } from './test-guard.js';
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
 
 /** Which toolchains the project needs ("auto" settings follow the project's files and what this PC has). */
-const decideProjectToolchains = (o: GenerateOptions): ReturnType<typeof decideToolchains> => {
+export const decideProjectToolchains = (o: Pick<GenerateOptions, 'run' | 'pcLanguages'>): ReturnType<typeof decideToolchains> => {
   const { config, workspaceHost } = o.run;
   const msvcScript = config.toolchains.msvc.enabled === 'auto' ? msvcHint(workspaceHost) : undefined;
   const pwshScript = config.toolchains.pwsh.enabled === 'auto' ? usesPwsh(readPwshScripts(workspaceHost)) : null;
@@ -53,7 +55,8 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
-  const mappings = collectMappings(o, launchPath);
+  const boot = planBootProjects({ run: o.run, packageRoot: o.packageRoot, extraProjects: o.extraProjects, knownProjects: o.knownProjects });
+  const mappings = collectMappings(o, launchPath, boot);
 
   const profile = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : NO_PROFILE;
   stageGitIdentity(launchPath);
@@ -64,8 +67,12 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   const session: GuestSession = {
     launchId,
     project: path.basename(workspaceHost),
+    projectId: hubName(workspaceHost, []),
     workspace: config.guestWorkspace,
     workspaceHost,
+    projectsDir: PROJECTS_GUEST,
+    roots: boot.roots.map((r) => r.guest),
+    ...(o.autoSession === false ? { autoSession: false } : {}),
     harnessName,
     harness,
     harnessArguments: o.harnessArgs,
@@ -94,5 +101,5 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: boot };
 };

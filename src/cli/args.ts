@@ -13,7 +13,26 @@ export interface CliOptions {
   config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
   scripts: string[]; databases: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
   personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; yes: boolean; timeout: number; days: number;
+  /** restart: every session, not only this folder's project's. */
+  all: boolean;
+  /** launch --session <agent>@<folder> (repeatable): several sessions at once, folders made absolute. */
+  sessions: SessionWant[];
 }
+
+/** One session to start: an agent in a folder. */
+export interface SessionWant { harness: string; folder: string }
+
+/**
+ * `<agent>@<folder>` (the folder may contain '@': only the first one splits), `<agent>` alone = the current folder.
+ * Folders become absolute against `cwd`. Pure; validate.ts checks that the agent and folder exist.
+ */
+export const parseSessionWant = (text: string, cwd: string = process.cwd()): SessionWant => {
+  const at = text.indexOf('@');
+  const harness = (at < 0 ? text : text.slice(0, at)).trim();
+  const folder = at < 0 ? '' : text.slice(at + 1).trim();
+  if (!harness) fail('--session "' + text + '" names no agent.', 'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).');
+  return { harness, folder: path.resolve(cwd, folder || '.') };
+};
 
 /** This package's version (this file is dist/cli/args.js, two folders below package.json). */
 export const packageVersion = (): string => {
@@ -115,6 +134,8 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     follow: Boolean(o.follow),
     json: Boolean(o.json),
     yes: Boolean(o.yes),
+    all: Boolean(o.all),
+    sessions: ((o.session as string[] | undefined) ?? []).map((s) => parseSessionWant(s)),
     timeout: (o.timeout as number | undefined) ?? 600,
     days: (o.days as number | undefined) ?? 7,
   };
@@ -122,5 +143,5 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 
 const defaults = (): CliOptions => ({
   command: '', positionals: [], passthrough: [], scripts: [], databases: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
-  personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, timeout: 600, days: 7,
+  personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, all: false, sessions: [], timeout: 600, days: 7,
 });

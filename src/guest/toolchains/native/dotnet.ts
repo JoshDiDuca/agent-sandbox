@@ -7,7 +7,8 @@ import { fetchJson, installArchive } from '../../../shared/download.js';
 import { readJsonFile, writeJsonAtomic } from '../../../shared/rundir.js';
 import { safeRemove } from '../../../shared/safe-remove.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../../env.js';
+import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn } from '../../env.js';
+import { projectWorkspace } from '../../project-context.js';
 import { downloadFile, installOnce, tool, type ToolEnv } from '../common.js';
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
@@ -22,7 +23,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   // A corrupt or hand-edited marker just means "nothing recorded yet" (the installs are idempotent).
   const recorded = DotnetMarker.safeParse(exists(marker) && !refresh ? readJsonFile<unknown>(marker) : {});
   const done: Record<string, boolean> = recorded.success ? recorded.data : {};
-  const globalJson = path.join(workspace, 'global.json');
+  const globalJson = path.join(projectWorkspace(), 'global.json');
   const installs: [string, string[]][] = [
     ...config.channels.map((c): [string, string[]] => ['channel:' + c, ['-Channel', c]]),
     ...(exists(globalJson) ? [['global.json:' + fs.readFileSync(globalJson, 'utf8').replace(/\s+/g, ''), ['-JSonFile', globalJson]] as [string, string[]]] : []),

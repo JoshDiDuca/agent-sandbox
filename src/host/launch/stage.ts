@@ -15,9 +15,15 @@ export const stageHooks = (packageRoot: string, launchPath: string, scripts: str
       if (dirExists(source)) fs.cpSync(source, target, { recursive: true, force: true });
     }
   }
+  stageScripts(path.join(launchPath, 'hooks', 'pre-agent'), scripts);
+};
+
+/** --script / "scripts" files, run before the agent in this order. */
+export const stageScripts = (target: string, scripts: string[]): void => {
+  ensureDir(target);
   scripts.forEach((script: string, index: number) => {
     if (!fileExists(script)) fail('Script file not found: ' + script, 'Check the --script path.');
-    fs.copyFileSync(script, path.join(launchPath, 'hooks', 'pre-agent', '90-extra-' + index + '-' + path.basename(script)));
+    fs.copyFileSync(script, path.join(target, '90-extra-' + index + '-' + path.basename(script)));
   });
 };
 

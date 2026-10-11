@@ -16,6 +16,8 @@ import { ensurePtyHost } from './ptyhost.js';
 import { pruneToolLeftovers } from './toolchains/leftovers.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
+import { saveBootEnv } from './boot-env.js';
+import { primaryProject, saveProjectStatus } from './project-status.js';
 import { dataDir, dryRun, errMsg, isWin, localDir, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
 
 const STEPS = 8;
@@ -62,12 +64,15 @@ const main = async (): Promise<void> => {
 
   const gitAccess = session.provisioning.git.access ?? 'full';
   step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
+  const basePath = process.env.PATH ?? '';
   const tools = await setupToolchains(session.toolchains, session.versions, {
     gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [],
   });
   if (!dryRun) tools.prepend.push(writeDbCommand());
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
+  saveBootEnv({ basePath, toolVars: Object.keys(tools.vars), steps: tools.steps, summary: tools.summary, lan });
+  saveProjectStatus(primaryProject(), workspace, 'ready', 'Ready', session.databases ?? [], tools.summary);
   for (const line of tools.summary) log('  ' + line);
   await soft('Cleaning old tool builds', () => pruneToolLeftovers());
 
@@ -81,14 +86,15 @@ const main = async (): Promise<void> => {
   await soft('Claude managed settings', () => writeManagedSettings(gitAccess));
 
   step(6, 'Agent: ' + session.harnessName);
-  if (session.harness) provisionHarness(session.harnessName, session.harness, env);
+  if (session.harness) await provisionHarness(session.harnessName, session.harness, env);
 
   step(7, 'Pre-agent hooks');
   runHooks('pre-agent', env);
 
   step(8, 'Starting ' + session.harnessName);
   setSandboxStatus('ready', 'Ready');
-  if (!session.harness) { if (!dryRun) startDaemon(env); log('Ready (no agent requested). Workspace: ' + workspace); return; }
+  // No agent, or a restart that adds a project (the host opens its sessions itself once the sandbox is ready).
+  if (!session.harness || session.autoSession === false) { if (!dryRun) startDaemon(env); log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace); return; }
   if (dryRun) {
     const launch = resolveLaunch(session.harnessName, session.harness);
     log('(dry run) would run: ' + [launch.file, ...launch.args, ...session.harness.arguments, ...session.harnessArguments].join(' ') + ' | cwd=' + workspace);

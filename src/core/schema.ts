@@ -5,3 +5,4 @@ export { Config, LocalOverrides } from './schema/config.js';
 export { Harness } from './schema/harness.js';
 export { describeIssues, jsonSchemas } from './schema/json-schema.js';
 export { Mapping } from './schema/sandbox.js';
+export { Toolchains } from './schema/toolchains.js';

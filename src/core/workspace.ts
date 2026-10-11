@@ -55,7 +55,14 @@ export const resolveVersions = (config: Config, workspace: string, local: Overri
 export const resolveRun = async (req: RunRequest, hostNodeVersion: string = process.version): Promise<ResolvedRun> => {
   const notes: string[] = [];
   // Mappings from the user config are relative to that config file; expand them before anything else uses them.
-  let config = { ...req.loaded.config, mappings: req.loaded.config.mappings.map((m) => ({ ...m, host: expandPath(m.host, req.loaded.base) })) };
+  const expand = (list: string[]): string[] => list.map((p) => expandPath(p, req.loaded.base));
+  const projects = req.loaded.config.projects;
+  let config = {
+    ...req.loaded.config,
+    mappings: req.loaded.config.mappings.map((m) => ({ ...m, host: expandPath(m.host, req.loaded.base) })),
+    projects: { ...projects, roots: expand(projects.roots), exclude: expand(projects.exclude), declinedRoots: expand(projects.declinedRoots) },
+  };
+  const mirror = config.guestWorkspace === 'mirror';
   const storageRoot = expandPath(config.storage.root, req.loaded.base);
 
   const workspaceHost = path.resolve(req.workspace ?? req.cwd);
@@ -104,5 +111,6 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
   if (harnessName !== 'none' && !config.harnesses[harnessName]) fail('Unknown agent "' + harnessName + '".', 'Configured agents: ' + Object.keys(config.harnesses).join(', ') + ' (add more under "harnesses" in your config).');
   const versions = resolveVersions(config, workspaceHost, overrides, req, hostNodeVersion);
   const dataPath = path.join(storageRoot, 'data', config.storage.dataName);
-  return { config, storageRoot, dataPath, workspaceHost, harnessName, scripts, localConfigPath, notes, versions };
+  // A project file may ask for "mirror" too (it decides only its own path); project roots follow the user's choice.
+  return { config, storageRoot, dataPath, workspaceHost, harnessName, scripts, localConfigPath, notes, versions, mirror };
 };

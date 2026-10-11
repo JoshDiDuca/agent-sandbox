@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
-import { dryRun, errMsg, exists, log, mkdirp, stateDir, warn, workspace } from '../env.js';
+import { dryRun, errMsg, exists, log, mkdirp, stateDir, warn } from '../env.js';
+import { projectWorkspace } from '../project-context.js';
 import { CLI_TOOLS, decideCli, type CliName, type CliSettings, type CliTool } from './catalogue.js';
 import { arch, tool, type ToolEnv } from './common.js';
 import { setupSingleExe } from './runtimes.js';
@@ -36,7 +37,7 @@ const shimOpenssl = (env: ToolEnv): void => {
  * rules on the workspace as the host would. The gh rule is enforced here again, whatever the host sent.
  */
 export const setupCli = async (env: ToolEnv, settings: CliSettings, gitAccess: GitAccess, refresh = false): Promise<void> => {
-  const decisions = decideCli(settings, { gitAccess, hasGithubDir: exists(path.join(workspace, '.github')) });
+  const decisions = decideCli(settings, { gitAccess, hasGithubDir: exists(path.join(projectWorkspace(), '.github')) });
   if (settings.gh && !decisions.gh.on) {
     env.summary.push('gh: off (' + decisions.gh.reason + ')');
     // A login from an earlier full-access sandbox is still on disk; the agent could read the token from there.
