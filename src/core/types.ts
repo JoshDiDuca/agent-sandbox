@@ -43,7 +43,8 @@ export interface Generated {
   wsbPath: string; launchPath: string; launchId: string; sessionPath: string; memoryMb: number;
   mappings: ResolvedMapping[]; profile: ProfileResult;
 }
-export interface ProfileResult { hostDir: string | null; staged: string[]; skipped: string[]; credentials: boolean }
+/** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
+export interface ProfileResult { hostDir: string | null; staged: string[]; skipped: string[]; credentials: boolean; secretsRemoved: string[] }
 
 /** Written by the host to C:\AgentLaunch\session.json (read-only for the guest): everything the guest needs to know. */
 export interface GuestSession {

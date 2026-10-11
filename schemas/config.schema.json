@@ -597,6 +597,34 @@
       },
       "additionalProperties": false
     },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "strip": {
+          "type": "boolean",
+          "description": "Remove credentials from everything copied into the sandbox (your Claude settings.json \"env\" and credential helpers, MCP servers' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys."
+        },
+        "allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Variable names that may go in anyway; * matches anything, e.g. [\"AWS_REGION\", \"AWS_PROFILE\", \"MY_APP_*\"]."
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "More variable names to treat as secrets; * matches anything, e.g. [\"ACME_*\", \"*_INTERNAL_URL\"]."
+        },
+        "warnFiles": {
+          "type": "boolean",
+          "description": "Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder."
+        }
+      },
+      "additionalProperties": false
+    },
     "personalization": {
       "type": "object",
       "properties": {

@@ -120,6 +120,12 @@
     "enabled": true,
     "reuseSession": true
   },
+  "secrets": {
+    "strip": true,
+    "allow": [],
+    "patterns": [],
+    "warnFiles": true
+  },
   "personalization": {
     "enabled": true
   },

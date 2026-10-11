@@ -3,6 +3,7 @@ import { activateAccount, activeAccount, defaultAccount } from '../../host/accou
 import { attachTerminal, findUnwatchedSession, requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { generateSandbox } from '../../host/generate.js';
+import { findSecretFiles } from '../../host/secrets.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
 import { assertCanLaunch, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
 import { ensureTerminal } from '../../host/terminal.js';
@@ -82,6 +83,8 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
   const generated = generateSandbox({ packageRoot, run, harnessArgs: options.passthrough, probe: probeHost(config, run.harnessName) });
 
   for (const note of run.notes) console.log(note);
+  const secretFiles = config.secrets.warnFiles ? findSecretFiles(run.workspaceHost) : [];
+  if (secretFiles.length) console.warn('\x1b[33mHeads-up: the agent can read these files in your workspace, which often hold secrets: ' + secretFiles.slice(0, 12).join(', ') + (secretFiles.length > 12 ? ', ...' : '') + '. Move real credentials out of the folder (or use test ones). Silence with secrets.warnFiles = false.\x1b[0m');
   table([
     ['Workspace', run.workspaceHost + '  ->  ' + config.guestWorkspace + (config.readOnly ? '  (read-only)' : '')],
     ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
@@ -89,6 +92,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Desktop', generated.personalization],
     ['Claude', generated.profile.staged.length ? generated.profile.staged.join(', ') + (generated.profile.credentials ? '  (INCLUDING YOUR LOGIN)' : '') : 'no settings copied'],
+    ['Secrets', !config.secrets.strip ? 'NOT stripped (secrets.strip is off)' : generated.profile.secretsRemoved.length ? 'kept on this PC: ' + generated.profile.secretsRemoved.join(', ') + '  (secrets.allow lets one through)' : 'none found in what is copied'],
     ...generated.mappings.slice(3).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
     ['Generated', generated.wsbPath],
   ]);

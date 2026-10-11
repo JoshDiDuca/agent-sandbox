@@ -118,7 +118,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   ensureDir(dataPath);
   const mappings = collectMappings(o, launchPath);
 
-  const profile: ProfileResult = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost) : { hostDir: null, staged: [], skipped: [], credentials: false };
+  const profile: ProfileResult = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
   const gitconfig = path.join(homeDir(), '.gitconfig');
   const identity = fileExists(gitconfig) ? gitIdentity(fs.readFileSync(gitconfig, 'utf8')) : '';
   if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ClaudeProfileConfig, ProfileResult } from '../core/types.js';
+import { stripMcpServers, stripSettings, type SecretsConfig } from './secrets.js';
 import { dirExists, ensureDir, fileExists, homeDir, readJson, writeJson } from '../core/util.js';
 
 const MAX_BYTES = 250 * 1024 * 1024;
@@ -43,8 +44,8 @@ export const sandboxGlobalState = (state: Record<string, unknown>, workspaceHost
   return { ...rest, projects: Object.fromEntries(own) };
 };
 
-export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: string, workspaceHost: string): ProfileResult => {
-  const result: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false };
+export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: string, workspaceHost: string, secrets: SecretsConfig): ProfileResult => {
+  const result: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
   if (!settings.enabled) return result;
   const hostDir = hostClaudeDir(settings);
   result.hostDir = hostDir;
@@ -59,7 +60,9 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
     const destination = path.join(target, name);
     if (fileExists(source)) {
       if (name.toLowerCase().endsWith('.json') && !validJson(source)) { result.skipped.push(name + ' (invalid JSON on host; fix or remove it)'); continue; }
-      fs.copyFileSync(source, destination);
+      // Claude's settings can carry credentials in "env" and commands that fetch them; those stay here.
+      if (/^settings(.local)?.json$/i.test(name)) writeJson(destination, stripSettings(readJson<Record<string, unknown>>(source), secrets, result.secretsRemoved));
+      else fs.copyFileSync(source, destination);
     } else if (dirExists(source)) {
       if (directorySize(source) > MAX_BYTES) { result.skipped.push(name + ' (over 250 MB)'); continue; }
       fs.cpSync(source, destination, { recursive: true, force: true });
@@ -75,7 +78,7 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
     const globalFile = hostGlobalStateFile(settings);
     if (!fileExists(globalFile)) result.skipped.push('.claude.json (not found)');
     else if (!validJson(globalFile)) result.skipped.push('.claude.json (invalid JSON on host)');
-    else { writeJson(path.join(target, '.claude.json'), sandboxGlobalState(readJson<Record<string, unknown>>(globalFile), workspaceHost)); result.staged.push('.claude.json'); }
+    else { writeJson(path.join(target, '.claude.json'), stripMcpServers(sandboxGlobalState(readJson<Record<string, unknown>>(globalFile), workspaceHost), secrets, result.secretsRemoved)); result.staged.push('.claude.json'); }
   }
   return result;
 };

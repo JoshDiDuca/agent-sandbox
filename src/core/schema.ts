@@ -126,6 +126,12 @@ const Toolchains = z.strictObject({
   vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
   environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'letters, digits and _ only'), z.string()).describe('Extra environment variables for the agent and every terminal, e.g. registry mirrors: {"NPM_CONFIG_REGISTRY": "https://...", "PIP_INDEX_URL": "https://..."}.'),
 });
+const Secrets = z.strictObject({
+  strip: z.boolean().describe('Remove credentials from everything copied into the sandbox (your Claude settings.json "env" and credential helpers, MCP servers\' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys.'),
+  allow: Strings.describe('Variable names that may go in anyway; * matches anything, e.g. ["AWS_REGION", "AWS_PROFILE", "MY_APP_*"].'),
+  patterns: Strings.describe('More variable names to treat as secrets; * matches anything, e.g. ["ACME_*", "*_INTERNAL_URL"].'),
+  warnFiles: z.boolean().describe('Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder.'),
+});
 const Attach = z.strictObject({
   enabled: z.boolean().describe('Allow claude-sbx --terminal / agent-sandbox attach from this PC.'),
   reuseSession: z.boolean().describe('claude-sbx -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
@@ -157,6 +163,7 @@ export const Config = z.strictObject({
   provisioning: Provisioning,
   toolchains: Toolchains,
   attach: Attach,
+  secrets: Secrets,
   personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
   claudeProfile: ClaudeProfile,
   harnesses: z.record(Name, Harness).describe('Agents that can run in the sandbox.'),

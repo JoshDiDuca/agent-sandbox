@@ -9,6 +9,7 @@ import { guardRepo, snapshotRepo } from '../host/repo-guard.js';
 import { assertNoLinks, ensureDir, safeText } from '../core/util.js';
 import { assertSafeMapping } from '../core/workspace.js';
 import { sandboxGlobalState } from '../host/claude-profile.js';
+import { findSecretFiles, stripMcpServers, stripSettings } from '../host/secrets.js';
 import { gitDecision } from '../guest/gitguard.js';
 import { gitDenyRules } from '../guest/gitrules.js';
 import { encodeFrame, FrameReader, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
@@ -110,6 +111,28 @@ export const securityTests = async (t: Harness, f: Fixtures): Promise<void> => {
   t.section('what reaches the sandbox, and what reaches your terminal');
   const state = sandboxGlobalState({ primaryApiKey: 'sk-secret', oauthAccount: { emailAddress: 'me' }, mcpServers: { a: {} }, theme: 'dark', projects: { 'D:/Code/app': { mcpServers: { db: { env: { TOKEN: 'mine' } } } }, 'D:/Other': { mcpServers: { x: { env: { TOKEN: 'other' } } } } } }, 'D:\\Code\\app');
   check(!('primaryApiKey' in state) && !('oauthAccount' in state) && JSON.stringify(state).includes('mine') && !JSON.stringify(state).includes('other') && (state.theme as string) === 'dark', 'the sandbox gets your MCP servers and this project, never API keys, your account or other projects');
+
+  const secrets = { strip: true, allow: ['AWS_REGION'], patterns: ['ACME_*'], warnFiles: true };
+  const removed: string[] = [];
+  const settings = stripSettings({ apiKeyHelper: 'aws-vault exec prod -- get-key', model: 'opus', env: {
+    AWS_ACCESS_KEY_ID: 'x', AWS_SECRET_ACCESS_KEY: 'y', AWS_REGION: 'eu-west-2', AZURE_CLIENT_SECRET: 'z', ARM_CLIENT_ID: 'id', CLOUDFLARE_API_TOKEN: 't',
+    GOOGLE_APPLICATION_CREDENTIALS: 'C:\\key.json', PROD_DB_HOST: 'db.internal', STRIPE_KEY: 'k', ACME_THING: 'a', DATABASE_URL: 'postgres://u:p@h/db',
+    INNOCENT: 'AKIAABCDEFGHIJKLMNOP', SAFE_URL: 'https://example.com', DISABLE_TELEMETRY: '1', CLAUDE_CODE_USE_BEDROCK: '1',
+  } }, secrets, removed);
+  const env = settings.env as Record<string, string>;
+  check(!('apiKeyHelper' in settings) && settings.model === 'opus' && Object.keys(env).sort().join() === 'AWS_REGION,CLAUDE_CODE_USE_BEDROCK,DISABLE_TELEMETRY,SAFE_URL' && removed.some((r) => r.endsWith('AWS_SECRET_ACCESS_KEY')),
+    'settings.json: AWS, Azure, Google, Cloudflare, prod, payment and database credentials (by name or by value) stay on this PC; secrets.allow and ordinary settings pass');
+  const mcp = stripMcpServers({ mcpServers: { gh: { command: 'npx', args: ['server', '--api-key', 'plain', '--verbose', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789'], env: { GITHUB_TOKEN: 'g', LOG_LEVEL: 'debug' } } },
+    projects: { 'D:/app': { mcpServers: { api: { type: 'http', url: 'https://x', headers: { Authorization: 'Bearer abcdefghijklmnopqrstuvwxyz', Accept: 'json' } } } } } }, secrets, []);
+  const gh = (mcp.mcpServers as Record<string, { args: string[]; env: object }>).gh;
+  const api = ((mcp.projects as Record<string, { mcpServers: Record<string, { headers: object }> }>)['D:/app']).mcpServers.api;
+  check(JSON.stringify(gh.args) === '["server","--api-key","[removed by agent-sandbox]","--verbose","[removed by agent-sandbox]"]' && JSON.stringify(gh.env) === '{"LOG_LEVEL":"debug"}' && JSON.stringify(api.headers) === '{"Accept":"json"}',
+    'MCP servers: token env vars, Authorization headers and key arguments are removed, the rest of the server works as before');
+  check(JSON.stringify(stripSettings({ env: { AWS_SECRET_ACCESS_KEY: 'y' } }, { ...secrets, strip: false }, [])) === '{"env":{"AWS_SECRET_ACCESS_KEY":"y"}}', 'secrets.strip = false copies settings unchanged');
+  const ws = at('secret-ws');
+  for (const file of ['.env', '.env.example', 'server.pem', 'README.md', 'api/credentials.json', 'node_modules/x/.env']) t.write(path.join(ws, file), 'x');
+  check(findSecretFiles(ws).sort().join() === '.env,api\\credentials.json,server.pem', 'secret-looking workspace files are found for the launch warning (templates and dependencies ignored)');
+
   check(safeText('ok \x1b[31mred\x1b[0m \x1b]52;c;ZXZpbA==\x07\x1b]0;title\x07\x1b[2J\x07end') === 'ok \x1b[31mred\x1b[0m end', 'sandbox text printed on this PC keeps colours but loses every other escape sequence');
   check(await rejects(() => assertSafeMapping(path.join(t.packageRoot, 'dist'), t.packageRoot, at('storage')), 'overlaps') && await rejects(() => assertSafeMapping(at('storage', 'data'), t.packageRoot, at('storage')), 'overlaps'), 'extra mappings may not reach agent-sandbox\'s own folders');
 };

@@ -35,6 +35,7 @@ export const DEFAULTS: Config = {
     environment: {},
   },
   attach: { enabled: true, reuseSession: true },
+  secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
   claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },
   harnesses: {
