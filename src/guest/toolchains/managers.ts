@@ -27,7 +27,7 @@ export const setupVolta = async (env: ToolEnv): Promise<void> => {
   const dir = tool('volta');
   if (!exists(path.join(dir, 'volta.exe'))) {
     const asset = await githubAsset('volta-cli/volta', arch === 'arm64' ? /^volta-[\d.]+-windows-arm64\.zip$/ : /^volta-[\d.]+-windows\.zip$/);
-    log('Downloading ' + asset.name + ' ...');
+    log('Downloading Volta (~15 MB once) ...');
     await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'volta.exe', fileName: asset.name });
   }
   // The MSI puts these shims (copies of volta-shim.exe) next to volta.exe; the portable zip leaves that to us.
@@ -59,7 +59,7 @@ export const setupPyenv = async (env: ToolEnv): Promise<void> => {
   const root = tool('pyenv', 'pyenv-win');
   if (!exists(path.join(root, 'bin', 'pyenv.bat'))) {
     const tag = await resolveCached('pyenv-win', () => latestGithubTag('pyenv-win/pyenv-win'));
-    log('Downloading pyenv-win ' + tag + ' ...');
+    log('Downloading pyenv-win ' + tag + ' (~5 MB once) ...');
     // GitHub's tag archive: no published checksum, but HTTPS from github.com for the project's own tag.
     await installArchive('https://github.com/pyenv-win/pyenv-win/archive/refs/tags/' + encodeURIComponent(tag) + '.zip', root, { locate: 'pyenv.bat', up: 1, fileName: 'pyenv-win.zip' });
   }

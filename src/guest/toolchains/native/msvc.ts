@@ -5,14 +5,16 @@
 // Use is governed by the Visual Studio licence terms: it only installs with toolchains.msvc.acceptLicense.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Toolchains } from '../../core/types.js';
-import { download, extractArchive, fetchJson } from '../../shared/download.js';
-import { safeRemove } from '../../shared/safe-remove.js';
-import { system32 } from '../../shared/system.js';
-import { dryRun, execAsync, exists, log, mkdirp } from '../env.js';
-import { ensureCompiled } from '../ptyhost.js';
-import { tool, type ToolEnv } from './common.js';
-import { msiCabs, pickMsvcVersion, pickWindowsSdk } from './versions.js';
+import { z } from 'zod';
+import type { Toolchains } from '../../../core/types.js';
+import { download, extractArchive, fetchJson } from '../../../shared/download.js';
+import { writeJsonAtomic } from '../../../shared/rundir.js';
+import { safeRemove } from '../../../shared/safe-remove.js';
+import { system32 } from '../../../shared/system.js';
+import { dryRun, errMsg, execAsync, exists, log, mkdirp, warn } from '../../env.js';
+import { ensureCompiled } from '../../ptyhost.js';
+import { tool, type ToolEnv } from '../common.js';
+import { msiCabs, pickMsvcVersion, pickWindowsSdk } from '../versions.js';
 
 interface Payload { fileName: string; url: string; sha256: string; size: number }
 interface Package { id: string; version: string; language?: string; payloads?: Payload[]; dependencies?: Record<string, unknown> }
@@ -27,7 +29,10 @@ const VSWHERE_DIR = path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program F
 /** The VS manifest (~18 MB), cached for a day. */
 const manifest = async (): Promise<Manifest> => {
   const cached = path.join(ROOT, '.manifest.json');
-  if (exists(cached) && Date.now() - fs.statSync(cached).mtimeMs < MANIFEST_DAY_MS) return JSON.parse(fs.readFileSync(cached, 'utf8')) as Manifest;
+  if (exists(cached) && Date.now() - fs.statSync(cached).mtimeMs < MANIFEST_DAY_MS) {
+    // A download cut short leaves unreadable JSON: fetch it again instead of failing until the day is over.
+    try { return JSON.parse(fs.readFileSync(cached, 'utf8')) as Manifest; } catch { /* downloaded again below */ }
+  }
   const channel = await fetchJson<{ channelItems: { id: string; payloads?: Payload[] }[] }>(CHANNEL);
   const item = channel.channelItems.find((i) => i.id === 'Microsoft.VisualStudio.Manifests.VisualStudio')?.payloads?.[0];
   if (!item) throw new Error('the Visual Studio channel has no package manifest');
@@ -83,7 +88,7 @@ const install = async (config: Toolchains['msvc']): Promise<{ msvc: string; sdk:
     if (!exists(file)) await download(p.url, file, p.sha256);
     return file;
   };
-  log('Downloading MSVC ' + version + ' (compiler, CRT) ...');
+  log('Downloading the MSVC ' + version + ' compiler and C/C++ libraries ...');
   for (const part of MSVC_PARTS) {
     const p = pick('microsoft.vc.' + version + '.' + part);
     if (!p) { if (part.startsWith('tools') || part.startsWith('crt.headers') || part.startsWith('crt.x64.desktop')) throw new Error('MSVC ' + version + ' has no ' + part); continue; }
@@ -94,7 +99,7 @@ const install = async (config: Toolchains['msvc']): Promise<{ msvc: string; sdk:
   // The SDK component depends on the package that holds the .msi/.cab payloads (e.g. Win11SDK_10.0.26100).
   const sdkPackage = pick(Object.keys(pick(sdk.componentId)?.dependencies ?? {})[0] ?? '');
   if (!sdkPackage?.payloads) throw new Error('the Windows SDK ' + sdk.build + ' package has no payloads');
-  log('Downloading the Windows SDK ' + sdk.build + ' (headers, libraries) ...');
+  log('Downloading the Windows SDK ' + sdk.build + ' (headers, libraries; the biggest part) ...');
   const payload = (name: string): Payload | undefined => sdkPackage.payloads!.find((p) => p.fileName.toLowerCase() === ('installers\\' + name).toLowerCase());
   const msis: string[] = [];
   for (const name of SDK_MSIS) {
@@ -104,6 +109,7 @@ const install = async (config: Toolchains['msvc']): Promise<{ msvc: string; sdk:
     msis.push(file);
     for (const cab of msiCabs(fs.readFileSync(file))) { const c = payload(cab); if (c) await fetchPayload(c); }
   }
+  log('Unpacking the Windows SDK (a few minutes) ...');
   for (const msi of msis) {
     // An administrative install only unpacks files; its verbose log explains a failure (e.g. a path over 260 characters).
     const logFile = msi + '.log';
@@ -160,12 +166,28 @@ const installVswhere = (msvc: string): void => {
   fs.writeFileSync(path.join(VSWHERE_DIR, 'vswhere.json'), JSON.stringify({ installationPath: ROOT, installationVersion: '17.' + (minor ?? '0') + '.0.' + (major ?? '0') }));
 };
 
+/**
+ * cl.exe and link.exe start vctip.exe (Visual Studio's telemetry uploader), which lingers after the build and keeps the
+ * folder locked, so `sandbox repair` / `data clean` could not delete tools\msvc. Neither VSCMD_SKIP_SENDTELEMETRY nor
+ * the TurnOffSwitch registry value stops it; without the file the compiler simply skips it. Nothing else needs it.
+ */
+const removeTelemetry = (msvc: string): void => {
+  const vctip = path.join(ROOT, 'VC', 'Tools', 'MSVC', msvc, 'bin', 'Hostx64', 'x64', 'vctip.exe');
+  try { fs.rmSync(vctip, { force: true }); } catch (e) { warn('Could not remove MSVC\'s telemetry helper (vctip.exe); it may keep tools\\msvc locked: ' + errMsg(e)); }
+};
+
+const Installed = z.object({ msvc: z.string().min(1), sdk: z.string().min(1), want: z.string() });
+const MARKER = path.join(ROOT, '.installed.json');
+/** What the last finished install recorded; null for a missing, unreadable or half-written marker. */
+const readInstalled = (): z.infer<typeof Installed> | null => {
+  try { return Installed.safeParse(JSON.parse(fs.readFileSync(MARKER, 'utf8'))).data ?? null; } catch { return null; }
+};
+const hasCompiler = (msvc: string): boolean => exists(path.join(ROOT, 'VC', 'Tools', 'MSVC', msvc, 'bin', 'Hostx64', 'x64', 'cl.exe'));
+
 /** The vcvars environment of an installed tree (for steps that run before the agent's environment exists). */
 export const installedMsvcEnv = (): ReturnType<typeof vcvars> | null => {
-  try {
-    const done = JSON.parse(fs.readFileSync(path.join(ROOT, '.installed.json'), 'utf8')) as { msvc: string; sdk: string };
-    return exists(path.join(ROOT, 'VC', 'Tools', 'MSVC', done.msvc, 'bin', 'Hostx64', 'x64', 'cl.exe')) ? vcvars(ROOT, done.msvc, done.sdk) : null;
-  } catch { return null; }
+  const done = readInstalled();
+  return done && hasCompiler(done.msvc) ? vcvars(ROOT, done.msvc, done.sdk) : null;
 };
 
 export const setupMsvc = async (env: ToolEnv, config: Toolchains['msvc']): Promise<void> => {
@@ -173,17 +195,18 @@ export const setupMsvc = async (env: ToolEnv, config: Toolchains['msvc']): Promi
     throw new Error('MSVC is installed only with toolchains.msvc.acceptLicense = true: its use is governed by the Visual Studio licence terms (https://visualstudio.microsoft.com/license-terms/), which need a Visual Studio licence');
   }
   if (dryRun) { log('(dry run) would provision MSVC ' + config.msvcVersion + ' and Windows SDK ' + config.sdkVersion); return; }
-  const marker = path.join(ROOT, '.installed.json');
   const want = config.msvcVersion + '/' + config.sdkVersion;
-  let done = exists(marker) ? (JSON.parse(fs.readFileSync(marker, 'utf8')) as { msvc: string; sdk: string; want: string }) : null;
-  if (!done || done.want !== want || !exists(path.join(ROOT, 'VC', 'Tools', 'MSVC', done.msvc, 'bin', 'Hostx64', 'x64', 'cl.exe'))) {
+  let done = readInstalled();
+  if (!done || done.want !== want || !hasCompiler(done.msvc)) {
     log('Installing MSVC and the Windows SDK (~1-2 GB, once; licence accepted in toolchains.msvc.acceptLicense) ...');
     // A previous attempt's verified downloads (.download) are kept; everything it unpacked is redone.
     if (exists(ROOT)) for (const name of fs.readdirSync(ROOT).filter((n) => n !== '.manifest.json' && n !== '.download')) safeRemove(path.join(ROOT, name), ROOT);
     const installed = await install(config);
     done = { ...installed, want };
-    fs.writeFileSync(marker, JSON.stringify(done, null, 2));
+    // Written last and atomically: without it (an interrupted install) the next boot starts over.
+    writeJsonAtomic(MARKER, done);
   }
+  removeTelemetry(done.msvc);
   const vc = vcvars(ROOT, done.msvc, done.sdk);
   writeVcvars(vc);
   installVswhere(done.msvc);

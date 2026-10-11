@@ -23,13 +23,15 @@ export interface CliTool {
   subdir?: string;
   /** What the tool is for (summary and docs). */
   about: string;
+  /** Rough download size for the progress line. */
+  size: string;
 }
 
 export const CLI_TOOLS = [
   // gh_2.102.0_windows_amd64.zip holds bin\gh.exe.
-  { name: 'gh', repo: 'cli/cli', asset: (arch) => (arch === 'arm64' ? /^gh_\d+\.\d+\.\d+_windows_arm64\.zip$/ : /^gh_\d+\.\d+\.\d+_windows_amd64\.zip$/), exe: 'gh.exe', about: 'GitHub CLI' },
+  { name: 'gh', repo: 'cli/cli', asset: (arch) => (arch === 'arm64' ? /^gh_\d+\.\d+\.\d+_windows_arm64\.zip$/ : /^gh_\d+\.\d+\.\d+_windows_amd64\.zip$/), exe: 'gh.exe', about: 'GitHub CLI', size: '15 MB' },
   // zstd-v1.5.7-win64.zip; there is no arm64 build, and Windows on Arm runs the x64 one.
-  { name: 'zstd', repo: 'facebook/zstd', asset: () => /^zstd-v\d+\.\d+\.\d+-win64\.zip$/, exe: 'zstd.exe', about: 'Zstandard compression' },
+  { name: 'zstd', repo: 'facebook/zstd', asset: () => /^zstd-v\d+\.\d+\.\d+-win64\.zip$/, exe: 'zstd.exe', about: 'Zstandard compression', size: '2 MB' },
 ] as const satisfies readonly CliTool[];
 
 export type CliName = (typeof CLI_TOOLS)[number]['name'] | 'openssl';

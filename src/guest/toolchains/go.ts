@@ -19,7 +19,7 @@ export const setupGo = async (env: ToolEnv, config: Toolchains['go']): Promise<v
     const goArch = arch === 'arm64' ? 'arm64' : 'amd64';
     const file = (await findRelease(version)).files.find((f) => f.os === 'windows' && f.arch === goArch && f.kind === 'archive');
     if (!file) throw new Error(version + ' has no Windows ' + goArch + ' zip');
-    log('Downloading ' + file.filename + ' ...');
+    log('Downloading Go ' + version.replace(/^go/, '') + ' (~80 MB once) ...');
     await installArchive('https://go.dev/dl/' + file.filename, root, { sha256: file.sha256, locate: 'VERSION', fileName: file.filename });
   }
   const GOPATH = tool('go-path');

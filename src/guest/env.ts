@@ -5,6 +5,7 @@ import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_
 import { moveIntoPlace, spawnAsync, stagingFolder } from '../shared/download.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
+import { safeRemove } from '../shared/safe-remove.js';
 import { SYSTEM } from '../shared/system.js';
 
 export const isWin = process.platform === 'win32';
@@ -89,5 +90,5 @@ export const copyNode = (from: string, to: string): void => {
     robocopy(from, work, ['node.exe', 'npm', 'npm.cmd', 'npx', 'npx.cmd']);
     robocopy(path.join(from, 'node_modules', 'npm'), path.join(work, 'node_modules', 'npm'));
     moveIntoPlace(work, to);
-  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+  } finally { safeRemove(work, path.dirname(work)); }
 };

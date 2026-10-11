@@ -5,10 +5,10 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { Toolchains, ToolVersions } from '../../core/types.js';
 import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
+import { safeRemove } from '../../shared/safe-remove.js';
 import { copyNode, dryRun, errMsg, execAsync, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
 import { arch, installOnce, resolveCached, tool, type ToolEnv } from './common.js';
 import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
-
 
 const NVM_HOME = tool('nvm');
 const NVM_SYMLINK = path.join(localDir, 'nodejs');
@@ -47,7 +47,9 @@ const ensureNvm = async (): Promise<void> => {
   if (exists(path.join(HOST_NVM, 'nvm.exe'))) {
     log('Copying nvm from this PC ...');
     mkdirp(NVM_HOME);
-    for (const file of fs.readdirSync(HOST_NVM).filter((f) => /\.(exe|cmd|vbs)$/i.test(f))) fs.copyFileSync(path.join(HOST_NVM, file), path.join(NVM_HOME, file));
+    // nvm.exe last: it is what marks the install as done, so an interrupted copy is redone.
+    const files = fs.readdirSync(HOST_NVM).filter((f) => /\.(exe|cmd|vbs)$/i.test(f)).sort((a, b) => Number(a.toLowerCase() === 'nvm.exe') - Number(b.toLowerCase() === 'nvm.exe'));
+    for (const file of files) fs.copyFileSync(path.join(HOST_NVM, file), path.join(NVM_HOME, file));
     return;
   }
   // nvm-windows 2.x only ships installers; the portable build is the newest 1.x release that has nvm-noinstall.zip.
@@ -62,10 +64,10 @@ const installNodeVersion = async (version: string): Promise<void> => {
   const fromHost = path.join(HOST_NVM, 'v' + version);
   if (exists(path.join(dir, 'node.exe'))) return;
   if (exists(path.join(fromHost, 'node.exe'))) { log('Copying Node ' + version + ' from this PC\'s nvm (without global packages) ...'); copyNode(fromHost, dir); return; }
-  log('nvm install ' + version + ' ...');
+  log('Downloading Node ' + version + ' (~30 MB once) ...');
   mkdirp(NVM_TEMP);
-  const out = await nvm(['install', version]);
-  fs.rmSync(NVM_TEMP, { recursive: true, force: true });
+  let out: string;
+  try { out = await nvm(['install', version]); } finally { safeRemove(NVM_TEMP, NVM_HOME); }
   if (!exists(path.join(dir, 'node.exe'))) throw new Error('nvm install ' + version + ' failed: ' + out.trim().split('\n').slice(-2).join(' '));
 };
 

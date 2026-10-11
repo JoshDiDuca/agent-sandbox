@@ -30,7 +30,7 @@ export const setupVcRuntime = async (env: ToolEnv, summary = true): Promise<bool
   const missing = !exists(path.join(system32, 'vcruntime140.dll')) || !exists(path.join(system32, 'msvcp140.dll'));
   if (missing) {
     const installer = tool('vcredist', 'vc_redist.x64.exe');
-    if (!exists(installer)) { log('Downloading the Visual C++ runtime ...'); await download(VC_REDIST, installer); }
+    if (!exists(installer)) { log('Downloading the Visual C++ runtime (~25 MB once) ...'); await download(VC_REDIST, installer); }
     const signer = execOutput(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command', "$s = Get-AuthenticodeSignature -LiteralPath '" + installer.replace(/'/g, "''") + "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }"]);
     if (signer.trim() !== 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US') { fs.rmSync(installer, { force: true }); throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)'); }
     log('Installing the Visual C++ runtime ...');
@@ -67,7 +67,7 @@ export const setupRuby = async (env: ToolEnv, config: Toolchains['ruby']): Promi
   if (!exists(path.join(home, 'bin', 'ruby.exe'))) {
     const asset = (await rubyBuilds()).get(version);
     if (!asset) throw new Error('RubyInstaller ' + version + ' is no longer published');
-    log('Downloading ' + asset.name + ' ...');
+    log('Downloading Ruby ' + version + ' (~100 MB once) ...');
     await installArchive(asset.browser_download_url, home, { sha256: asset.digest?.startsWith('sha256:') ? asset.digest.slice(7) : null, locate: 'ruby.exe', up: 1, fileName: asset.name });
   }
   const gems = tool('ruby-gems', version.split('.').slice(0, 2).join('.'));
@@ -112,7 +112,7 @@ export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise
   const home = tool('php', version);
   if (!exists(path.join(home, 'php.exe'))) {
     const build = await phpBuild(version);
-    log('Downloading ' + build.path + ' ...');
+    log('Downloading PHP ' + version + ' (~30 MB once) ...');
     await installArchive('https://windows.php.net/downloads/releases/' + build.path, home, { sha256: build.sha256, locate: 'php.exe', fileName: build.path });
   }
   writePhpIni(home);
@@ -121,7 +121,7 @@ export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise
   if (!config.composer) return;
   const phar = tool('composer', 'composer.phar');
   if (!exists(phar)) {
-    log('Downloading Composer ...');
+    log('Downloading Composer (~3 MB once) ...');
     await download('https://getcomposer.org/download/latest-stable/composer.phar', phar, (await fetchText('https://getcomposer.org/download/latest-stable/composer.phar.sha256sum')).trim().split(/\s+/)[0]);
   }
   const composerHome = tool('composer-home');
