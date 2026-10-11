@@ -1,9 +1,8 @@
 // C/C++: MinGW-w64 GCC (with CMake, Ninja, make) and the flex/bison parser generators.
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { githubAsset, installArchive } from '../../../shared/download.js';
 import { dryRun, exists, log, warn } from '../../env.js';
-import { arch, tool, versionOf, type ToolEnv } from '../common.js';
+import { arch, installFromGithub, tool, versionOf, type ToolEnv } from '../common.js';
 import { CMAKE_FLOOR, cmakeTooOld } from '../versions.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */
@@ -12,9 +11,8 @@ export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise
   const gcc = path.join(bin, 'gcc.exe');
   if (dryRun) { log('(dry run) would provision MinGW-w64 GCC'); return; }
   if (!exists(gcc)) {
-    const asset = await githubAsset('brechtsanders/winlibs_mingw', arch === 'arm64' ? /^winlibs-aarch64-.*\.zip$/ : /^winlibs-x86_64-posix-seh-gcc-.*\.zip$/, true);
-    log('Downloading the C/C++ compiler, MinGW-w64 GCC with CMake and Ninja (~270 MB once) ...');
-    await installArchive(asset.url, tool('mingw'), { sha256: asset.sha256, fileName: asset.name });
+    const pattern = arch === 'arm64' ? /^winlibs-aarch64-.*\.zip$/ : /^winlibs-x86_64-posix-seh-gcc-.*\.zip$/;
+    await installFromGithub('brechtsanders/winlibs_mingw', pattern, { dest: tool('mingw'), what: 'the C/C++ compiler, MinGW-w64 GCC with CMake and Ninja (~270 MB once)', searchOlder: true });
   }
   if (!exists(gcc)) throw new Error('gcc.exe missing after installing MinGW');
   // Appended (not prepended) so MinGW's tools never shadow Windows or toolchain commands of the same name.
@@ -30,9 +28,7 @@ export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise
 const setupFlexBison = async (env: ToolEnv): Promise<void> => {
   const dir = tool('winflexbison');
   if (!exists(path.join(dir, 'win_bison.exe'))) {
-    const asset = await githubAsset('lexxmark/winflexbison', /^win_flex_bison-[\d.]+\.zip$/);
-    log('Downloading win_flex / win_bison (~1 MB once) ...');
-    await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'win_bison.exe', fileName: asset.name });
+    await installFromGithub('lexxmark/winflexbison', /^win_flex_bison-[\d.]+\.zip$/, { dest: dir, what: 'win_flex / win_bison (~1 MB once)', locate: 'win_bison.exe' });
   }
   env.append.push(dir);
   env.summary.push('win_flex/win_bison: ' + versionOf(path.join(dir, 'win_bison.exe')));

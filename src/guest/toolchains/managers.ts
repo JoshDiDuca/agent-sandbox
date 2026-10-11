@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
-import { githubAsset, installArchive, latestGithubTag } from '../../shared/download.js';
+import { installArchive, latestGithubTag } from '../../shared/download.js';
 import { dryRun, errMsg, execAsync, exists, log, mkdirp, session, warn, workspace } from '../env.js';
-import { arch, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
+import { arch, installFromGithub, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
 
 /** The "volta" block of the workspace's package.json ({ node, npm, yarn, pnpm }), if any. */
 export const voltaPins = (): Record<string, string> => {
@@ -26,9 +26,8 @@ export const setupVolta = async (env: ToolEnv): Promise<void> => {
   if (dryRun) { log('(dry run) would provision Volta'); return; }
   const dir = tool('volta');
   if (!exists(path.join(dir, 'volta.exe'))) {
-    const asset = await githubAsset('volta-cli/volta', arch === 'arm64' ? /^volta-[\d.]+-windows-arm64\.zip$/ : /^volta-[\d.]+-windows\.zip$/);
-    log('Downloading Volta (~15 MB once) ...');
-    await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'volta.exe', fileName: asset.name });
+    const pattern = arch === 'arm64' ? /^volta-[\d.]+-windows-arm64\.zip$/ : /^volta-[\d.]+-windows\.zip$/;
+    await installFromGithub('volta-cli/volta', pattern, { dest: dir, what: 'Volta (~15 MB once)', locate: 'volta.exe' });
   }
   // The MSI puts these shims (copies of volta-shim.exe) next to volta.exe; the portable zip leaves that to us.
   for (const shim of ['node', 'npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'yarnpkg']) {
