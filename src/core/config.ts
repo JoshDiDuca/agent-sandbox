@@ -25,7 +25,7 @@ export const DEFAULTS: Config = {
     uv: { enabled: true },
     vscode: { enabled: true },
   },
-  attach: { enabled: true },
+  attach: { enabled: true, reuseSession: true },
   personalization: { enabled: true },
   claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },
   harnesses: {

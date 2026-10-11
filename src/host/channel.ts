@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
-import { connect, DETACH_KEY, runTerminalClient } from '../shared/pty-client.js';
+import { connect, DETACH_KEY, queryViewers, runTerminalClient, type Endpoint, type Viewers } from '../shared/pty-client.js';
 import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
 
@@ -111,13 +111,34 @@ export const pickSession = (dataPath: string, sessionId?: string): SessionStatus
   return running.find((s: SessionStatus) => s.id === sessionId || s.id.startsWith(sessionId)) ?? fail('No running session "' + sessionId + '".', 'Running sessions: ' + running.map((s) => s.id).join(', ') + ' (agent-sandbox sessions lists them).');
 };
 
+/** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
+const hostEndpoint = (session: SessionStatus): Endpoint | null => {
+  const addresses = session.attach?.addresses.filter((a: string) => isSandboxAddress(a)) ?? [];
+  return session.attach && addresses.length ? { ...session.attach, addresses } : null;
+};
+
+/** Who is watching a session right now (closed terminals do not count); null when it cannot be asked. */
+export const sessionViewers = (session: SessionStatus): Promise<Viewers | null> => {
+  const endpoint = hostEndpoint(session);
+  return endpoint ? queryViewers(endpoint) : Promise.resolve(null);
+};
+
+/**
+ * The newest running session of this agent in exactly this folder that no terminal on this PC is attached to, so
+ * claude-sbx -t picks it back up instead of starting another. A session that cannot answer is never reused.
+ */
+export const findUnwatchedSession = async (dataPath: string, harness: string, cwd: string): Promise<SessionStatus | null> => {
+  const candidates = runningSessions(dataPath).filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase()).reverse();
+  for (const session of candidates) if ((await sessionViewers(session))?.remote === 0) return session;
+  return null;
+};
+
 /** Bridges this terminal to a session. Returns the agent's exit code, or 0 when the user detaches. */
 export const attachTerminal = async (session: SessionStatus): Promise<number> => {
   if (!process.stdin.isTTY || !process.stdout.isTTY) fail('--terminal / attach needs an interactive terminal.', 'Run it directly in Windows Terminal or PowerShell, not through a pipe or script.');
   if (!session.attach) fail('This session cannot be attached to: networking or attach is disabled for this sandbox.', 'Set sandbox.networking and attach.enabled to true, then start a new sandbox.');
-  const addresses = session.attach.addresses.filter((a: string) => isSandboxAddress(a));
-  if (addresses.length === 0) fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run agent-sandbox doctor.');
-  const socket = await connect({ ...session.attach, addresses });
+  const endpoint = hostEndpoint(session) ?? fail('Refusing to connect: the sandbox reported no address on this PC\'s Hyper-V (vEthernet) network (' + session.attach.addresses.join(', ') + ').', 'Use the sandbox window instead (sbx-show); if this keeps happening, run agent-sandbox doctor.');
+  const socket = await connect(endpoint);
   console.log('Attaching to ' + session.harness + ' session ' + session.id + ' (' + session.cwd + '). Detach any time with Ctrl+]');
   await sleep(400);
   const result = await runTerminalClient(socket, session.attach.token, { detachKey: DETACH_KEY });

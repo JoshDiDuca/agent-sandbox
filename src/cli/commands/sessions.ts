@@ -2,7 +2,8 @@
 import _ from 'lodash';
 import type { SessionStatus } from '../../core/types.js';
 import { activeAccount } from '../../host/accounts.js';
-import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, runningSessions, waitForReady } from '../../host/channel.js';
+import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
+import type { Viewers } from '../../shared/pty-client.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { repoFindings } from '../../host/repo-guard.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
@@ -19,13 +20,18 @@ export const attach = async (ctx: Context): Promise<number> => {
   return attachTerminal(pickSession(ctx.dataPath, id));
 };
 
-const sessionRow = (s: SessionStatus): string[] => [s.id, s.harness, s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), s.cwd, new Date(s.startedAt).toLocaleTimeString()];
+type Listed = SessionStatus & { viewers?: Viewers | null };
 
-export const sessions = (ctx: Context): number => {
-  const list = listSessions(ctx.dataPath);
-  if (printJson(ctx, list)) return 0;
+const viewerText = (v: Viewers | null | undefined): string => (v === undefined ? '-' : v === null ? '?' : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox');
+const sessionRow = (s: Listed): string[] => [s.id, s.harness, s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), viewerText(s.viewers), s.cwd, new Date(s.startedAt).toLocaleTimeString()];
+
+export const sessions = async (ctx: Context): Promise<number> => {
+  // Who is attached comes from each session itself, so a terminal that was closed is never counted.
+  const live = isSandboxRunning();
+  const list: Listed[] = await Promise.all(listSessions(ctx.dataPath).map(async (s) => (live && s.phase === 'running' ? { ...s, viewers: await sessionViewers(s) } : s)));
+  if (printJson(ctx, list.map((s) => _.omit(s, 'attach')))) return 0;
   if (list.length === 0) console.log('No sessions.');
-  else table([['ID', 'AGENT', 'STATE', 'FOLDER', 'STARTED'], ...list.map(sessionRow)]);
+  else table([['ID', 'AGENT', 'STATE', 'ATTACHED', 'FOLDER', 'STARTED'], ...list.map(sessionRow)]);
   return 0;
 };
 

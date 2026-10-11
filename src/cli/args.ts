@@ -6,7 +6,7 @@ import { fail } from '../core/util.js';
 export interface CliOptions {
   command: string; positionals: string[]; passthrough: string[];
   config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
-  scripts: string[]; headless?: boolean; terminal: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
+  scripts: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
   personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; timeout: number; days: number;
 }
 
@@ -21,7 +21,8 @@ const positiveNumber = (value: string): number => {
 const collect = (value: string, previous: string[] = []): string[] => [...previous, value];
 
 const withLaunchOptions = (cmd: Command): Command => cmd
-  .option('-t, --terminal', 'run the agent in THIS terminal (attaches if a sandbox is already running)')
+  .option('-t, --terminal', 'run the agent in THIS terminal (reattaches to this folder\'s session if nobody is watching it)')
+  .option('--new', 'always start a new session, even if this folder already has one nobody is attached to')
   .addOption(new Option('--headless', 'hide the sandbox window (sbx-show brings it back)'))
   .addOption(new Option('--window', 'show the sandbox window even if config says headless'))
   .option('--account <name>', 'Claude account to use for this sandbox')
@@ -108,6 +109,7 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     scripts: (o.script as string[] | undefined) ?? [],
     headless: o.window ? false : o.headless ? true : undefined,
     terminal: Boolean(o.terminal),
+    newSession: Boolean(o.new),
     noAgent: o.agent === false,
     trustConfig: Boolean(o.trustConfig),
     noLocalConfig: o.localConfig === false,
@@ -122,6 +124,6 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 };
 
 const defaults = (): CliOptions => ({
-  command: '', positionals: [], passthrough: [], scripts: [], terminal: false, noAgent: false, trustConfig: false, noLocalConfig: false,
+  command: '', positionals: [], passthrough: [], scripts: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
   personal: false, fromHost: false, noRestart: false, follow: false, json: false, timeout: 600, days: 7,
 });

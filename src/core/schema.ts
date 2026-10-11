@@ -79,6 +79,10 @@ const Toolchains = z.strictObject({
   uv: toggle('uv (Python package manager).'),
   vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
 });
+const Attach = z.strictObject({
+  enabled: z.boolean().describe('Allow claude-sbx --terminal / agent-sandbox attach from this PC.'),
+  reuseSession: z.boolean().describe('claude-sbx -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
+});
 const ClaudeProfile = z.strictObject({
   enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),
   hostDir: z.string().describe('Your Claude folder, or "auto" (~/.claude or CLAUDE_CONFIG_DIR).'),
@@ -105,7 +109,7 @@ export const Config = z.strictObject({
   network: z.strictObject({ blockPrivateRanges: z.boolean().describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.') }),
   provisioning: Provisioning,
   toolchains: Toolchains,
-  attach: toggle('Allow claude-sbx --terminal / agent-sandbox attach.'),
+  attach: Attach,
   personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
   claudeProfile: ClaudeProfile,
   harnesses: z.record(Name, Harness).describe('Agents that can run in the sandbox.'),
@@ -130,7 +134,7 @@ export const LocalOverrides = z.strictObject({
     node: Toolchains.shape.node.partial(), python: Toolchains.shape.python.partial(), rust: Toolchains.shape.rust.partial(),
     cpp: Toolchains.shape.cpp.partial(), dotnet: Toolchains.shape.dotnet.partial(), bun: Toolchains.shape.bun.partial(), uv: Toolchains.shape.uv.partial(), vscode: Toolchains.shape.vscode.partial(),
   }).partial(),
-  attach: toggle('Allow attaching from the host terminal.').partial(),
+  attach: Attach.partial(),
   personalization: toggle('Copy your desktop look into the sandbox.').partial(),
   claudeProfile: ClaudeProfile.pick({ enabled: true, include: true, overwrite: true, copyCredentials: true, syncHistory: true, syncClaudeMem: true }).partial(),
   hooks: z.strictObject({ failFast: z.boolean() }).partial(),

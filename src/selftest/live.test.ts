@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import type { GuestResponse, SessionStatus } from '../core/types.js';
 import { ensureDir, findOnPath, sleep } from '../core/util.js';
-import { connect, encodeFrame, FrameReader, FrameType, helloFrame } from '../shared/pty-client.js';
+import { connect, encodeFrame, fixWindowsKeys, FrameReader, FrameType, helloFrame, queryViewers } from '../shared/pty-client.js';
 import { readJsonFile, writeJsonAtomic } from '../shared/rundir.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
@@ -50,6 +50,19 @@ export const daemonTests = async (t: Harness, f: Fixtures, launchPath: string): 
     badClient.on('data', (c: Buffer) => { for (const fr of badReader.push(c)) if (fr.type === FrameType.Error) denied = fr.payload.toString(); });
     badClient.write(helloFrame('wrong-token', 80, 24));
     check(Boolean(await waitFor(() => denied, 5000)) && denied.includes('denied'), 'a client with the wrong token is refused');
+
+    const local = { ...s.attach, addresses: ['127.0.0.1'] };
+    const first = await queryViewers(local);
+    const second = await connect(local);
+    second.on('data', () => undefined);
+    second.write(helloFrame(s.attach.token, 60, 20));
+    const both = await waitFor(async () => ((await queryViewers(local))?.viewers === 2 ? true : null), 5000);
+    second.destroy();
+    const after = await waitFor(async () => { const v = await queryViewers(local); return v?.viewers === 1 ? v : null; }, 5000);
+    const still = readJsonFile<SessionStatus>(path.join(run, 'sessions', 'live1.json'));
+    check(first?.viewers === 1 && first.remote === 0 && Boolean(both) && after?.remote === 0 && still?.phase === 'running', 'viewers are counted live: a closed terminal stops counting at once and the session keeps running');
+    check(await queryViewers({ ...local, token: 'wrong-token' }) === null, 'the viewer query needs the session token too');
+    check(fixWindowsKeys(Buffer.from([0x61, 0x08, 0x7f, 0x1b])).equals(Buffer.from([0x61, 0x7f, 0x08, 0x1b])), 'Windows console Backspace (^H) reaches the agent as DEL, so it deletes one character, not a word');
 
     request({ kind: 'exec', id: 'exec1', command: ['echo', 'hello from exec'], cwd: workspace, timeoutSeconds: 30 });
     const ex = await response('exec1');

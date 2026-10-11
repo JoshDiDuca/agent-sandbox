@@ -5,14 +5,17 @@
 // Usage: ptyhost.exe <port> <token> <cols> <rows> <logFile> <commandLine> [<restartCommandLine>]
 //
 // Wire format, both directions: [type:1][length:4, little endian][payload]
-//   client -> host  1 HELLO   [cols:2][rows:2][flags:1][token utf8]   flags bit 0 = control-only (no output, no sizing)
+//   client -> host  1 HELLO   [cols:2][rows:2][flags:1][token utf8]   flags bit 0 = control-only (no output, no sizing),
+//                                                                    bit 1 = status query (answered with STATUS, then closed)
 //                   2 INPUT   bytes for the program
 //                   3 RESIZE  [cols:2][rows:2]
 //                   4 RESTART restart the program with <restartCommandLine> (e.g. after switching accounts)
+//                   5 PING    "still here": viewers send it every few seconds, so a closed terminal stops counting
 //   host -> client 16 OUTPUT  VT output
 //                  17 EXIT    [exitCode:4]
 //                  18 ERROR   utf8 message
 //                  19 RESTARTING
+//                  20 STATUS  [viewers:2][remoteViewers:2]  viewers heard from recently (remote = not loopback, i.e. the PC)
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -123,6 +126,7 @@ sealed class Listener
                 TcpClient tcp = listener.AcceptTcpClient();
                 if (Interlocked.Increment(ref connections) > MaxConnections) { Interlocked.Decrement(ref connections); tcp.Close(); continue; }
                 tcp.NoDelay = true;
+                KeepAlive(tcp.Client);
                 Background(delegate { try { Serve(tcp); } finally { Interlocked.Decrement(ref connections); } });
             }
         });
@@ -138,9 +142,11 @@ sealed class Listener
             tcp.ReceiveTimeout = 10000;
             if (!Frame.Read(client.Stream, out type, out payload) || type != Frame.Hello || payload.Length < 5) return;
             if (!hub.Admit(client, payload)) return;
+            if (client.Query) { hub.SendStatus(client); return; }
             tcp.ReceiveTimeout = 0;
             while (Frame.Read(client.Stream, out type, out payload))
             {
+                client.Seen();
                 if (type == Frame.Input) hub.Input(client, payload);
                 else if (type == Frame.Resize && payload.Length >= 4) hub.Resize(client, BitConverter.ToInt16(payload, 0), BitConverter.ToInt16(payload, 2));
                 else if (type == Frame.Restart) host.Restart();
@@ -152,6 +158,20 @@ sealed class Listener
     }
 
     static void Background(ThreadStart work) { new Thread(work) { IsBackground = true }.Start(); }
+
+    /** TCP keepalive after 10 s idle, probing every 3 s: a peer that vanished (PC asleep, network gone) is dropped. */
+    static void KeepAlive(Socket socket)
+    {
+        try
+        {
+            var values = new byte[12];
+            BitConverter.GetBytes(1).CopyTo(values, 0);
+            BitConverter.GetBytes(10000).CopyTo(values, 4);
+            BitConverter.GetBytes(3000).CopyTo(values, 8);
+            socket.IOControl(IOControlCode.KeepAliveValues, values, null);
+        }
+        catch (SocketException) { }
+    }
 }
 
 /** One connection. Frames go through a bounded outbox written by its own thread, so a slow viewer never blocks the agent. */
@@ -160,15 +180,24 @@ sealed class Client
     public readonly TcpClient Tcp;
     public readonly NetworkStream Stream;
     public readonly BlockingCollection<byte[]> Outbox = new BlockingCollection<byte[]>(4096);
-    public bool ControlOnly;
+    public readonly bool Remote;
+    public bool ControlOnly, Query;
     public short Cols, Rows;
+    long lastSeen = DateTime.UtcNow.Ticks;
 
     public Client(TcpClient tcp)
     {
         Tcp = tcp;
         Stream = tcp.GetStream();
+        var endpoint = tcp.Client.RemoteEndPoint as IPEndPoint;
+        Remote = endpoint != null && !IPAddress.IsLoopback(endpoint.Address);
         new Thread(Write) { IsBackground = true }.Start();
     }
+
+    public void Seen() { Interlocked.Exchange(ref lastSeen, DateTime.UtcNow.Ticks); }
+
+    /** Heard from in the last 15 s. Viewers ping every 5 s, so anything quieter is a terminal that went away. */
+    public bool Active { get { return DateTime.UtcNow.Ticks - Interlocked.Read(ref lastSeen) < TimeSpan.FromSeconds(15).Ticks; } }
 
     void Write()
     {
@@ -179,8 +208,9 @@ sealed class Client
 }
 
 /**
- * Everyone connected to the session. Output goes to all of them; the most recent client to connect or type decides
- * the size (like tmux "latest"), and every change of owner forces a full repaint so a new viewer sees the screen.
+ * Everyone connected to the session. Output goes to all of them; the most recent client to connect, type or resize
+ * decides the size (like tmux "latest"), and every size change forces a full repaint so no viewer is left with a
+ * half-drawn screen. When the owner leaves, the most recently active viewer left takes over at its own size.
  */
 sealed class ClientHub
 {
@@ -212,7 +242,9 @@ sealed class ClientHub
         }
         client.Cols = BitConverter.ToInt16(hello, 0);
         client.Rows = BitConverter.ToInt16(hello, 2);
-        client.ControlOnly = (hello[4] & 1) != 0;
+        client.ControlOnly = (hello[4] & 3) != 0;
+        client.Query = (hello[4] & 2) != 0;
+        if (client.Query) return true;
         lock (gate) clients.Add(client);
         if (!client.ControlOnly) TakeOwnership(client);
         return true;
@@ -227,10 +259,23 @@ sealed class ClientHub
         if (current != null) current.Write(data);
     }
 
+    /** A viewer being resized is the one being looked at, so it takes over the size. */
     public void Resize(Client client, short width, short height)
     {
+        if (client.ControlOnly) return;
         client.Cols = width; client.Rows = height;
-        if (sizeOwner == client) Apply(width, height, false);
+        TakeOwnership(client);
+    }
+
+    public void SendStatus(Client client)
+    {
+        int viewers = 0, remote = 0;
+        foreach (Client c in Snapshot()) if (!c.ControlOnly && c.Active) { viewers++; if (c.Remote) remote++; }
+        var payload = new byte[4];
+        BitConverter.GetBytes((short)viewers).CopyTo(payload, 0);
+        BitConverter.GetBytes((short)remote).CopyTo(payload, 2);
+        Send(client, Frame.Status, payload);
+        Retire(client);
     }
 
     public void Broadcast(byte[] output)
@@ -284,8 +329,18 @@ sealed class ClientHub
     /** Stops sending to a client after what is already queued (its writer closes the connection when done). */
     public void Retire(Client client)
     {
-        lock (gate) { clients.Remove(client); if (sizeOwner == client) sizeOwner = null; }
+        Client next = null;
+        lock (gate)
+        {
+            clients.Remove(client);
+            if (sizeOwner == client)
+            {
+                sizeOwner = null;
+                for (int i = clients.Count - 1; i >= 0 && next == null; i--) if (!clients[i].ControlOnly) next = clients[i];
+            }
+        }
         try { client.Outbox.CompleteAdding(); } catch (ObjectDisposedException) { }
+        if (next != null) TakeOwnership(next);
     }
 
     /** Disconnects a client (after at most half a second for frames already queued, e.g. "access denied"). */
@@ -298,18 +353,23 @@ sealed class ClientHub
 
     void TakeOwnership(Client client)
     {
-        lock (gate) sizeOwner = client;
-        Apply(client.Cols, client.Rows, true);
+        lock (gate)
+        {
+            // Kept in order of activity, so a departing owner hands over to whoever was active most recently.
+            if (clients.Remove(client)) clients.Add(client);
+            sizeOwner = client;
+        }
+        Apply(client.Cols, client.Rows);
     }
 
-    void Apply(short width, short height, bool forceRepaint)
+    void Apply(short width, short height)
     {
         if (width < 2 || height < 2) return;
         PseudoConsole current;
         lock (gate) { current = console; cols = width; rows = height; }
         if (current == null) return;
         // ConPTY repaints everything on a size change; resizing by one row first forces that even for the same size.
-        if (forceRepaint) current.Resize(width, (short)(height - 1));
+        current.Resize(width, (short)(height - 1));
         current.Resize(width, height);
     }
 
@@ -431,8 +491,8 @@ sealed class PseudoConsole : IDisposable
 /** The wire format (see the top of this file). */
 static class Frame
 {
-    public const byte Hello = 1, Input = 2, Resize = 3, Restart = 4;
-    public const byte Output = 16, Exit = 17, Error = 18, Restarting = 19;
+    public const byte Hello = 1, Input = 2, Resize = 3, Restart = 4, Ping = 5;
+    public const byte Output = 16, Exit = 17, Error = 18, Restarting = 19, Status = 20;
     const int MaxPayload = 1 << 20;
 
     public static bool Read(Stream stream, out byte type, out byte[] payload)

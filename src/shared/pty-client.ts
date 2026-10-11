@@ -2,7 +2,13 @@
 // `--terminal` / `attach` on the host, so it only depends on Node built-ins.
 import net from 'node:net';
 
-export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Output: 16, Exit: 17, Error: 18, Restarting: 19 } as const;
+export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Ping: 5, Output: 16, Exit: 17, Error: 18, Restarting: 19, Status: 20 } as const;
+
+/** HELLO flags: control-only connections get no output and never size the console; a query only asks for STATUS. */
+export const HelloFlag = { ControlOnly: 1, Query: 2 } as const;
+
+/** Viewers ping this often; ptyhost counts a viewer as gone after 15 s of silence (e.g. its terminal tab was closed). */
+export const PING_INTERVAL_MS = 5000;
 
 export interface Frame { type: number; payload: Buffer }
 export interface Endpoint { addresses: string[]; port: number; token: string }
@@ -18,11 +24,11 @@ export const encodeFrame = (type: number, payload: Buffer = Buffer.alloc(0)): Bu
   return Buffer.concat([header, payload]);
 };
 
-export const helloFrame = (token: string, cols: number, rows: number, controlOnly = false): Buffer => {
+export const helloFrame = (token: string, cols: number, rows: number, flags = 0): Buffer => {
   const head = Buffer.alloc(5);
   head.writeInt16LE(cols, 0);
   head.writeInt16LE(rows, 2);
-  head.writeUInt8(controlOnly ? 1 : 0, 4);
+  head.writeUInt8(flags, 4);
   return encodeFrame(FrameType.Hello, Buffer.concat([head, Buffer.from(token, 'utf8')]));
 };
 
@@ -94,7 +100,44 @@ export const connect = async (endpoint: Endpoint, timeoutMs = 3000): Promise<net
 /** Sends one control frame (e.g. RESTART) without taking over the screen. */
 export const sendControl = async (endpoint: Endpoint, type: number): Promise<void> => {
   const socket = await connect(endpoint);
-  await new Promise<void>((resolve) => socket.end(Buffer.concat([helloFrame(endpoint.token, 80, 24, true), encodeFrame(type)]), resolve));
+  await new Promise<void>((resolve) => socket.end(Buffer.concat([helloFrame(endpoint.token, 80, 24, HelloFlag.ControlOnly), encodeFrame(type)]), resolve));
+};
+
+/** Who is watching a session right now: `remote` counts viewers on the PC (not the sandbox's own tabs). */
+export interface Viewers { viewers: number; remote: number }
+
+/**
+ * Asks a session's ptyhost who is attached. Only viewers heard from in the last few seconds count, so a terminal that
+ * was closed (or a PC that went to sleep) is not reported. null when the session does not answer: an older ptyhost
+ * treats the query as a silent control connection, so the caller must not assume anything.
+ */
+export const queryViewers = async (endpoint: Endpoint, timeoutMs = 2000): Promise<Viewers | null> => {
+  let socket: net.Socket;
+  try { socket = await connect(endpoint, timeoutMs); } catch { return null; }
+  return new Promise((resolve) => {
+    const reader = new FrameReader();
+    const done = (value: Viewers | null): void => { clearTimeout(timer); socket.destroy(); resolve(value); };
+    const timer = setTimeout(() => done(null), timeoutMs);
+    socket.on('data', (chunk: Buffer) => {
+      let frames: Frame[];
+      try { frames = reader.push(chunk); } catch { done(null); return; }
+      const status = frames.find((f) => f.type === FrameType.Status && f.payload.length >= 4);
+      if (status) done({ viewers: status.payload.readInt16LE(0), remote: status.payload.readInt16LE(2) });
+      else if (frames.some((f) => f.type === FrameType.Error)) done(null);
+    });
+    socket.on('error', () => done(null));
+    socket.on('close', () => done(null));
+    socket.write(helloFrame(endpoint.token, 80, 24, HelloFlag.Query));
+  });
+};
+
+/**
+ * Node on Windows reads keys through the console API, where Backspace is ^H and Ctrl+Backspace is DEL: the reverse of
+ * what terminals send. ConPTY reads ^H as Ctrl+Backspace (delete a word), so swap them back.
+ */
+export const fixWindowsKeys = (chunk: Buffer): Buffer => {
+  if (!chunk.includes(0x08) && !chunk.includes(0x7f)) return chunk;
+  return Buffer.from(chunk.map((b) => (b === 0x08 ? 0x7f : b === 0x7f ? 0x08 : b)));
 };
 
 /**
@@ -104,16 +147,23 @@ export const sendControl = async (endpoint: Endpoint, type: number): Promise<voi
 export const runTerminalClient = (socket: net.Socket, token: string, options: { detachKey?: number } = {}): Promise<ClientResult> => {
   const stdin = process.stdin;
   const stdout = process.stdout;
-  const size = (): [number, number] => [stdout.columns || 120, stdout.rows || 30];
+  // getWindowSize asks the console every time; columns/rows only change when Node noticed a resize.
+  const size = (): [number, number] => { const [c, r] = stdout.isTTY ? stdout.getWindowSize() : [0, 0]; return [c || 120, r || 30]; };
+  const swapKeys = process.platform === 'win32' && stdin.isTTY;
   return new Promise((resolve) => {
     let done = false;
     const reader = new FrameReader();
     const filter = new OutputFilter();
+    let sent = size();
+    let resizeTimer: NodeJS.Timeout | undefined;
     const finish = (result: ClientResult): void => {
       if (done) return;
       done = true;
       stdin.off('data', onInput);
       stdout.off('resize', onResize);
+      clearTimeout(resizeTimer);
+      clearInterval(heartbeat);
+      clearInterval(sizeWatch);
       if (stdin.isTTY) stdin.setRawMode(false);
       stdin.pause();
       socket.destroy();
@@ -122,9 +172,22 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
     };
     const onInput = (chunk: Buffer): void => {
       if (options.detachKey !== undefined && chunk.includes(options.detachKey)) { finish({ reason: 'detach' }); return; }
-      socket.write(encodeFrame(FrameType.Input, chunk));
+      socket.write(encodeFrame(FrameType.Input, swapKeys ? fixWindowsKeys(chunk) : chunk));
     };
-    const onResize = (): void => { const [c, r] = size(); socket.write(resizeFrame(c, r)); };
+    // Dragging a window edge fires dozens of resizes; each one makes ConPTY reflow and repaint, and repaints racing each
+    // other are what left the screen garbled. Wait until the size settles, clear what this terminal reflowed on its own,
+    // then let ptyhost repaint everything once at the new size.
+    const sendSize = (): void => {
+      const [c, r] = size();
+      if (c === sent[0] && r === sent[1]) return;
+      sent = [c, r];
+      stdout.write('\x1b[H\x1b[J');
+      socket.write(resizeFrame(c, r));
+    };
+    const onResize = (): void => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { resizeTimer = undefined; sendSize(); }, 120); };
+    const heartbeat = setInterval(() => socket.write(encodeFrame(FrameType.Ping)), PING_INTERVAL_MS);
+    // Windows does not always report a resize in raw mode, so the size is also checked twice a second.
+    const sizeWatch = setInterval(() => { if (!resizeTimer) sendSize(); }, 500);
 
     socket.on('data', (chunk: Buffer) => {
       let frames: Frame[];

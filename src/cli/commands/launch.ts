@@ -1,6 +1,6 @@
 // `launch` / `generate`, and what claude-sbx runs: start a sandbox, or another session in the running one.
 import { activateAccount, activeAccount, defaultAccount } from '../../host/accounts.js';
-import { attachTerminal, requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
+import { attachTerminal, findUnwatchedSession, requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { generateSandbox } from '../../host/generate.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
@@ -31,6 +31,14 @@ const launchIntoRunning = async (ctx: Context): Promise<number> => {
   const ready = status.phase === 'ready' ? status : await waitForReady(dataPath, status.launchId, sandboxAlive);
   const cwd = currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace);
   const harness = options.harness ?? loaded.config.defaultHarness;
+  // -t with nothing new for the agent: pick up this folder's session if no terminal on this PC shows it (its tab was
+  // closed, or you detached). Someone already attached, --new, or agent arguments: a new session, as before.
+  const reuse = options.terminal && !options.newSession && options.passthrough.length === 0 && loaded.config.attach.reuseSession;
+  const existing = reuse ? await findUnwatchedSession(dataPath, harness, cwd) : null;
+  if (existing) {
+    console.log('Reattaching to ' + harness + ' session ' + existing.id + ' in ' + cwd + ' (no other terminal is attached; --new starts another).');
+    return attachTerminal(existing);
+  }
   console.log('Sandbox already running: starting another ' + harness + ' session in ' + cwd);
   const session = await waitForSession(dataPath, requestSession(dataPath, harness, options.passthrough, cwd), sandboxAlive);
   if (options.terminal) return attachTerminal(session);

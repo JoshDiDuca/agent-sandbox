@@ -16,7 +16,8 @@
     "codex-sbx": "dist/bin/codex-sbx.js",
     "gemini-sbx": "dist/bin/gemini-sbx.js",
     "claude-host": "dist/bin/claude-host.js",
-    "sbx-show": "dist/bin/sbx-show.js"
+    "sbx-show": "dist/bin/sbx-show.js",
+    "sbx-hide": "dist/bin/sbx-hide.js"
   },
   "exports": {
     ".": {

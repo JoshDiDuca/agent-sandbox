@@ -11,7 +11,7 @@ export interface Harness {
   rejects: (fn: () => unknown, needle: string) => Promise<boolean>;
   write: (file: string, content: string) => string;
   /** Polls `read` until it returns something truthy (or the timeout passes). */
-  waitFor: <T>(read: () => T | null | undefined | false, ms?: number) => Promise<T | null>;
+  waitFor: <T>(read: () => T | null | undefined | false | Promise<T | null | undefined | false>, ms?: number) => Promise<T | null>;
   section: (title: string) => void;
 }
 
@@ -27,7 +27,7 @@ export const createHarness = (packageRoot: string): Harness & { failures: () => 
     write: (file, content) => { ensureDir(path.dirname(file)); fs.writeFileSync(file, content); return file; },
     waitFor: async (read, ms = 30000) => {
       const end = Date.now() + ms;
-      while (Date.now() < end) { const v = read(); if (v) return v; await sleep(250); }
+      while (Date.now() < end) { const v = await read(); if (v) return v; await sleep(250); }
       return null;
     },
     section: (title) => console.log('\n\x1b[36m-- ' + title + '\x1b[0m'),

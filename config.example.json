@@ -72,7 +72,8 @@
     }
   },
   "attach": {
-    "enabled": true
+    "enabled": true,
+    "reuseSession": true
   },
   "personalization": {
     "enabled": true

@@ -203,7 +203,7 @@
               "items": {
                 "type": "string"
               },
-              "description": "More Node versions to install (switch with nvm use)."
+              "description": "More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC's nvm, not counted towards that limit."
             }
           },
           "additionalProperties": false
@@ -312,7 +312,11 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Allow attaching from the host terminal."
+          "description": "Allow claude-sbx --terminal / agent-sandbox attach from this PC."
+        },
+        "reuseSession": {
+          "type": "boolean",
+          "description": "claude-sbx -t in a running sandbox reattaches to this folder's session when no terminal on this PC is attached to it (--new always starts another)."
         }
       },
       "additionalProperties": false
