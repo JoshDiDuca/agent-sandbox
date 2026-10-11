@@ -83,7 +83,8 @@ const setupGradle = async (env: ToolEnv): Promise<void> => {
   }
   const userHome = tool('gradle-home');
   fs.mkdirSync(userHome, { recursive: true });
-  Object.assign(env.vars, { GRADLE_HOME: home, GRADLE_USER_HOME: userHome });
+  // File-system watching does not work on mapped folders (harmless but noisy "Couldn't add watch" on every build).
+  Object.assign(env.vars, { GRADLE_HOME: home, GRADLE_USER_HOME: userHome, GRADLE_OPTS: '-Dorg.gradle.vfs.watch=false' });
   env.prepend.push(path.join(home, 'bin'));
   env.summary.push('gradle: ' + version);
 };

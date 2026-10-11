@@ -1,7 +1,7 @@
 // Bun, uv and Deno: single-binary tools from GitHub releases (claude-mem needs Bun and uv).
 import path from 'node:path';
 import { githubAsset, installArchive } from '../../shared/download.js';
-import { dryRun, exists, log } from '../env.js';
+import { dryRun, exists, localDir, log } from '../env.js';
 import { arch, tool, versionOf, type ToolEnv } from './common.js';
 
 const setupSingleExe = async (env: ToolEnv, name: string, repo: string, pattern: RegExp, exeName: string, dir: string): Promise<void> => {
@@ -17,7 +17,8 @@ const setupSingleExe = async (env: ToolEnv, name: string, repo: string, pattern:
 
 export const setupBun = async (env: ToolEnv): Promise<void> => {
   await setupSingleExe(env, 'bun', 'oven-sh/bun', arch === 'arm64' ? /^bun-windows-aarch64\.zip$/ : /^bun-windows-x64\.zip$/, 'bun.exe', tool('bun', 'bin'));
-  env.vars.BUN_INSTALL = tool('bun');
+  // Bun cannot keep its cache or temp files on a mapped folder (EINVAL); they go to the sandbox's own disk.
+  Object.assign(env.vars, { BUN_INSTALL: tool('bun'), BUN_INSTALL_CACHE_DIR: path.join(localDir, 'bun-cache'), BUN_TMPDIR: path.join(localDir, 'bun-tmp') });
 };
 
 export const setupDeno = async (env: ToolEnv): Promise<void> => {

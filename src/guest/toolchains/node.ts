@@ -101,7 +101,9 @@ const packageManagers = async (env: ToolEnv, config: Toolchains['node'], version
   const extra = config.corepack && !exists(corepackJs) ? ['corepack'] : [];
   await installOnce(env, 'npm@' + version, [...extra, ...config.globalPackages], (pkg) => npm(['install', '--global', pkg, '--no-fund', '--no-audit']));
   if (!config.corepack) return;
-  Object.assign(env.vars, { COREPACK_HOME: tool('corepack'), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' });
+  // Without a packageManager pin, corepack's own known-good versions: the newest pnpm can be one this corepack cannot
+  // start. Mapped folders allow no symlinks, so pnpm uses a flat (hoisted) node_modules instead of its linked layout.
+  Object.assign(env.vars, { COREPACK_HOME: tool('corepack'), COREPACK_ENABLE_DOWNLOAD_PROMPT: '0', COREPACK_DEFAULT_TO_LATEST: '0', npm_config_node_linker: 'hoisted' });
   try {
     await execAsync(path.join(dir, 'node.exe'), [corepackJs, 'enable', '--install-directory', mkdirp(tool('bin')), 'pnpm', 'yarn'], { env: nodeEnv, stdio: 'ignore' });
     env.summary.push('pnpm, yarn: via corepack (package.json "packageManager" picks the version)');

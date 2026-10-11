@@ -40,4 +40,6 @@ export const setupGitConfig = (env: NodeJS.ProcessEnv): void => {
   if (!exists(git)) return;
   const { GIT_DIR: _gitDir, ...rest } = env;
   spawnSync(git, ['config', '--global', '--add', 'safe.directory', '*'], { env: rest, windowsHide: true, stdio: 'ignore' });
+  // Windows long paths are on in the sandbox, but git skips files over 260 characters unless told.
+  spawnSync(git, ['config', '--global', 'core.longpaths', 'true'], { env: rest, windowsHide: true, stdio: 'ignore' });
 };

@@ -18,6 +18,7 @@ export const sandboxGuide = (toolSummary: string[], lan: 'blocked' | 'open' | 'o
   '- RO: `' + launchDir + '` (this boot\'s scripts) · lost on close: everything else, incl. `C:\\nvm` (Node symlink)',
   '- Tools: ' + toolSummary.join(' · '),
   '- Persistent installs: `npm i -g` (per nvm version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`. Real installers must re-run each boot via a hook (ask the user).',
+  '- Mapped folders (workspace, C:\\AgentData) allow NO symlinks or junctions: pnpm runs hoisted (set), npm workspaces / `file:` deps and deno node_modules dirs fail there (use a folder on C:\\ outside them), bun cannot save its lockfile there (`bun install --no-save`).',
   '- Network: ' + (lan === 'offline' ? 'OFF' : lan === 'blocked' ? 'internet yes, host LAN blocked' : 'internet yes, host LAN NOT blocked this time') + '. Other sessions may share this workspace; the user may be typing from the host.',
   END,
 ].join('\n');

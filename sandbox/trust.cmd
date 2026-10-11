@@ -17,6 +17,8 @@ for %%Z in (0 1 2 3 4) do (
 )
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v SEE_MASK_NOZONECHECKS /t REG_SZ /d 1 /f >nul 2>&1
 set "SEE_MASK_NOZONECHECKS=1"
+rem Paths over 260 characters (deep node_modules, Gradle and NuGet caches) work for every program.
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f >nul 2>&1
 rem "Windows Defender Firewall has blocked some features of this app" pops up whenever a program (node, a dev server,
 rem the session host) listens on the network. Inbound stays blocked, just silently; the attach rule lets this PC in.
 netsh advfirewall set allprofiles settings inboundusernotification disable >nul 2>&1
