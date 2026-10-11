@@ -1,0 +1,75 @@
+{
+  "_comment": "agent-sandbox user config. Lives at ~/.agent-sandbox/config.json (create it with: agent-sandbox config init). Only keep the keys you want to change; everything else uses the built-in defaults shown here. Run 'agent-sandbox config show' to see the effective config.",
+
+  "defaultHarness": "claude",
+  "_guestWorkspace": "'auto' maps the folder you run from to C:\\Workspace\\<folder name> inside the sandbox.",
+  "guestWorkspace": "auto",
+  "readOnly": false,
+  "mappings": [],
+
+  "sandbox": {
+    "memoryMb": "auto",
+    "maxMemoryMb": 32768,
+    "reserveHostMb": 8192,
+    "vGpu": true,
+    "networking": true,
+    "clipboard": true,
+    "audioInput": false,
+    "videoInput": false,
+    "printerRedirection": false,
+    "protectedClient": true,
+    "_headless": "true hides the sandbox window (sbx-show brings it back); a headless sandbox shuts down when its last session ends.",
+    "headless": false
+  },
+
+  "storage": {
+    "root": "%LOCALAPPDATA%\\AgentSandbox",
+    "persistAgentState": true,
+    "dataName": "default"
+  },
+
+  "network": { "blockPrivateRanges": true },
+
+  "provisioning": {
+    "copyFromHost": true,
+    "fallbackToInstall": true,
+    "refresh": false,
+    "git": { "enabled": true },
+    "terminal": { "enabled": true }
+  },
+
+  "toolchains": {
+    "_node": "'host' = the Node version on this PC. A project's .nvmrc / .node-version wins over this.",
+    "node": { "version": "host", "extraVersions": [] },
+    "python": { "enabled": true, "version": "3", "python2": true },
+    "_rust": "The GNU host needs no Visual Studio; use x86_64-pc-windows-msvc only if you install Build Tools via a hook.",
+    "rust": { "enabled": true, "toolchain": "stable", "host": "x86_64-pc-windows-gnu" },
+    "_cpp": "MinGW-w64 GCC (gcc, g++, mingw32-make). Also the linker Rust needs for the GNU host.",
+    "cpp": { "enabled": true },
+    "dotnet": { "enabled": true, "channels": ["LTS"] },
+    "bun": { "enabled": true },
+    "uv": { "enabled": true }
+  },
+
+  "attach": { "enabled": true },
+  "personalization": { "enabled": true },
+
+  "claudeProfile": {
+    "enabled": true,
+    "hostDir": "auto",
+    "include": ["settings.json", "CLAUDE.md", "commands", "agents", "skills", "plugins"],
+    "globalStateFile": "auto",
+    "copyCredentials": false,
+    "overwrite": true,
+    "syncHistory": true,
+    "syncClaudeMem": true
+  },
+
+  "harnesses": {
+    "claude": { "hostExecutable": "claude.exe", "hostDir": "auto", "npmPackage": "@anthropic-ai/claude-code@latest", "npmBin": "claude", "arguments": [], "environment": { "DISABLE_AUTOUPDATER": "1" }, "resumeArguments": ["--continue"] },
+    "codex": { "npmPackage": "@openai/codex@latest", "npmBin": "codex", "arguments": [], "environment": {}, "resumeArguments": ["resume", "--last"] },
+    "gemini": { "npmPackage": "@google/gemini-cli@latest", "npmBin": "gemini", "arguments": [], "environment": {} }
+  },
+
+  "hooks": { "failFast": false }
+}

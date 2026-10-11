@@ -1,98 +1,157 @@
 # agent-sandbox
 
-Runs Claude Code (or Codex / Gemini) inside Windows Sandbox with **the folder you run it from** as the workspace.
-TypeScript source is in `src/`; compiled JavaScript is already in `dist/`, so there is nothing to build. You need Node 20+ on your PC.
+Run **Claude Code** (or Codex / Gemini) inside **Windows Sandbox**, with the folder you are in as its workspace.
+The agent can read and write that folder and nothing else on your PC. The sandbox is wiped when it closes; your
+project, toolchains, logins and history are kept.
 
-## Quick start (Windows 11 Pro/Enterprise/Education)
+- One command: `claude-sbx` in any project folder.
+- Windows Terminal inside the sandbox, with Git (+ Bash), nvm/Node, Python 3 + 2, Rust, C/C++ (MinGW), .NET, Bun and uv ready.
+- Use the sandboxed Claude **from your own terminal** (`claude-sbx --terminal`), or run the sandbox **headless**.
+- Several Claude sessions in one sandbox, several Claude **accounts** you can switch between mid-session.
+- Your conversation history and claude-mem data go in and come back out. Your desktop theme comes along too.
+
+## Requirements
+
+- Windows 10/11 Pro, Enterprise or Education with Windows Sandbox enabled. If it isn't, run this in an
+  admin PowerShell and reboot: `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All`
+- Node.js 20 or newer on your PC.
+
+## Install
 
 ```powershell
-cd C:\Scripts\agent-sandbox
-node dist\index.js self-test        # offline logic tests, must say ALL TESTS PASSED
-node dist\index.js doctor           # shows what will be copied / installed
-node dist\index.js install-commands # adds claude-sbx, codex-sbx, gemini-sbx, claude-host to PATH (open a new terminal)
+# from a GitHub release (no build needed)
+npm install -g https://github.com/<you>/agent-sandbox/releases/download/v3.0.0/agent-sandbox-3.0.0.tgz
 
-cd C:\any\project\folder
-claude-sbx                          # that folder is C:\Workspace (read/write) and Claude starts in it
+# or from a clone of this repo
+npm install          # also builds
+npm install -g .
+
+# or, once published to npm
+npm install -g agent-sandbox
 ```
 
-Without the wrappers: `node C:\Scripts\agent-sandbox\dist\index.js launch` from the project folder.
-The agent can read/write the current folder and nothing else on your PC (plus whatever you map in config, read-only by default).
-If Windows Sandbox is not enabled: elevated PowerShell, `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All`, then reboot.
+That gives you these commands:
 
-## Where settings come from
-
-Lowest to highest priority:
-
-1. Built-in defaults.
-2. `config.json` next to the tool: your defaults for every folder (agent, memory, network, mappings, Claude settings, ...).
-3. `--project <name>`: optional named preset from `config.json` -> `projects` (legacy; not needed).
-4. `.sandbox-config.json` in the folder you run from (see below).
-5. Command-line flags (`--harness`, `--workspace`, `--script`, ...).
-
-## Per-folder settings: `.sandbox-config.json`
-
-Put this file in a project folder to change settings for that project only. Every key is optional; relative paths are relative to the file. See `.sandbox-config.example.json`.
-
-```json
-{
-  "harness": "claude",
-  "sandbox": { "memoryMb": 16384, "networking": true },
-  "mappings": [
-    { "host": "F:\\SteamLibrary\\steamapps\\common\\Call of Duty Modern Warfare 2", "guest": "C:\\GameSources\\MW2", "readOnly": true, "optional": true }
-  ],
-  "scripts": ["./sandbox-setup.ps1"]
-}
-```
-
-Allowed keys: `harness`, `guestWorkspace`, `readOnly`, `mappings`, `scripts`, `sandbox.*`, `network.blockPrivateRanges`, `provisioning.copyFromHost|fallbackToInstall|refresh|git|terminal|node.version`, `claudeProfile.enabled|include|overwrite|copyCredentials`, `hooks.failFast`. Anything else (storage, agent executables, host Node/Claude folders, other host paths) is rejected.
-
-**A repo can ship this file, so it must be approved.** The first time (and whenever the file changes) the tool lists exactly what it would change, highlights risky items (read/write mappings, copying your Claude login, turning off the LAN block) and asks `[y/N]`. Approvals are stored by file path + SHA-256 in `<storage.root>\trusted-configs.json`. Non-interactive runs fail unless you pass `--trust-config`. Use `--no-local-config` to ignore the file.
-
-## Workspace safety
-
-The workspace must exist and is refused if it is a drive root, your whole user profile, the agent-sandbox install folder (or inside it, or a parent of it), the storage folder, or a system folder (Windows, Program Files, ProgramData). This stops the agent from being able to modify the tool that launches it.
-
-## What happens when it starts
-
-1. The host writes a `.wsb` plus a launch folder and starts Windows Sandbox.
-2. Windows runs `sandbox\logon.cmd` (hidden), which writes `C:\AgentData\logs\logon-hit.txt` and opens a visible PowerShell running `bootstrap.ps1`.
-3. `bootstrap.ps1` makes sure Node exists in persistent storage (copy from your PC, or download) and runs `guest\main.js`.
-4. `main.js` applies the private-network block, runs hooks, sets up Git, gets the agent, copies your Claude settings, then starts the agent in `C:\Workspace`.
-
-Persistent storage is `<storage.root>\data\<storage.dataName>` (mapped to `C:\AgentData`): Node, the agent, Git, logins/state, logs. It is shared by every workspace, so you only sign in and download once. (`storage.dataName` in `config.json` defaults to `default`; yours is set to `mw2-agent` so the existing cache keeps working.)
-
-## Copy from your PC vs install (`config.json` -> `provisioning`)
-
-| setting | meaning |
+| Command | What it does |
 |---|---|
-| `copyFromHost: true` | Node is copied from your PC's Node folder; Claude from `claude.exe` on PATH or `~\.local\bin`. Those folders are mapped read-only. |
-| `copyFromHost: false` | Nothing is copied: Node is downloaded (SHA-256 verified) and the agent is installed with npm inside the sandbox. |
-| `fallbackToInstall: true` | If a host copy is missing, install instead of failing. |
-| `refresh: true` | Re-copy / re-install even if cached. |
+| `claude-sbx` | Start Claude in a sandbox for the current folder (`codex-sbx`, `gemini-sbx` for the others) |
+| `claude-sbx --terminal` | Same, but Claude runs in **this** terminal (attaches if a sandbox is already running) |
+| `sbx-show` | Show the window of a headless sandbox |
+| `agent-sandbox ...` | Everything else (below) |
+| `claude-host` | Claude on your PC, *not* sandboxed, with a separate profile |
 
-## Claude settings
+## Use it
 
-Before each launch `settings.json`, `CLAUDE.md`, `commands`, `agents`, `skills` and your `.claude.json` are copied from your PC into the sandbox profile (history is never copied or mapped; malformed JSON is skipped with a message). Your login is **not** copied unless `claudeProfile.copyCredentials` is true.
+```powershell
+cd C:\code\my-app
+claude-sbx                     # sandbox window opens, Claude starts in C:\Workspace\my-app
+claude-sbx --terminal          # ...or use it right here (Ctrl+] detaches, Claude keeps running)
+claude-sbx --headless          # no window at all; sbx-show brings it back
+claude-sbx --continue          # anything agent-sandbox doesn't know goes to Claude
+claude-sbx                     # again while a sandbox runs: a second Claude session in a new tab
+```
 
-## Hooks
+The first start downloads the toolchains (a few minutes, once). After that, a sandbox is up in seconds.
 
-Put `.ps1`, `.mjs` or `.cmd` files in `hooks\pre-provision`, `hooks\pre-agent` or `hooks\post-agent` (name order), or use `--script <file>` / `"scripts"` in `.sandbox-config.json`. They run inside the sandbox in the workspace with `AGENT_WORKSPACE`, `AGENT_DATA`, `AGENT_TOOLS`, `AGENT_PROJECT` set.
+### All commands
 
-## Commands and options
+```
+agent-sandbox launch            start a sandbox (or another session in the running one)
+agent-sandbox attach [id]       show a running session in this terminal (Ctrl+] detaches)
+agent-sandbox sessions          list sessions                 agent-sandbox status      overview
+agent-sandbox exec -- <cmd>     run a command inside the sandbox and print its output
+agent-sandbox restart           restart Claude in place (it resumes the conversation)
+agent-sandbox stop              shut the sandbox down         agent-sandbox show | hide
+agent-sandbox account ...       list | save <name> [--from-host] | use <name> | default <name> | remove <name>
+agent-sandbox sync              copy history back now         agent-sandbox logs [-f]
+agent-sandbox clean [--days n]  prune old launches/logs       agent-sandbox doctor
+agent-sandbox config init|show|path                           agent-sandbox self-test
+```
 
-`launch`, `generate` (no start), `doctor`, `host-claude` (Claude on your PC, not sandboxed), `install-commands [--shadow]`, `self-test`.
-Options: `--workspace <dir>`, `--harness <name>`, `--project <name>`, `--script <file>`, `--no-agent`, `--trust-config`, `--no-local-config`, `--config <file>`, and `-- <args>` passed to the agent (e.g. `claude-sbx -- --continue`). `--here` is accepted and ignored (the current folder is always the default).
-The `claude-sbx` / `codex-sbx` / `gemini-sbx` wrappers force their agent, overriding `harness` in config files.
+Options: `--terminal`, `--headless` / `--window`, `--account <name>`, `--node <ver>`, `--python <ver>`,
+`--workspace <dir>`, `--harness <name>`, `--script <file>`, `--no-agent`, `--trust-config`, `--no-local-config`,
+`--config <file>`, `--json`.
 
-## Network
+## Accounts
 
-`network.blockPrivateRanges` blocks 10/8, 172.16/12, 192.168/16, 169.254/16, multicast, IPv6 local and SMB with guest firewall rules (via `netsh`); only DNS/DHCP to the sandbox gateway stays open. If the internet stops working afterwards the rules are removed and a warning is printed. This is guest-enforced, so an agent with admin rights could undo it. `sandbox.networking: false` is the only hard guarantee Windows Sandbox offers.
+```powershell
+agent-sandbox account save personal      # saves the login currently in the sandbox
+agent-sandbox account save work --from-host
+agent-sandbox account default personal   # used for new sandboxes
+agent-sandbox account use work           # switch now: Claude restarts with --continue and carries on
+```
+
+Claude refreshes its tokens while it runs, so switching away from an account saves its latest tokens first.
+
+## Toolchains and versions
+
+Everything is installed into `C:\AgentData\tools`, which survives sandbox wipes.
+
+| Tool | Version comes from (first match wins) |
+|---|---|
+| Node (nvm-windows) | `--node`, `.sandbox-config.json`, `.nvmrc` / `.node-version`, config, the Node on your PC |
+| Python 3 (+ `python2`) | `--python`, `.sandbox-config.json`, `.python-version`, config (latest 3.x) |
+| Rust | `rust-toolchain.toml` (rustup handles it), config (`stable`, GNU host, linked with MinGW) |
+| .NET SDK | `global.json`, config channels (`LTS`) |
+| Git for Windows | copied from your PC if installed, otherwise PortableGit |
+
+Inside the sandbox `nvm use 18` / `nvm install 22` work as usual. `npm i -g`, `pip`, `cargo install`, `dotnet tool -g`,
+`uv tool` and `bun add -g` all install somewhere persistent. Portable programs can go in `C:\AgentData\tools\bin`
+(it's on PATH). Every agent also gets a short manifest telling it what persists and where things are.
+
+## History, claude-mem and your desktop
+
+- **History:** before each start, all your Claude conversations, prompt history, todos and plans are copied in. New
+  history is copied back every minute and when the sandbox closes. Paths are translated between your folder and
+  `C:\Workspace\<name>`, so `--continue` / `--resume` work on both sides. Only data files come back, nothing executable.
+- **claude-mem:** your plugin and `~/.claude-mem` data go in. Changes come back when the sandbox closes. If both
+  sides changed, nothing is overwritten: the older copy is kept next to it as `.claude-mem.conflict-<time>`.
+- **Desktop:** theme, accent colour, taskbar, Explorer options, wallpaper, mouse/keyboard and date formats are
+  copied from your registry (an allow-list, nothing else).
+
+## Configuration
+
+Your settings live in `~/.agent-sandbox/config.json` (`agent-sandbox config init` creates it from
+[config.example.json](config.example.json)). Keep only the keys you change. Your own hook scripts go in
+`~/.agent-sandbox/hooks/{pre-provision,pre-agent,post-agent}`.
+
+A project can carry `.sandbox-config.json` ([example](.sandbox-config.example.json)) to pick its agent, memory,
+toolchain versions, extra folders and setup scripts. A repo can ship this file, so **you approve it** the first time
+and whenever it changes. Risky items (read/write folders, copying your login, turning off the LAN block) are flagged.
+It can never change storage paths, executables or anything outside a safe list.
+
+## Safety
+
+- The agent can write only to the workspace folder (plus its own persistent storage). Drive roots, your user profile,
+  system folders and agent-sandbox's own folders are refused as workspaces.
+- Your LAN is blocked from the sandbox by its firewall (DNS to the gateway excepted). For a hard guarantee, set
+  `sandbox.networking: false`.
+- Host and sandbox talk only through small JSON files. The sandbox can be asked to do exactly four things
+  (start a session, run a command, restart, ping). Everything it writes back is size-capped and validated. Your PC
+  never runs anything the sandbox sends.
+- `--terminal` only connects to addresses inside the sandbox's own Hyper-V network, with a random token per session.
+
+## Storage and cleanup
+
+Everything lives under `storage.root` (default `%LOCALAPPDATA%\AgentSandbox`):
+`data\<name>` (tools, state, logs; mapped to `C:\AgentData`), `launches\` (one folder per start), `accounts\`.
+Every launch deletes launch folders older than 7 days, logs older than 14 days and interrupted downloads.
+`agent-sandbox clean` does the same on demand.
 
 ## Troubleshooting
 
-Logs: `<storage.root>\data\<dataName>\logs\` - `logon-hit.txt` (Windows ran the logon command), `bootstrap-*.log` / `bootstrap-error.txt` (Node stage), `guest-*.log` / `guest-error.txt` (hooks, Git, agent). The sandbox window prints failures in red and stays open.
+- `agent-sandbox doctor`: checks Windows Sandbox, RAM and what will be copied or downloaded.
+- `agent-sandbox logs -f`: follow the sandbox's log. All logs are in `<storage>\data\<name>\logs`.
+- Sandbox won't start? Only one Windows Sandbox can run at a time: `agent-sandbox status`, then `sbx-show` or `stop`.
 
-## What was and was not verified
+## Development
 
-`self-test` checks (offline): config loading, run-from-any-folder, workspace safety refusals, `.sandbox-config.json` validation/trust/precedence, presets, `.wsb` content, mappings, hooks, copy/fallback/install modes, Claude settings, network rule maths, memory sizing, and the guest runner end to end in dry-run mode.
-Not verified without Windows: `logon.cmd` / `bootstrap.ps1` / `netsh` on a real sandbox, real downloads, a real Claude login. The TypeScript in `src/` is generated from the same source as the tested `dist/` JavaScript, but `tsc` could not be run here, so `npm run build` may report type errors; `dist/` is what runs.
+```powershell
+npm install        # installs deps and builds
+npm test           # offline tests + live ConPTY/daemon tests; must end with ALL TESTS PASSED
+npm run release:patch   # bumps the version and pushes a tag -> GitHub Actions builds, tests and publishes a release
+```
+
+Publishing to npm: add an `NPM_TOKEN` secret to the repository, and pick a package name you own (e.g. a scoped
+`@you/agent-sandbox`) in `package.json`. The release workflow then publishes every tagged version.
+See [CLAUDE.md](CLAUDE.md) for the code layout.

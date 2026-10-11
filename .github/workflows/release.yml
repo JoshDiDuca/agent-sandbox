@@ -1,0 +1,47 @@
+name: Release
+
+# Push a version tag (npm run release:patch does it for you) to build, test, pack and publish a GitHub release.
+# If the repository has an NPM_TOKEN secret, the same package is also published to npm.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm test
+      - name: Check the tag matches package.json
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match package.json version $version" }
+      - name: Pack
+        id: pack
+        shell: pwsh
+        run: |
+          $file = (npm pack --json | ConvertFrom-Json)[0].filename
+          "file=$file" >> $env:GITHUB_OUTPUT
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.file }}
+          generate_release_notes: true
+          body: |
+            Install: `npm install -g https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.pack.outputs.file }}`
+      - name: Publish to npm
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        run: npm publish ${{ steps.pack.outputs.file }} --provenance --access public

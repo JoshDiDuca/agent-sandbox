@@ -1,6 +1,7 @@
 #Requires -Version 5.1
-# Runs INSIDE Windows Sandbox (Windows PowerShell 5.1), started by logon.cmd in a visible window.
-# Its only job is to make sure a persistent Node exists, then hand over to guest\main.js.
+# Runs INSIDE Windows Sandbox (Windows PowerShell 5.1) in the sandbox window, started by logon.cmd.
+# Its only job: make sure the runner's Node exists in persistent storage, then hand over to guest\main.js.
+# (That Node only runs agent-sandbox itself; the agent's `node` comes from nvm.)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # progress bars make PS 5.1 downloads extremely slow
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -12,15 +13,24 @@ $toolsDir = Join-Path $dataDir 'tools'
 $nodeDir = Join-Path $toolsDir 'node'
 $nodeExe = Join-Path $nodeDir 'node.exe'
 $logsDir = Join-Path $dataDir 'logs'
-New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
-New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+$runDir = Join-Path $dataDir 'run'
+foreach ($dir in @($logsDir, $toolsDir, $runDir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+$host.UI.RawUI.WindowTitle = 'Agent Sandbox'
 Write-Host 'Agent sandbox bootstrap started.' -ForegroundColor Cyan
 $transcript = Join-Path $logsDir ('bootstrap-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 Start-Transcript -Path $transcript | Out-Null
 $transcriptStopped = $false
+$session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw | ConvertFrom-Json
 
-function Invoke-Download {
-    param([string]$Uri, [string]$OutFile)
+function Set-Status([string]$Phase, [string]$Message) {
+    # Same shape as SandboxStatus in src/types.ts; written atomically so the host never reads half a file.
+    $status = [ordered]@{ launchId = $session.launchId; phase = $Phase; message = $Message; updatedAt = (Get-Date).ToUniversalTime().ToString('o'); workspaceHost = $session.workspaceHost; guestWorkspace = $session.workspace; headless = [bool]$session.headless }
+    $file = Join-Path $runDir 'sandbox.json'
+    [IO.File]::WriteAllText("$file.tmp", ($status | ConvertTo-Json -Compress))
+    Move-Item -LiteralPath "$file.tmp" -Destination $file -Force
+}
+
+function Invoke-Download([string]$Uri, [string]$OutFile) {
     # The sandbox network can take a few seconds to come up, so retry.
     for ($attempt = 1; $attempt -le 5; $attempt++) {
         try {
@@ -42,8 +52,7 @@ function Test-Node {
     try { $null = & $nodeExe --version; return ($LASTEXITCODE -eq 0) } catch { return $false }
 }
 
-function Publish-Directory {
-    param([string]$Staging, [string]$Destination)
+function Publish-Directory([string]$Staging, [string]$Destination) {
     if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
     Move-Item -LiteralPath $Staging -Destination $Destination
 }
@@ -53,7 +62,6 @@ function Copy-NodeFromHost {
     Write-Host "Copying Node from this PC ($hostNode) ..."
     $staging = Join-Path $toolsDir 'node-staging'
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
-    New-Item -ItemType Directory -Path $staging -Force | Out-Null
     & robocopy.exe $hostNode $staging /E /NFL /NDL /NJH /NJS /NP | Out-Null
     $code = $LASTEXITCODE
     $global:LASTEXITCODE = 0
@@ -63,16 +71,11 @@ function Copy-NodeFromHost {
 }
 
 function Install-NodeFromWeb {
-    param([string]$Wanted)
     $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
-    Write-Host 'Looking up Node release ...'
+    Write-Host 'Looking up the Node LTS release ...'
     $index = (Invoke-Download -Uri 'https://nodejs.org/dist/index.json') | ConvertFrom-Json
-    $release = $null
-    foreach ($candidate in $index) {
-        $isWanted = if ($Wanted -eq 'lts') { [bool]$candidate.lts } else { $candidate.version -eq $Wanted }
-        if ($isWanted -and ($candidate.files -contains "win-$arch-zip")) { $release = $candidate; break }
-    }
-    if ($null -eq $release) { throw "No Node release found for '$Wanted' ($arch)." }
+    $release = $index | Where-Object { $_.lts -and ($_.files -contains "win-$arch-zip") } | Select-Object -First 1
+    if ($null -eq $release) { throw "No Node LTS release found ($arch)." }
     $version = [string]$release.version
     if ($version -notmatch '^v\d+\.\d+\.\d+$') { throw "Unexpected Node version string: $version" }
     $zipName = "node-$version-win-$arch.zip"
@@ -88,13 +91,10 @@ function Install-NodeFromWeb {
         if (-not $line) { throw "No checksum entry for $zipName" }
         $expected = ($line.Trim() -split '\s+')[0]
         if ((Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'Node download failed checksum verification.' }
-        Write-Host 'Extracting Node ...'
         $extractDir = Join-Path $work 'extracted'
         New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-        $extracted = $false
-        try { & tar.exe -xf $zipPath -C $extractDir; $extracted = ($LASTEXITCODE -eq 0) } catch { $extracted = $false }
-        $global:LASTEXITCODE = 0
-        if (-not $extracted) { Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force }
+        & tar.exe -xf $zipPath -C $extractDir
+        if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force }
         $inner = Join-Path $extractDir "node-$version-win-$arch"
         if (-not (Test-Path -LiteralPath (Join-Path $inner 'node.exe'))) { throw 'Unexpected Node archive layout.' }
         Publish-Directory -Staging $inner -Destination $nodeDir
@@ -105,11 +105,10 @@ function Install-NodeFromWeb {
 }
 
 try {
-    $session = Get-Content -LiteralPath (Join-Path $launchDir 'session.json') -Raw | ConvertFrom-Json
+    Set-Status 'booting' 'Preparing the runner'
     $provisioning = $session.provisioning
-
     if ((Test-Node) -and -not $provisioning.refresh) {
-        Write-Host ('Node ' + (& $nodeExe --version) + ' already cached in persistent storage.')
+        Write-Host ('Runner Node ' + (& $nodeExe --version) + ' cached in persistent storage.')
     }
     else {
         $ready = $false
@@ -120,9 +119,9 @@ try {
                 Write-Warning 'Host Node unavailable; downloading Node instead.'
             }
         }
-        if (-not $ready) { Install-NodeFromWeb -Wanted ([string]$provisioning.node.version) }
+        if (-not $ready) { Install-NodeFromWeb }
         if (-not (Test-Node)) { throw 'Node is not runnable after provisioning.' }
-        Write-Host ('Node ' + (& $nodeExe --version) + ' ready.')
+        Write-Host ('Runner Node ' + (& $nodeExe --version) + ' ready.')
     }
 
     $env:PATH = "$nodeDir;$env:PATH"
@@ -130,11 +129,12 @@ try {
     Stop-Transcript | Out-Null
     $transcriptStopped = $true
     & $nodeExe (Join-Path $launchDir 'guest\main.js')
-    Write-Host "guest runner finished (exit code $LASTEXITCODE). This window stays open in $($session.workspace)."
+    Write-Host "Sandbox runner finished (exit code $LASTEXITCODE). This window stays open in $($session.workspace)."
 }
 catch {
     $report = ($_ | Format-List * -Force | Out-String) + "`r`n" + $_.ScriptStackTrace
     Set-Content -Path (Join-Path $logsDir 'bootstrap-error.txt') -Value $report -Encoding UTF8
+    try { Set-Status 'failed' ('Bootstrap failed: ' + $_.Exception.Message) } catch { }
     Write-Host $report -ForegroundColor Red
     Write-Host "Saved to $logsDir\bootstrap-error.txt" -ForegroundColor Yellow
 }

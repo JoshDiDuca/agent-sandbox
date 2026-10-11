@@ -1,23 +1,13 @@
 {
-  "_comment": "Copy this to <your project>/.sandbox-config.json. Every key is optional. Relative paths are relative to this file. The first time (and whenever the file changes) you are asked to approve it.",
+  "_comment": "Copy to <your project>/.sandbox-config.json. Every key is optional; relative paths are relative to this file. You are asked to approve it the first time and whenever it changes.",
   "harness": "claude",
-  "sandbox": {
-    "memoryMb": "auto",
-    "networking": true
+  "sandbox": { "memoryMb": "auto", "headless": false },
+  "toolchains": {
+    "node": { "version": "20", "extraVersions": ["18"] },
+    "python": { "version": "3.12" },
+    "rust": { "enabled": false }
   },
   "mappings": [
-    {
-      "host": "F:\\SteamLibrary\\steamapps\\common\\Call of Duty Modern Warfare 2",
-      "guest": "C:\\GameSources\\MW2",
-      "readOnly": true,
-      "optional": true
-    },
-    {
-      "host": "C:\\Steam\\Medal of Honor Allied Assault Warchest",
-      "guest": "C:\\GameSources\\MoHAA",
-      "readOnly": true,
-      "optional": true
-    }
-  ],
-  "scripts": []
+    { "host": "D:\\Assets\\textures", "guest": "C:\\Assets", "readOnly": true, "optional": true }
+  ]
 }
