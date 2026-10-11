@@ -1,7 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CommanderError } from 'commander';
-import { parseCli } from './args.js';
+import { buildProgram, parseCli } from './args.js';
+import { commandSpec } from './manifest.js';
+import { menu, recordHistory } from './menu.js';
+import { loadConfig } from '../core/config.js';
 import * as commands from './commands/index.js';
 import { UserError, errMsg, fail } from '../core/util.js';
 
@@ -29,6 +32,8 @@ const HANDLERS: Record<string, Handler> = {
   config: commands.config,
   doctor: commands.doctor,
   setup: commands.setup,
+  data: commands.data,
+  repair: (ctx) => commands.repair(ctx),
   'host-claude': commands.claudeHost,
   _watch: commands.watcher,
 };
@@ -36,14 +41,31 @@ const HANDLERS: Record<string, Handler> = {
 const red = (s: string): string => '\x1b[31m' + s + '\x1b[0m';
 const dim = (s: string): string => '\x1b[2m' + s + '\x1b[0m';
 
-/** CLI entry. `preset` lets wrapper binaries fix the command/agent (claude-sbx = launch --harness claude). */
-export const main = async (argv: string[], preset: { harness?: string; command?: string } = {}): Promise<number> => {
+export interface Preset { harness?: string; command?: string }
+
+/** Runs an argv from the menu exactly as if it had been typed, reporting errors instead of throwing. */
+const runFromMenu = (argv: string[]): Promise<number> => main(argv).catch((e: unknown) => report(e));
+
+/**
+ * CLI entry. `preset` lets wrapper binaries fix the command/agent (claude-sbx = launch --harness claude). No arguments
+ * opens the menu; `sandbox <agent> [agent args]` starts that agent.
+ */
+export const main = async (argv: string[], preset: Preset = {}): Promise<number> => {
+  const isAgent = (name: string | undefined): name is string => Boolean(name && !commandSpec(name) && loadConfig().config.harnesses[name]);
+  if (!preset.command && !preset.harness) {
+    if (argv.length === 0) return process.stdin.isTTY ? main(['menu']) : (buildProgram(() => undefined).outputHelp(), 0);
+    if (isAgent(argv[0])) return main(argv.slice(1), { harness: argv[0] });
+  }
   const options = parseCli(preset.command ? [preset.command, ...argv] : argv, Boolean(preset.harness));
   if (preset.harness) options.harness = preset.harness;
+  recordHistory(preset.harness ? ['launch', '--harness', preset.harness, ...argv] : preset.command ? [preset.command, ...argv] : argv);
+  if (options.command === 'menu') return menu(commands.createContext(packageRoot, entry, options), runFromMenu);
   // Loaded only when asked for: normal commands never load test code.
   if (options.command === 'self-test') return (await import('../selftest/index.js')).selfTest(packageRoot);
+  // repair must run even when the config file is broken (createContext would refuse it).
+  if (options.command === 'repair') return commands.repairCommand(packageRoot, entry, options);
   const handler = HANDLERS[options.command];
-  if (!handler) return fail('Unknown command "' + options.command + '".', 'Run agent-sandbox --help for the list of commands.');
+  if (!handler) return fail('Unknown command "' + options.command + '".', 'Run sandbox --help for the list of commands, or sandbox for the menu.');
   return (await handler(commands.createContext(packageRoot, entry, options))) ?? 0;
 };
 
@@ -56,11 +78,11 @@ export const report = (e: unknown): number => {
     return 1;
   }
   console.error(red('Unexpected error: ') + errMsg(e));
-  console.error(dim('This is a bug in agent-sandbox. Details: ' + (e instanceof Error && e.stack ? e.stack.split('\n').slice(1, 4).join(' | ').trim() : 'none')));
-  console.error('  Please report it with the output of: agent-sandbox doctor');
+  console.error(dim('This is a bug in windows-development-sandbox. Details: ' + (e instanceof Error && e.stack ? e.stack.split('\n').slice(1, 4).join(' | ').trim() : 'none')));
+  console.error('  Please report it with the output of: sandbox doctor');
   return 1;
 };
 
-export const run = (argv: string[], preset?: { harness?: string; command?: string }): void => {
+export const run = (argv: string[], preset?: Preset): void => {
   main(argv, preset).then((code) => { process.exitCode = code; }, (e: unknown) => { process.exitCode = report(e); });
 };

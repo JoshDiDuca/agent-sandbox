@@ -2,12 +2,13 @@
 // dispatches the result. claude-sbx & co parse as `launch`: every option launch does not own goes to the agent, in order.
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { fail } from '../core/util.js';
+import { COMMANDS, type OptionSpecT } from './manifest.js';
 
 export interface CliOptions {
   command: string; positionals: string[]; passthrough: string[];
   config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
   scripts: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
-  personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; timeout: number; days: number;
+  personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; yes: boolean; timeout: number; days: number;
 }
 
 /** Reserved spelling for our launch options that can never clash with an agent's flags: --sbx-terminal, ... */
@@ -20,53 +21,32 @@ const positiveNumber = (value: string): number => {
 };
 const collect = (value: string, previous: string[] = []): string[] => [...previous, value];
 
-const withLaunchOptions = (cmd: Command): Command => cmd
-  .option('-t, --terminal', 'run the agent in THIS terminal (reattaches to this folder\'s session if nobody is watching it)')
-  .option('--new', 'always start a new session, even if this folder already has one nobody is attached to')
-  .addOption(new Option('--headless', 'hide the sandbox window (sbx-show brings it back)'))
-  .addOption(new Option('--window', 'show the sandbox window even if config says headless'))
-  .option('--account <name>', 'Claude account to use for this sandbox')
-  .option('--node <version>', 'Node version for nvm (default: .sandbox-config.json > .nvmrc > this PC)')
-  .option('--python <version>', 'Python 3 version (default: .sandbox-config.json > .python-version > config)')
-  .option('--workspace <dir>', 'use this folder instead of the current one')
-  .option('--harness <name>', 'agent to run: claude | codex | gemini | ...')
-  .option('--script <file>', 'run this .ps1/.mjs/.cmd inside the sandbox before the agent (repeatable)', collect)
-  .option('--no-agent', 'provision the sandbox without starting an agent')
-  .option('--trust-config', 'approve the folder\'s .sandbox-config.json without asking')
-  .option('--no-local-config', 'ignore the folder\'s .sandbox-config.json');
+/** One commander option from its manifest entry. */
+const toOption = (o: OptionSpecT): Option => {
+  const flags = (o.short ? o.short + ', ' : '') + o.flag + (o.type === 'boolean' ? '' : ' <' + (o.value ?? 'value') + '>');
+  const option = new Option(flags, o.description);
+  if (o.type === 'number') option.argParser(positiveNumber);
+  if (o.type === 'list') option.argParser(collect);
+  if (o.default !== undefined) option.default(o.default);
+  return option;
+};
 
-const jsonOption = (cmd: Command): Command => cmd.option('--json', 'machine-readable output');
-
-/** Every command, its options and help text. Actions only record what was parsed. */
+/** Every command, its options and help text, from manifest.ts. Actions only record what was parsed. */
 export const buildProgram = (record: (name: string, cmd: Command) => void): Command => {
-  const program = new Command('agent-sandbox')
-    .description('Run Claude Code (or Codex / Gemini) in Windows Sandbox with the current folder as its workspace.')
+  const program = new Command('sandbox')
+    .description('A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.')
     .enablePositionalOptions()
     .showHelpAfterError('(run with --help for usage)')
     .exitOverride();
-  const add = (name: string, description: string, build: (cmd: Command) => Command = (c) => c): Command =>
-    build(program.command(name).description(description).option('--config <file>', 'config file (default: ~/.agent-sandbox/config.json)')).action((...args: unknown[]) => record(name, args[args.length - 1] as Command));
-
-  add('launch', 'start the sandbox and the agent (or another session in the running sandbox)', (c) => withLaunchOptions(c).argument('[agentArgs...]').allowUnknownOption().allowExcessArguments());
-  add('generate', 'write the .wsb and launch folder without starting anything', (c) => withLaunchOptions(c).argument('[agentArgs...]').allowUnknownOption().allowExcessArguments());
-  add('attach', 'show a running session in this terminal (Ctrl+] detaches)', (c) => c.argument('[id]'));
-  add('sessions', 'list agent sessions', jsonOption);
-  add('status', 'sandbox overview', jsonOption);
-  add('exec', 'run a command inside the sandbox and print its output', (c) => jsonOption(c).option('--timeout <seconds>', 'give up after this many seconds', positiveNumber, 600).option('--workspace <dir>', 'folder (inside the mapped workspace) to run in').argument('<command...>').passThroughOptions());
-  add('restart', 'restart running agents in place; they resume their conversation', (c) => c.option('--harness <name>', 'only this agent'));
-  add('stop', 'shut the sandbox down');
-  add('show', 'show the sandbox window');
-  add('hide', 'hide the sandbox window');
-  add('account', 'Claude accounts: list | save <name> | use <name> | default <name> | remove <name>', (c) => jsonOption(c).argument('[action]').argument('[name]').option('--from-host', '(save) save this PC\'s login instead of the sandbox\'s').option('--no-restart', '(use) do not restart running sessions'));
-  add('sync', 'copy history (and claude-mem, once closed) back to this PC now');
-  add('logs', 'print the newest sandbox log', (c) => c.option('-f, --follow', 'keep printing new lines'));
-  add('clean', 'delete old launch folders, logs and leftovers', (c) => c.option('--days <n>', 'launch folders older than this many days', positiveNumber, 7));
-  add('config', 'show | path | init | schema', (c) => c.argument('[action]'));
-  add('setup', 'check this PC can run Windows Sandbox and offer to turn it on');
-  add('doctor', 'check this PC and show what will be copied or downloaded', (c) => c.option('--harness <name>', 'agent to check'));
-  add('host-claude', 'Claude on this PC (NOT sandboxed) with a separate profile', (c) => c.option('--personal', 'use your normal Claude profile').argument('[claudeArgs...]').allowUnknownOption().allowExcessArguments());
-  add('self-test', 'run the built-in tests');
-  program.command('_watch', { hidden: true }).option('--config <file>').action((...args: unknown[]) => record('_watch', args[args.length - 1] as Command));
+  for (const spec of COMMANDS) {
+    const cmd = program.command(spec.name, { hidden: spec.hidden }).description(spec.summary).option('--config <file>', 'config file (default: ~/.agent-sandbox/config.json)');
+    for (const option of spec.options) cmd.addOption(toOption(option));
+    if (spec.json) cmd.option('--json', 'machine-readable output');
+    for (const arg of spec.args) cmd.argument((arg.required ? '<' : '[') + arg.name + (arg.variadic ? '...' : '') + (arg.required ? '>' : ']'), arg.description);
+    if (spec.passthrough === 'agent') cmd.argument('[agentArgs...]', 'passed to the agent').allowUnknownOption().allowExcessArguments();
+    if (spec.passthrough === 'command') cmd.passThroughOptions();
+    cmd.action((...args: unknown[]) => record(spec.name, args[args.length - 1] as Command));
+  }
   return program;
 };
 
@@ -92,13 +72,14 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
   if (!parsed) return { ...defaults(), command: '' };
   const { name, cmd } = parsed as { name: string; cmd: Command };
   const o = { ...program.opts(), ...cmd.opts() } as Record<string, unknown>;
-  const forAgent = ['launch', 'generate', 'host-claude'].includes(name);
+  const forAgent = ['launch', 'start', 'generate', 'host-claude'].includes(name);
   // Commander keeps our `--` separator among the operands when unknown options are allowed; it is ours, not the agent's.
   const separator = forAgent ? cmd.args.indexOf('--') : -1;
   const operands = separator === -1 ? cmd.args : [...cmd.args.slice(0, separator), ...cmd.args.slice(separator + 1)];
   return {
     ...defaults(),
-    command: name,
+    // `start` is launch without an agent.
+    command: name === 'start' ? 'launch' : name,
     positionals: forAgent || name === 'exec' ? [] : operands,
     passthrough: forAgent || name === 'exec' ? operands : [],
     config: o.config as string | undefined,
@@ -111,7 +92,7 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     headless: o.window ? false : o.headless ? true : undefined,
     terminal: Boolean(o.terminal),
     newSession: Boolean(o.new),
-    noAgent: o.agent === false,
+    noAgent: o.agent === false || name === 'start',
     trustConfig: Boolean(o.trustConfig),
     noLocalConfig: o.localConfig === false,
     personal: Boolean(o.personal),
@@ -119,6 +100,7 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     noRestart: o.restart === false,
     follow: Boolean(o.follow),
     json: Boolean(o.json),
+    yes: Boolean(o.yes),
     timeout: (o.timeout as number | undefined) ?? 600,
     days: (o.days as number | undefined) ?? 7,
   };
@@ -126,5 +108,5 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 
 const defaults = (): CliOptions => ({
   command: '', positionals: [], passthrough: [], scripts: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
-  personal: false, fromHost: false, noRestart: false, follow: false, json: false, timeout: 600, days: 7,
+  personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, timeout: 600, days: 7,
 });

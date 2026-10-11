@@ -2,6 +2,8 @@
 // the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11).
 import { errMsg } from '../core/util.js';
 import { configTests } from './config.test.js';
+import { cliTests } from './cli.test.js';
+import { dataTests } from './data.test.js';
 import { detectTests } from './detect.test.js';
 import { createFixtures } from './fixtures.js';
 import { guestTests } from './guest.test.js';
@@ -27,6 +29,8 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     detectTests(t);
     setupTests(t);
     hostTests(t);
+    dataTests(t);
+    cliTests(t);
     if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
     else console.log('SKIP  live tests (need Windows with the .NET Framework compiler)');
   } catch (e) {

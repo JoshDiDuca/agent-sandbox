@@ -7,7 +7,7 @@ import { findSecretFiles } from '../../host/secrets.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
 import { assertCanLaunch, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
 import { ensureTerminal } from '../../host/terminal.js';
-import { hideSandboxWindow } from '../../host/window.js';
+import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun } from '../../core/types.js';
@@ -43,7 +43,7 @@ const launchIntoRunning = async (ctx: Context): Promise<number> => {
   console.log('Sandbox already running: starting another ' + harness + ' session in ' + cwd);
   const session = await waitForSession(dataPath, requestSession(dataPath, harness, options.passthrough, cwd), sandboxAlive);
   if (options.terminal) return attachTerminal(session);
-  console.log('Session ' + session.id + ' opened in a new tab inside the sandbox. Attach here with: agent-sandbox attach ' + session.id + (ready.headless ? '   (headless: sbx-show opens the window)' : ''));
+  console.log('Session ' + session.id + ' opened in a new tab inside the sandbox. Attach here with: sandbox attach ' + session.id + (ready.headless ? '   (headless: sbx-show opens the window)' : ''));
   return 0;
 };
 
@@ -63,7 +63,7 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh) : { exe: null, message: 'disabled' };
   const history = syncSummary(config, dataPath, run.workspaceHost);
   const guarded = checkRepo(dataPath);
-  if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see agent-sandbox status).\x1b[0m');
+  if (guarded.length) console.warn('\x1b[33mSECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).\x1b[0m');
   saveRepoSnapshot(dataPath, run.workspaceHost);
   resetRunDir(dataPath);
   return { account, terminal: terminal.message, history, pruned: describePrune(pruneStorage(storageRoot)) };
@@ -71,7 +71,12 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
 
 export const launch = async (ctx: Context, generateOnly = false): Promise<number> => {
   const { options, loaded, packageRoot, dataPath, storageRoot } = ctx;
-  if (!generateOnly && isSandboxRunning()) return launchIntoRunning(ctx);
+  if (!generateOnly && isSandboxRunning()) {
+    if (!options.noAgent) return launchIntoRunning(ctx);
+    // Only one Windows Sandbox can run: "start" on a running one brings its window up instead.
+    console.log('A sandbox is already running' + (showSandboxWindow(storageRoot) ? '; its window is in front now.' : '.') + ' Start an agent in it with claude-sbx (or sandbox <agent>); stop it with sandbox stop.');
+    return 0;
+  }
   const run = await resolveRun({
     packageRoot, loaded, cwd: process.cwd(), workspace: options.workspace, harness: options.harness, noAgent: options.noAgent,
     noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, headless: options.headless,
@@ -110,7 +115,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     await waitForReady(dataPath, generated.launchId, sandboxAlive);
     return attachTerminal(await waitForSession(dataPath, generated.launchId, sandboxAlive));
   }
-  if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: claude-sbx -t' : 'Could not find the sandbox window to hide (it may still be starting); run agent-sandbox hide in a moment.');
+  if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: claude-sbx -t' : 'Could not find the sandbox window to hide (it may still be starting); run sandbox hide in a moment.');
   else console.log('Sandbox starting. ' + run.harnessName + ' opens in Windows Terminal inside it. Attach here any time: claude-sbx -t');
   return 0;
 };
