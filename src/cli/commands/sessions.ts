@@ -2,7 +2,7 @@
 import _ from 'lodash';
 import type { SessionStatus } from '../../core/types.js';
 import { activeAccount } from '../../host/accounts.js';
-import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
+import { execInSandbox, pickSession, pingSandbox, restartSessions, currentSessions, runningSessions, sessionViewers, waitForReady } from '../../host/channel.js';
 import type { Viewers } from '../../shared/pty-client.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { repoFindings } from '../../host/repo-guard.js';
@@ -11,13 +11,14 @@ import { listSessions, readSandboxStatus } from '../../shared/rundir.js';
 import { watcherRunning } from '../../sync/watcher.js';
 import { errMsg, fail, safeText, sleep } from '../../core/util.js';
 import { currentGuestDir, printJson, requireRunning, sandboxAlive, table, type Context } from './context.js';
+import { attachHere } from './launch.js';
 
 export const attach = async (ctx: Context): Promise<number> => {
   requireRunning('Start one with: sandbox claude --terminal');
   await waitForReady(ctx.dataPath, null, sandboxAlive);
   const id = ctx.options.positionals[0];
   if (!id && runningSessions(ctx.dataPath).length === 0) await sleep(1500);
-  return attachTerminal(pickSession(ctx.dataPath, id));
+  return attachHere(ctx, pickSession(ctx.dataPath, id));
 };
 
 type Listed = SessionStatus & { viewers?: Viewers | null };

@@ -12,6 +12,7 @@
 2. Start the default agent, or pick another (shows which are already installed)
 3. Start a sandbox without an agent
 4. Sandbox, sessions, accounts, data, diagnostics, configuration
+5. **Settings**: every setting with its value and description, changed and saved from the menu
 
 Each command asks for its arguments and options, with on/off options as checkboxes and agents, accounts and sessions
 as lists. It then shows the exact command line and runs it.

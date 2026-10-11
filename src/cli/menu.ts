@@ -11,6 +11,7 @@ import { listAccounts } from '../host/accounts.js';
 import { runningSessions } from '../host/channel.js';
 import { isSandboxRunning } from '../host/platform.js';
 import type { Context } from './commands/context.js';
+import { settingsMenu } from './settings.js';
 import { COMMANDS, Group, type ArgSpecT, type CommandSpecT, type OptionSpecT } from './manifest.js';
 
 const c = { bold: (s: string) => '\x1b[1m' + s + '\x1b[0m', dim: (s: string) => '\x1b[2m' + s + '\x1b[0m', cyan: (s: string) => '\x1b[36m' + s + '\x1b[0m', green: (s: string) => '\x1b[32m' + s + '\x1b[0m', yellow: (s: string) => '\x1b[33m' + s + '\x1b[0m' };
@@ -133,6 +134,7 @@ const mainMenu = async (ctx: Context): Promise<Pick> => {
       { name: 'Start a sandbox without an agent', value: { kind: 'ask', spec: COMMANDS.find((s) => s.name === 'start')! } },
       new Separator(),
       ...Group.options.filter((g) => g !== 'Agents').map((g) => ({ name: GROUP_TITLES[g] + '...', value: { kind: 'group', group: g } as Pick })),
+      { name: 'Settings ' + c.dim('(every setting, saved to your config file)'), value: { kind: 'group', group: '@settings' } },
       new Separator(),
       { name: 'Exit', value: { kind: 'exit' } },
     ],
@@ -157,7 +159,8 @@ export const menu = async (ctx: Context, run: (argv: string[]) => Promise<number
   try {
     for (let pick = await mainMenu(ctx); ;) {
       if (pick.kind === 'exit') return 0;
-      if (pick.kind === 'group') pick = pick.group === '' ? await mainMenu(ctx) : pick.group === '@agents' ? await pickAgent(ctx) : await groupMenu(pick.group);
+      if (pick.kind === 'group' && pick.group === '@settings') { await settingsMenu(ctx.loaded.configPath); pick = await mainMenu(ctx); }
+      else if (pick.kind === 'group') pick = pick.group === '' ? await mainMenu(ctx) : pick.group === '@agents' ? await pickAgent(ctx) : await groupMenu(pick.group);
       else {
         const argv = pick.kind === 'run' ? pick.argv : await askCommand(ctx, pick.spec, pick.preset);
         if (!argv) { pick = await mainMenu(ctx); continue; }

@@ -172,6 +172,8 @@ const Secrets = z.strictObject({
 const Attach = z.strictObject({
   enabled: z.boolean().describe('Allow sandbox claude --terminal / sandbox attach from this PC.'),
   reuseSession: z.boolean().describe('sandbox claude -t in a running sandbox reattaches to this folder\'s session when no terminal on this PC is attached to it (--new always starts another).'),
+  auto: z.boolean().describe('Starting an agent attaches this terminal automatically, as if you passed -t (only in an interactive terminal).'),
+  autoHide: z.boolean().describe('Hide the Windows Sandbox window whenever this terminal attaches; it keeps running (sandbox show brings it back).'),
 });
 const ClaudeProfile = z.strictObject({
   enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),

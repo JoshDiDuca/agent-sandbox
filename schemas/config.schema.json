@@ -787,6 +787,14 @@
         "reuseSession": {
           "type": "boolean",
           "description": "sandbox claude -t in a running sandbox reattaches to this folder's session when no terminal on this PC is attached to it (--new always starts another)."
+        },
+        "auto": {
+          "type": "boolean",
+          "description": "Starting an agent attaches this terminal automatically, as if you passed -t (only in an interactive terminal)."
+        },
+        "autoHide": {
+          "type": "boolean",
+          "description": "Hide the Windows Sandbox window whenever this terminal attaches; it keeps running (sandbox show brings it back)."
         }
       },
       "additionalProperties": false

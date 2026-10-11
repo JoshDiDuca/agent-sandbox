@@ -150,7 +150,9 @@
   },
   "attach": {
     "enabled": true,
-    "reuseSession": true
+    "reuseSession": true,
+    "auto": false,
+    "autoHide": false
   },
   "secrets": {
     "strip": true,

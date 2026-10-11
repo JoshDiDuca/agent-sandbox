@@ -2,6 +2,7 @@
 import { buildProgram, parseCli } from '../cli/args.js';
 import { COMMANDS } from '../cli/manifest.js';
 import { commandLine, readHistory, recordHistory, splitArgs } from '../cli/menu.js';
+import { editConfigText } from '../cli/settings.js';
 import type { Harness } from './harness.js';
 
 export const cliTests = (t: Harness): void => {
@@ -16,6 +17,13 @@ export const cliTests = (t: Harness): void => {
   check(clean.command === 'data' && clean.positionals.join() === 'clean,tools/go,logs' && clean.yes, 'data clean takes targets and --yes');
   check(parseCli(['launch', '--harness', 'opencode', '--', '--continue']).passthrough.join() === '--continue', 'agent arguments after -- reach the agent');
   check(JSON.stringify(splitArgs('--model "big one" -c \'x y\'')) === '["--model","big one","-c","x y"]' && commandLine(['exec', 'echo', 'a b']) === 'sandbox exec echo "a b"', 'menu: arguments split like a shell, command lines quoted');
+  const original = '{\n  // my notes stay\n  "sandbox": { "headless": true }\n}\n';
+  const set = editConfigText(original, ['attach', 'auto'], true);
+  const nested = 'text' in set ? editConfigText(set.text, ['databases', 'postgres', 'port'], 6543) : set;
+  const reset = 'text' in nested ? editConfigText(nested.text, ['sandbox', 'headless'], undefined) : nested;
+  const invalid = editConfigText(original, ['sandbox', 'memoryMb'], 12);
+  check('text' in reset && reset.text.includes('// my notes stay') && reset.text.includes('"auto": true') && reset.text.includes('"port": 6543') && !reset.text.includes('headless') && 'problems' in invalid && invalid.problems.join().includes('memoryMb'),
+    'settings screen: changes keep the file\'s comments, nested keys are created, reset removes a key, invalid values are not saved');
   recordHistory(['launch', '--harness', 'claude']);
   recordHistory(['status']);
   recordHistory(['launch', '--harness', 'claude']);

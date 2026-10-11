@@ -57,7 +57,7 @@ The first start downloads what the project needs (a few minutes, once). After th
 
 | Command | |
 |---|---|
-| `sandbox` | the interactive menu (repeats your last command, asks for every option) |
+| `sandbox` | the interactive menu: repeat your last command, start agents, every option, and all settings |
 | `sandbox <agent>`, `claude-sandbox` | start an agent; `-t` for this terminal, `--headless` for no window |
 | `sandbox start` | the sandbox without an agent |
 | `sandbox attach` / `sessions` / `status` | work with a running sandbox |

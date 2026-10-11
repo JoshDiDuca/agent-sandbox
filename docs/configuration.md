@@ -2,6 +2,10 @@
 
 ## Your settings
 
+The easiest way: `sandbox`, then **Settings**. Every setting is listed by section with its current value and what it
+does; pick one to change it (on/off and choices as lists) or reset it to the default. Changes are saved to your config
+file, keeping its comments, and only when the result is valid.
+
 `sandbox config init` creates `~/.agent-sandbox/config.json` with every setting and its default (see
 [config.example.json](../config.example.json)). Keep only what you change. VS Code shows docs and autocomplete from
 its JSON Schema. `sandbox config show` prints the effective config.
@@ -15,6 +19,8 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
+| `attach.auto` | starting an agent attaches this terminal automatically (like `-t`) |
+| `attach.autoHide` | the sandbox window hides whenever this terminal attaches (`sandbox show` brings it back) |
 | `provisioning.git.access` | `full`, `readonly` or `none` |
 | `secrets.allow`, `secrets.patterns` | let named variables through, or strip more |
 | `toolchains.environment` | extra environment variables (e.g. registry mirrors) |

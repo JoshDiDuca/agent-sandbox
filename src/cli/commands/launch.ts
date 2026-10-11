@@ -5,7 +5,7 @@ import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { generateSandbox } from '../../host/generate.js';
 import { findSecretFiles } from '../../host/secrets.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
-import { assertCanLaunch, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
+import { assertCanLaunch, insideSandbox, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
 import { ensureTerminal } from '../../host/terminal.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
@@ -16,6 +16,12 @@ import type { Config, ResolvedRun } from '../../core/types.js';
 import { errMsg, fail, sleep } from '../../core/util.js';
 import { askYesNo, resolveRun } from '../../core/workspace.js';
 import { currentGuestDir, sandboxAlive, table, type Context } from './context.js';
+
+/** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
+export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
+  if (ctx.loaded.config.attach.autoHide && !insideSandbox()) void hideSandboxWindow(ctx.storageRoot, 120).catch(() => false);
+  return attachTerminal(session);
+};
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
 const firstBoot = (dataPath: string): boolean => !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
@@ -45,11 +51,11 @@ const launchIntoRunning = async (ctx: Context): Promise<number> => {
   const existing = reuse ? await findUnwatchedSession(dataPath, harness, cwd) : null;
   if (existing) {
     console.log('Reattaching to ' + harness + ' session ' + existing.id + ' in ' + cwd + ' (no other terminal is attached; --new starts another).');
-    return attachTerminal(existing);
+    return attachHere(ctx, existing);
   }
   console.log('Sandbox already running: starting another ' + harness + ' session in ' + cwd);
   const session = await waitForSession(dataPath, requestSession(dataPath, harness, options.passthrough, cwd), sandboxAlive);
-  if (options.terminal) return attachTerminal(session);
+  if (options.terminal) return attachHere(ctx, session);
   console.log('Session ' + session.id + ' opened in a new tab inside the sandbox. Attach here with: sandbox attach ' + session.id + (ready.headless ? '   (headless: sbx-show opens the window)' : ''));
   return 0;
 };
@@ -78,6 +84,8 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
 
 export const launch = async (ctx: Context, generateOnly = false): Promise<number> => {
   const { options, loaded, packageRoot, dataPath, storageRoot } = ctx;
+  // attach.auto: an agent started from an interactive terminal attaches it, as with -t.
+  if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY) options.terminal = true;
   if (!generateOnly && isSandboxRunning()) {
     if (!options.noAgent) return launchIntoRunning(ctx);
     // Only one Windows Sandbox can run: "start" on a running one brings its window up instead.
@@ -124,7 +132,7 @@ export const launch = async (ctx: Context, generateOnly = false): Promise<number
     await waitForReady(dataPath, generated.launchId, sandboxAlive);
     // Without an agent there is no session to attach to: the sandbox itself is the result.
     if (options.noAgent) { console.log('Sandbox ready. Its window has a terminal in ' + config.guestWorkspace + '; from here: sandbox exec -- <command>, sandbox stop.'); return 0; }
-    return attachTerminal(await waitForSession(dataPath, generated.launchId, sandboxAlive));
+    return attachHere(ctx, await waitForSession(dataPath, generated.launchId, sandboxAlive));
   }
   if (firstBoot(dataPath)) console.log(FIRST_BOOT);
   if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: sandbox claude -t' : 'Could not find the sandbox window to hide (it may still be starting); run sandbox hide in a moment.');

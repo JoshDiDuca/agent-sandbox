@@ -42,7 +42,7 @@ export const DEFAULTS: Config = {
     dynamodb: { enabled: 'auto', port: 8000, adminPort: 8001, admin: true },
     sqlserver: { enabled: 'auto' },
   },
-  attach: { enabled: true, reuseSession: true },
+  attach: { enabled: true, reuseSession: true, auto: false, autoHide: false },
   secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
   claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },
