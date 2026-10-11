@@ -24,6 +24,8 @@ export const hostTests = (t: Harness): void => {
     AGENT_DATA_DIR: path.join(t.temp, 'no-agent-data'),
     AGENT_HOST_TOOLS_DIR: path.join(t.temp, 'no-host-tools'),
     NO_COLOR: '1',
+    // This test may itself run inside a sandbox: the CLI must behave as it would on a PC.
+    AGENT_SANDBOX_HOST_ONLY: '1',
   };
   const bin = (name: string): string => path.join(t.packageRoot, 'dist', 'bin', name + '.js');
   const runs: [string, string, string[]][] = [
