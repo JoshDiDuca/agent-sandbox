@@ -9,12 +9,14 @@ import { agentCommandTests } from './agent-commands.test.js';
 import { dataTests } from './data.test.js';
 import { detectTests } from './detect.test.js';
 import { mirrorTests } from './mirror.test.js';
+import { projectTests } from './projects.test.js';
 import { createFixtures } from './fixtures.js';
 import { guestTests } from './guest.test.js';
 import { createHarness } from './harness.js';
 import { helperTests } from './helpers.test.js';
 import { hostTests } from './host.test.js';
 import { daemonTests, gitGuardTests, liveTestsAvailable } from './live.test.js';
+import { multiProjectDaemonTests } from './live-projects.test.js';
 import { securityTests } from './security.test.js';
 import { setupTests } from './setup.test.js';
 import { syncTests } from './sync.test.js';
@@ -38,6 +40,7 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     const launchPath = await guestTests(t, f);
     await syncTests(t, f);
     await mirrorTests(t, f);
+    await projectTests(t, f);
     await securityTests(t, f);
     helperTests(t);
     detectTests(t);
@@ -46,7 +49,7 @@ export const selfTest = async (packageRoot: string): Promise<number> => {
     dataTests(t);
     cliTests(t);
     agentCommandTests(t);
-    if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
+    if (liveTestsAvailable()) { await daemonTests(t, f, launchPath); await multiProjectDaemonTests(t, f, launchPath); await gitGuardTests(t, f, launchPath); }
     else console.log('SKIP  live tests (need Windows with the .NET Framework compiler)');
   } catch (e) {
     t.check(false, 'unexpected error: ' + errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : ''));
