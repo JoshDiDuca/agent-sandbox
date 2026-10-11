@@ -4,8 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { writeGuides } from './guide.js';
-import { setupToolchains } from './toolchains.js';
-import { agentEnv, applyNetworkPolicy, applyPersonalization, persistEnvironment, provisionHarness, resolveLaunch, restoreClaudeMem, runHooks, setupGitConfig, syncClaudeProfile } from './provision.js';
+import { setupToolchains } from './toolchains/index.js';
+import { provisionHarness, resolveLaunch } from './setup/agents.js';
+import { restoreClaudeMem, syncClaudeProfile } from './setup/claude.js';
+import { agentEnv, persistEnvironment } from './setup/environment.js';
+import { runHooks } from './setup/hooks.js';
+import { applyNetworkPolicy } from './setup/network.js';
+import { writeManagedSettings } from './setup/policy.js';
+import { applyPersonalization, setupGitConfig } from './setup/user.js';
 import { ensurePtyHost, pruneToolLeftovers } from './ptyhost.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
@@ -44,12 +50,13 @@ const main = async (): Promise<void> => {
   runHooks('pre-provision', process.env);
   await soft('Personalisation', applyPersonalization);
 
+  const gitAccess = session.provisioning.git.access ?? 'full';
   step(3, 'Toolchains (Git, nvm/Node, Python, Rust, .NET, Bun, uv)');
-  const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, hostGit: session.hostTools.git, refresh: session.provisioning.refresh });
+  const tools = await setupToolchains(session.toolchains, session.versions, { gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh });
   const env = agentEnv(tools);
-  persistEnvironment(env, [...Object.keys(tools.vars), 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'npm_config_cache', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT']);
+  persistEnvironment(env, Object.keys(tools.vars));
   for (const line of tools.summary) log('  ' + line);
-  await soft('Cleaning old tool builds', () => pruneToolLeftovers(ptyHost));
+  await soft('Cleaning old tool builds', () => pruneToolLeftovers());
 
   step(4, 'Git identity');
   await soft('Git config', () => setupGitConfig(env));
@@ -58,6 +65,7 @@ const main = async (): Promise<void> => {
   if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
   await soft('claude-mem restore', restoreClaudeMem);
   await soft('Sandbox guide for the agent', () => writeGuides(tools.summary));
+  await soft('Claude managed settings', () => writeManagedSettings(gitAccess));
 
   step(6, 'Agent: ' + session.harnessName);
   if (session.harness) provisionHarness(session.harnessName, session.harness, env);

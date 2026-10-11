@@ -1,0 +1,84 @@
+// Working with a running sandbox: attach, sessions, status, exec, restart, stop, show/hide.
+import _ from 'lodash';
+import type { SessionStatus } from '../../core/types.js';
+import { activeAccount } from '../../host/accounts.js';
+import { attachTerminal, execInSandbox, pickSession, pingSandbox, restartSessions, runningSessions, waitForReady } from '../../host/channel.js';
+import { isSandboxRunning } from '../../host/platform.js';
+import { repoFindings } from '../../host/repo-guard.js';
+import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
+import { listSessions, readSandboxStatus } from '../../shared/rundir.js';
+import { watcherRunning } from '../../sync/watcher.js';
+import { errMsg, fail, sleep } from '../../core/util.js';
+import { currentGuestDir, printJson, requireRunning, sandboxAlive, table, type Context } from './context.js';
+
+export const attach = async (ctx: Context): Promise<number> => {
+  requireRunning('Start one with: claude-sbx --terminal');
+  await waitForReady(ctx.dataPath, null, sandboxAlive);
+  const id = ctx.options.positionals[0];
+  if (!id && runningSessions(ctx.dataPath).length === 0) await sleep(1500);
+  return attachTerminal(pickSession(ctx.dataPath, id));
+};
+
+const sessionRow = (s: SessionStatus): string[] => [s.id, s.harness, s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''), s.cwd, new Date(s.startedAt).toLocaleTimeString()];
+
+export const sessions = (ctx: Context): number => {
+  const list = listSessions(ctx.dataPath);
+  if (printJson(ctx, list)) return 0;
+  if (list.length === 0) console.log('No sessions.');
+  else table([['ID', 'AGENT', 'STATE', 'FOLDER', 'STARTED'], ...list.map(sessionRow)]);
+  return 0;
+};
+
+export const status = async (ctx: Context): Promise<number> => {
+  const running = isSandboxRunning();
+  const sandbox = readSandboxStatus(ctx.dataPath);
+  const daemon = running && sandbox?.phase === 'ready' ? await pingSandbox(ctx.dataPath, sandboxAlive).then((r) => r.message, (e: unknown) => 'no answer (' + errMsg(e) + ')') : '-';
+  const info = {
+    running, phase: running ? sandbox?.phase ?? 'unknown' : 'stopped', message: sandbox?.message, workspace: sandbox?.workspaceHost, headless: sandbox?.headless,
+    daemon, account: activeAccount(ctx.dataPath), sessions: running ? runningSessions(ctx.dataPath).length : 0, syncWatcher: watcherRunning(ctx.dataPath),
+    repoGuard: repoFindings(ctx.dataPath).length ? repoFindings(ctx.dataPath).map((x) => x.kind + ': ' + x.detail).join('; ') : 'no git hook/config changes from the sandbox',
+  };
+  if (!printJson(ctx, info)) table(Object.entries(info).map(([k, v]) => [_.startCase(k), String(v ?? '-')]));
+  return 0;
+};
+
+export const exec = async (ctx: Context): Promise<number> => {
+  const command = [...ctx.options.positionals, ...ctx.options.passthrough];
+  if (command.length === 0) fail('Usage: agent-sandbox exec [--timeout <s>] -- <command> [args...]');
+  requireRunning();
+  const ready = await waitForReady(ctx.dataPath, null, sandboxAlive);
+  const result = await execInSandbox(ctx.dataPath, command, currentGuestDir(ctx, ready.workspaceHost, ready.guestWorkspace), ctx.options.timeout, sandboxAlive);
+  if (!printJson(ctx, result)) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
+  }
+  return result.exitCode ?? 1;
+};
+
+export const restart = async (ctx: Context): Promise<number> => {
+  requireRunning();
+  console.log((await restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive)).message);
+  return 0;
+};
+
+export const stop = async (ctx: Context): Promise<number> => {
+  if (!isSandboxRunning()) { console.log('No Windows Sandbox is running.'); return 0; }
+  const sandbox = readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by agent-sandbox; close its window instead.');
+  await execInSandbox(ctx.dataPath, ['shutdown', '/s', '/t', '2'], sandbox.guestWorkspace, 30, sandboxAlive);
+  console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');
+  return 0;
+};
+
+export const show = (ctx: Context): number => {
+  requireRunning();
+  if (!showSandboxWindow(ctx.storageRoot)) fail('Could not find the Windows Sandbox window.');
+  return 0;
+};
+
+export const hide = async (ctx: Context): Promise<number> => {
+  requireRunning();
+  if (!(await hideSandboxWindow(ctx.storageRoot, 5))) fail('Could not find a visible Windows Sandbox window.');
+  console.log('Sandbox window hidden. Bring it back with: sbx-show');
+  return 0;
+};

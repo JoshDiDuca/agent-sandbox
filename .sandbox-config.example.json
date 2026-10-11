@@ -1,7 +1,9 @@
+// Copy to <your project>/.sandbox-config.json. Every key is optional; relative paths are relative to this file.
+// A repo can ship this file, so you are asked to approve it the first time and whenever it changes.
 {
-  "_comment": "Copy to <your project>/.sandbox-config.json. Every key is optional; relative paths are relative to this file. You are asked to approve it the first time and whenever it changes.",
   "harness": "claude",
   "sandbox": { "memoryMb": "auto", "headless": false },
+  "provisioning": { "git": { "access": "readonly" } },
   "toolchains": {
     "node": { "version": "20", "extraVersions": ["18"] },
     "python": { "version": "3.12" },
@@ -9,5 +11,7 @@
   },
   "mappings": [
     { "host": "D:\\Assets\\textures", "guest": "C:\\Assets", "readOnly": true, "optional": true }
-  ]
+  ],
+  // Scripts run inside the sandbox before the agent starts, e.g. "./sandbox-setup.ps1".
+  "scripts": []
 }

@@ -1,0 +1,46 @@
+// `account list | save | use | default | remove`
+import path from 'node:path';
+import { activateAccount, listAccounts, removeAccount, saveAccount, setDefaultAccount, type Account } from '../../host/accounts.js';
+import { restartSessions, runningSessions } from '../../host/channel.js';
+import { hostClaudeDir } from '../../host/claude-profile.js';
+import { isSandboxRunning } from '../../host/platform.js';
+import { fail } from '../../core/util.js';
+import { printJson, sandboxAlive, table, type Context } from './context.js';
+
+const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
+
+/** This PC's Claude login location (config folder + global state file). */
+const hostLogin = (ctx: Context): { claudeDir: string; globalStateFile: string } => {
+  const claudeDir = hostClaudeDir(ctx.loaded.config.claudeProfile);
+  const globalStateFile = process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(path.dirname(claudeDir), '.claude.json');
+  return { claudeDir, globalStateFile };
+};
+
+const list = (ctx: Context): number => {
+  const rows = listAccounts(ctx.storageRoot, ctx.dataPath);
+  if (printJson(ctx, rows)) return 0;
+  if (rows.length === 0) { console.log('No saved accounts. Sign in inside the sandbox, then: agent-sandbox account save <name>   (or --from-host to save this PC\'s login)'); return 0; }
+  table([['', 'NAME', 'EMAIL', 'SAVED'], ...rows.map((a) => [(a.isActive ? '*' : ' ') + (a.isDefault ? 'D' : ' '), a.name, a.email ?? '-', a.savedAt.slice(0, 16).replace('T', ' ')])]);
+  console.log('\n* = active in the sandbox   D = default for new launches');
+  return 0;
+};
+
+const use = async (ctx: Context, name: string): Promise<number> => {
+  console.log('Sandbox now uses ' + label(activateAccount(ctx.storageRoot, ctx.dataPath, name)) + '.');
+  const claudeRunning = isSandboxRunning() && runningSessions(ctx.dataPath).some((s) => s.harness === 'claude');
+  if (claudeRunning && !ctx.options.noRestart) console.log((await restartSessions(ctx.dataPath, 'claude', sandboxAlive)).message + ' with --continue; the conversation carries on under the new account.');
+  return 0;
+};
+
+export const account = async (ctx: Context): Promise<number> => {
+  const [action = 'list', name] = ctx.options.positionals;
+  const needName = (): string => name ?? fail('Usage: agent-sandbox account ' + action + ' <name>');
+  switch (action) {
+    case 'list': return list(ctx);
+    case 'save': console.log('Saved account ' + label(saveAccount(ctx.storageRoot, ctx.dataPath, needName(), ctx.options.fromHost ? hostLogin(ctx) : null)) + '.'); return 0;
+    case 'use': return use(ctx, needName());
+    case 'default': setDefaultAccount(ctx.storageRoot, needName()); console.log('Default account: ' + name); return 0;
+    case 'remove': removeAccount(ctx.storageRoot, needName()); console.log('Removed account ' + name); return 0;
+    default: fail('Unknown account action "' + action + '" (list | save | use | default | remove)');
+  }
+};

@@ -1,25 +1,26 @@
+// agent-sandbox user config: ~/.agent-sandbox/config.json (create it with `agent-sandbox config init`).
+// Comments and trailing commas are fine. Keep only the keys you want to change; everything else uses these defaults.
+// `agent-sandbox config show` prints the effective config.
 {
-  "_comment": "agent-sandbox user config. Lives at ~/.agent-sandbox/config.json (create it with: agent-sandbox config init). Only keep the keys you want to change; everything else uses the built-in defaults shown here. Run 'agent-sandbox config show' to see the effective config.",
-
   "defaultHarness": "claude",
-  "_guestWorkspace": "'auto' maps the folder you run from to C:\\Workspace\\<folder name> inside the sandbox.",
+  // "auto" maps the folder you run from to C:\Workspace\<folder name> inside the sandbox.
   "guestWorkspace": "auto",
   "readOnly": false,
+  // Extra host folders: { "host": "D:\\Assets", "guest": "C:\\Assets", "readOnly": true, "optional": true }
   "mappings": [],
 
   "sandbox": {
-    "memoryMb": "auto",
+    "memoryMb": "auto",          // or a fixed number of MB (>= 2048)
     "maxMemoryMb": 32768,
-    "reserveHostMb": 8192,
-    "vGpu": true,
+    "reserveHostMb": 8192,       // RAM always left for your PC when memoryMb is "auto"
+    "vGpu": false,               // off: Microsoft notes a virtual GPU widens the sandbox attack surface
     "networking": true,
     "clipboard": true,
     "audioInput": false,
     "videoInput": false,
     "printerRedirection": false,
     "protectedClient": true,
-    "_headless": "true hides the sandbox window (sbx-show brings it back); a headless sandbox shuts down when its last session ends.",
-    "headless": false
+    "headless": false            // true hides the window (sbx-show brings it back); it shuts down when the last session ends
   },
 
   "storage": {
@@ -28,41 +29,41 @@
     "dataName": "default"
   },
 
-  "network": { "blockPrivateRanges": true },
+  "network": { "blockPrivateRanges": true },   // block your LAN from inside the sandbox
 
   "provisioning": {
-    "copyFromHost": true,
-    "fallbackToInstall": true,
-    "refresh": false,
-    "git": { "enabled": true },
-    "terminal": { "enabled": true }
+    "copyFromHost": true,        // copy Node / Git / nvm / claude.exe from this PC when installed here
+    "fallbackToInstall": true,   // otherwise download them inside the sandbox
+    "refresh": false,            // re-copy / re-download everything on the next launch
+    // access: "full" (normal git) | "readonly" (status/log/diff only, no commits) | "none" (no git, .git hidden)
+    "git": { "enabled": true, "access": "full" },
+    "terminal": { "enabled": true }             // Windows Terminal as the sandbox window
   },
 
   "toolchains": {
-    "_node": "'host' = the Node version on this PC. A project's .nvmrc / .node-version wins over this.",
-    "node": { "version": "host", "extraVersions": [] },
+    "node": { "version": "host", "extraVersions": [] },   // "host" = the Node on this PC; a project's .nvmrc wins
     "python": { "enabled": true, "version": "3", "python2": true },
-    "_rust": "The GNU host needs no Visual Studio; use x86_64-pc-windows-msvc only if you install Build Tools via a hook.",
+    // The GNU host needs no Visual Studio (MinGW below is its linker).
     "rust": { "enabled": true, "toolchain": "stable", "host": "x86_64-pc-windows-gnu" },
-    "_cpp": "MinGW-w64 GCC (gcc, g++, mingw32-make). Also the linker Rust needs for the GNU host.",
-    "cpp": { "enabled": true },
+    "cpp": { "enabled": true },                  // MinGW-w64 GCC: gcc, g++, mingw32-make
     "dotnet": { "enabled": true, "channels": ["LTS"] },
     "bun": { "enabled": true },
-    "uv": { "enabled": true }
+    "uv": { "enabled": true },
+    "vscode": { "enabled": true }                // portable VS Code; its settings and extensions persist
   },
 
-  "attach": { "enabled": true },
-  "personalization": { "enabled": true },
+  "attach": { "enabled": true },                 // claude-sbx --terminal / agent-sandbox attach
+  "personalization": { "enabled": true },        // copy theme, accent, taskbar, wallpaper, ... from this PC
 
   "claudeProfile": {
     "enabled": true,
     "hostDir": "auto",
     "include": ["settings.json", "CLAUDE.md", "commands", "agents", "skills", "plugins"],
     "globalStateFile": "auto",
-    "copyCredentials": false,
+    "copyCredentials": false,    // true copies your Claude login into the sandbox (prefer `agent-sandbox account`)
     "overwrite": true,
-    "syncHistory": true,
-    "syncClaudeMem": true
+    "syncHistory": true,         // conversations in and out (path-translated)
+    "syncClaudeMem": true        // claude-mem database in and out
   },
 
   "harnesses": {

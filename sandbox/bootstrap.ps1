@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # Runs INSIDE Windows Sandbox (Windows PowerShell 5.1) in the sandbox window, started by logon.cmd.
-# Its only job: make sure the runner's Node exists in persistent storage, then hand over to guest\main.js.
+# Its only job: make sure the runner's Node exists in persistent storage, then hand over to runtime\main.js.
 # (That Node only runs agent-sandbox itself; the agent's `node` comes from nvm.)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # progress bars make PS 5.1 downloads extremely slow
@@ -128,7 +128,7 @@ try {
     Set-Location -LiteralPath $session.workspace
     Stop-Transcript | Out-Null
     $transcriptStopped = $true
-    & $nodeExe (Join-Path $launchDir 'guest\main.js')
+    & $nodeExe (Join-Path $launchDir 'runtime\main.js')
     Write-Host "Sandbox runner finished (exit code $LASTEXITCODE). This window stays open in $($session.workspace)."
 }
 catch {

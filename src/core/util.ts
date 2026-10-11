@@ -2,13 +2,35 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { parse as parseJsoncText, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 export const isWin = process.platform === 'win32';
 
-/** Typed explicitly so TypeScript narrows after calls (arrow functions need this to act as 
-ever). */
-export const fail: (message: string) => never = (message) => { throw new Error(message); };
-export const errMsg = (e: unknown): string => e instanceof Error ? e.message : String(e);
+/** An expected problem the user can act on: what went wrong, and (optionally) how to fix it. */
+export class UserError extends Error {
+  constructor(message: string, readonly fix?: string) { super(message); this.name = 'UserError'; }
+}
+
+/** Throws a UserError. Typed explicitly so TypeScript narrows after calls (arrow functions need it to act as never). */
+export const fail: (message: string, fix?: string) => never = (message, fix) => { throw new UserError(message, fix); };
+/**
+ * Parses JSON with comments and trailing commas (JSONC, like VS Code's settings.json). Errors name the file, line
+ * and column, and say what to fix.
+ */
+export const parseJsonc = <T>(text: string, source: string): T => {
+  const errors: ParseError[] = [];
+  const value = parseJsoncText(text.replace(/^﻿/, ''), errors, { allowTrailingComma: true, disallowComments: false });
+  if (errors.length) {
+    const { offset, error } = errors[0];
+    const before = text.slice(0, offset).split(/\r?\n/);
+    fail(source + ' is not valid JSON (line ' + before.length + ', column ' + (before[before.length - 1].length + 1) + ': ' + printParseErrorCode(error) + ').', 'Fix that spot in the file. Comments (// and /* */) and trailing commas are fine.');
+  }
+  return value as T;
+};
+
+export const readJsonc = <T>(file: string): T => parseJsonc<T>(fs.readFileSync(file, 'utf8'), file);
+
+export const errMsg =(e: unknown): string => e instanceof Error ? e.message : String(e);
 export const ensureDir = (p: string): void => { fs.mkdirSync(p, { recursive: true }); };
 export const dirExists = (p: string): boolean => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 export const fileExists = (p: string): boolean => { try { return fs.statSync(p).isFile(); } catch { return false; } };
@@ -41,6 +63,27 @@ export const findOnPath = (names: string[]): string | null => {
   const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter((d: string) => d !== '');
   for (const name of names) for (const dir of dirs) { const candidate = path.join(dir, name); if (fileExists(candidate)) return candidate; }
   return null;
+};
+
+/** True if `p` itself is a symlink or junction (lstat; never follows it). */
+export const isLink = (p: string): boolean => { try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; } };
+
+/** Removes a symlink or junction itself (never its target). Junctions need rmdir on Windows. */
+export const removeLink = (p: string): void => { try { fs.unlinkSync(p); } catch { fs.rmdirSync(p); } };
+
+/**
+ * The sandbox can write anywhere in its data folder, so it could swap a folder for a junction that points at this
+ * PC's own disk. Before the host reads, writes or deletes anything under `root`, every existing path component from
+ * `root` down to `target` must be a plain folder/file. Throws otherwise.
+ */
+export const assertNoLinks = (root: string, target: string): void => {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  if (rel.startsWith('..') || path.isAbsolute(rel)) fail('Refusing to touch ' + target + ': it is outside ' + root);
+  let current = path.resolve(root);
+  for (const part of ['', ...rel.split(path.sep).filter(Boolean)]) {
+    current = part ? path.join(current, part) : current;
+    if (isLink(current)) fail('Refusing to touch ' + target + ': ' + current + ' is a link (possible escape attempt from the sandbox).');
+  }
 };
 
 /** PowerShell arguments for a script passed encoded (no quoting issues, no progress-bar noise on stderr). */

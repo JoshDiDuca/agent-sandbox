@@ -20,7 +20,7 @@ project, toolchains, logins and history are kept.
 
 ```powershell
 # from a GitHub release (no build needed)
-npm install -g https://github.com/<you>/agent-sandbox/releases/download/v3.0.0/agent-sandbox-3.0.0.tgz
+npm install -g https://github.com/joshdiduca/agent-sandbox/releases/download/v3.0.0/agent-sandbox-3.0.0.tgz
 
 # or from a clone of this repo
 npm install          # also builds

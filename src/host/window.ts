@@ -49,7 +49,7 @@ while ((Get-Date) -lt $deadline) {
 }
 ConvertTo-Json -Compress @($hidden)`;
   const stdout = await runPowerShellAsync(script);
-  const handles = JSON.parse(stdout.trim() || '[]') as number[];
+  const handles = (JSON.parse(stdout.trim() || '[]') as unknown[]).filter((h): h is number => Number.isSafeInteger(h));
   writeJson(stateFile(storageRoot), { handles });
   return handles.length > 0;
 };
@@ -57,7 +57,8 @@ ConvertTo-Json -Compress @($hidden)`;
 /** Shows the sandbox window again (the ones we hid, or any hidden Windows Sandbox window). */
 export const showSandboxWindow = (storageRoot: string): boolean => {
   if (!isWin) return false;
-  const recorded = tryReadJson<{ handles: number[] }>(stateFile(storageRoot))?.handles ?? [];
+  // Only integers go into the script, whatever the file contains.
+  const recorded = (tryReadJson<{ handles: unknown[] }>(stateFile(storageRoot))?.handles ?? []).filter((h): h is number => Number.isSafeInteger(h));
   const script = PRELUDE + `
 $handles = @(${recorded.join(',')}) | Where-Object { [AgentSandbox.Win]::IsWindow([IntPtr]$_) }
 if (-not $handles) { $handles = Get-SandboxWindows $false }

@@ -7,7 +7,7 @@ import os from 'node:os';
 import type { GuestRequest, GuestResponse, SandboxStatus, SessionStatus } from '../core/types.js';
 import { connect, DETACH_KEY, runTerminalClient } from '../shared/pty-client.js';
 import { listSessions, now, readResponse, readSandboxStatus, readSession, runPaths, writeJsonAtomic } from '../shared/rundir.js';
-import { fail, sleep } from '../core/util.js';
+import { assertNoLinks, fail, isLink, removeLink, sleep } from '../core/util.js';
 
 const BOOT_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -51,12 +51,15 @@ export const waitForReady = (dataPath: string, launchId: string | null, isAlive:
   }, 'Timed out waiting for the sandbox to finish provisioning.');
 };
 
-export const sendRequest = (dataPath: string, request: GuestRequest): void => writeJsonAtomic(runPaths(dataPath).request(request.id), request);
+export const sendRequest = (dataPath: string, request: GuestRequest): void => {
+  assertNoLinks(dataPath, runPaths(dataPath).requests);
+  writeJsonAtomic(runPaths(dataPath).request(request.id), request);
+};
 
 export const waitForResponse = (dataPath: string, requestId: string, isAlive: () => boolean, timeoutMs: number): Promise<GuestResponse> =>
   until(timeoutMs, isAlive, () => {
     const response = readResponse(dataPath, requestId);
-    if (response) fs.rmSync(runPaths(dataPath).response(requestId), { force: true });
+    if (response && !isLink(runPaths(dataPath).responses)) fs.rmSync(runPaths(dataPath).response(requestId), { force: true });
     return response;
   }, 'Timed out waiting for the sandbox to answer (is the session daemon running?).');
 
@@ -129,5 +132,8 @@ export const attachTerminal = async (session: SessionStatus): Promise<number> =>
 /** Forgets status from a previous sandbox run so nothing stale is picked up. */
 export const resetRunDir = (dataPath: string): void => {
   const p = runPaths(dataPath);
-  for (const target of [p.sandbox, p.requests, p.responses, p.sessions]) fs.rmSync(target, { recursive: true, force: true });
+  // A link here (planted by a sandbox) is removed itself; rm never follows it.
+  for (const target of [p.sandbox, p.requests, p.responses, p.sessions]) {
+    if (isLink(target)) removeLink(target); else fs.rmSync(target, { recursive: true, force: true });
+  }
 };

@@ -1,0 +1,67 @@
+// Full Git for Windows (with bash: Claude Code on Windows needs Git Bash). Copied from the host when installed there.
+// provisioning.git.access decides what the agent gets: 'full' git, a 'readonly' guarded git, or 'none' (bash only).
+import fs from 'node:fs';
+import path from 'node:path';
+import type { GitAccess } from '../../core/types.js';
+import { download, githubAsset } from '../../shared/download.js';
+import { dataDir, dryRun, errMsg, exec, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, warn } from '../env.js';
+import { ensureCompiled } from '../ptyhost.js';
+import { arch, tool, type ToolEnv } from './common.js';
+
+const BLOCKED_HOOKS = ['pre-commit', 'commit-msg', 'pre-merge-commit', 'pre-push', 'pre-rebase', 'pre-applypatch', 'applypatch-msg'];
+const posix = (p: string): string => p.replace(/\\/g, '/');
+
+const installPortableGit = async (root: string): Promise<void> => {
+  const asset = await githubAsset('git-for-windows/git', arch === 'arm64' ? /^PortableGit-[\d.]+-arm64\.7z\.exe$/ : /^PortableGit-[\d.]+-64-bit\.7z\.exe$/);
+  const sfx = tool(asset.name);
+  log('Downloading ' + asset.name + ' ...');
+  await download(asset.url, sfx, asset.sha256);
+  exec(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
+  fs.rmSync(sfx, { force: true });
+};
+
+/**
+ * readonly / none: a `git` wrapper first on PATH and as a bash function (Git Bash would otherwise find the real
+ * git.exe), plus git config from the environment (which repository config cannot override).
+ */
+const installGuard = (env: ToolEnv, access: Exclude<GitAccess, 'full'>, realGit: string): void => {
+  const dir = mkdirp(tool('gitguard'));
+  const guard = path.join(launchDir, 'runtime', 'gitguard.js');
+  // A real git.exe (programs like Claude Code only look for .exe); a .cmd only if the C# compiler is unavailable.
+  try { fs.copyFileSync(ensureCompiled('gitshim'), path.join(dir, 'git.exe')); fs.rmSync(path.join(dir, 'git.cmd'), { force: true }); }
+  catch (e) { warn('git guard: falling back to git.cmd (' + errMsg(e) + ')'); fs.writeFileSync(path.join(dir, 'git.cmd'), '@"' + process.execPath + '" "' + guard + '" %*\r\n'); }
+  fs.writeFileSync(path.join(dir, 'bashenv.sh'), 'git() { "' + posix(process.execPath) + '" "' + posix(guard) + '" "$@"; }\nexport -f git\n');
+  env.prepend.unshift(dir);
+  Object.assign(env.vars, {
+    AGENT_GIT_ACCESS: access, AGENT_REAL_GIT: access === 'readonly' ? realGit : '',
+    AGENT_GUARD_NODE: process.execPath, AGENT_GUARD_SCRIPT: guard, BASH_ENV: posix(path.join(dir, 'bashenv.sh')),
+  });
+  if (access === 'readonly') {
+    const hooks = mkdirp(path.join(dir, 'hooks'));
+    for (const hook of BLOCKED_HOOKS) fs.writeFileSync(path.join(hooks, hook), '#!/bin/sh\necho "git is read-only in this sandbox: ' + hook + ' refused." >&2\nexit 1\n');
+    Object.assign(env.vars, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: posix(hooks) });
+  } else {
+    // Even a git.exe found some other way sees no repository.
+    env.vars.GIT_DIR = path.join(dataDir, 'git-disabled');
+  }
+};
+
+export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean, access: GitAccess): Promise<void> => {
+  const root = tool('git');
+  const bash = path.join(root, 'bin', 'bash.exe');
+  const gitExe = path.join(root, 'cmd', 'git.exe');
+  const hostGit = path.join(hostToolsDir, 'git');
+  if (exists(root) && !exists(bash)) { log('Replacing the old MinGit (no bash) with full Git for Windows.'); fs.rmSync(root, { recursive: true, force: true }); }
+  if (!exists(bash) || refresh) {
+    if (dryRun) { log('(dry run) would provision Git for Windows' + (hostCopy ? ' from this PC' : '') + ' (access: ' + access + ')'); return; }
+    if (hostCopy && exists(path.join(hostGit, 'bin', 'bash.exe'))) { log('Copying Git for Windows from this PC ...'); robocopy(hostGit, root); }
+    else await installPortableGit(root);
+  }
+  if (!exists(bash)) throw new Error('bash.exe missing after installing Git');
+  env.vars.CLAUDE_CODE_GIT_BASH_PATH = bash;
+  env.append.push(path.join(root, 'usr', 'bin'));
+  const version = execOutput(gitExe, ['--version']).replace(/^git version /, '');
+  if (access === 'full') { env.prepend.push(path.join(root, 'cmd')); env.summary.push('git: ' + version); return; }
+  installGuard(env, access, gitExe);
+  env.summary.push(access === 'readonly' ? 'git: ' + version + ' READ-ONLY (status/log/diff/show/blame; no commit, push, checkout, ...)' : 'git: DISABLED (bash only; the agent cannot use git)');
+};

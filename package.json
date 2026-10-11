@@ -33,7 +33,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "rebuild": "npm run clean && npm run build",
     "test": "npm run build && node dist/bin/agent-sandbox.js self-test",
@@ -57,11 +57,15 @@
     "gemini"
   ],
   "dependencies": {
-    "lodash": "^4.18.1"
+    "commander": "^14.0.3",
+    "jsonc-parser": "^3.3.1",
+    "lodash": "^4.18.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.26",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.8.0"
   }
 }

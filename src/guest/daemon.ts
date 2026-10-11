@@ -7,8 +7,11 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import type { GuestRequest, GuestResponse, SessionStatus } from '../core/types.js';
 import { FrameType, sendControl } from '../shared/pty-client.js';
 import { commandLine, ensurePtyHost, freePort, startPtyHost, waitForPort } from './ptyhost.js';
-import { provisionHarness, resolveLaunch, runHooks, saveClaudeMem, guestAddresses } from './provision.js';
-import { listRequests, now, readSession, writeJsonAtomic } from '../shared/rundir.js';
+import { provisionHarness, resolveLaunch } from './setup/agents.js';
+import { saveClaudeMem } from './setup/claude.js';
+import { runHooks } from './setup/hooks.js';
+import { guestAddresses } from './setup/network.js';
+import { now, readSession, scanRequests, writeJsonAtomic } from '../shared/rundir.js';
 import { dataDir, errMsg, exists, isWin, log, run, session, toolsDir, warn, workspace } from './env.js';
 
 const MAX_OUTPUT = 1024 * 1024;
@@ -90,7 +93,7 @@ const handle = async (req: GuestRequest): Promise<void> => {
 const maybeShutdown = (): void => {
   if (!session.headless || live.size > 0 || !isWin) return;
   setTimeout(() => {
-    if (live.size > 0 || listRequests(dataDir).length > 0) return;
+    if (live.size > 0 || scanRequests(dataDir).valid.length > 0) return;
     log('Headless sandbox has no sessions left; shutting down.');
     saveClaudeMem();
     spawnSync('shutdown.exe', ['/s', '/t', '5'], { windowsHide: true });
@@ -98,12 +101,10 @@ const maybeShutdown = (): void => {
 };
 
 const loop = async (): Promise<void> => {
+  const { valid, invalid } = scanRequests(dataDir);
   // Anything in requests/ that is not a valid request (wrong kind, bad id, junk) is deleted unread.
-  for (const file of fs.existsSync(run.requests) ? fs.readdirSync(run.requests) : []) {
-    const valid = /^[A-Za-z0-9_-]{1,64}\.json$/.test(file) && listRequests(dataDir).some((r) => r.id + '.json' === file);
-    if (!valid && !file.endsWith('.tmp')) fs.rmSync(path.join(run.requests, file), { force: true });
-  }
-  for (const req of listRequests(dataDir)) {
+  for (const file of invalid) fs.rmSync(file, { recursive: true, force: true });
+  for (const req of valid) {
     fs.rmSync(run.request(req.id), { force: true });
     if (readSession(dataDir, req.id)) continue;
     await handle(req).catch((e: unknown) => respond(req.id, { ok: false, message: errMsg(e) }));

@@ -33,6 +33,9 @@ export const resizeFrame = (cols: number, rows: number): Buffer => {
   return encodeFrame(FrameType.Resize, payload);
 };
 
+/** Same limit as ptyhost.cs; a peer announcing more is broken or hostile. */
+export const MAX_FRAME_BYTES = 1 << 20;
+
 /** Splits a TCP byte stream back into frames. */
 export class FrameReader {
   private pending = Buffer.alloc(0);
@@ -41,11 +44,32 @@ export class FrameReader {
     const frames: Frame[] = [];
     while (this.pending.length >= 5) {
       const length = this.pending.readUInt32LE(1);
+      if (length > MAX_FRAME_BYTES) throw new Error('frame too large (' + length + ' bytes)');
       if (this.pending.length < 5 + length) break;
       frames.push({ type: this.pending[0], payload: this.pending.subarray(5, 5 + length) });
       this.pending = this.pending.subarray(5 + length);
     }
     return frames;
+  }
+}
+
+/**
+ * Removes OSC 52 (clipboard write) from the sandbox's output before it reaches your terminal: an untrusted program
+ * must not be able to silently put text into your clipboard. Everything else (colours, titles, links) passes.
+ * Stateful, so a sequence split across chunks is still caught.
+ */
+export class OutputFilter {
+  private carry = '';
+  push(chunk: Buffer): Buffer {
+    let text = (this.carry + chunk.toString('latin1')).replace(/\x1b\]52;[^\x07\x1b]*(\x07|\x1b\\)/g, '');
+    this.carry = '';
+    const open = text.lastIndexOf('\x1b');
+    const tail = open === -1 ? '' : text.slice(open);
+    if (tail.length < 1 << 16 && /^\x1b(\](5(2(;[^\x07\x1b]*)?)?)?)?$/.test(tail)) {
+      this.carry = tail;
+      text = text.slice(0, open);
+    }
+    return Buffer.from(text, 'latin1');
   }
 }
 
@@ -84,6 +108,7 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
   return new Promise((resolve) => {
     let done = false;
     const reader = new FrameReader();
+    const filter = new OutputFilter();
     const finish = (result: ClientResult): void => {
       if (done) return;
       done = true;
@@ -102,11 +127,13 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
     const onResize = (): void => { const [c, r] = size(); socket.write(resizeFrame(c, r)); };
 
     socket.on('data', (chunk: Buffer) => {
-      for (const frame of reader.push(chunk)) {
-        if (frame.type === FrameType.Output) stdout.write(frame.payload);
+      let frames: Frame[];
+      try { frames = reader.push(chunk); } catch { finish({ reason: 'error', message: 'invalid data from the sandbox' }); return; }
+      for (const frame of frames) {
+        if (frame.type === FrameType.Output) stdout.write(filter.push(frame.payload));
         else if (frame.type === FrameType.Restarting) stdout.write('\x1b[2J\x1b[3J\x1b[H');
-        else if (frame.type === FrameType.Exit) finish({ reason: 'exit', exitCode: frame.payload.readInt32LE(0) });
-        else if (frame.type === FrameType.Error) finish({ reason: 'error', message: frame.payload.toString('utf8') });
+        else if (frame.type === FrameType.Exit) finish({ reason: 'exit', exitCode: frame.payload.length >= 4 ? frame.payload.readInt32LE(0) : 1 });
+        else if (frame.type === FrameType.Error) finish({ reason: 'error', message: frame.payload.toString('utf8').slice(0, 500).replace(/[\x00-\x1f\x7f]/g, ' ') });
       }
     });
     socket.on('close', () => finish({ reason: 'closed' }));

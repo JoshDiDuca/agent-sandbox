@@ -1,5 +1,5 @@
-// Builds sandbox/ptyhost.cs with the .NET Framework compiler that ships with Windows (cached by source hash) and
-// starts one ptyhost per agent session.
+// Builds the sandbox's small C# helpers (ptyhost.cs, gitshim.cs) with the .NET Framework compiler that ships with
+// Windows (cached by source hash), and starts one ptyhost per agent session.
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -12,18 +12,23 @@ const CSC = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Microsoft.NET', 'Fra
 export const quoteArg = (arg: string): string => (arg !== '' && !/[\s"]/.test(arg) ? arg : '"' + arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"');
 export const commandLine = (file: string, args: string[]): string => [file, ...args].map(quoteArg).join(' ');
 
-/** Path of the compiled ptyhost.exe for the current source (compiles it the first time). */
-export const ensurePtyHost = (): string => {
-  const source = path.join(launchDir, 'sandbox', 'ptyhost.cs');
+export type Helper = 'ptyhost' | 'gitshim';
+const HELPERS: Helper[] = ['ptyhost', 'gitshim'];
+
+/** tools\<name>\<source hash>\<name>.exe for the current sandbox\<name>.cs (compiled the first time). */
+export const ensureCompiled = (name: Helper): string => {
+  const source = path.join(launchDir, 'sandbox', name + '.cs');
   const hash = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex').slice(0, 12);
-  const exe = path.join(toolsDir, 'ptyhost', hash, 'ptyhost.exe');
+  const exe = path.join(toolsDir, name, hash, name + '.exe');
   if (exists(exe)) return exe;
   if (!exists(CSC)) throw new Error('The .NET Framework C# compiler was not found at ' + CSC);
   mkdirp(path.dirname(exe));
   const result = spawnSync(CSC, ['/nologo', '/optimize', '/target:exe', '/out:' + exe, source], { encoding: 'utf8', windowsHide: true });
-  if (result.status !== 0) throw new Error('Compiling ptyhost failed: ' + (result.stdout ?? '') + (result.stderr ?? ''));
+  if (result.status !== 0) throw new Error('Compiling ' + name + ' failed: ' + (result.stdout ?? '') + (result.stderr ?? ''));
   return exe;
 };
+
+export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
 
 export const freePort = (): Promise<number> => new Promise((resolve, reject) => {
   const server = net.createServer();
@@ -50,11 +55,14 @@ export interface PtyHostOptions { exe: string; port: number; token: string; cols
 export const startPtyHost = (o: PtyHostOptions): ChildProcess =>
   spawn(o.exe, [String(o.port), o.token, String(o.cols), String(o.rows), path.join(logsDir, 'ptyhost-' + o.id + '.log'), o.command, o.restartCommand], { cwd: o.cwd, env: o.env, detached: true, stdio: 'ignore', windowsHide: true });
 
-/** Removes ptyhost builds of older sources and interrupted downloads in the tools folder. */
-export const pruneToolLeftovers = (currentPtyHost: string | null): void => {
-  const builds = path.join(toolsDir, 'ptyhost');
-  if (currentPtyHost && exists(builds)) {
-    for (const hash of fs.readdirSync(builds).filter((h) => h !== path.basename(path.dirname(currentPtyHost)))) fs.rmSync(path.join(builds, hash), { recursive: true, force: true });
+/** Removes helper builds of older sources and interrupted downloads in the tools folder. */
+export const pruneToolLeftovers = (): void => {
+  for (const name of HELPERS) {
+    const builds = path.join(toolsDir, name);
+    const source = path.join(launchDir, 'sandbox', name + '.cs');
+    if (!exists(builds) || !exists(source)) continue;
+    const current = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex').slice(0, 12);
+    for (const hash of fs.readdirSync(builds).filter((h) => h !== current)) fs.rmSync(path.join(builds, hash), { recursive: true, force: true });
   }
   for (const name of fs.readdirSync(toolsDir).filter((n) => /\.staging-[0-9a-f]+$/i.test(n))) fs.rmSync(path.join(toolsDir, name), { recursive: true, force: true });
 };

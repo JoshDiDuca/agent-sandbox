@@ -1,17 +1,20 @@
+// Built-in defaults and loading the user config (~/.agent-sandbox/config.json). Shapes live in schema.ts.
 import fs from 'node:fs';
 import path from 'node:path';
+import _ from 'lodash';
 import type { Config, LoadedConfig } from './types.js';
-import { assertGuestPath, fail, homeDir, readJson } from './util.js';
+import { Config as ConfigSchema, describeIssues } from './schema.js';
+import { fail, homeDir, readJsonc } from './util.js';
 
 export const DEFAULTS: Config = {
   defaultHarness: 'claude',
   guestWorkspace: 'auto',
   readOnly: false,
   mappings: [],
-  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, reserveHostMb: 8192, vGpu: true, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
+  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default' },
   network: { blockPrivateRanges: true },
-  provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true }, terminal: { enabled: true } },
+  provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },
   toolchains: {
     node: { version: 'host', extraVersions: [] },
     python: { enabled: true, version: '3', python2: true },
@@ -20,6 +23,7 @@ export const DEFAULTS: Config = {
     dotnet: { enabled: true, channels: ['LTS'] },
     bun: { enabled: true },
     uv: { enabled: true },
+    vscode: { enabled: true },
   },
   attach: { enabled: true },
   personalization: { enabled: true },
@@ -32,64 +36,38 @@ export const DEFAULTS: Config = {
   hooks: { failFast: false },
 };
 
-/** Per-user folder for config, hooks and the account store pointer. Survives reinstalling the npm package. */
+/** Per-user folder for config and hooks. Survives reinstalling the npm package. */
 export const userDir = (): string => process.env.AGENT_SANDBOX_HOME ?? path.join(homeDir(), '.agent-sandbox');
 export const userConfigPath = (): string => path.join(userDir(), 'config.json');
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** Deep merge where arrays (and anything that is not a plain object) replace instead of merging element by element. */
+export const mergeConfig = <T>(base: T, extra: unknown): T =>
+  _.mergeWith(_.cloneDeep(base), extra, (_target: unknown, source: unknown) => (Array.isArray(source) ? source : undefined));
 
-export const mergeConfig = <T>(base: T, extra: unknown): T => {
-  const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-  if (!isPlainObject(extra)) return result as T;
-  for (const [key, value] of Object.entries(extra)) {
-    if (key.startsWith('_') || key.startsWith('$')) continue;
-    result[key] = isPlainObject(result[key]) && isPlainObject(value) ? mergeConfig(result[key], value) : value;
-  }
-  return result as T;
-};
-
-export const validateConfig = (config: Config): void => {
-  if (typeof config.storage?.root !== 'string') fail('storage.root must be a string.');
-  if (!/^[A-Za-z0-9_-]+$/.test(config.storage.dataName)) fail('storage.dataName may only contain letters, numbers, - and _.');
-  const memory = config.sandbox.memoryMb;
-  if (memory !== 'auto' && (!Number.isInteger(memory) || memory < 2048)) fail("sandbox.memoryMb must be 'auto' or an integer >= 2048.");
-  if (!config.harnesses?.[config.defaultHarness]) fail('defaultHarness does not exist: ' + config.defaultHarness);
-  if (config.guestWorkspace !== 'auto') assertGuestPath(config.guestWorkspace);
-  for (const mapping of config.mappings ?? []) {
-    if (typeof mapping.host !== 'string' || typeof mapping.guest !== 'string' || typeof mapping.readOnly !== 'boolean') fail('Every mappings entry needs host, guest and a boolean readOnly.');
-    assertGuestPath(mapping.guest);
-  }
-  for (const [name, harness] of Object.entries(config.harnesses)) {
-    if (!/^[A-Za-z0-9_-]+$/.test(name)) fail('Invalid harness name: ' + name);
-    if (!harness.hostExecutable && !harness.npmPackage) fail('Harness ' + name + ' needs hostExecutable or npmPackage.');
-    if (harness.npmPackage && !harness.npmBin) fail('Harness ' + name + ' needs npmBin when npmPackage is set.');
-  }
+/** Validates a full config; throws one readable error listing every problem. */
+export const validateConfig = (config: unknown, source: string): Config => {
+  const parsed = ConfigSchema.safeParse(config);
+  if (!parsed.success) fail(source + ' is not valid:\n  - ' + describeIssues(parsed.error).join('\n  - '));
+  return parsed.data;
 };
 
 /**
  * Lookup order: --config, %AGENT_SANDBOX_CONFIG%, ~/.agent-sandbox/config.json, built-in defaults.
- * Whatever file is found is merged over the defaults, so it only needs the keys you want to change.
+ * Whatever file is found (JSON with comments) is merged over the defaults, so it only needs the keys you change.
  */
 export const loadConfig = (explicitPath?: string): LoadedConfig => {
-  const candidate = explicitPath ?? process.env.AGENT_SANDBOX_CONFIG ?? userConfigPath();
-  const full = path.resolve(candidate);
+  const requested = explicitPath ?? process.env.AGENT_SANDBOX_CONFIG;
+  const full = path.resolve(requested ?? userConfigPath());
   if (!fs.existsSync(full)) {
-    if (explicitPath || process.env.AGENT_SANDBOX_CONFIG) fail('Config not found: ' + full);
-    const config = structuredClone(DEFAULTS);
-    validateConfig(config);
-    return { config, configPath: null, base: userDir() };
+    if (requested) fail('Config not found: ' + full);
+    return { config: structuredClone(DEFAULTS), configPath: null, base: userDir() };
   }
-  const config = mergeConfig(structuredClone(DEFAULTS), readJson<unknown>(full));
-  validateConfig(config);
-  return { config, configPath: full, base: path.dirname(full) };
+  return { config: validateConfig(mergeConfig(DEFAULTS, readJsonc<unknown>(full)), full), configPath: full, base: path.dirname(full) };
 };
 
 export const assertNoGuestOverlap = (mappings: { guest: string }[]): void => {
-  for (let i = 0; i < mappings.length; i++) {
-    for (let j = i + 1; j < mappings.length; j++) {
-      const a = mappings[i].guest.replace(/\\+$/, '').toLowerCase();
-      const b = mappings[j].guest.replace(/\\+$/, '').toLowerCase();
-      if (a === b || a.startsWith(b + '\\') || b.startsWith(a + '\\')) fail('Overlapping guest mappings: ' + mappings[i].guest + ' and ' + mappings[j].guest);
-    }
-  }
+  const normal = mappings.map((m) => m.guest.replace(/\\+$/, '').toLowerCase());
+  normal.forEach((a, i) => normal.slice(i + 1).forEach((b, j) => {
+    if (a === b || a.startsWith(b + '\\') || b.startsWith(a + '\\')) fail('Overlapping guest mappings: ' + mappings[i].guest + ' and ' + mappings[i + 1 + j].guest);
+  }));
 };

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { githubAsset, installArchive } from '../shared/download.js';
-import { errMsg, fileExists, writeJson } from '../core/util.js';
+import { assertNoLinks, errMsg, fileExists, writeJson } from '../core/util.js';
 
 export const terminalDir = (dataPath: string): string => path.join(dataPath, 'tools', 'terminal');
 export const terminalExe = (dataPath: string): string => path.join(terminalDir(dataPath), 'WindowsTerminal.exe');
@@ -20,6 +20,7 @@ const SETTINGS = {
 
 export const ensureTerminal = async (dataPath: string, refresh: boolean): Promise<{ exe: string | null; message: string }> => {
   const exe = terminalExe(dataPath);
+  assertNoLinks(dataPath, terminalDir(dataPath));
   if (fileExists(exe) && !refresh) return { exe, message: 'cached' };
   try {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x64';

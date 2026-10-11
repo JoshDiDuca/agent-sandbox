@@ -1,0 +1,55 @@
+// Python 3 and Python 2: full CPython from the official NuGet packages (portable, with pip).
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Toolchains, ToolVersions } from '../../core/types.js';
+import { fetchJson, installArchive } from '../../shared/download.js';
+import { dryRun, exec, exists, log, mkdirp } from '../env.js';
+import { resolveCached, tool, type ToolEnv } from './common.js';
+
+type Package = 'python' | 'python2';
+
+/** Newest stable version matching a prefix spec ("3" -> 3.13.1, "3.12" -> 3.12.10). */
+export const pickPackageVersion = (all: string[], spec: string): string | null => {
+  const s = spec.trim().replace(/^python-?/i, '');
+  const stable = all.filter((v) => /^\d+(\.\d+)*$/.test(v)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  return stable.find((v) => v === s || v.startsWith(s + '.')) ?? null;
+};
+
+const installPython = async (pkg: Package, spec: string): Promise<string> => {
+  const version = await resolveCached(pkg + ':' + spec, async () => {
+    const { versions } = await fetchJson<{ versions: string[] }>('https://api.nuget.org/v3-flatcontainer/' + pkg + '/index.json');
+    return pickPackageVersion(versions, spec) ?? Promise.reject(new Error('No ' + pkg + ' release matches "' + spec + '"'));
+  });
+  const dir = tool('python', pkg + '-' + version);
+  const exe = path.join(dir, 'python.exe');
+  if (!exists(exe)) {
+    log('Downloading ' + pkg + ' ' + version + ' ...');
+    await installArchive('https://api.nuget.org/v3-flatcontainer/' + pkg + '/' + version + '/' + pkg + '.' + version + '.nupkg', dir, { locate: 'python.exe', fileName: pkg + '.' + version + '.zip' });
+  }
+  if (!exists(path.join(dir, 'Scripts', 'pip.exe')) && !exists(path.join(dir, 'Scripts', 'pip2.exe'))) exec(exe, ['-m', 'ensurepip', '--default-pip'], { stdio: 'ignore' });
+  return dir;
+};
+
+/** Writes `<name>.cmd` into tools\shims, e.g. python2.cmd. */
+const shim = (name: string, command: string): void => {
+  fs.writeFileSync(path.join(mkdirp(tool('shims')), name + '.cmd'), '@echo off\r\n' + command + ' %*\r\n');
+};
+
+const shimPair = (version: '2' | '3', dir: string): void => {
+  const python = '"' + path.join(dir, 'python.exe') + '"';
+  shim('python' + version, python);
+  shim('pip' + version, python + ' -m pip');
+};
+
+export const setupPython = async (env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> => {
+  if (dryRun) { log('(dry run) would provision Python ' + versions.python.spec + (config.python2 ? ' and Python 2.7' : '')); return; }
+  const py3 = await installPython('python', versions.python.spec);
+  shimPair('3', py3);
+  env.prepend.push(py3, path.join(py3, 'Scripts'), tool('shims'));
+  env.vars.PYTHONIOENCODING = 'utf-8';
+  env.summary.push('python: ' + path.basename(py3).replace('python-', '') + ' (from ' + versions.python.source + ')');
+  if (!config.python2) return;
+  const py2 = await installPython('python2', '2.7');
+  shimPair('2', py2);
+  env.summary.push('python2: ' + path.basename(py2).replace('python2-', ''));
+};

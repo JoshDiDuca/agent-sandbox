@@ -6,7 +6,7 @@ import type { Config, GenerateOptions, Generated, GuestSession, ProfileResult, R
 import { assertNoGuestOverlap, userDir } from '../core/config.js';
 import { capturePersonalization } from './personalize.js';
 import { hostClaudeDir, stageClaudeProfile } from './claude-profile.js';
-import { dirExists, ensureDir, expandPath, fail, fileExists, homeDir, isRootPath, isUserProfile, writeJson, xmlEscape } from '../core/util.js';
+import { dirExists, ensureDir, fail, fileExists, homeDir, isRootPath, isUserProfile, writeJson, xmlEscape } from '../core/util.js';
 
 export const GUEST = { launch: 'C:\\AgentLaunch', data: 'C:\\AgentData', hostTools: 'C:\\HostTools' } as const;
 const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'];
@@ -39,14 +39,13 @@ export const buildWsb = (config: Config, memoryMb: number, mappings: ResolvedMap
 
 const collectMappings = (o: GenerateOptions, launchPath: string): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
-  const base = path.dirname(dataPath);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
     { host: dataPath, guest: GUEST.data, readOnly: false },
     { host: workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
   ];
   for (const m of config.mappings) {
-    const host = expandPath(m.host, base);
+    const host = m.host;
     if (!dirExists(host)) {
       if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
       fail('Required mapping folder not found: ' + host);
@@ -78,13 +77,31 @@ const stageHooks = (packageRoot: string, launchPath: string, scripts: string[]):
   });
 };
 
+export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js'];
+
+/** The bundled sandbox runtime (dist/runtime: one self-contained file per entry point) and the sandbox/ scripts. */
 const copyRuntime = (packageRoot: string, launchPath: string): void => {
-  const guestDir = path.join(packageRoot, 'dist', 'guest');
-  if (!fileExists(path.join(guestDir, 'main.js'))) fail('Missing build output: ' + path.join(guestDir, 'main.js') + ' (run "npm run build").');
-  ensureDir(path.join(launchPath, 'guest'));
-  for (const file of fs.readdirSync(guestDir).filter((f: string) => f.endsWith('.js'))) fs.copyFileSync(path.join(guestDir, file), path.join(launchPath, 'guest', file));
-  fs.writeFileSync(path.join(launchPath, 'guest', 'package.json'), '{ "type": "module" }\n', 'utf8');
+  const runtime = path.join(packageRoot, 'dist', 'runtime');
+  const missing = RUNTIME_FILES.filter((f) => !fileExists(path.join(runtime, f)));
+  if (missing.length) fail('The sandbox runtime is missing from ' + runtime + ' (' + missing.join(', ') + ').', 'Rebuild agent-sandbox: npm run build (or reinstall the package).');
+  ensureDir(path.join(launchPath, 'runtime'));
+  for (const file of RUNTIME_FILES) fs.copyFileSync(path.join(runtime, file), path.join(launchPath, 'runtime', file));
+  fs.writeFileSync(path.join(launchPath, 'package.json'), '{ "type": "module" }\n', 'utf8');
   fs.cpSync(path.join(packageRoot, 'sandbox'), path.join(launchPath, 'sandbox'), { recursive: true });
+};
+
+/** Only the identity from ~/.gitconfig: the rest can hold credentials (helpers, tokens in insteadOf URLs). */
+export const gitIdentity = (gitconfig: string): string => {
+  const values: Record<string, string> = {};
+  let section = '';
+  for (const line of gitconfig.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]+)\]/.exec(line);
+    if (header) { section = header[1].trim().toLowerCase(); continue; }
+    const pair = /^\s*(name|email)\s*=\s*(.*?)\s*$/i.exec(line);
+    if (section === 'user' && pair && !/[\r\n]/.test(pair[2])) values[pair[1].toLowerCase()] = pair[2].replace(/^"(.*)"$/, '$1');
+  }
+  const lines = Object.entries(values).map(([k, v]) => '\t' + k + ' = ' + v);
+  return lines.length ? '[user]\n' + lines.join('\n') + '\n' : '';
 };
 
 export const generateSandbox = (o: GenerateOptions): Generated & { personalization: string } => {
@@ -100,7 +117,8 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
 
   const profile: ProfileResult = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath) : { hostDir: null, staged: [], skipped: [], credentials: false };
   const gitconfig = path.join(homeDir(), '.gitconfig');
-  if (fileExists(gitconfig)) { ensureDir(path.join(launchPath, 'home')); fs.copyFileSync(gitconfig, path.join(launchPath, 'home', '.gitconfig')); }
+  const identity = fileExists(gitconfig) ? gitIdentity(fs.readFileSync(gitconfig, 'utf8')) : '';
+  if (identity) { ensureDir(path.join(launchPath, 'home')); fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8'); }
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
 
   const session: GuestSession = {

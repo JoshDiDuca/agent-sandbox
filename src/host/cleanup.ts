@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { dirExists } from '../core/util.js';
+import { dirExists, isLink, removeLink } from '../core/util.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -11,16 +11,18 @@ export interface PruneResult { launches: number; logs: number; leftovers: number
 
 export const DEFAULT_PRUNE: PruneOptions = { launchDays: 7, logDays: 14, conflictDays: 30, keep: [] };
 
+/** Size on disk, never following links (a sandbox-planted junction must not make us walk this PC's disk). */
 const sizeOf = (p: string): number => {
   try {
-    const stat = fs.statSync(p);
-    return stat.isDirectory() ? _.sumBy(fs.readdirSync(p), (name) => sizeOf(path.join(p, name))) : stat.size;
+    const stat = fs.lstatSync(p);
+    return stat.isDirectory() ? _.sumBy(fs.readdirSync(p), (name) => sizeOf(path.join(p, name))) : stat.isSymbolicLink() ? 0 : stat.size;
   } catch { return 0; }
 };
 
-const ageMs = (p: string, now: number): number => { try { return now - fs.statSync(p).mtimeMs; } catch { return 0; } };
+const ageMs = (p: string, now: number): number => { try { return now - fs.lstatSync(p).mtimeMs; } catch { return 0; } };
 
-const children = (dir: string): string[] => (dirExists(dir) ? fs.readdirSync(dir).map((name) => path.join(dir, name)) : []);
+/** Entries of a real folder; a link in place of a folder yields nothing (it is never listed or entered). */
+const children = (dir: string): string[] => (dirExists(dir) && !isLink(dir) ? fs.readdirSync(dir).map((name) => path.join(dir, name)) : []);
 
 /**
  * Deletes, under the storage root:
@@ -35,7 +37,7 @@ export const pruneStorage = (storageRoot: string, options: Partial<PruneOptions>
   const result: PruneResult = { launches: 0, logs: 0, leftovers: 0, bytes: 0 };
   const remove = (p: string, counter: keyof Omit<PruneResult, 'bytes'>): void => {
     result.bytes += sizeOf(p);
-    fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 });
+    if (isLink(p)) removeLink(p); else fs.rmSync(p, { recursive: true, force: true, maxRetries: 2 });
     result[counter]++;
   };
 

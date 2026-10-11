@@ -64,7 +64,8 @@ export const resolveVersions = (config: Config, workspace: string, local: Overri
 /** Precedence (lowest to highest): built-in defaults, user config, .sandbox-config.json in the workspace, command-line flags. */
 export const resolveRun = async (req: RunRequest, hostNodeVersion: string = process.version): Promise<ResolvedRun> => {
   const notes: string[] = [];
-  let config = req.loaded.config;
+  // Mappings from the user config are relative to that config file; expand them before anything else uses them.
+  let config = { ...req.loaded.config, mappings: req.loaded.config.mappings.map((m) => ({ ...m, host: expandPath(m.host, req.loaded.base) })) };
   const storageRoot = expandPath(config.storage.root, req.loaded.base);
 
   const workspaceHost = path.resolve(req.workspace ?? req.cwd);
