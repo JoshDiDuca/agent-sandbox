@@ -82,6 +82,26 @@
           "maximum": 9007199254740991,
           "description": "Upper limit for memoryMb \"auto\"."
         },
+        "maxMemoryPercent": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 100,
+          "description": "memoryMb \"auto\" never takes more than this share of this PC's total RAM (percent)."
+        },
+        "cpuLimit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "none"
+            },
+            {
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 100
+            }
+          ],
+          "description": "Most of this PC's CPU the sandbox may use, in percent (5-100), e.g. 50 keeps half free for you; \"none\" = no cap (Windows Sandbox would take every processor). Covers everything this tool starts in the sandbox (agents, installs, builds, its terminal)."
+        },
         "reserveHostMb": {
           "type": "integer",
           "minimum": 0,

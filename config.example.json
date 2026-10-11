@@ -7,6 +7,8 @@
   "sandbox": {
     "memoryMb": "auto",
     "maxMemoryMb": 32768,
+    "maxMemoryPercent": 80,
+    "cpuLimit": 80,
     "reserveHostMb": 8192,
     "vGpu": false,
     "networking": true,

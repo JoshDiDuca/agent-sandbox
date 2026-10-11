@@ -93,6 +93,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     claudeProfile: { overwrite: config.claudeProfile.overwrite, items: profile.staged, credentials: profile.credentials, hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile), syncClaudeMem: config.claudeProfile.syncClaudeMem },
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
     substDrives: substDrives(mappings.map((m) => m.guest)),
+    cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
   };
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);

@@ -1,6 +1,7 @@
 // Generated sandbox (.wsb + launch folder) and the guest boot in dry-run mode.
 import fs from 'node:fs';
 import path from 'node:path';
+import { LocalOverrides } from '../core/schema.js';
 import { gitIdentity } from '../host/launch/stage.js';
 import { buildWsb, resolveMemoryMb } from '../host/launch/wsb.js';
 import { readJsonFile } from '../shared/rundir.js';
@@ -22,11 +23,18 @@ export const guestTests = async (t: Harness, f: Fixtures): Promise<string> => {
   check(logon.indexOf('trust.cmd') < logon.indexOf('wt.exe') && logon.includes('tools\\terminal\\wt.exe') && logon.includes('-NoExit'), 'logon.cmd applies sandbox trust settings first, then opens Windows Terminal (PowerShell fallback)');
   const session = f.readJson(gen.sessionPath);
   check(session.launchId === gen.launchId && session.workspace === 'C:\\Workspace\\work-a' && session.workspaceHost === f.workA && session.harnessArguments[0] === '--version' && session.hostTools.git && session.hostTools.nvm && /^\d+\.\d+\.\d+$/.test(session.hostTools.nodeVersion ?? '') &&session.versions.node.spec === '22.3.0' && session.provisioning.git.access === 'full', 'session.json carries ids, paths, versions, host tools and git access');
+  check(session.cpuLimitPercent === 80, 'session.json carries the CPU cap for cpucap.ps1 (default 80 %)');
+  const project = LocalOverrides.safeParse({ sandbox: { cpuLimit: 'none' } });
+  check(!project.success, "a project's .sandbox-config.json cannot lift your CPU cap (sandbox.cpuLimit is yours only)");
   const staged = path.join(gen.launchPath, 'claude-profile');
   check(['settings.json', 'CLAUDE.md', '.claude.json', 'plugins'].every((file) => fs.existsSync(path.join(staged, file))) && !fs.existsSync(path.join(staged, '.credentials.json')), 'Claude settings and plugins staged; the login is not');
   check(gitIdentity('[user]\n\tname = Josh\n\temail = "j@x.io"\n[credential]\n\thelper = store\n[url "https://TOKEN@github.com/"]\n\tinsteadOf = https://github.com/\n') === '[user]\n\tname = Josh\n\temail = j@x.io\n' && gitIdentity('[core]\n\tname = x\n') === '', 'only name/email from ~/.gitconfig reach the sandbox (no credential helpers or token URLs)');
   check(buildWsb(f.baseConfig, 4096, [{ host: 'C:\\a&b', guest: 'C:\\X', readOnly: true }]).includes('C:\\a&amp;b'), 'wsb values are XML-escaped');
-  check(resolveMemoryMb({ ...f.baseConfig.sandbox, memoryMb: 'auto' }, 40000 * 1048576) === 31744 && await rejects(() => resolveMemoryMb({ ...f.baseConfig.sandbox, memoryMb: 'auto' }, 9000 * 1048576), 'Not enough free RAM'), "memory 'auto' follows free RAM minus reserve");
+  const auto = { ...f.baseConfig.sandbox, memoryMb: 'auto' as const };
+  const GB64 = 64 * 1024 * 1048576;
+  check(resolveMemoryMb(auto, 40000 * 1048576, GB64) === 31744 && await rejects(() => resolveMemoryMb(auto, 9000 * 1048576, GB64), 'Not enough free RAM'), "memory 'auto' follows free RAM minus reserve");
+  check(resolveMemoryMb({ ...auto, maxMemoryPercent: 80 }, 30000 * 1048576, 32 * 1024 * 1048576) === 21504 && resolveMemoryMb({ ...auto, maxMemoryPercent: 50 }, 60000 * 1048576, GB64) === 32768,
+    "memory 'auto' never takes more than maxMemoryPercent of the PC's RAM (free RAM and maxMemoryMb still apply)");
 
   t.section('guest boot (dry run)');
   const data1 = at('data1');

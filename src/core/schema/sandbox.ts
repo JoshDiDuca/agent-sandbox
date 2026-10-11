@@ -14,6 +14,8 @@ export const Mapping = z.strictObject({
 export const Sandbox = z.strictObject({
   memoryMb: z.union([z.literal('auto'), z.number().int().min(2048)]).describe('Sandbox RAM in MB (>= 2048), or "auto": free RAM minus reserveHostMb, capped at maxMemoryMb.'),
   maxMemoryMb: z.number().int().positive().describe('Upper limit for memoryMb "auto".'),
+  maxMemoryPercent: z.number().int().min(10).max(100).describe('memoryMb "auto" never takes more than this share of this PC\'s total RAM (percent).'),
+  cpuLimit: z.union([z.literal('none'), z.number().int().min(5).max(100)]).describe('Most of this PC\'s CPU the sandbox may use, in percent (5-100), e.g. 50 keeps half free for you; "none" = no cap (Windows Sandbox would take every processor). Covers everything this tool starts in the sandbox (agents, installs, builds, its terminal).'),
   reserveHostMb: z.number().int().nonnegative().describe('RAM always left for this PC when memoryMb is "auto".'),
   vGpu: z.boolean().describe('Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface.'),
   networking: z.boolean().describe('Internet access. false is the only hard network isolation Windows Sandbox offers.'),

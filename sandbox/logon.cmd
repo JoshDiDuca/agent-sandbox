@@ -5,6 +5,8 @@ if not exist C:\AgentData\logs mkdir C:\AgentData\logs
 echo logon.cmd ran at %date% %time% > C:\AgentData\logs\logon-hit.txt
 call C:\AgentLaunch\sandbox\trust.cmd
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+rem sandbox.cpuLimit: this window joins a CPU-capped job first, so everything started below inherits the cap.
+"%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\cpucap.ps1
 set "BOOT=%PS% -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\AgentLaunch\sandbox\bootstrap.ps1"
 if not exist C:\AgentData\tools\terminal\wt.exe goto plain
 start "" C:\AgentData\tools\terminal\wt.exe --maximized new-tab --title "Agent Sandbox" -d C:\AgentLaunch %BOOT%

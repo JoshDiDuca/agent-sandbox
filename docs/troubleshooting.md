@@ -15,6 +15,7 @@ Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 | A database didn't start | Check `sandbox logs`. Turn it on explicitly with `databases.<name>.enabled: true` |
 | Can't delete `toolsmsvc` | MSVC's telemetry helper (`vctip.exe`) is removed on each start so nothing keeps it locked; if a delete still fails, close the sandbox first |
 | MSVC is not installed | Set `toolchains.msvc.acceptLicense: true`; the launch output says when a project would use it |
+| The sandbox slows my PC down | Lower `sandbox.cpuLimit` (e.g. `50`) and `sandbox.maxMemoryPercent`; they apply from the next start |
 | No Vulkan | Windows Sandbox has none: `toolchains.mesa.vulkan: true` gives software Vulkan, `sandbox.vGpu: true` Direct3D 12 |
 | winget is missing | Windows Sandbox has no winget; everything here installs portably, and real installers go in a hook |
 | `self-test` or `npm test` refuses to run | By design: it starts real processes and creates files and links, so it only runs inside a Windows Sandbox (`sandbox start`) or on GitHub Actions |

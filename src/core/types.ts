@@ -88,4 +88,6 @@ export interface GuestSession {
   personalization: boolean;
   /** Drives other than C: that bootstrap.ps1 makes with subst before anything uses them: letter D-Z onto C:\Mirror\<letter>. */
   substDrives?: { letter: string; target: string }[];
+  /** sandbox.cpuLimit as a number (null = no cap); sandbox\cpucap.ps1 applies it before anything starts. */
+  cpuLimitPercent?: number | null;
 }
