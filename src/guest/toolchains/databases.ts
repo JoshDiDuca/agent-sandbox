@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { DatabasePlan } from '../../core/types.js';
 import { fetchJson, fetchText, githubAsset, installArchive } from '../../shared/download.js';
+import { safeRemove } from '../../shared/safe-remove.js';
 import { ensureJdk } from './java.js';
 import { dataDir, dryRun, execAsync, exists, log, logsDir, mkdirp } from '../env.js';
 import { resolveCached, tool, type ToolEnv } from './common.js';
@@ -36,8 +37,28 @@ const startServer = async (name: string, exe: string, args: string[], port: numb
   if (!(await waitForPort(port, 60))) throw new Error(name + ' did not start listening on port ' + port + '; see ' + logFile);
 };
 
-/** Lock files a sandbox that was closed without shutting the server down leaves behind (this VM never ran it). */
-const clearStaleLocks = (dir: string, files: string[]): void => { for (const f of files) fs.rmSync(path.join(dir, f), { force: true }); };
+/**
+ * Lock files a sandbox that was closed without shutting the server down leaves behind. Only when nothing listens on
+ * the port: a server already running in this VM keeps its lock.
+ */
+const clearStaleLocks = async (dir: string, files: string[], port: number): Promise<void> => {
+  if (await portOpen(port)) return;
+  for (const f of files) fs.rmSync(path.join(dir, f), { force: true });
+};
+
+/**
+ * Creates a database folder with `create` (initdb, install-db) unless `marker` is there. A failed or interrupted run
+ * removes the folder again when this call made it, so the half-made one is not taken for a finished database next boot.
+ */
+const createOnce = async (data: string, marker: string, create: () => Promise<void>): Promise<void> => {
+  if (exists(path.join(data, marker))) return;
+  const existed = exists(data);
+  mkdirp(path.dirname(data));
+  try { await create(); } catch (e) {
+    if (!existed) { try { safeRemove(data, dataDir); } catch { /* reported with the original error */ } }
+    throw e;
+  }
+};
 
 // ---- PostgreSQL (EnterpriseDB's Windows binaries, without pgAdmin) --------------------------------------------------
 
@@ -57,14 +78,13 @@ const setupPostgres = async (env: ToolEnv, plan: DatabasePlan): Promise<void> =>
     await installArchive('https://get.enterprisedb.com/postgresql/postgresql-' + exact + '-1-windows-x64-binaries.zip', home, { locate: 'pg_ctl.exe', up: 1, fileName: 'postgresql-' + exact + '.zip', members: ['pgsql/bin', 'pgsql/lib', 'pgsql/share', 'pgsql/include'] });
   }
   const data = dataFor('postgres-' + exact.split('.')[0]);
-  if (!exists(path.join(data, 'PG_VERSION'))) {
-    log('Creating the PostgreSQL database cluster ...');
-    mkdirp(path.dirname(data));
+  await createOnce(data, 'PG_VERSION', async () => {
+    log('Creating the PostgreSQL database (first start) ...');
     await execAsync(path.join(bin, 'initdb.exe'), ['-D', data, '-U', 'postgres', '-A', 'trust', '-E', 'UTF8', '--locale=C'], { stdio: 'ignore' });
-  }
-  clearStaleLocks(data, ['postmaster.pid']);
-  // postgres.exe refuses to run as an administrator (the sandbox user is one); pg_ctl drops the rights first.
+  });
   if (await portOpen(plan.port)) throw new Error('port ' + plan.port + ' is already in use (change databases.postgres.port)');
+  await clearStaleLocks(data, ['postmaster.pid'], plan.port);
+  // postgres.exe refuses to run as an administrator (the sandbox user is one); pg_ctl drops the rights first.
   await execAsync(path.join(bin, 'pg_ctl.exe'), ['start', '-D', data, '-w', '-t', '60', '-l', path.join(logsDir, 'postgres.log'), '-o', '-p ' + plan.port + ' -c listen_addresses=localhost'], { stdio: 'ignore' });
   Object.assign(env.vars, { PGHOST: 'localhost', PGPORT: String(plan.port), PGUSER: 'postgres' });
   env.prepend.push(bin);
@@ -94,15 +114,14 @@ const setupMysql = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   const bin = path.join(home, 'bin');
   if (!exists(path.join(bin, 'mariadbd.exe'))) {
     const { zip } = await latest();
-    log('Downloading MariaDB ' + version + ' ...');
+    log('Downloading MariaDB ' + version + ' (~90 MB once) ...');
     await installArchive(zip.file_download_url.replace(/^http:/, 'https:'), home, { sha256: zip.checksum?.sha256sum ?? null, locate: 'mariadbd.exe', up: 1, fileName: zip.file_name });
   }
   const data = dataFor('mariadb');
-  if (!exists(path.join(data, 'mysql'))) {
-    log('Creating the MariaDB data folder ...');
-    mkdirp(path.dirname(data));
+  await createOnce(data, 'mysql', async () => {
+    log('Creating the MariaDB database (first start) ...');
     await execAsync(path.join(bin, 'mariadb-install-db.exe'), ['--datadir=' + data, '--port=' + plan.port], { stdio: 'ignore' });
-  }
+  });
   await startServer('mysql', path.join(bin, 'mariadbd.exe'), ['--datadir=' + data, '--port=' + plan.port, '--bind-address=127.0.0.1', '--console'], plan.port);
   Object.assign(env.vars, { MYSQL_HOST: '127.0.0.1', MYSQL_TCP_PORT: String(plan.port) });
   env.prepend.push(bin);
@@ -125,17 +144,17 @@ const setupMongo = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   const home = tool('mongodb', version);
   if (!exists(path.join(home, 'bin', 'mongod.exe'))) {
     const { archive } = await find();
-    log('Downloading MongoDB ' + version + ' ...');
+    log('Downloading MongoDB ' + version + ' (~400 MB once) ...');
     await installArchive(archive.url, home, { sha256: archive.sha256, locate: 'mongod.exe', up: 1 });
   }
   const shell = tool('mongosh');
   if (!exists(path.join(shell, 'mongosh.exe'))) {
     const asset = await githubAsset('mongodb-js/mongosh', /^mongosh-[\d.]+-win32-x64\.zip$/);
-    log('Downloading mongosh ...');
+    log('Downloading mongosh, the MongoDB shell (~50 MB once) ...');
     await installArchive(asset.url, shell, { sha256: asset.sha256, locate: 'mongosh.exe', fileName: asset.name });
   }
   const data = mkdirp(dataFor('mongodb'));
-  clearStaleLocks(data, ['mongod.lock']);
+  await clearStaleLocks(data, ['mongod.lock'], plan.port);
   await startServer('mongodb', path.join(home, 'bin', 'mongod.exe'), ['--dbpath', data, '--bind_ip', '127.0.0.1', '--port', String(plan.port)], plan.port);
   env.prepend.push(path.join(home, 'bin'), shell);
   env.summary.push('mongodb ' + version + ': mongodb://127.0.0.1:' + plan.port + ' (mongosh on PATH)');
@@ -148,7 +167,7 @@ const setupRedis = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   if (!exists(path.join(home, 'redis-server.exe'))) {
     // Redis has no official Windows build; this is the maintained community build of upstream Redis (MSYS2).
     const asset = await githubAsset('redis-windows/redis-windows', /^Redis-[\d.]+-Windows-x64-msys2\.zip$/);
-    log('Downloading ' + asset.name + ' ...');
+    log('Downloading Redis (' + asset.name + ', ~10 MB once) ...');
     await installArchive(asset.url, home, { sha256: asset.sha256, locate: 'redis-server.exe', fileName: asset.name });
   }
   const data = mkdirp(dataFor('redis'));
@@ -170,7 +189,7 @@ const setupDynamo = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   const java = path.join(await ensureJdk(), 'bin', 'java.exe');
   const home = tool('dynamodb-local');
   if (!exists(path.join(home, 'DynamoDBLocal.jar'))) {
-    log('Downloading DynamoDB Local ...');
+    log('Downloading DynamoDB Local (~60 MB once) ...');
     const sha256 = (await fetchText(DYNAMO_ZIP + '.sha256')).trim().split(/\s+/)[0];
     await installArchive(DYNAMO_ZIP, home, { sha256, locate: 'DynamoDBLocal.jar', fileName: 'dynamodb_local.zip' });
   }
@@ -185,7 +204,7 @@ const setupDynamo = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   const prefix = tool('dynamodb-admin');
   const script = path.join(prefix, 'node_modules', 'dynamodb-admin', 'dist', 'dynamodb-admin.js');
   if (!exists(script)) {
-    log('Installing dynamodb-admin (web UI for DynamoDB) ...');
+    log('Installing dynamodb-admin, the DynamoDB web UI (~20 MB once) ...');
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
     await execAsync(process.execPath, [npmCli, 'install', '--global', '--prefix', prefix, 'dynamodb-admin', '--no-fund', '--no-audit'], { stdio: 'ignore' });
   }

@@ -7,6 +7,7 @@ import { dryRun, errMsg, exists, log, mkdirp, stateDir, warn, workspace } from '
 import { CLI_TOOLS, decideCli, type CliName, type CliSettings, type CliTool } from './catalogue.js';
 import { arch, tool, type ToolEnv } from './common.js';
 import { setupSingleExe } from './runtimes.js';
+import { ensureCompiled } from '../ptyhost.js';
 
 /** gh keeps `gh auth login` here, under the agent state (persists like Claude's own login; never copied from the PC). */
 export const ghConfigDir = (): string => path.join(stateDir, 'gh');
@@ -16,19 +17,18 @@ const toolVars: Partial<Record<CliName, () => Record<string, string>>> = {
 };
 
 /**
- * openssl.cmd in tools\shims, running Git's mingw64\bin\openssl.exe. Only the shim: putting mingw64\bin itself on PATH
- * would bring Git's own gcc-runtime DLLs, curl, and friends along and could shadow MinGW's gcc from the C/C++ step.
- * setlocal keeps OPENSSL_CONF from leaking into a cmd prompt that runs `openssl`. (A .cmd is found by shells and
- * by programs that use cmd /c; Rust's Command::new("openssl") looks only for openssl.exe.)
+ * tools\shims\openssl.exe (sandbox/openssl.cs), a launcher for Git's mingw64\bin\openssl.exe. A real .exe so programs
+ * that call CreateProcess directly (Rust's Command::new("openssl")) find it, and only the shim is on PATH: mingw64\bin
+ * itself would bring Git's runtime DLLs along and could shadow MinGW's gcc from the C/C++ step.
  */
 const shimOpenssl = (env: ToolEnv): void => {
-  const exe = tool('git', 'mingw64', 'bin', 'openssl.exe');
-  if (!exists(exe)) { env.summary.push('openssl: not in this Git for Windows (skipped)'); return; }
-  const conf = tool('git', 'mingw64', 'etc', 'ssl', 'openssl.cnf');
-  const lines = ['@echo off', 'setlocal', ...(exists(conf) ? ['if not defined OPENSSL_CONF set "OPENSSL_CONF=' + conf + '"'] : []), '"' + exe + '" %*'];
-  fs.writeFileSync(path.join(mkdirp(tool('shims')), 'openssl.cmd'), lines.join('\r\n') + '\r\n');
-  env.prepend.push(tool('shims'));
-  env.summary.push('openssl: Git for Windows\' copy (shim)');
+  if (!exists(tool('git', 'mingw64', 'bin', 'openssl.exe'))) { env.summary.push('openssl: not in this Git for Windows (skipped)'); return; }
+  const shims = mkdirp(tool('shims'));
+  fs.copyFileSync(ensureCompiled('openssl'), path.join(shims, 'openssl.exe'));
+  // An earlier version wrote a .cmd; it would still win for shells that prefer it.
+  fs.rmSync(path.join(shims, 'openssl.cmd'), { force: true });
+  env.prepend.push(shims);
+  env.summary.push('openssl: Git for Windows\' copy');
 };
 
 /**
@@ -47,7 +47,7 @@ export const setupCli = async (env: ToolEnv, settings: CliSettings, gitAccess: G
     const name = entry.name as CliName;
     if (!decisions[name].on) continue;
     try {
-      await setupSingleExe(env, name, entry.repo, entry.asset(arch), entry.exe, tool('cli', name), { refresh, subdir: entry.subdir });
+      await setupSingleExe(env, name, entry.repo, entry.asset(arch), entry.exe, tool('cli', name), { refresh, subdir: entry.subdir, size: entry.size });
       Object.assign(env.vars, toolVars[name]?.() ?? {});
     } catch (e) {
       // One tool failing never takes the others down.
@@ -55,5 +55,7 @@ export const setupCli = async (env: ToolEnv, settings: CliSettings, gitAccess: G
       env.summary.push(entry.name + ': FAILED');
     }
   }
-  if (decisions.openssl.on) shimOpenssl(env);
+  if (decisions.openssl.on) {
+    try { shimOpenssl(env); } catch (e) { warn('openssl setup failed (continuing without it): ' + errMsg(e)); env.summary.push('openssl: FAILED'); }
+  }
 };

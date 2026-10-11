@@ -10,7 +10,7 @@ export const pwshDir = (): string => tool('pwsh');
 
 export const setupPwsh = async (env: ToolEnv, refresh = false): Promise<void> => {
   // pwsh.exe sits at the zip's root next to its runtime and modules: the whole folder is kept.
-  await setupSingleExe(env, 'pwsh', 'PowerShell/PowerShell', pwshAsset(arch), 'pwsh.exe', pwshDir(), { refresh, versionArgs: ['-Version'], note: ' (PowerShell 7; powershell is still 5.1)' });
+  await setupSingleExe(env, 'pwsh', 'PowerShell/PowerShell', pwshAsset(arch), 'pwsh.exe', pwshDir(), { refresh, size: '100 MB', versionArgs: ['-Version'], note: ' (PowerShell 7; powershell is still 5.1)' });
   // No update banner or telemetry from a copy that provisioning.refresh replaces anyway.
   Object.assign(env.vars, { POWERSHELL_UPDATECHECK: 'Off', POWERSHELL_TELEMETRY_OPTOUT: '1' });
 };

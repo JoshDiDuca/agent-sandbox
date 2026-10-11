@@ -6,8 +6,9 @@ import { z } from 'zod';
 import type { Toolchains } from '../../core/types.js';
 import { download, fetchJson, githubAsset, installArchive } from '../../shared/download.js';
 import { readJsonFile, writeJsonAtomic } from '../../shared/rundir.js';
+import { safeRemove } from '../../shared/safe-remove.js';
 import { SYSTEM } from '../../shared/system.js';
-import { dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
+import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn, workspace } from '../env.js';
 import { arch, installOnce, tool, versionOf, type ToolEnv } from './common.js';
 import { CMAKE_FLOOR, cmakeTooOld } from './versions.js';
 import { crateInstaller } from './binstall.js';
@@ -138,8 +139,9 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
     ...(exists(globalJson) ? [['global.json:' + fs.readFileSync(globalJson, 'utf8').replace(/\s+/g, ''), ['-JSonFile', globalJson]] as [string, string[]]] : []),
   ];
   for (const [key, args] of installs.filter(([k]) => !done[k])) {
-    if (!exists(script) || refresh) await download('https://dot.net/v1/dotnet-install.ps1', script);
-    log('Installing .NET SDK (' + key + ') ...');
+    // Fetched every time something is installed (it is small): an interrupted earlier download must not be run.
+    await download('https://dot.net/v1/dotnet-install.ps1', script);
+    log('Installing the .NET SDK ' + (key.startsWith('channel:') ? key.slice(8) : 'pinned in global.json') + ' (~250 MB once) ...');
     await execAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
     done[key] = true;
     writeJsonAtomic(marker, done);
@@ -168,17 +170,18 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
     const id = 'microsoft.netframework.referenceassemblies.' + target.toLowerCase();
     const marker = path.join(root, '.installed-' + target.toLowerCase());
     if (exists(marker)) continue;
+    const staging = tool('netfx-references-' + target.toLowerCase());
     try {
       const { versions } = await fetchJson<{ versions: string[] }>('https://api.nuget.org/v3-flatcontainer/' + id + '/index.json');
       const version = versions.filter((v) => /^\d+(\.\d+)*$/.test(v)).pop();
       if (!version) throw new Error('no stable version of ' + id);
-      log('Downloading .NET Framework reference assemblies (' + target + ') ...');
-      const staging = tool('netfx-references-' + target.toLowerCase());
+      log('Downloading the .NET Framework ' + target + ' reference assemblies (~30 MB once) ...');
       await installArchive('https://api.nuget.org/v3-flatcontainer/' + id + '/' + version + '/' + id + '.' + version + '.nupkg', staging, { fileName: id + '.zip' });
       fs.cpSync(path.join(staging, 'build', '.NETFramework'), path.join(root, '.NETFramework'), { recursive: true });
-      fs.rmSync(staging, { recursive: true, force: true });
       fs.writeFileSync(marker, version);
-    } catch (e) { warn('.NET Framework reference assemblies ' + target + ' failed: ' + errMsg(e)); }
+    } catch (e) { warn('.NET Framework ' + target + ' reference assemblies could not be installed (projects targeting it will not build): ' + errMsg(e)); } finally {
+      safeRemove(staging, dataDir);
+    }
   }
   if (!exists(path.join(root, '.NETFramework'))) return;
   env.vars.TargetFrameworkRootPath = root + path.sep;
