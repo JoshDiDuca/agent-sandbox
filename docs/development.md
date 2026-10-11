@@ -33,7 +33,7 @@ npm only lets CI publish a package that already exists, so the first version is 
 
 ```powershell
 npm login
-npm run publish:npm      # tests, packs like CI and publishes; asks for your 2FA code if you use one
+npm run publish:npm      # builds, packs like CI and publishes (no tests); asks for your 2FA code if you use one
 ```
 
 Then, on npmjs.com, open the package's **Settings > Trusted Publisher**, choose GitHub Actions and enter the repository

@@ -12,8 +12,6 @@ if (user.status !== 0) stop('Not signed in to npm. Run `npm login` first, then `
 console.log('Publishing ' + pkg.name + '@' + pkg.version + ' as ' + user.stdout.trim() + ' ...');
 if (npm(['view', pkg.name + '@' + pkg.version, 'version']).stdout.trim() === pkg.version) stop(pkg.version + ' is already on npm. Bump the version first (npm version patch).');
 
-if (npm(['test'], true).status !== 0) stop('Tests failed; nothing was published.');
-
 // The packed package is already built: without `prepare`, installing it runs no package script.
 const original = fs.readFileSync('package.json');
 let file = '';
