@@ -37,6 +37,9 @@
     },
     "terminal": {
       "enabled": true
+    },
+    "conpty": {
+      "enabled": true
     }
   },
   "downloads": {

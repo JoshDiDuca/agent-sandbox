@@ -33,6 +33,7 @@ export const Provisioning = z.strictObject({
   refresh: z.boolean().describe('Re-copy / re-download everything on the next launch.'),
   git: Git,
   terminal: toggle('Windows Terminal as the sandbox window (downloaded once).'),
+  conpty: toggle('Agent sessions use Microsoft\'s newer pseudo console (conpty.dll, downloaded once) instead of the one built into Windows: no garbled screen after resizing, real scrollback for the mouse wheel. Off = the one built into Windows.'),
 });
 
 export const Downloads = z.strictObject({

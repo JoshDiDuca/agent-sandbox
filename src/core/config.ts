@@ -14,7 +14,7 @@ export const DEFAULTS: Config = {
   sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, maxMemoryPercent: 80, cpuLimit: 80, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default' },
   network: { blockPrivateRanges: true },
-  provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true } },
+  provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true }, conpty: { enabled: true } },
   downloads: { requireChecksum: false },
   toolchains: {
     node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },

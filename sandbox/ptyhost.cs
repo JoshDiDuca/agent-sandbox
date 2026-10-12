@@ -16,6 +16,9 @@
 //                  18 ERROR   utf8 message
 //                  19 RESTARTING
 //                  20 STATUS  [viewers:2][remoteViewers:2]  viewers heard from recently (remote = not loopback, i.e. the PC)
+//                  21 CONSOLE utf8 "conpty.dll" or "windows", sent after HELLO. With conpty.dll the output is passed
+//                             through (real scrollback, no repaint on resize): a viewer that joins later is sent the
+//                             output since the last screen clear instead, and must not clear its screen on a resize.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -75,6 +78,7 @@ sealed class SessionHost
             using (var console = PseudoConsole.Start(command, hub.Cols, hub.Rows, hub.Broadcast))
             {
                 hub.Attach(console);
+                log.Write("pseudo console: " + Native.ConsoleKind);
                 int exitCode = console.WaitForExit();
                 if (!restartRequested)
                 {
@@ -92,6 +96,7 @@ sealed class SessionHost
     public void Restart()
     {
         restartRequested = true;
+        hub.ResetReplay();
         hub.Notify(Frame.Restarting);
         hub.KillProgram();
     }
@@ -225,6 +230,9 @@ sealed class ClientHub
     readonly byte[] token;
     readonly byte[] tail = new byte[8192];
     int tailLength;
+    readonly object replayGate = new object();
+    readonly MemoryStream replay = new MemoryStream();
+    const int MaxReplay = 4 << 20;
     PseudoConsole console;
     Client sizeOwner;
     short cols, rows;
@@ -251,8 +259,18 @@ sealed class ClientHub
         client.ControlOnly = (hello[4] & 3) != 0;
         client.Query = (hello[4] & 2) != 0;
         if (client.Query) return true;
-        lock (gate) clients.Add(client);
-        if (!client.ControlOnly) TakeOwnership(client);
+        if (!client.ControlOnly)
+        {
+            Send(client, Frame.Console, Encoding.UTF8.GetBytes(Native.ConsoleKind.StartsWith("conpty") ? "conpty.dll" : "windows"));
+            // Taken and queued under the replay lock, so no output falls between the replay and the live stream.
+            lock (replayGate)
+            {
+                if (Native.ConsoleKind.StartsWith("conpty") && replay.Length > 0) Send(client, Frame.Output, replay.ToArray());
+                lock (gate) clients.Add(client);
+            }
+            TakeOwnership(client);
+        }
+        else lock (gate) clients.Add(client);
         return true;
     }
 
@@ -287,7 +305,41 @@ sealed class ClientHub
     public void Broadcast(byte[] output)
     {
         Remember(output);
-        foreach (Client c in Snapshot()) if (!c.ControlOnly) Send(c, Frame.Output, output);
+        lock (replayGate)
+        {
+            Record(output);
+            foreach (Client c in Snapshot()) if (!c.ControlOnly) Send(c, Frame.Output, output);
+        }
+    }
+
+    /**
+     * The output a viewer joining now needs to see the screen (conpty.dll does not repaint for it): everything since the
+     * last "clear screen", capped. Cut at a line start when capped, so the replay never begins inside an escape sequence.
+     */
+    void Record(byte[] output)
+    {
+        if (!Native.ConsoleKind.StartsWith("conpty")) return;
+        int clear = LastClear(output);
+        if (clear >= 0) { replay.SetLength(0); replay.Write(output, clear, output.Length - clear); }
+        else replay.Write(output, 0, output.Length);
+        if (replay.Length <= MaxReplay) return;
+        byte[] all = replay.ToArray();
+        int from = all.Length - MaxReplay / 2;
+        while (from < all.Length && all[from] != (byte)'\n') from++;
+        replay.SetLength(0);
+        if (from + 1 < all.Length) replay.Write(all, from + 1, all.Length - from - 1);
+    }
+
+    /** Where the last ESC[2J (clear screen) or ESC c (reset) starts in `data`, or -1. */
+    static int LastClear(byte[] data)
+    {
+        for (int i = data.Length - 2; i >= 0; i--)
+        {
+            if (data[i] != 0x1b) continue;
+            if (data[i + 1] == (byte)'c') return i;
+            if (i + 3 < data.Length && data[i + 1] == (byte)'[' && data[i + 2] == (byte)'2' && data[i + 3] == (byte)'J') return i;
+        }
+        return -1;
     }
 
     /** The program's last output as plain text (escape sequences removed), for the log when it exits. */
@@ -310,6 +362,9 @@ sealed class ClientHub
             tailLength = keep + add;
         }
     }
+
+    /** A restarted program starts on a clean screen (viewers clear theirs on RESTARTING). */
+    public void ResetReplay() { lock (replayGate) replay.SetLength(0); }
 
     public void Notify(byte type)
     {
@@ -503,7 +558,7 @@ sealed class PseudoConsole : IDisposable
 static class Frame
 {
     public const byte Hello = 1, Input = 2, Resize = 3, Restart = 4, Ping = 5;
-    public const byte Output = 16, Exit = 17, Error = 18, Restarting = 19, Status = 20;
+    public const byte Output = 16, Exit = 17, Error = 18, Restarting = 19, Status = 20, Console = 21;
     const int MaxPayload = 1 << 20;
 
     public static bool Read(Stream stream, out byte type, out byte[] payload)
@@ -598,9 +653,52 @@ static class Native
         }
     }
 
-    [DllImport("kernel32.dll")] public static extern int CreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
-    [DllImport("kernel32.dll")] public static extern int ResizePseudoConsole(IntPtr hPC, Coord size);
-    [DllImport("kernel32.dll")] public static extern void ClosePseudoConsole(IntPtr hPC);
+    // The pseudo console: the newer conpty.dll (+ OpenConsole.exe next to it) when PTYHOST_CONPTY names one, else the one
+    // built into Windows. Windows 10/11 before 24H2 ship a ConPTY that re-renders the screen instead of passing the
+    // program's output through, which garbles wide characters after a resize and loses mouse input and scrollback.
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate int CreateFn(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate int ResizeFn(IntPtr hPC, Coord size);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate void CloseFn(IntPtr hPC);
+    static CreateFn create;
+    static ResizeFn resize;
+    static CloseFn close;
+    /** "conpty.dll" or "windows": which pseudo console is in use (logged, and told to viewers). */
+    public static string ConsoleKind = "windows";
+
+    static Native()
+    {
+        string dll = Environment.GetEnvironmentVariable("PTYHOST_CONPTY");
+        if (string.IsNullOrEmpty(dll) || !File.Exists(dll) || !File.Exists(Path.Combine(Path.GetDirectoryName(dll), "OpenConsole.exe"))) return;
+        IntPtr module = LoadLibraryW(dll);
+        if (module == IntPtr.Zero) return;
+        IntPtr c = GetProcAddress(module, "ConptyCreatePseudoConsole"), r = GetProcAddress(module, "ConptyResizePseudoConsole"), x = GetProcAddress(module, "ConptyClosePseudoConsole");
+        if (c == IntPtr.Zero || r == IntPtr.Zero || x == IntPtr.Zero) return;
+        create = (CreateFn)Marshal.GetDelegateForFunctionPointer(c, typeof(CreateFn));
+        resize = (ResizeFn)Marshal.GetDelegateForFunctionPointer(r, typeof(ResizeFn));
+        close = (CloseFn)Marshal.GetDelegateForFunctionPointer(x, typeof(CloseFn));
+        ConsoleKind = "conpty.dll";
+    }
+
+    /** conpty.dll first; if it cannot start one (OpenConsole.exe blocked or broken), the built-in one for good. */
+    public static int CreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC)
+    {
+        if (create != null)
+        {
+            int hr = create(size, hInput, hOutput, dwFlags, out phPC);
+            if (hr == 0) return 0;
+            create = null; resize = null; close = null;
+            ConsoleKind = "windows (conpty.dll failed: 0x" + hr.ToString("X8") + ")";
+        }
+        return KernelCreatePseudoConsole(size, hInput, hOutput, dwFlags, out phPC);
+    }
+    public static int ResizePseudoConsole(IntPtr hPC, Coord size) { return resize != null ? resize(hPC, size) : KernelResizePseudoConsole(hPC, size); }
+    public static void ClosePseudoConsole(IntPtr hPC) { if (close != null) close(hPC); else KernelClosePseudoConsole(hPC); }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreatePseudoConsole")] static extern int KernelCreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
+    [DllImport("kernel32.dll", EntryPoint = "ResizePseudoConsole")] static extern int KernelResizePseudoConsole(IntPtr hPC, Coord size);
+    [DllImport("kernel32.dll", EntryPoint = "ClosePseudoConsole")] static extern void KernelClosePseudoConsole(IntPtr hPC);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr LoadLibraryW(string path);
+    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false)] static extern IntPtr GetProcAddress(IntPtr module, string name);
     [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CreatePipe(out SafeFileHandle hReadPipe, out SafeFileHandle hWritePipe, IntPtr lpPipeAttributes, int nSize);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool InitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);

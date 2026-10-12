@@ -30,6 +30,13 @@ export const channelSuite: Suite = {
       filter.push(Buffer.from('2;c;cGF5\x1b\\d')),
     ]).toString('latin1');
     t.equal(filtered, 'a' + 'b\x1b]0;title\x07' + 'c' + 'd', 'clipboard writes (OSC 52) from the sandbox are stripped, even split across chunks; titles pass');
+    const through = (...chunks: string[]): string => { const f = new OutputFilter(); return Buffer.concat(chunks.map((s) => f.push(Buffer.from(s, 'latin1')))).toString('latin1'); };
+    t.equal(through('x\x1b]52;c;QUFB\x1b', '\\y'), 'xy', 'an OSC 52 whose terminator is split between chunks is still stripped');
+    t.equal(through('x\x1b]052;c;QUFB\x07y'), 'xy', 'OSC 052 (leading zero) is stripped too');
+    t.equal(through('x\x1b]52;c;' + 'A'.repeat(70000), 'B'.repeat(100), '\x07y'), 'xy', 'a huge OSC 52 stays stripped across chunks');
+    t.equal(through('x\xc2\x9d52;c;QUFB\xc2\x9cy\x1bP1$qm\x1b\\z'), 'xyz', 'C1 (UTF-8) OSC and DCS strings are stripped');
+    t.equal(through('\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0'), '\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0', 'links, colours and ordinary UTF-8 (incl. U+00A0) pass unchanged');
+    t.equal(through('\x1b]9;9;macro\x07\x1b]9;4;1;50\x07'), '\x1b]9;4;1;50\x07', 'only the progress form of OSC 9 passes (ConEmu macros do not)');
     const oversizedHeader = Buffer.concat([Buffer.from([16]), Buffer.from([0, 0, 0, 0x7f])]);
     await t.throws(() => new FrameReader().push(oversizedHeader), 'frame too large', 'a frame announcing too much data is rejected instead of buffered');
     t.equal(new FrameReader().push(encodeFrame(16, Buffer.alloc(MAX_FRAME_BYTES))).length, 1, 'a frame of exactly the maximum size is accepted');

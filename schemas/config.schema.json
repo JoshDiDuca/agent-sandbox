@@ -216,6 +216,16 @@
             }
           },
           "additionalProperties": false
+        },
+        "conpty": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Agent sessions use Microsoft's newer pseudo console (conpty.dll, downloaded once) instead of the one built into Windows: no garbled screen after resizing, real scrollback for the mouse wheel. Off = the one built into Windows."
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

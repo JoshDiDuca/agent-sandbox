@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LocalOverrides } from '../core/schema.js';
+import { logonEnv } from '../host/generate.js';
 import { gitIdentity } from '../host/launch/stage.js';
 import { buildWsb, resolveMemoryMb } from '../host/launch/wsb.js';
 import type { Suite } from './suite.js';
@@ -32,6 +33,9 @@ export const generateSuite: Suite = {
     t.check(logon.indexOf('trust.cmd') < logon.indexOf('wt.exe'), 'logon.cmd applies the sandbox trust settings before opening Windows Terminal');
     t.includes(logon, 'tools\\terminal\\wt.exe', 'logon.cmd opens Windows Terminal from the tools folder');
     t.includes(logon, '-NoExit', 'logon.cmd falls back to a PowerShell window');
+    t.check(logon.indexOf('env.cmd') > 0 && logon.indexOf('env.cmd') < logon.indexOf('wt.exe'), 'logon.cmd sets AGENT_WORKSPACE (env.cmd) before Windows Terminal starts, so new tabs can open in it');
+    t.includes(fs.readFileSync(path.join(gen.launchPath, 'env.cmd'), 'utf8'), 'AGENT_WORKSPACE=', 'env.cmd names the workspace');
+    t.equal(logonEnv('C:\\Workspace\\100%\\x'), '@set "AGENT_WORKSPACE=C:\\Workspace\\100%%\\x"\r\n', 'a % in the workspace path is escaped for cmd');
 
     t.section('session.json');
     const session = f.readJson(gen.sessionPath);

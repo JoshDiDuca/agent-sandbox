@@ -13,7 +13,7 @@ import { findSecretFiles } from '../../host/secrets.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
 import { assertCanLaunch, insideSandbox, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
 import { NeedsRestart, rememberProject, startRegistry } from '../../host/projects.js';
-import { ensureTerminal } from '../../host/terminal.js';
+import { ensureConpty, ensureTerminal } from '../../host/terminal.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { isWithin } from '../../shared/projects.js';
@@ -206,11 +206,12 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const account = options.account ?? defaultAccount(storageRoot);
   if (account && run.harnessName === 'claude' && account !== activeAccount(dataPath)) activateAccount(storageRoot, dataPath, account);
   const terminal = config.provisioning.terminal.enabled ? await ensureTerminal(dataPath, config.provisioning.refresh, { pwsh: config.toolchains.pwsh.enabled !== false }) : { exe: null, message: 'disabled' };
+  const conpty = config.provisioning.conpty.enabled ? await ensureConpty(dataPath, config.provisioning.refresh) : 'off';
   const history = syncSummary(config, dataPath, run.workspaceHost);
   const guarded = checkRepo(dataPath);
   if (guarded.length) console.warn(c.yellow('SECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).'));
   resetRunDir(dataPath);
-  return { account, terminal: terminal.message, history, pruned: describePrune(pruneStorage(storageRoot)) };
+  return { account, terminal: terminal.message + '; pseudo console: ' + conpty, history, pruned: describePrune(pruneStorage(storageRoot)) };
 };
 
 /** A restart that adds a project: map these too, start no session at boot (restart.ts opens them), wait until ready. */

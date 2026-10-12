@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { ensureCompiled } from './helpers.js';
 import { portOpen } from './ports.js';
-import { logsDir } from './env.js';
+import { logsDir, session, toolsDir } from './env.js';
 
 export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
 
@@ -30,8 +30,17 @@ export const ptyHostLogTail = (id: string, lines = 12): string => {
 
 export interface PtyHostOptions { exe: string; port: number; token: string; cols: number; rows: number; command: string; restartCommand: string; cwd: string; env: NodeJS.ProcessEnv; id: string; remote: boolean }
 
+/** conpty.dll (+ OpenConsole.exe) the host downloaded, when provisioning.conpty is on; ptyhost falls back to Windows' own. */
+const conptyDll = (): string | null => {
+  const dll = path.join(toolsDir, 'conpty', 'conpty.dll');
+  return session.provisioning.conpty?.enabled !== false && fs.existsSync(dll) && fs.existsSync(path.join(toolsDir, 'conpty', 'OpenConsole.exe')) ? dll : null;
+};
+
 /** Starts ptyhost detached, so closing a terminal tab never kills the agent; only the agent exiting ends it. */
-export const startPtyHost = (o: PtyHostOptions): ChildProcess =>
-  spawn(o.exe, [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand], {
-    cwd: o.cwd, env: { ...o.env, PTYHOST_BIND: o.remote ? 'any' : 'loopback' }, detached: true, stdio: 'ignore', windowsHide: true,
-  });
+export const startPtyHost = (o: PtyHostOptions): ChildProcess => {
+  const env: NodeJS.ProcessEnv = { ...o.env, PTYHOST_BIND: o.remote ? 'any' : 'loopback' };
+  delete env.PTYHOST_CONPTY;
+  const dll = conptyDll();
+  if (dll) env.PTYHOST_CONPTY = dll;
+  return spawn(o.exe, [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand], { cwd: o.cwd, env, detached: true, stdio: 'ignore', windowsHide: true });
+};

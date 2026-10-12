@@ -2,7 +2,7 @@
 // `--terminal` / `attach` on the host, so it only depends on Node built-ins.
 import net from 'node:net';
 
-export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Ping: 5, Output: 16, Exit: 17, Error: 18, Restarting: 19, Status: 20 } as const;
+export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Ping: 5, Output: 16, Exit: 17, Error: 18, Restarting: 19, Status: 20, Console: 21 } as const;
 
 /** HELLO flags: control-only connections get no output and never size the console; a query only asks for STATUS. */
 export const HelloFlag = { ControlOnly: 1, Query: 2 } as const;
@@ -59,23 +59,82 @@ export class FrameReader {
   }
 }
 
+/** OSC commands that may reach your terminal: window title (0, 1, 2), links (8), progress (9;4), shell marks (133). */
+const KEPT_OSC = (body: string): boolean => {
+  const number = /^(\d{1,4})(;|$)/.exec(body);
+  if (!number) return false;
+  const n = Number(number[1]);
+  return n <= 2 || n === 8 || n === 133 || (n === 9 && body.startsWith(number[1] + ';4;'));
+};
+/** Longest OSC kept (a title or a link); anything longer is dropped whole. */
+const MAX_KEPT_STRING = 4096;
+
 /**
- * Removes OSC 52 (clipboard write) from the sandbox's output before it reaches your terminal: an untrusted program
- * must not be able to silently put text into your clipboard. Everything else (colours, titles, links) passes.
- * Stateful, so a sequence split across chunks is still caught.
+ * Removes the terminal "strings" an untrusted program could abuse from the sandbox's output before it reaches your
+ * terminal: clipboard writes (OSC 52), terminal macros (ConEmu's OSC 9), DCS / APC / PM / SOS, and their C1 forms.
+ * Titles, links, progress and colours pass. A byte-level state machine, so no split across chunks, leading zero
+ * (ESC]052) or huge payload slips through: a dropped string stays dropped until its terminator, however long it is.
  */
 export class OutputFilter {
-  private carry = '';
+  /** text: normal output; esc: after ESC; c2: after a 0xC2 lead byte; string: inside an OSC/DCS/...; stringEsc / stringC2: a possible terminator inside one. */
+  private state: 'text' | 'esc' | 'c2' | 'string' | 'stringEsc' | 'stringC2' = 'text';
+  /** The string being read: an OSC worth keeping is collected until its terminator; null = being dropped. */
+  private body: number[] | null = null;
+
   push(chunk: Buffer): Buffer {
-    let text = (this.carry + chunk.toString('latin1')).replace(/\x1b\]52;[^\x07\x1b]*(\x07|\x1b\\)/g, '');
-    this.carry = '';
-    const open = text.lastIndexOf('\x1b');
-    const tail = open === -1 ? '' : text.slice(open);
-    if (tail.length < 1 << 16 && /^\x1b(\](5(2(;[^\x07\x1b]*)?)?)?)?$/.test(tail)) {
-      this.carry = tail;
-      text = text.slice(0, open);
+    const out = Buffer.allocUnsafe(chunk.length + MAX_KEPT_STRING + 8);
+    let n = 0;
+    const put = (...bytes: number[]): void => { for (const b of bytes) out[n++] = b; };
+    /** After ESC (or the C1 form): ] opens an OSC (maybe kept), P X ^ _ open DCS / SOS / PM / APC (dropped). */
+    const opens = (b: number, c1: boolean): boolean => {
+      if (b === (c1 ? 0x9d : 0x5d)) { this.body = c1 ? null : []; this.state = 'string'; return true; }
+      if ((c1 ? [0x90, 0x98, 0x9e, 0x9f] : [0x50, 0x58, 0x5e, 0x5f]).includes(b)) { this.body = null; this.state = 'string'; return true; }
+      return false;
+    };
+    const endString = (terminator: number[]): void => {
+      const body = this.body && Buffer.from(this.body).toString('latin1');
+      if (body !== null && KEPT_OSC(body)) { put(0x1b, 0x5d); out.write(body, n, 'latin1'); n += body.length; put(...terminator); }
+      this.body = null;
+      this.state = 'text';
+    };
+    const collect = (b: number): void => { if (this.body && this.body.push(b) > MAX_KEPT_STRING) this.body = null; };
+    for (const b of chunk) {
+      switch (this.state) {
+        case 'text':
+          if (b === 0x1b) this.state = 'esc';
+          else if (b === 0xc2) this.state = 'c2';
+          else put(b);
+          break;
+        case 'esc':
+          if (opens(b, false)) break;
+          if (b !== 0x1b) { put(0x1b, b); this.state = 'text'; } else put(0x1b);
+          break;
+        case 'c2':
+          if (opens(b, true)) break;
+          if (b === 0x1b) { put(0xc2); this.state = 'esc'; } else if (b === 0xc2) put(0xc2); else { put(0xc2, b); this.state = 'text'; }
+          break;
+        case 'string':
+          if (b === 0x07) endString([0x07]);
+          else if (b === 0x1b) this.state = 'stringEsc';
+          else if (b === 0xc2) this.state = 'stringC2';
+          else if (b === 0x18 || b === 0x1a) { this.body = null; this.state = 'text'; }
+          else collect(b);
+          break;
+        case 'stringC2':
+          // U+009C is the C1 string terminator; any other character is part of the string.
+          if (b === 0x9c) endString([0x1b, 0x5c]);
+          else { collect(0xc2); this.state = 'string'; if (b === 0x07) endString([0x07]); else if (b === 0x1b) this.state = 'stringEsc'; else if (b !== 0xc2) collect(b); else this.state = 'stringC2'; }
+          break;
+        case 'stringEsc':
+          if (b === 0x5c) { endString([0x1b, 0x5c]); break; }
+          // ESC inside a string ends it (dropped) and starts a new sequence.
+          this.body = null;
+          this.state = 'esc';
+          if (!opens(b, false) && b !== 0x1b) { put(0x1b, b); this.state = 'text'; }
+          break;
+      }
     }
-    return Buffer.from(text, 'latin1');
+    return out.subarray(0, n);
   }
 }
 
@@ -174,14 +233,16 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       if (options.detachKey !== undefined && chunk.includes(options.detachKey)) { finish({ reason: 'detach' }); return; }
       socket.write(encodeFrame(FrameType.Input, swapKeys ? fixWindowsKeys(chunk) : chunk));
     };
-    // Dragging a window edge fires dozens of resizes; each one makes ConPTY reflow and repaint, and repaints racing each
-    // other are what left the screen garbled. Wait until the size settles, clear what this terminal reflowed on its own,
-    // then let ptyhost repaint everything once at the new size.
+    // Windows' own ConPTY repaints the whole screen on every resize; dragging a window edge fires dozens of them, and
+    // repaints racing each other left the screen garbled. Wait until the size settles, clear what this terminal
+    // reflowed on its own, then let ptyhost repaint everything once at the new size. With conpty.dll (passthrough)
+    // nothing is repainted: this terminal's own reflow and scrollback stay, and the program redraws what it needs.
+    let passthrough = false;
     const sendSize = (): void => {
       const [c, r] = size();
       if (c === sent[0] && r === sent[1]) return;
       sent = [c, r];
-      stdout.write('\x1b[H\x1b[J');
+      if (!passthrough) stdout.write('\x1b[H\x1b[J');
       socket.write(resizeFrame(c, r));
     };
     const onResize = (): void => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { resizeTimer = undefined; sendSize(); }, 120); };
@@ -194,6 +255,7 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       try { frames = reader.push(chunk); } catch { finish({ reason: 'error', message: 'invalid data from the sandbox' }); return; }
       for (const frame of frames) {
         if (frame.type === FrameType.Output) stdout.write(filter.push(frame.payload));
+        else if (frame.type === FrameType.Console) passthrough = frame.payload.toString('latin1') === 'conpty.dll';
         else if (frame.type === FrameType.Restarting) stdout.write('\x1b[2J\x1b[3J\x1b[H');
         else if (frame.type === FrameType.Exit) finish({ reason: 'exit', exitCode: frame.payload.length >= 4 ? frame.payload.readInt32LE(0) : 1 });
         else if (frame.type === FrameType.Error) finish({ reason: 'error', message: frame.payload.toString('utf8').slice(0, 500).replace(/[\x00-\x1f\x7f]/g, ' ') });
