@@ -16,7 +16,7 @@ export const localConfigSuite: Suite = {
       harness: 'codex',
       sandbox: { memoryMb: 4096, networking: false, headless: true },
       toolchains: { node: { version: '18' }, rust: { enabled: false } },
-      mappings: [{ host: './assets', guest: 'C:\\Assets', readOnly: true }, { host: '../shared', guest: 'C:\\Shared', readOnly: false }],
+      mappings: [{ host: './assets', guest: 'C:\\Assets', readOnly: true }, { host: './data', guest: 'C:\\Data', readOnly: false }],
       scripts: ['./setup.mjs'],
     };
     f.writeLocal(f.workB, localB);
@@ -38,7 +38,7 @@ export const localConfigSuite: Suite = {
       { harness: 'codex', memoryMb: 4096, headless: true, rustEnabled: false, pythonStillOn: true, nodeSource: '.sandbox-config.json' },
       'approved local settings apply over the defaults (including toolchains and headless)',
     );
-    t.check(approved.config.mappings.some((m) => m.host === f.shared && !m.readOnly), 'relative mapping paths resolve against the folder of .sandbox-config.json', 'mappings: ' + JSON.stringify(approved.config.mappings));
+    t.check(approved.config.mappings.some((m) => m.host === path.join(f.workB, 'data') && !m.readOnly), 'relative mapping paths resolve against the folder of .sandbox-config.json', 'mappings: ' + JSON.stringify(approved.config.mappings));
     t.check(approved.scripts.includes(path.join(f.workB, 'setup.mjs')), 'relative script paths resolve against the folder of .sandbox-config.json', 'scripts: ' + JSON.stringify(approved.scripts));
     t.equal((await f.run({ cwd: f.workB })).harnessName, 'codex', 'an approval is remembered');
     t.equal((await f.run({ cwd: f.workB, noLocalConfig: true })).harnessName, 'claude', '--no-local-config ignores the file');
@@ -59,6 +59,8 @@ export const localConfigSuite: Suite = {
     await rejectedBecause({ toolchains: { node: { hostDir: 'x' } } }, 'toolchains.node.hostDir is not allowed', 'a project file cannot point at host tool folders');
     await rejectedBecause({ sandbox: { memoryMb: 12 } }, 'sandbox.memoryMb:', 'values are type-checked (memory too small)');
     await rejectedBecause({ mappings: [{ host: 'x', guest: 'C:\\Windows\\x', readOnly: true }] }, 'reserved or invalid guest path', 'reserved guest paths are rejected');
+    await rejectedBecause({ mappings: [{ host: '../shared', guest: 'C:\\Shared', readOnly: true }] }, 'only map folders inside the project', 'a project file cannot map folders outside the project');
+    await rejectedBecause({ mappings: [{ host: '%APPDATA%', guest: 'C:\\Startup', readOnly: false }] }, 'only map folders inside the project', '... not even through environment variables');
     await rejectedBecause({ provisioning: { git: { access: 'admin' } } }, 'provisioning.git.access:', 'unknown git access modes are rejected');
     await rejectedBecause('{\n  // a comment\n  "readOnly": tru\n}', 'line 3', 'broken JSON is reported with its line');
     await rejectedBecause({ _comment: 'old style' }, '_comment is not allowed', 'unknown keys are rejected');

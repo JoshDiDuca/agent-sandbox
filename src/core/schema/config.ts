@@ -46,7 +46,7 @@ export const LocalOverrides = z.strictObject({
   harness: Name.describe('Agent for this project.'),
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map this project read-only.'),
-  mappings: z.array(Mapping).describe('Extra folders (relative to this file).'),
+  mappings: z.array(Mapping).describe('Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
   sandbox: Sandbox.omit({ cpuLimit: true }).partial(),
   network: z.strictObject({ blockPrivateRanges: z.boolean() }).partial(),
@@ -60,7 +60,7 @@ export const LocalOverrides = z.strictObject({
   databases: z.strictObject(_.mapValues(Databases.shape, (shape) => shape.partial())).partial(),
   attach: Attach.partial(),
   personalization: toggle('Copy your desktop look into the sandbox.').partial(),
-  claudeProfile: ClaudeProfile.pick({ enabled: true, include: true, overwrite: true, copyCredentials: true, syncHistory: true, syncClaudeMem: true }).partial(),
+  claudeProfile: ClaudeProfile.pick({ enabled: true, overwrite: true, copyCredentials: true, syncHistory: true, syncClaudeMem: true }).partial(),
   hooks: z.strictObject({ failFast: z.boolean() }).partial(),
 }).partial();
 

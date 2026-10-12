@@ -65,6 +65,9 @@ export const isInsideOrEqual = (parent: string, child: string): boolean => {
 export const safeText = (text: string): string =>
   text.replace(/\x1b\[[0-9;]*m|\x1b(\[[0-9;?]*[ -\/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[@-Z\\-_])|[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, (m) => (/^\x1b\[[0-9;]*m$/.test(m) ? m : ''));
 
+/** safeText without colours either: for text you are asked to approve, which must not be able to hide parts of itself. */
+export const plainText = (text: string): string => safeText(text).replace(/\x1b\[[0-9;]*m/g, '');
+
 export const findOnPath = (names: string[]): string | null => {
   const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter((d: string) => d !== '');
   for (const name of names) for (const dir of dirs) { const candidate = path.join(dir, name); if (fileExists(candidate)) return candidate; }

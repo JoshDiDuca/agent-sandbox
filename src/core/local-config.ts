@@ -7,7 +7,7 @@ import _ from 'lodash';
 import type { Config, LocalConfigFile, Overrides } from './types.js';
 import { mergeConfig } from './config.js';
 import { describeIssues, LocalOverrides } from './schema.js';
-import { expandPath, fail, fileExists, parseJsonc, tryReadJson, writeJson } from './util.js';
+import { expandPath, fail, fileExists, isInsideOrEqual, parseJsonc, tryReadJson, writeJson } from './util.js';
 
 export const LOCAL_CONFIG_NAME = '.sandbox-config.json';
 
@@ -19,7 +19,21 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
   const scripts = overrides.scripts?.map((s) => expandPath(s, dir));
   const missing = scripts?.filter((s) => !fileExists(s)) ?? [];
   if (missing.length) fail(source + ' is not valid:\n  - scripts: file not found: ' + missing.join(', '));
-  return { ...overrides, scripts, mappings: overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) })) };
+  const mappings = overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) }));
+  // A repo ships this file, so it must not reach the rest of this PC: its extra folders stay inside the project.
+  const outside = mappings?.filter((m) => !insideProject(dir, m.host)) ?? [];
+  if (outside.length) fail(source + ' is not valid:\n  - mappings: a project file may only map folders inside the project, not ' + outside.map((m) => m.host).join(', '), 'Map other folders in your own settings (sandbox config path shows where they are).');
+  return { ...overrides, scripts, mappings };
+};
+
+/** `folder` (also where it really is, through links) is inside the project folder `dir`. */
+const insideProject = (dir: string, folder: string): boolean => {
+  // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created yet.
+  const real = (p: string): string => {
+    const full = path.resolve(p);
+    try { return fs.realpathSync.native(full); } catch { return path.dirname(full) === full ? full : path.join(real(path.dirname(full)), path.basename(full)); }
+  };
+  return isInsideOrEqual(dir, folder) && isInsideOrEqual(real(dir), real(folder));
 };
 
 /**
@@ -27,7 +41,7 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
  * switch off what you turned on (or turn on what you turned off). The strictest of the two values always wins.
  */
 export const ON_IS_SAFER = ['readOnly', 'network.blockPrivateRanges', 'sandbox.protectedClient', 'downloads.requireChecksum'];
-export const OFF_IS_SAFER = ['sandbox.networking', 'sandbox.clipboard', 'sandbox.audioInput', 'sandbox.videoInput', 'sandbox.printerRedirection', 'sandbox.vGpu', 'claudeProfile.copyCredentials'];
+export const OFF_IS_SAFER = ['sandbox.networking', 'sandbox.clipboard', 'sandbox.audioInput', 'sandbox.videoInput', 'sandbox.printerRedirection', 'sandbox.vGpu', 'claudeProfile.copyCredentials', 'claudeProfile.enabled', 'claudeProfile.syncHistory', 'claudeProfile.syncClaudeMem'];
 export const GIT_STRICTNESS: Record<string, number> = { full: 0, readonly: 1, none: 2 };
 export const NEVER_LOOSER = [...ON_IS_SAFER, ...OFF_IS_SAFER, 'provisioning.git.access'];
 

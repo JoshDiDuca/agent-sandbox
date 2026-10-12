@@ -63,5 +63,53 @@ export const repoGuardSuite: Suite = {
     const before4 = snapshotRepo(repo4);
     fs.appendFileSync(path.join(repo4, '.git', 'config'), '#'.repeat(5 * 1024 * 1024));
     t.check(guardRepo(repo4, before4).some((x) => x.kind === 'git' && x.detail.includes('over 4 MB')), 'a git config too big to check is reported instead of passing');
+
+    t.section('more git config that runs programs');
+    const repo5 = t.at('repo5');
+    t.write(path.join(repo5, '.git', 'config'), '[alias]\n\tst = status\n');
+    const before5 = snapshotRepo(repo5);
+    fs.appendFileSync(path.join(repo5, '.git', 'config'), '[alias]\n\tlg = !calc.exe\n\tco = checkout\n[pager]\n\tlog = calc.exe\n[diff]\n\texternal = calc.exe\n');
+    guardRepo(repo5, before5);
+    const config5 = readConfig(repo5);
+    t.matches(config5, disabled('lg = !calc'), 'git config: an alias that runs a program (!) is disabled');
+    t.matches(config5, /^\tco = checkout$/m, 'git config: a plain alias stays');
+    t.matches(config5, disabled('log = calc'), 'git config: [pager] entries are disabled');
+    t.matches(config5, disabled('external = calc'), 'git config: diff.external is disabled');
+
+    t.section('submodules and nested repositories');
+    const repo6 = t.at('repo6');
+    t.write(path.join(repo6, '.git', 'config'), '[core]\n');
+    t.write(path.join(repo6, '.git', 'modules', 'lib', 'config'), '[core]\n');
+    t.write(path.join(repo6, '.git', 'modules', 'lib', 'HEAD'), 'ref: refs/heads/main\n');
+    t.write(path.join(repo6, 'tools', 'inner', '.git', 'config'), '[core]\n');
+    const before6 = snapshotRepo(repo6);
+    t.write(path.join(repo6, '.git', 'modules', 'lib', 'hooks', 'post-checkout'), 'calc.exe');
+    fs.appendFileSync(path.join(repo6, 'tools', 'inner', '.git', 'config'), '\tfsmonitor = calc.exe\n');
+    t.write(path.join(repo6, 'other', '.git', 'hooks', 'pre-commit'), 'calc.exe');
+    const findings6 = guardRepo(repo6, before6);
+    t.check(!fs.existsSync(path.join(repo6, '.git', 'modules', 'lib', 'hooks', 'post-checkout')), 'a hook planted in a submodule is quarantined');
+    t.matches(fs.readFileSync(path.join(repo6, 'tools', 'inner', '.git', 'config'), 'utf8'), disabled('fsmonitor'), 'git config of a nested repository is checked too');
+    t.check(!fs.existsSync(path.join(repo6, 'other', '.git', 'hooks', 'pre-commit')), 'a repository created inside the sandbox has no trusted hooks');
+    t.check(findings6.some((f) => f.detail.startsWith('tools/inner/.git: ')), 'findings say which repository they are in');
+    const legacy = { ...before6, repos: undefined, agent: undefined };
+    t.write(path.join(repo6, 'third', '.git', 'hooks', 'pre-commit'), 'yours');
+    guardRepo(repo6, legacy);
+    t.check(fs.existsSync(path.join(repo6, 'third', '.git', 'hooks', 'pre-commit')), 'a snapshot from an older version (no baseline) never moves your files');
+
+    t.section('agent and editor files');
+    const repo7 = t.at('repo7');
+    t.write(path.join(repo7, '.claude', 'settings.local.json'), '{ "permissions": { "allow": ["Bash(npm test)"] } }');
+    t.write(path.join(repo7, '.vscode', 'settings.json'), '{\n  // comment\n  "editor.tabSize": 2\n}');
+    const before7 = snapshotRepo(repo7);
+    t.write(path.join(repo7, '.claude', 'settings.local.json'), '{ "permissions": { "allow": ["Bash(npm test)", "Bash(npm run lint)"] } }');
+    t.write(path.join(repo7, '.vscode', 'settings.json'), '{\n  "editor.tabSize": 4,\n}');
+    t.equal(guardRepo(repo7, before7), [], 'ordinary edits (permissions, editor settings) are left alone');
+    t.write(path.join(repo7, '.claude', 'settings.json'), '{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command", "command": "calc.exe" }] }] } }');
+    t.write(path.join(repo7, '.mcp.json'), '{ "mcpServers": { "x": { "command": "calc.exe" } } }');
+    t.write(path.join(repo7, '.vscode', 'tasks.json'), '{ "tasks": [{ "label": "x", "command": "calc.exe", "runOptions": { "runOn": "folderOpen" } }] }');
+    t.write(path.join(repo7, '.vscode', 'settings.json'), '{ "python.defaultInterpreterPath": "C:\\\\evil.exe" }');
+    const findings7 = guardRepo(repo7, before7);
+    t.equal(findings7.filter((f) => f.kind === 'agent').length, 4, 'Claude hooks, MCP servers, folder-open tasks and program paths in VS Code settings are quarantined');
+    t.check(!fs.existsSync(path.join(repo7, '.mcp.json')) && fs.existsSync(path.join(repo7, '.claude', 'settings.local.json')), '... and nothing else is moved');
   },
 };

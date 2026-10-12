@@ -6,18 +6,24 @@
 //  - git: new or changed hooks, and config that makes git run programs (core.fsmonitor, core.sshCommand, filters,
 //    include.path, ...), plus files that redirect where git reads config and hooks (commondir, config.worktree);
 //  - commands: executables dropped in the project root under the name of something you type there (node.exe,
-//    git.cmd, npm.cmd, ...), because Windows runs a program from the current folder before searching PATH.
+//    git.cmd, npm.cmd, ...), because Windows runs a program from the current folder before searching PATH;
+//  - agent and editor files: hooks, helper commands and MCP servers in .claude/ and .mcp.json, VS Code folder-open
+//    tasks and program paths, .envrc. Submodules and nested repositories get the git checks too.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { z } from 'zod';
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { readValid, writeFileAtomic, writeJsonAtomic } from '../shared/rundir.js';
 import { assertTestWritable } from './test-guard.js';
 import { dirExists, fileExists, isLink } from '../core/util.js';
 
 /** Config keys that make git run a program, or load more config. */
-const DANGEROUS_KEY = /^(fsmonitor|hookspath|sshcommand|pager|editor|askpass|program|gpgprogram|textconv|command|cmd|clean|smudge|process|driver|helper|uploadpack|receivepack|path|attributesfile|excludesfile|worktree|worktreeconfig|gitproxy|proxycommand|sendemailvalidate|tool)\s*=/i;
+const DANGEROUS_KEY = /^(fsmonitor|hookspath|sshcommand|pager|editor|askpass|program|gpgprogram|textconv|command|cmd|clean|smudge|process|driver|helper|uploadpack|receivepack|path|attributesfile|excludesfile|worktree|worktreeconfig|gitproxy|proxycommand|sendemailvalidate|tool|external|difffilter|defaultkeycommand|alternaterefscommand)\s*=/i;
+/** Sections where any key runs a program ([pager] log = x), or where a "!" value does ([alias] st = !x). */
+const dangerousInSection = (section: string, keyPart: string): boolean =>
+  (section === 'pager' && keyPart.includes('=')) || (section === 'alias' && /^[^=]+=\s*"?\s*!/.test(keyPart));
 const SECTION = /^\s*\[([^\]]*)\]\s*/;
 const MARK = '# [agent-sandbox] disabled, added inside the sandbox: ';
 /** Files in .git that make git read config/hooks from somewhere else. */
@@ -35,8 +41,51 @@ const COMMANDS = new RegExp('^(' + [
   'powershell', 'pwsh', 'cmd', 'where', 'tasklist', 'tar', 'curl', 'ssh', 'scp',
 ].join('|') + ')\\.(exe|com|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|ps1)$', 'i');
 
-export interface RepoSnapshot { gitDir: boolean; config: string[]; hooks: Record<string, string>; redirects: string[]; commands: Record<string, string> }
-export interface RepoFinding { kind: 'hook' | 'config' | 'git' | 'command'; detail: string }
+/**
+ * Project files that tools on this PC act on by themselves: Claude Code runs a project's hooks, helpers and MCP servers,
+ * VS Code runs folder-open tasks and the programs workspace settings point at, direnv runs .envrc. For each, only the
+ * part that can run something is compared (`risky`), so the agent may still edit the rest (permissions, formatting).
+ */
+const AGENT_FILES: Record<string, (data: unknown, text: string) => unknown> = {
+  '.claude/settings.json': (d) => claudeRisk(d),
+  '.claude/settings.local.json': (d) => claudeRisk(d),
+  '.mcp.json': (_d, text) => text,
+  '.vscode/tasks.json': (d) => JSON.stringify(d).match(/"runOn"\s*:\s*"folderOpen"/) ? d : null,
+  '.vscode/settings.json': (d) => _.pickBy(_.isPlainObject(d) ? d as object : {}, (_v, k) => /path|executable|command|interpreter|shell|profile|args|env|exec|program|server|launch|runtime|binary/i.test(k)),
+  '.envrc': (_d, text) => text,
+};
+const claudeRisk = (d: unknown): unknown => {
+  const s = (_.isPlainObject(d) ? d : {}) as Record<string, unknown>;
+  const permissions = (_.isPlainObject(s.permissions) ? s.permissions : {}) as Record<string, unknown>;
+  return { ..._.pick(s, ['hooks', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'otelHeadersHelper', 'statusLine', 'env', 'enableAllProjectMcpServers', 'enabledMcpjsonServers', 'disableAllHooks']), permissions: _.pick(permissions, ['defaultMode', 'additionalDirectories']) };
+};
+const MAX_AGENT_FILE_BYTES = 1024 * 1024;
+
+/** What can run in one agent file, as a short fingerprint (null = the file is not there). */
+const agentRisk = (workspace: string, rel: string): string | null => {
+  const file = path.join(workspace, ...rel.split('/'));
+  if (!fs.existsSync(file)) return null;
+  if (isLink(file) || isLink(path.dirname(file)) || !fileExists(file)) return 'link-or-not-a-file';
+  if (fs.statSync(file).size > MAX_AGENT_FILE_BYTES) return 'too-large-' + hash(file);
+  const text = fs.readFileSync(file, 'utf8');
+  const errors: ParseError[] = [];
+  const data = parseJsonc(text, errors, { allowTrailingComma: true });
+  const risk = AGENT_FILES[rel](rel === '.envrc' ? null : data, text);
+  return crypto.createHash('sha256').update(JSON.stringify(risk ?? null) + (errors.length && rel !== '.envrc' && rel !== '.mcp.json' ? hash(file) : '')).digest('hex');
+};
+const agentSnapshot = (workspace: string): Record<string, string> =>
+  Object.fromEntries(Object.keys(AGENT_FILES).flatMap((rel) => { const r = agentRisk(workspace, rel); return r ? [[rel, r]] : []; }));
+
+/** A git folder's own state: config lines, hooks, redirect files. */
+export interface GitState { config: string[]; hooks: Record<string, string>; redirects: string[] }
+export interface RepoSnapshot extends GitState {
+  gitDir: boolean; commands: Record<string, string>;
+  /** Fingerprints of AGENT_FILES (missing in snapshots of older versions: then they are not checked). */
+  agent?: Record<string, string>;
+  /** Other git folders: submodules (.git/modules/...) and repositories nested in the project, by relative path. */
+  repos?: Record<string, GitState>;
+}
+export interface RepoFinding { kind: 'hook' | 'config' | 'git' | 'command' | 'agent'; detail: string }
 
 /** SHA-256 in small chunks: a sandbox can plant a multi-gigabyte "node.exe" to exhaust this PC's memory. */
 const hash = (file: string): string => {
@@ -65,14 +114,54 @@ const configLines = (dir: string): string[] => {
   return fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_CONFIG_BYTES ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : [];
 };
 
+const gitState = (dir: string | null): GitState => ({
+  config: dir ? configLines(dir) : [],
+  hooks: dir ? filesIn(path.join(dir, 'hooks'), (n) => !n.endsWith('.sample')) : {},
+  redirects: dir ? REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n))) : [],
+});
+const EMPTY_GIT: GitState = { config: [], hooks: {}, redirects: [] };
+
+const MAX_OTHER_REPOS = 64;
+const SKIP_DIRS = new Set(['node_modules', '.git', 'agent-sandbox-quarantine', 'target', 'dist', 'build', 'bin', 'obj', '.venv', 'venv']);
+const plainDirs = (dir: string, limit: number): string[] => {
+  try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.isSymbolicLink()).slice(0, limit).map((e) => path.join(dir, e.name)); } catch { return []; }
+};
+/**
+ * Git folders other than the project's own: submodules (.git/modules/**) and repositories nested up to two levels deep.
+ * git runs their hooks and config too (git status in a subfolder, VS Code's repository scan). Bounded: links are never
+ * followed and at most MAX_OTHER_REPOS are looked at.
+ */
+const otherGitDirs = (workspace: string): string[] => {
+  const found: string[] = [];
+  const main = plainGitDir(workspace);
+  // Submodules: a folder with a config and a HEAD is a git folder, and may have modules of its own.
+  const walk = (dir: string, depth: number): void => {
+    for (const d of plainDirs(dir, 200)) {
+      if (found.length >= MAX_OTHER_REPOS) return;
+      if (fileExists(path.join(d, 'config')) && fileExists(path.join(d, 'HEAD'))) { found.push(d); if (depth < 3) walk(path.join(d, 'modules'), depth + 1); }
+      else if (depth < 3) walk(d, depth + 1);
+    }
+  };
+  if (main) walk(path.join(main, 'modules'), 0);
+  for (const sub of plainDirs(workspace, 500).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase()))) {
+    for (const candidate of [sub, ...plainDirs(sub, 200).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase()))]) {
+      if (found.length >= MAX_OTHER_REPOS) return found;
+      const git = plainGitDir(candidate);
+      if (git) found.push(git);
+    }
+  }
+  return found;
+};
+const relative = (workspace: string, dir: string): string => path.relative(workspace, dir).split(path.sep).join('/');
+
 export const snapshotRepo = (workspace: string): RepoSnapshot => {
   const dir = plainGitDir(workspace);
   return {
     gitDir: dir !== null,
-    config: dir ? configLines(dir) : [],
-    hooks: dir ? filesIn(path.join(dir, 'hooks'), (n) => !n.endsWith('.sample')) : {},
-    redirects: dir ? REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n))) : [],
+    ...gitState(dir),
     commands: filesIn(workspace, (n) => COMMANDS.test(n)),
+    agent: agentSnapshot(workspace),
+    repos: Object.fromEntries(otherGitDirs(workspace).map((d) => [relative(workspace, d), gitState(d)])),
   };
 };
 
@@ -96,14 +185,15 @@ const disableConfig = (dir: string, before: string[]): RepoFinding[] => {
   const seen: Record<string, number> = {};
   const findings: RepoFinding[] = [];
   let inInclude = false;
+  let section = '';
   const fixed = lines.map((line) => {
     const header = SECTION.exec(line);
-    if (header) inInclude = /^include(if\s+"[^"]*")?$/i.test(header[1].trim());
+    if (header) { section = header[1].trim().toLowerCase().split(/\s/)[0]; inInclude = /^include(if\s+"[^"]*")?$/i.test(header[1].trim()); }
     seen[line] = (seen[line] ?? 0) + 1;
     if (line.startsWith(MARK) || seen[line] <= (known[line] ?? 0)) return line;
     // git also accepts "[core] fsmonitor = x" on one line, so look past a leading section header.
     const keyPart = line.replace(SECTION, '').trim();
-    if (!(DANGEROUS_KEY.test(keyPart) || (inInclude && keyPart.includes('=')))) return line;
+    if (!(DANGEROUS_KEY.test(keyPart) || (inInclude && keyPart.includes('=')) || dangerousInSection(section, keyPart))) return line;
     findings.push({ kind: 'config', detail: line.trim() });
     return MARK + line.trim();
   });
@@ -125,18 +215,48 @@ export const guardRepo = (workspace: string, before: RepoSnapshot): RepoFinding[
   const commandsNow = filesIn(workspace, (n) => COMMANDS.test(n));
   findings.push(...quarantine(workspace, Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]), workspace, 'command'));
 
+  // Snapshots from before these checks existed have no baseline: checking against nothing would move your own files.
+  if (before.agent) findings.push(...guardAgentFiles(workspace, before.agent));
+  if (before.repos) {
+    for (const other of otherGitDirs(workspace)) {
+      const rel = relative(workspace, other);
+      findings.push(...guardGitDir(other, before.repos[rel] ?? EMPTY_GIT).map((f) => ({ ...f, detail: rel + ': ' + f.detail })));
+    }
+  }
+
   const dir = plainGitDir(workspace);
   if (!dir) {
     const replaced = before.gitDir && fs.existsSync(path.join(workspace, '.git'));
     if (replaced) findings.push({ kind: 'git', detail: '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' + workspace + ' until you have checked it.' });
     return findings;
   }
+  findings.push(...guardGitDir(dir, before));
+  return findings;
+};
+
+const guardGitDir = (dir: string, before: GitState): RepoFinding[] => {
   const hooksDir = path.join(dir, 'hooks');
   const hooksNow = filesIn(hooksDir, (n) => !n.endsWith('.sample'));
-  findings.push(...quarantine(hooksDir, Object.keys(hooksNow).filter((n) => before.hooks[n] !== hooksNow[n]), dir, 'hook'));
-  findings.push(...quarantine(dir, REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n)) && !before.redirects.includes(n)), dir, 'git'));
-  findings.push(...disableConfig(dir, before.config));
-  return findings;
+  return [
+    ...quarantine(hooksDir, Object.keys(hooksNow).filter((n) => before.hooks[n] !== hooksNow[n]), dir, 'hook'),
+    ...quarantine(dir, REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n)) && !before.redirects.includes(n)), dir, 'git'),
+    ...disableConfig(dir, before.config),
+  ];
+};
+
+/** Agent files whose runnable part changed are moved to the quarantine folder (the rest of your edits are in there too). */
+const guardAgentFiles = (workspace: string, before: Record<string, string>): RepoFinding[] => {
+  const changed = Object.keys(AGENT_FILES).filter((rel) => { const now = agentRisk(workspace, rel); return now !== null && now !== before[rel]; });
+  if (!changed.length) return [];
+  const target = path.join(workspace, 'agent-sandbox-quarantine', String(Date.now()));
+  fs.mkdirSync(target, { recursive: true });
+  return changed.map((rel) => {
+    const what = rel + ' (the sandbox added something it would run on this PC: hooks, MCP servers, helper commands or tasks';
+    try { fs.renameSync(path.join(workspace, ...rel.split('/')), path.join(target, rel.replace(/\//g, '_'))); } catch (e) {
+      return { kind: 'agent' as const, detail: what + '; could not be moved: ' + (e as NodeJS.ErrnoException).code + '. Check it before you open this folder in Claude Code or VS Code)' };
+    }
+    return { kind: 'agent' as const, detail: what + '; moved to ' + target + ')' };
+  });
 };
 
 // ---- snapshot storage (host-only, next to the sync state) ---------------------------------------------------------
@@ -145,10 +265,11 @@ const syncDir = (dataPath: string): string => path.join(path.dirname(path.dirnam
 const snapshotFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo.json');
 const findingsFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo-findings.json');
 
-const Finding = z.object({ kind: z.enum(['hook', 'config', 'git', 'command']), detail: z.string().max(4096), at: z.string().max(64).optional() });
+const Finding = z.object({ kind: z.enum(['hook', 'config', 'git', 'command', 'agent']), detail: z.string().max(4096), at: z.string().max(64).optional() });
+const GitStateSchema = z.object({ config: z.array(z.string()), hooks: z.record(z.string(), z.string()), redirects: z.array(z.string()) });
 const Saved = z.object({
   workspace: z.string().max(1024).refine((p) => path.isAbsolute(p)),
-  snapshot: z.object({ gitDir: z.boolean(), config: z.array(z.string()), hooks: z.record(z.string(), z.string()), redirects: z.array(z.string()), commands: z.record(z.string(), z.string()) }),
+  snapshot: GitStateSchema.extend({ gitDir: z.boolean(), commands: z.record(z.string(), z.string()), agent: z.record(z.string(), z.string()).optional(), repos: z.record(z.string(), GitStateSchema).optional() }),
 });
 
 /**
@@ -159,7 +280,7 @@ type SavedT = z.output<typeof Saved>;
 const Store = z.strictObject({ projects: z.array(Saved).max(4096), roots: z.array(z.string().max(1024).refine((p) => path.isAbsolute(p))).max(64) });
 const StoreAny = z.union([Store, Saved.transform((s) => ({ projects: [s], roots: [] as string[] }))]);
 const readStore = (dataPath: string): z.output<typeof Store> => readValid(StoreAny, snapshotFile(dataPath)) ?? { projects: [], roots: [] };
-const EMPTY: RepoSnapshot = { gitDir: false, config: [], hooks: {}, redirects: [], commands: {} };
+const EMPTY: RepoSnapshot = { gitDir: false, config: [], hooks: {}, redirects: [], commands: {}, agent: {}, repos: {} };
 const MAX_ROOT_PROJECTS = 2000;
 
 /** The folders directly inside a project root (plain folders only; links are never followed). */

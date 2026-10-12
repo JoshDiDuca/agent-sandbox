@@ -62,7 +62,7 @@
         ],
         "additionalProperties": false
       },
-      "description": "Extra folders (relative to this file)."
+      "description": "Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox."
     },
     "scripts": {
       "type": "array",
@@ -926,14 +926,6 @@
         "enabled": {
           "type": "boolean",
           "description": "Copy selected Claude settings from this PC into the sandbox."
-        },
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._-]+$"
-          },
-          "description": "Files and folders copied from it."
         },
         "overwrite": {
           "type": "boolean",

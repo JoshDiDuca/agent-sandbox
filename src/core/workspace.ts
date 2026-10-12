@@ -6,7 +6,7 @@ import { planMirrorWorkspace } from '../shared/guest-paths.js';
 import { DATABASES, type Database } from './detect-databases.js';
 import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { assertSafeWorkspace } from './safe-paths.js';
-import { dirExists, expandPath, fail, fileExists } from './util.js';
+import { dirExists, expandPath, fail, fileExists, plainText } from './util.js';
 
 /**
  * 'auto' guest workspace: C:\Workspace\<folder name>. Keeping the real folder name means Claude's per-project history
@@ -81,10 +81,10 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
       let trusted = req.trustConfig;
       if (!trusted && req.ask) {
         console.log('\nFound ' + local.path + ' which is not trusted yet. It would apply:');
-        for (const line of summary) console.log('  ' + line);
+        for (const line of summary) console.log('  ' + plainText(line));
         trusted = await req.ask('Trust and use this file?');
       }
-      if (!trusted) fail(local.path + ' has not been approved yet (a repo can ship this file, so it needs your OK). It would apply:\n  ' + (summary.join('\n  ') || '(no changes)'), 'Review it, then run again in an interactive terminal and answer y, or add --trust-config. To ignore the file: --no-local-config');
+      if (!trusted) fail(local.path + ' has not been approved yet (a repo can ship this file, so it needs your OK). It would apply:\n  ' + (summary.map(plainText).join('\n  ') || '(no changes)'), 'Review it, then run again in an interactive terminal and answer y, or add --trust-config. To ignore the file: --no-local-config');
       saveTrust(store, local.path, local.hash);
       notes.push('Trusted ' + local.path + ' (you will only be asked again if the file changes).');
     }
