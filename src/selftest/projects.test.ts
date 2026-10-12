@@ -19,7 +19,7 @@ import { projectFolderName } from '../shared/paths.js';
 import { syncHistoryOut } from '../sync/history.js';
 import { validateOptions, validateProjectsArgs } from '../cli/validate.js';
 import { parseCli, parseSessionWant } from '../cli/args.js';
-import { candidateFolders, severalAgentsArgv } from '../cli/menu-multi.js';
+import { candidateFolders, severalAgentsArgv } from '../cli/menu/index.js';
 import type { Context } from '../cli/commands/context.js';
 import { generateSandbox } from '../host/generate.js';
 import { askedWhen } from '../cli/manifest.js';

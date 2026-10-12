@@ -8,7 +8,7 @@ import { agentCommands, commandsDir, reconcileAgentCommands, type Reconciled } f
 import { insideSandbox } from '../../host/platform.js';
 import { writeFileAtomic } from '../../shared/rundir.js';
 import { c } from '../colors.js';
-import { editConfigText } from '../settings/edit.js';
+import { editConfigText } from '../menu/settings/config-file.js';
 import { table, type Context } from './context.js';
 
 const entryOf = (ctx: Context): string => path.join(ctx.packageRoot, 'dist', 'bin', 'sandbox.js');

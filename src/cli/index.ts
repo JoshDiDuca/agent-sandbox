@@ -5,7 +5,7 @@ import { buildProgram, parseCli } from './args.js';
 import { commandSpec } from './manifest.js';
 import { c } from './colors.js';
 import { recordHistory } from './history.js';
-import { menu } from './menu.js';
+import { menu } from './menu/index.js';
 import { validateOptions } from './validate.js';
 import { loadConfig } from '../core/config.js';
 import * as commands from './commands/index.js';

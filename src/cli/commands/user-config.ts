@@ -6,7 +6,7 @@ import { parse } from 'jsonc-parser';
 import _ from 'lodash';
 import { userConfigPath } from '../../core/config.js';
 import { fail } from '../../core/util.js';
-import { editConfigText } from '../settings/edit.js';
+import { editConfigText } from '../menu/settings/config-file.js';
 import type { Context } from './context.js';
 
 export const configFile = (ctx: Context): string => ctx.loaded.configPath ?? userConfigPath();
