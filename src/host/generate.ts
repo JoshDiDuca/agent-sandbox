@@ -42,7 +42,14 @@ const hostToolsOf = (probe: HostProbe): GuestSession['hostTools'] => ({
   pyenv: Boolean(probe.pyenv),
 });
 
-export const generateSandbox = (o: GenerateOptions): Generated & { personalization: string } => {
+/**
+ * env.cmd, which logon.cmd calls before it opens Windows Terminal: Terminal expands "%AGENT_WORKSPACE%" (the starting
+ * folder of new tabs) from its own environment, and the runtime only sets the variable machine-wide after Terminal
+ * started. `%` is doubled for cmd; a Windows path holds no quotes.
+ */
+export const logonEnv = (workspace: string): string => '@set "AGENT_WORKSPACE=' + workspace.replace(/[\r\n"]/g, '').replace(/%/g, '%%') + '"\r\n';
+
+export const generateSandbox =(o: GenerateOptions): Generated & { personalization: string } => {
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
   if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
@@ -97,6 +104,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   };
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);
+  fs.writeFileSync(path.join(launchPath, 'env.cmd'), logonEnv(session.workspace), 'utf8');
   copyRuntime(o.packageRoot, launchPath);
   stageHooks(o.packageRoot, launchPath, o.run.scripts);
 

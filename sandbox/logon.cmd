@@ -4,6 +4,8 @@ rem (downloaded once by the host into persistent storage), or a plain PowerShell
 if not exist C:\AgentData\logs mkdir C:\AgentData\logs
 echo logon.cmd ran at %date% %time% > C:\AgentData\logs\logon-hit.txt
 call C:\AgentLaunch\sandbox\trust.cmd
+rem New Terminal tabs start in %AGENT_WORKSPACE%: Terminal must have it before the runtime sets it machine-wide.
+if exist C:\AgentLaunch\env.cmd call C:\AgentLaunch\env.cmd
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 rem sandbox.cpuLimit: this window joins a CPU-capped job first, so everything started below inherits the cap.
 "%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\cpucap.ps1
