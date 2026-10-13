@@ -21,6 +21,10 @@ export class Theme {
   static readonly selected = (t: string): string => (Theme.colour ? '\x1b[48;5;24m\x1b[97m' + t.replace(/\x1b\[0m/g, '\x1b[0m\x1b[48;5;24m\x1b[97m') + '\x1b[0m' : t);
   /** The header bar. */
   static readonly bar = (t: string): string => (Theme.colour ? '\x1b[48;5;236m\x1b[97m' + t.replace(/\x1b\[0m/g, '\x1b[0m\x1b[48;5;236m\x1b[97m') + '\x1b[0m' : t);
+  /** The two settings scopes: your own (blue) and the project's (purple). */
+  static readonly scopeGlobal = (t: string): string => (Theme.colour ? '\x1b[48;5;25m\x1b[97m\x1b[1m' + t + '\x1b[0m' : '[' + t + ']');
+  static readonly scopeProject = (t: string): string => (Theme.colour ? '\x1b[48;5;91m\x1b[97m\x1b[1m' + t + '\x1b[0m' : '[' + t + ']');
+  static readonly project = sgr('38;5;177', '39');
   static readonly key = (t: string): string => (Theme.colour ? '\x1b[48;5;238m\x1b[97m ' + t + ' \x1b[0m' : '[' + t + ']');
 
   static readonly glyph = {

@@ -31,12 +31,15 @@ export interface ListItem<T> {
 
 export interface Category { id: string; label: string; description?: string }
 export interface ListAction { key: string; label: string }
+/** Tabs above the list (e.g. which settings file): Tab switches, the screen reopens on the other one. */
+export interface Tab { label: string; badge: string; paint: (text: string) => string }
 
 export type ListResult<T> =
   | { kind: 'pick'; value: T }
   | { kind: 'back' }
   | { kind: 'action'; key: string; value: T | undefined }
-  | { kind: 'multi'; values: T[] };
+  | { kind: 'multi'; values: T[] }
+  | { kind: 'tab'; index: number };
 
 export interface ListOptions<T> {
   path: string[];
@@ -52,6 +55,7 @@ export interface ListOptions<T> {
   actions?: ListAction[];
   notice?: string;
   empty?: string;
+  tabs?: { items: Tab[]; active: number };
   /** What Esc does, for the footer ("back", "quit"). */
   escapeLabel?: string;
 }
@@ -117,6 +121,7 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const listWidth = detailsRight ? rest - detailsWidth - 3 : rest;
 
     const top: string[] = [];
+    if (this.o.tabs) top.push(' ' + this.o.tabs.items.map((tab, i) => (i === this.o.tabs!.active ? tab.paint(' ' + tab.badge + ' ' + tab.label + ' ') : Theme.muted('  ' + tab.label + '  '))).join(' ') + Theme.muted('   tab switches'), '');
     const intro = typeof this.o.intro === 'string' ? [this.o.intro] : this.o.intro ?? [];
     for (const line of intro) top.push(...Text.wrap(line, size.width - 3).map((l) => ' ' + Theme.muted(l)));
     if (this.searching || this.query) top.push(' ' + Theme.accent(Theme.glyph.search) + ' ' + this.query + (this.searching ? Theme.accent('▏') : '') + Theme.muted('   ' + visible.length + ' match' + (visible.length === 1 ? '' : 'es')));
@@ -206,6 +211,7 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (this.searching) return [['type', 'to search'], ['↑↓', 'move'], ['↵', this.o.multi ? 'done' : 'open'], ['esc', 'clear search']];
     return [
       ['↑↓', 'move'],
+      ...(this.o.tabs ? [['tab', 'switch ' + this.o.tabs.items.map((t) => t.label.toLowerCase()).join(' / ')] as [string, string]] : []),
       ...(this.o.categories ? [['←→', 'categories'] as [string, string]] : []),
       ...(this.o.multi ? [['space', 'tick'], ['a', 'tick all shown'], ['↵', 'done']] as [string, string][] : [['↵', 'open'] as [string, string]]),
       ['/', 'search'],
@@ -234,9 +240,13 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       // In a tick list, space always ticks (even while searching).
       if (key.name !== 'return' && key.text && !(this.o.multi && key.name === 'space')) { this.query += key.text; this.cursor = 0; return; }
     }
+    if (this.o.tabs && key.name === 'tab') {
+      const n = this.o.tabs.items.length;
+      return { done: { kind: 'tab', index: (this.o.tabs.active + (key.shift ? n - 1 : 1)) % n } };
+    }
     if (this.o.categories && !this.query) {
       if (key.name === 'left' && this.focus === 'list') { this.focus = 'side'; return; }
-      if ((key.name === 'right' || key.name === 'tab' || key.name === 'return') && this.focus === 'side') { this.focus = 'list'; return; }
+      if ((key.name === 'right' || key.name === 'return') && this.focus === 'side') { this.focus = 'list'; return; }
     }
     if (key.name === 'escape' || (key.name === 'backspace' && !this.searching)) {
       if (this.query) { this.query = ''; this.cursor = 0; return; }

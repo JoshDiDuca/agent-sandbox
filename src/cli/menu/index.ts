@@ -95,8 +95,8 @@ export class Menu {
     const userFile = ConfigFile.user(this.ctx.loaded.configPath);
     add('apps', 'Apps', 'Browse the apps catalogue…', { kind: 'apps', target: 'user' }, 'Tick the apps every sandbox should have: by category, searchable, with sizes. Each downloads once and is kept.', Theme.muted(appsSummary(userFile)));
     add('apps', 'Apps', 'Apps for this project only…', { kind: 'apps', target: 'project' }, 'Catalogue apps this project needs (saved in its .sandbox-config.json, added to yours).');
-    add('settings', 'Settings', 'Your settings', { kind: 'settings', target: 'user' }, 'Every setting, for all projects: languages, databases, the sandbox machine, agents, security ...');
-    add('settings', 'Settings', 'This project\'s settings', { kind: 'settings', target: 'project' }, 'This folder\'s .sandbox-config.json: only what a project may set. A changed file needs your approval at the next launch.');
+    add('settings', 'Settings', 'Settings for all projects', { kind: 'settings', target: 'user' }, 'Your own settings, used by every project: languages, databases, the sandbox machine, agents, security ... (Tab switches to this project\'s.)', Theme.scopeGlobal(' YOURS '));
+    add('settings', 'Settings', 'Settings for this project', { kind: 'settings', target: 'project' }, 'This folder\'s .sandbox-config.json: only what a project may set, on top of yours. A changed file needs your approval at the next launch. (Tab switches to all projects.)', Theme.scopeProject(' PROJECT '));
 
     for (const spec of COMMANDS.filter((s) => !s.hidden && s.name !== 'launch')) {
       const category = CATEGORY_OF_GROUP[spec.group];
@@ -133,7 +133,7 @@ export class Menu {
   /** Does what a home entry says. A number ends the menu with that exit code. */
   private async perform(action: Action): Promise<number | undefined> {
     if (action.kind === 'settings') {
-      await new SettingsEditor(this.app, this.fileFor(action.target), this.ctx.dataPath).run();
+      await new SettingsEditor(this.app, { user: this.fileFor('user'), project: this.fileFor('project') }, action.target, this.ctx.dataPath).run();
       this.applyAgentCommands();
       return undefined;
     }

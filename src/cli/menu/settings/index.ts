@@ -1,10 +1,12 @@
-// The settings screen: every setting of your own config or this project's .sandbox-config.json, grouped into
-// categories (sidebar), searchable, each with its value, default and description. Enter edits (on/off flips at once),
-// r resets. Edits keep the file's comments and formatting, and nothing is saved unless the whole file stays valid.
+// The settings screen: two scopes on tabs, your own settings ("All projects", blue) and this folder's
+// .sandbox-config.json ("This project", purple); Tab switches and keeps your place. Every setting is grouped into
+// categories (sidebar), searchable, with its value in both scopes, its default and description. Enter edits (on/off
+// flips at once), r resets. Edits keep the file's comments and formatting, and nothing is saved unless the whole file
+// stays valid.
 import _ from 'lodash';
 import { NEVER_LOOSER } from '../../../core/local-config.js';
 import type { Config } from '../../../core/types.js';
-import { App, Text, Theme, type Category, type ListItem } from '../../tui/index.js';
+import { App, Text, Theme, type Category, type ListItem, type Tab } from '../../tui/index.js';
 import { AppsCatalogue } from '../apps.js';
 import { CATEGORIES, categoryOf, nameOf } from './categories.js';
 import { ConfigFile } from './config-file.js';
@@ -17,15 +19,23 @@ export { SchemaNode } from './schema-node.js';
 
 interface Setting { key: string[]; node: SchemaNode; category: string; section?: string }
 
+export type Scope = 'user' | 'project';
+const SCOPES: { scope: Scope; tab: Tab }[] = [
+  { scope: 'user', tab: { label: 'All projects', badge: 'YOURS', paint: Theme.scopeGlobal } },
+  { scope: 'project', tab: { label: 'This project', badge: 'PROJECT', paint: Theme.scopeProject } },
+];
+
 export class SettingsEditor {
   private readonly editor: ValueEditor;
 
-  /** dataPath: where the apps catalogue looks for what is installed already. */
-  constructor(private readonly app: App, private readonly file: ConfigFile, private readonly dataPath = '') {
+  /** files: your config and this folder's project file; dataPath: where the apps catalogue looks for installed apps. */
+  constructor(private readonly app: App, private readonly files: Record<Scope, ConfigFile>, private scope: Scope = 'user', private readonly dataPath = '') {
     this.editor = new ValueEditor(app, { suggestions: (key) => (['defaultHarness', 'harness'].includes(key.join('.')) ? Object.keys(this.file.userConfig().harnesses) : undefined) });
   }
 
-  private get title(): string { return this.file.isProject ? 'Project settings' : 'Your settings'; }
+  /** The file the current tab edits. */
+  get file(): ConfigFile { return this.files[this.scope]; }
+  private get title(): string { return 'Settings · ' + (this.file.isProject ? 'This project' : 'All projects'); }
 
   /** Every editable setting with the category and heading it is shown under. */
   settings(): Setting[] {
@@ -44,21 +54,23 @@ export class SettingsEditor {
   private item(s: Setting, config: Config): ListItem<string> {
     const inFile = this.file.valueInFile(s.key);
     const set = inFile !== undefined;
-    const now = this.file.effective(s.key, config);
     const yours = _.get(config, s.key);
-    const value = this.file.isProject && !set ? Theme.muted('yours: ') + formatValue(yours, 40) : formatValue(now);
     const id = s.key.join('.');
+    const project = this.files.project;
+    const inProject = project.schema.leaves().some((l) => l.key.join('.') === id) ? project.valueInFile(s.key) : undefined;
+    const paint = this.file.isProject ? Theme.project : Theme.changed;
+    const value = this.file.isProject && !set ? Theme.muted('all projects: ') + formatValue(yours, 40) : formatValue(this.file.effective(s.key, config));
     const details = [
-      Theme.muted('Setting  ') + id,
-      this.file.isProject
-        ? (set ? Theme.changed('Set in this project') : Theme.muted('Not set in this project')) + Theme.muted(' · yours: ') + formatValue(yours, 30)
-        : (set ? Theme.changed('Set in your file') : Theme.muted('Built-in default')) + Theme.muted(' · default: ') + formatValue(this.file.defaultOf(s.key), 30),
+      Theme.muted('Setting       ') + id,
+      Theme.muted('All projects  ') + formatValue(yours, 40) + Theme.muted(this.files.user.valueInFile(s.key) === undefined ? '  (built-in default)' : '  (your file)'),
+      Theme.muted('This project  ') + (inProject === undefined ? Theme.muted('not set') : Theme.project(Text.strip(formatValue(inProject, 40)))),
+      ...(!this.file.isProject ? [Theme.muted('Default       ') + formatValue(this.file.defaultOf(s.key), 40)] : []),
       ...(this.file.isProject && NEVER_LOOSER.includes(id) ? [Theme.warn(Theme.glyph.lock + ' A project can only make this stricter than your own setting.')] : []),
     ];
     return {
       value: id,
       label: Text.humanize(s.key[s.key.length - 1]),
-      hint: set ? Theme.changed(Text.strip(value)) + ' ' + Theme.changed(Theme.glyph.changed) : value,
+      hint: set ? paint(Text.strip(value)) + ' ' + paint(Theme.glyph.changed) : value,
       description: s.node.description,
       details,
       section: s.section,
@@ -76,7 +88,8 @@ export class SettingsEditor {
       const categories: Category[] = CATEGORIES.filter((c) => settings.some((s) => s.category === c.id)).map((c) => ({ id: c.id, label: c.label, description: c.description }));
       const picked = await this.app.list<string>({
         path: [this.title],
-        status: Theme.muted('Editing ') + Text.middle(this.file.file, 80) + (this.file.exists ? '' : Theme.muted(' (created when you save)')),
+        tabs: { items: SCOPES.map((x) => x.tab), active: SCOPES.findIndex((x) => x.scope === this.scope) },
+        status: (this.file.isProject ? Theme.project('●') : Theme.accent('●')) + Theme.muted(' Editing ') + Text.middle(this.file.file, 80) + (this.file.exists ? '' : Theme.muted(' (created when you save)')) + (this.file.isProject ? Theme.muted('  · only what a project may set; needs your approval at the next launch') : ''),
         items: settings.map((s) => this.item(s, config)),
         categories,
         startAt: focus,
@@ -85,6 +98,8 @@ export class SettingsEditor {
       });
       notice = undefined;
       if (picked.kind === 'back') return;
+      // The other tab, on the same setting when that scope has it.
+      if (picked.kind === 'tab') { this.scope = SCOPES[picked.index].scope; continue; }
       if (picked.kind !== 'pick' && picked.kind !== 'action') continue;
       if (picked.value === undefined) continue;
       focus = picked.value;
