@@ -1,4 +1,4 @@
-// Grows the sandbox's paging file at once, with no restart. Loaded by pagefile.ps1 (Add-Type). C# 5.
+// Sets the size of the sandbox's paging file at once, with no restart. Loaded by pagefile.ps1 (Add-Type). C# 5.
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -14,14 +14,14 @@ public static class SandboxPageFile {
 
     private const int SeCreatePagefilePrivilege = 15;
 
-    /// <summary>Lets C:\pagefile.sys grow to maximumMb (it starts at minimumMb). Throws with Windows' reason on failure.</summary>
-    public static void Grow(int minimumMb, int maximumMb) {
+    /// <summary>Makes C:\pagefile.sys sizeMb, fixed (it never grows). Throws with Windows' reason on failure.</summary>
+    public static void Set(int sizeMb) {
         bool wasEnabled;
         Check(RtlAdjustPrivilege(SeCreatePagefilePrivilege, true, false, out wasEnabled));
-        // The same call Windows makes at startup; for the existing file it changes the limits in place.
+        // The same call Windows makes at startup; for the existing file it changes the size in place.
         const string path = @"\??\C:\pagefile.sys";
         NtString name = new NtString { Length = (ushort)(path.Length * 2), MaximumLength = (ushort)(path.Length * 2 + 2), Buffer = path };
-        long minimum = minimumMb * 1048576L, maximum = maximumMb * 1048576L;
+        long minimum = sizeMb * 1048576L, maximum = minimum;
         Check(NtCreatePagingFile(ref name, ref minimum, ref maximum, 0));
     }
 

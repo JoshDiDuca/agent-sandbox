@@ -122,10 +122,10 @@ export const syncSuite: Suite = {
     t.equal(explainStop([ev(41, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:20:00Z'), ev(42, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:10:00Z')])?.kind, 'sleep', 'the first event counts (sleep, then a crash)');
     t.equal(explainStop([ev(2004, 'Microsoft-Windows-Resource-Exhaustion-Detector', '2026-10-13T02:10:00Z')])?.kind, 'memory', 'low memory is recognised');
     t.equal(explainStop([ev(41, 'SomethingElse', '2026-10-13T02:10:00Z')]), null, 'the same event id from another source is ignored');
-    const lsm = 'Microsoft-Windows-TerminalServices-LocalSessionManager';
-    t.equal(explainStop([ev(24, lsm, '2026-10-13T09:50:00Z', 'PC\\Josh')], 'josh')?.kind, 'session', 'switching user away from your session is recognised');
-    t.equal(explainStop([ev(23, lsm, '2026-10-13T09:50:00Z', 'PC\\Josh')], 'josh')?.text, 'you signed out of Windows', 'signing out is recognised');
-    t.equal(explainStop([ev(24, lsm, '2026-10-13T09:50:00Z', 'PC\\Guest')], 'josh'), null, 'another account\'s session ending does not count');
+    // The message Hyper-V logged on 13 Oct 2026 when Windows inside the sandbox crashed.
+    const crashMessage = "'8abb707a-972e-42e2-9599-01d125d4595c' has encountered a fatal error.  The guest operating system reported that it failed with the following error codes: ErrorCode0: 0x1A, ErrorCode1: 0x13003, ErrorCode2: 0x2346E5, ErrorCode3: 0x1";
+    t.equal(explainStop([ev(18590, 'Microsoft-Windows-Hyper-V-Worker', '2026-10-13T08:49:08Z', crashMessage)])?.text, 'Windows inside the sandbox crashed (stop code 0x1A, 0x13003)', 'a crash of Windows inside the sandbox is recognised, with its stop code');
+    t.equal(explainStop([ev(24, 'Microsoft-Windows-TerminalServices-LocalSessionManager', '2026-10-13T08:41:40Z', 'PC\\Admin')]), null, 'switching user is not taken for the cause (the sandbox keeps running)');
 
     const lifeRoot = t.at('life-storage');
     const lifeData = path.join(lifeRoot, 'data', 'testdata');

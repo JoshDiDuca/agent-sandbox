@@ -3,7 +3,6 @@
 // (sandbox.keepAwake). When the PC restarts, sleeps or crashes, the watcher stops too and the record has no end: the
 // next launch reads Windows' System log from that moment on and says what happened, and what keeps it from happening.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { SYSTEM } from '../shared/system.js';
@@ -14,7 +13,7 @@ import { refuseInSelfTest } from './test-guard.js';
 const Iso = z.string().max(40);
 const Life = z.object({
   started: Iso, lastSeen: Iso, keepAwake: z.boolean(),
-  ended: z.object({ at: Iso, cause: z.object({ kind: z.enum(['updates', 'restart', 'crash', 'sleep', 'memory', 'session']), at: Iso, text: z.string().max(400) }).nullable() }).optional(),
+  ended: z.object({ at: Iso, cause: z.object({ kind: z.enum(['updates', 'restart', 'crash', 'sleep', 'memory', 'sandboxCrash']), at: Iso, text: z.string().max(400) }).nullable() }).optional(),
   reported: z.boolean().optional(),
 });
 type LifeT = z.infer<typeof Life>;
@@ -44,17 +43,17 @@ export const endLife = (storageRoot: string, dataPath: string, cause: StopCause 
 export interface StopEvent { at: string; id: number; provider: string; process: string }
 const StopEvents = z.array(z.object({ at: Iso, id: z.number().int(), provider: z.string().max(200), process: z.string().max(400).nullable().transform((p) => p ?? '') })).max(100);
 
-export type StopKind = 'updates' | 'restart' | 'crash' | 'sleep' | 'memory' | 'session';
+export type StopKind = 'updates' | 'restart' | 'crash' | 'sleep' | 'memory' | 'sandboxCrash';
 export interface StopCause { kind: StopKind; at: string; text: string }
 
 const UPDATERS = /^(trustedinstaller|mousocoreworker|musnotification(ux)?|usoclient|wuauclt|tiworker|updateorchestrator)\.exe$/i;
 
 /**
- * The first event that ends a running sandbox (pure): a restart or shutdown, a crash or power loss, sleep, low memory,
- * or you leaving your Windows session (switch user, sign out). For session events `process` holds the user, and only
- * `user`'s own session counts (another account's sessions do not touch your sandbox).
+ * The first event that ends a running sandbox (pure): Windows inside the sandbox crashing (Hyper-V 18590; `process`
+ * holds its message with the stop code), a restart or shutdown, a crash or power loss, sleep, low memory. Switching
+ * user does not end it (seen on 13 Oct 2026: the sandbox ran on after a switch).
  */
-export const explainStop = (events: StopEvent[], user = ''): StopCause | null => {
+export const explainStop = (events: StopEvent[]): StopCause | null => {
   const causes = events.flatMap((e): StopCause[] => {
     const p = e.provider.toLowerCase();
     if (e.id === 1074 && p.includes('user32')) {
@@ -66,8 +65,11 @@ export const explainStop = (events: StopEvent[], user = ''): StopCause | null =>
     if ((e.id === 41 && p.includes('kernel-power')) || (e.id === 6008 && p.includes('eventlog'))) return [{ kind: 'crash', at: e.at, text: 'Windows stopped unexpectedly (a crash, a power cut, or the power button held down)' }];
     if (e.id === 42 && p.includes('kernel-power')) return [{ kind: 'sleep', at: e.at, text: 'this PC went to sleep or hibernated' }];
     if (e.id === 2004 && p.includes('resource-exhaustion')) return [{ kind: 'memory', at: e.at, text: 'this PC ran out of memory' }];
-    const mine = user !== '' && e.process.split('\\').pop()?.toLowerCase() === user.toLowerCase();
-    if ((e.id === 24 || e.id === 23) && p.includes('localsessionmanager') && mine) return [{ kind: 'session', at: e.at, text: e.id === 24 ? 'your Windows session was disconnected (switch user, or a remote desktop connection ended)' : 'you signed out of Windows' }];
+    if (e.id === 18590 && p.includes('hyper-v-worker')) {
+      const code = /ErrorCode0:\s*(0x[0-9a-f]{1,8})/i.exec(e.process)?.[1];
+      const sub = /ErrorCode1:\s*(0x[0-9a-f]{1,16})/i.exec(e.process)?.[1];
+      return [{ kind: 'sandboxCrash', at: e.at, text: 'Windows inside the sandbox crashed' + (code ? ' (stop code ' + code + (sub ? ', ' + sub : '') + ')' : '') }];
+    }
     return [];
   });
   return causes.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))[0] ?? null;
@@ -78,21 +80,21 @@ const ADVICE: Record<StopKind, string> = {
   restart: 'If that was not you, check Settings > Windows Update and Event Viewer > Windows Logs > System.',
   crash: 'Event Viewer > Windows Logs > System has the details; a laptop also needs to stay plugged in.',
   sleep: 'sandbox.keepAwake keeps this PC awake while a sandbox runs (closing a laptop lid still sleeps it). Check it is on, and that sleep is not forced by a policy.',
-  session: 'Windows Sandbox closes with your Windows session. Lock the PC instead (Windows key + L): agents keep working while it is locked.',
+  sandboxCrash: 'C:\\AgentData\\logs\\memory-*.log shows what used memory just before. Fewer builds at once inside the sandbox (e.g. cargo build.jobs) makes it less likely.',
   memory: 'Give the sandbox less RAM (sandbox.maxMemoryMb, sandbox.reserveHostMb) or run fewer builds at once inside it.',
 };
 
-/** System log and session events since `since` that can end a sandbox (Windows only; empty when the logs cannot be read). */
+/** System log and Hyper-V events since `since` that can end a sandbox (Windows only; empty when the logs cannot be read). */
 export const readStopEvents = (since: Date): StopEvent[] => {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');
-  const script = "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" + since.toISOString() + "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'; Id=23,24; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -in 1074,23,24) { [string]$_.Properties[0].Value } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
+  const script = "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" + since.toISOString() + "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='Microsoft-Windows-Hyper-V-Worker-Admin'; Id=18590; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -eq 1074) { [string]$_.Properties[0].Value } elseif ($_.Id -eq 18590) { ([string]$_.Message).Substring(0, [math]::Min(390, ([string]$_.Message).Length)) } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
   const result = spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   try { return StopEvents.parse(JSON.parse(result.stdout || '[]')); } catch { return []; }
 };
 
 /** Looking back from the last time the sandbox was seen running (a minute between checks, plus margin). */
-export const causeSince = (lastSeen: string): StopCause | null => explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000)), os.userInfo().username);
+export const causeSince = (lastSeen: string): StopCause | null => explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000)));
 
 const when = (iso: string): string => new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 

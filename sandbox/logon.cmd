@@ -11,6 +11,8 @@ rem sandbox.cpuLimit: this window joins a CPU-capped job first, so everything st
 "%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\cpucap.ps1
 rem sandbox.pageFileMb: room for many parallel builds (the sandbox starts with about 1 GB of paging file).
 "%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\pagefile.ps1
+rem The memory state every 30 s into the persistent logs, so a crash leaves evidence.
+start "" /min "%PS%" -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\memlog.ps1
 set "BOOT=%PS% -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\AgentLaunch\sandbox\bootstrap.ps1"
 if not exist C:\AgentData\tools\terminal\wt.exe goto plain
 start "" C:\AgentData\tools\terminal\wt.exe --maximized new-tab --title "Agent Sandbox" -d C:\AgentLaunch %BOOT%

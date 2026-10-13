@@ -16,7 +16,7 @@ export const Sandbox = z.strictObject({
   maxMemoryMb: z.number().int().positive().describe('Upper limit for memoryMb "auto".'),
   maxMemoryPercent: z.number().int().min(10).max(100).describe('memoryMb "auto" never takes more than this share of this PC\'s total RAM (percent).'),
   cpuLimit: z.union([z.literal('none'), z.number().int().min(5).max(100)]).describe('Most of this PC\'s CPU the sandbox may use, in percent (5-100), e.g. 50 keeps half free for you; "none" = no cap (Windows Sandbox would take every processor). Covers everything this tool starts in the sandbox (agents, installs, builds, its terminal).'),
-  pageFileMb: z.number().int().min(0).max(262144).describe('How far the sandbox\'s paging file may grow, in MB (it starts at 4 GB and only takes disk space when needed; 8 GB of disk always stays free). Many parallel builds need it: Windows Sandbox starts with about 1 GB, and builds then fail with "The paging file is too small". 0 = leave Windows\' own.'),
+  pageFileMb: z.number().int().min(0).max(262144).describe('Size of the sandbox\'s paging file in MB, created at full size when it starts so it never grows while builds run (8 GB of its disk always stays free). Windows Sandbox starts with about 1 GB: parallel builds then fail with "The paging file is too small", and Windows grows the file under load. 0 = leave Windows\' own.'),
   reserveHostMb: z.number().int().nonnegative().describe('RAM always left for this PC when memoryMb is "auto".'),
   vGpu: z.boolean().describe('Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface.'),
   networking: z.boolean().describe('Internet access. false is the only hard network isolation Windows Sandbox offers.'),
