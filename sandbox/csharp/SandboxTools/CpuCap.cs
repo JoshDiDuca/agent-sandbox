@@ -1,4 +1,5 @@
-// Caps a process and everything it starts at a share of the PC's CPU. Loaded by scripts\set-cpu-cap.ps1 (Add-Type). C# 5.
+// Caps a process and everything it starts at a share of the PC's CPU (SandboxTools cpu-cap). Windows Sandbox has no
+// CPU setting and gets every processor; a job object with a hard CPU-rate cap holds logon.cmd and all it starts. C# 5.
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -22,8 +23,37 @@ public static class SandboxCpuCap
         public uint Rate;
     }
 
+    private const uint SnapshotProcesses = 0x2;
+    private static readonly IntPtr InvalidHandle = new IntPtr(-1);
+
+    // PROCESSENTRY32W.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry
+    {
+        public uint Size;
+        public uint Usage;
+        public uint ProcessId;
+        public IntPtr DefaultHeapId;
+        public uint ModuleId;
+        public uint Threads;
+        public uint ParentProcessId;
+        public int PriorityClassBase;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string ExeFile;
+    }
+
     private static class NativeMethods
     {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
+
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr CreateJobObject(IntPtr attributes, string name);
 
@@ -38,6 +68,34 @@ public static class SandboxCpuCap
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool CloseHandle(IntPtr handle);
+    }
+
+    /// <summary>The process that started this one (logon.cmd's cmd.exe). Throws when it cannot be found.</summary>
+    public static int ParentProcessId()
+    {
+        int self = System.Diagnostics.Process.GetCurrentProcess().Id;
+        IntPtr snapshot = NativeMethods.CreateToolhelp32Snapshot(SnapshotProcesses, 0);
+        if (snapshot == InvalidHandle)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        try
+        {
+            ProcessEntry entry = new ProcessEntry();
+            entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            for (bool more = NativeMethods.Process32FirstW(snapshot, ref entry); more; more = NativeMethods.Process32NextW(snapshot, ref entry))
+            {
+                if (entry.ProcessId == self)
+                {
+                    return (int)entry.ParentProcessId;
+                }
+            }
+        }
+        finally
+        {
+            NativeMethods.CloseHandle(snapshot);
+        }
+        throw new InvalidOperationException("the parent process was not found.");
     }
 
     /// <summary>Puts process pid in a new job with a hard cap of percent % of all processors. Throws on failure.</summary>

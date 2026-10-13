@@ -70,14 +70,13 @@ export class LifeRecord {
    * ran out of memory), then never again for that run. `watcherAlive` = its watcher is still running (then it did not
    * end).
    */
-  lastStopWarning(watcherAlive: boolean, find = causeSince): string | null {
+  lastStopWarning(watcherAlive: boolean, find?: (since: string) => StopCause | null): string | null {
     const life = this.read();
     if (!life || life.reported || watcherAlive) return null;
     this.file.write({ ...life, reported: true });
     // The watcher writes the report when it sees the end; when this PC itself went down, it is written now.
     const report = (): string | null =>
-      life.ended?.report ??
-      (find === causeSince ? saveCrashReport(this.storageRoot, this.dataPath, life.lastSeen) : null);
-    return stopWarning(life, find, report);
+      life.ended?.report ?? (find ? null : saveCrashReport(this.storageRoot, this.dataPath, life.lastSeen));
+    return stopWarning(life, find ?? ((since) => causeSince(since, this.storageRoot)), report);
   }
 }

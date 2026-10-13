@@ -1,4 +1,5 @@
-// Keeps this PC from sleeping while a sandbox runs (sandbox.keepAwake). Loaded by scripts\keep-awake.ps1 (Add-Type). C# 5.
+// Keeps this PC from sleeping while a sandbox runs (sandbox.keepAwake): HostTools keep-awake, or Add-Type from
+// scripts\keep-awake.ps1 when HostTools cannot be built. C# 5.
 using System.Runtime.InteropServices;
 
 namespace AgentSandbox

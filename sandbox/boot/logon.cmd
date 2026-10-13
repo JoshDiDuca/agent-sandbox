@@ -7,12 +7,18 @@ call C:\AgentLaunch\sandbox\boot\trust.cmd
 rem New Terminal tabs start in %AGENT_WORKSPACE%: Terminal must have it before the runtime sets it machine-wide.
 if exist C:\AgentLaunch\env.cmd call C:\AgentLaunch\env.cmd
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+rem SandboxTools.exe (sandbox\csharp\SandboxTools), built once per boot on the sandbox's own disk (no window: winexe).
+set "TOOLS=%TEMP%\agent-sandbox\SandboxTools.exe"
+if not exist "%TEMP%\agent-sandbox" mkdir "%TEMP%\agent-sandbox"
+if not exist "%TOOLS%" "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /optimize /target:winexe /out:"%TOOLS%" C:\AgentLaunch\sandbox\csharp\SandboxTools\*.cs >> C:\AgentData\logs\logon-hit.txt 2>&1
+if not exist "%TOOLS%" goto tools_done
 rem sandbox.cpuLimit: this window joins a CPU-capped job first, so everything started below inherits the cap.
-"%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\scripts\set-cpu-cap.ps1
+"%TOOLS%" cpu-cap
 rem sandbox.pageFileMb: room for many parallel builds (the sandbox starts with about 1 GB of paging file).
-"%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\scripts\set-page-file.ps1
+"%TOOLS%" page-file
 rem The memory state every 30 s into the persistent logs, so a crash leaves evidence.
-start "" /min "%PS%" -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\scripts\log-memory.ps1
+start "" "%TOOLS%" memory-log
+:tools_done
 set "BOOT=%PS% -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\AgentLaunch\sandbox\boot\bootstrap.ps1"
 if not exist C:\AgentData\tools\terminal\wt.exe goto plain
 start "" C:\AgentData\tools\terminal\wt.exe --maximized new-tab --title "Agent Sandbox" -d C:\AgentLaunch %BOOT%

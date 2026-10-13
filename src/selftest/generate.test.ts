@@ -42,11 +42,10 @@ export const generateSuite: Suite = {
       'sandbox/boot/trust.cmd',
       'sandbox/csharp/PtyHost.cs',
       'sandbox/csharp/GitShim.cs',
-      'sandbox/scripts/set-cpu-cap.ps1',
-      'sandbox/csharp/CpuCap.cs',
-      'sandbox/scripts/set-page-file.ps1',
-      'sandbox/csharp/PageFile.cs',
-      'sandbox/scripts/log-memory.ps1',
+      'sandbox/csharp/SandboxTools/Program.cs',
+      'sandbox/csharp/SandboxTools/CpuCap.cs',
+      'sandbox/csharp/SandboxTools/PageFile.cs',
+      'sandbox/csharp/SandboxTools/MemoryLog.cs',
       'sandbox/csharp/LinkGate.cs',
     ];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
@@ -104,8 +103,12 @@ export const generateSuite: Suite = {
       /^\d+\.\d+\.\d+$/,
       'session.json: the host Node version is a plain version',
     );
-    t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for cpucap.ps1 (default 80 %)');
-    t.equal(session.pageFileMb, 16384, 'session.json carries the paging file limit for pagefile.ps1 (default 16 GB)');
+    t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for SandboxTools cpu-cap (default 80 %)');
+    t.equal(
+      session.pageFileMb,
+      16384,
+      'session.json carries the paging file limit for SandboxTools page-file (default 16 GB)',
+    );
     t.check(
       !LocalOverridesSchema.safeParse({ sandbox: { cpuLimit: 'none' } }).success,
       "a project's .sandbox-config.json cannot lift your CPU cap (sandbox.cpuLimit is yours only)",

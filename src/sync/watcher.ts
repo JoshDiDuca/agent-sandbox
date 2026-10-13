@@ -111,7 +111,7 @@ export const watch = async (dataPath: string): Promise<void> => {
   });
   // sandbox.keepAwake, and the life record that tells the next launch how this run ended (host/stops.ts).
   const life = new LifeRecord(storageOf(dataPath), dataPath);
-  const awake = life.read()?.keepAwake ? KeepAwake.start(process.pid) : null;
+  const awake = life.read()?.keepAwake ? KeepAwake.start(process.pid, storageOf(dataPath)) : null;
   try {
     await sleep(30000);
     while (isSandboxRunning()) {
@@ -121,7 +121,7 @@ export const watch = async (dataPath: string): Promise<void> => {
     }
     try {
       const last = life.read();
-      const cause = last ? causeSince(last.lastSeen) : null;
+      const cause = last ? causeSince(last.lastSeen, storageOf(dataPath)) : null;
       const report = last && cause ? saveCrashReport(storageOf(dataPath), dataPath, last.lastSeen) : null;
       life.end(cause, new Date(), report);
       if (cause) note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));

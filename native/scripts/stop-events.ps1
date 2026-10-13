@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # Prints, as JSON, the Windows events since -Since that can end a sandbox: restarts and shutdowns, power loss, sleep,
-# low memory, this PC's blue screens, and Windows inside the sandbox crashing. Read-only. Used by host/stops.ts.
+# low memory, this PC's blue screens, and Windows inside the sandbox crashing. Read-only. The fallback for HostTools.exe stop-events (host/life/stop-events.ts).
 param([Parameter(Mandatory = $true)][datetime]$Since)
 $ErrorActionPreference = 'Stop'
 

@@ -77,7 +77,7 @@ function memoryLogTail(dataPath: string): string {
 
 /** When the sandbox ended in a crash (its own, this PC's, power, low memory): writes the report and returns its path. */
 export function saveCrashReport(storageRoot: string, dataPath: string, lastSeen: string): string | null {
-  const events = readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000));
+  const events = readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000), storageRoot);
   const cause = explainStop(events);
   if (!cause || !['sandboxCrash', 'crash', 'memory'].includes(cause.kind)) return null;
   const dir = crashDir(storageRoot);

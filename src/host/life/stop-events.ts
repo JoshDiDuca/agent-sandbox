@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SYSTEM } from '../../shared/system.js';
 import { isWin } from '../../core/util/index.js';
 import { refuseInSelfTest } from '../test-guard.js';
-import { nativeScript } from '../native.js';
+import { hostToolsExe, nativeScript } from '../native.js';
 
 export const IsoSchema = z.string().max(40);
 
@@ -97,23 +97,24 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
 
 /**
  * System log and Hyper-V events since `since` that can end a sandbox (Windows only; empty when the logs cannot be
- * read).
+ * read). HostTools.exe reads them (built in <storageRoot>\bin), else native\scripts\stop-events.ps1.
  */
-export const readStopEvents = (since: Date): StopEvent[] => {
+export function readStopEvents(since: Date, storageRoot: string): StopEvent[] {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');
-  const result = spawnSync(SYSTEM.powershell(), nativeScript('stop-events.ps1', ['-Since', since.toISOString()]), {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 60000,
-  });
+  const tools = hostToolsExe(storageRoot);
+  const options = { encoding: 'utf8' as const, windowsHide: true, timeout: 60000 };
+  const result = tools
+    ? spawnSync(tools, ['stop-events', '--since', since.toISOString()], options)
+    : spawnSync(SYSTEM.powershell(), nativeScript('stop-events.ps1', ['-Since', since.toISOString()]), options);
   try {
     return StopEventsSchema.parse(JSON.parse(result.stdout || '[]'));
   } catch {
     return [];
   }
-};
+}
 
 /** Looking back from the last time the sandbox was seen running (a minute between checks, plus margin). */
-export const causeSince = (lastSeen: string): StopCause | null =>
-  explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000)));
+export function causeSince(lastSeen: string, storageRoot: string): StopCause | null {
+  return explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000), storageRoot));
+}

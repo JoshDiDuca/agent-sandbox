@@ -1,5 +1,6 @@
 // Live: the sandbox's allowOnly proxy (the real bundled runtime\netproxy.js) and the PC-side port forwarder, on
 // loopback only; and that the cargo shim compiles with the compiler that ships with Windows.
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -104,6 +105,81 @@ export const liveNetworkSuite: Suite = {
       compiled.status === 0,
       'CargoShim.cs compiles with the .NET Framework compiler (C# 5)',
       compiled.stdout + compiled.stderr,
+    );
+
+    t.section('SandboxTools and HostTools');
+    const csharp = (...parts: string[]): string[] => {
+      const dir = path.join(...parts);
+      return fs
+        .readdirSync(dir)
+        .filter((n) => n.endsWith('.cs'))
+        .map((n) => path.join(dir, n));
+    };
+    const sandboxTools = path.join(t.dir('sandbox-tools'), 'SandboxTools.exe');
+    const builtTools = spawnSync(
+      CSC,
+      [
+        '/nologo',
+        '/optimize',
+        '/target:winexe',
+        '/out:' + sandboxTools,
+        ...csharp(gen.launchPath, 'sandbox', 'csharp', 'SandboxTools'),
+      ],
+      { encoding: 'utf8' },
+    );
+    t.check(builtTools.status === 0, 'SandboxTools compiles (C# 5)', builtTools.stdout + builtTools.stderr);
+    const memoryDir = t.dir('memory-log');
+    spawnSync(sandboxTools, ['memory-log', '--once', '--dir', memoryDir], { timeout: 60000 });
+    const logs = fs.readdirSync(memoryDir).filter((n) => /^memory-\d{8}-\d{6}\.log$/.test(n));
+    const lines = logs.length ? fs.readFileSync(path.join(memoryDir, logs[0]), 'utf8').trim().split(/\r?\n/) : [];
+    t.check(
+      lines.length === 2 &&
+        lines[0].startsWith('time     | RAM used/total MB') &&
+        /^\d\d:\d\d:\d\d \| \d+\/\d+ \| \d+\/\d+ \| \d+ processes; /.test(lines[1]),
+      'memory-log --once writes the header and one sample',
+      lines.join('\n'),
+    );
+    const pressure = fs.existsSync(path.join(memoryDir, 'memory-pressure.txt'))
+      ? fs.readFileSync(path.join(memoryDir, 'memory-pressure.txt'), 'utf8')
+      : '';
+    t.check(
+      /^(ok|high|critical) \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d RAM \d+\/\d+ MB, commit \d+\/\d+ MB/.test(pressure),
+      'memory-pressure.txt holds the level and the numbers',
+      pressure,
+    );
+    const hostTools = path.join(t.dir('host-tools'), 'HostTools.exe');
+    const builtHost = spawnSync(
+      CSC,
+      ['/nologo', '/optimize', '/out:' + hostTools, ...csharp(t.packageRoot, 'native', 'csharp', 'HostTools')],
+      { encoding: 'utf8' },
+    );
+    t.check(builtHost.status === 0, 'HostTools compiles (C# 5)', builtHost.stdout + builtHost.stderr);
+    const events = spawnSync(hostTools, ['stop-events', '--since', new Date(Date.now() - 86400000).toISOString()], {
+      encoding: 'utf8',
+      timeout: 60000,
+    });
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(events.stdout);
+    } catch {
+      /* checked below */
+    }
+    t.check(
+      Array.isArray(parsed) &&
+        parsed.every(
+          (e) =>
+            typeof e.at === 'string' &&
+            typeof e.id === 'number' &&
+            typeof e.provider === 'string' &&
+            typeof e.process === 'string',
+        ),
+      'HostTools stop-events prints a JSON list of { at, id, provider, process }',
+      events.stdout.slice(0, 500) + events.stderr,
+    );
+    t.equal(
+      spawnSync(hostTools, ['stop-events'], { encoding: 'utf8' }).status,
+      2,
+      'HostTools without --since prints its usage',
     );
   },
 };
