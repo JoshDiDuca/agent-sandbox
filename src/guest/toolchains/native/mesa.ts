@@ -1,7 +1,7 @@
 // Mesa for running OpenGL and Vulkan programs without a GPU (llvmpipe, lavapipe).
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { installArchive } from '../../../shared/download/index.js';
+import { downloader } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun } from '../../runtime/paths.js';
 import { execAsync, execOutput } from '../../runtime/process.js';
@@ -51,7 +51,7 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
     log('Downloading the Vulkan loader (~10 MB once) ...');
     // LunarG publishes no checksum for this zip; it comes over HTTPS from LunarG, the Khronos SDK's maintainer.
     // The zip has x86 and x64 folders: only the 64-bit loader (and vulkaninfo) is extracted.
-    await installArchive(VULKAN_RUNTIME, dir, {
+    await downloader.archive(VULKAN_RUNTIME, dir, {
       locate: 'vulkan-1.dll',
       fileName: 'vulkan-runtime.zip',
       members: ['*/x64/*'],

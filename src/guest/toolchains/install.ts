@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { z } from 'zod';
-import { download, githubAsset, installArchive, type ReleaseAsset } from '../../shared/download/index.js';
+import { downloader, githubAsset, type ReleaseAsset } from '../../shared/download/index.js';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { log, warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
@@ -11,7 +11,7 @@ import { readState } from './state-file.js';
 export const downloadFile = async (url: string, file: string, sha256: string | null = null): Promise<void> => {
   const part = file + '.part';
   try {
-    await download(url, part, sha256);
+    await downloader.file(url, part, sha256);
     fs.rmSync(file, { force: true });
     fs.renameSync(part, file);
   } finally {
@@ -26,7 +26,7 @@ interface GithubInstall {
   what: string | ((asset: ReleaseAsset) => string);
   /** Look past the latest release for a matching asset. */
   searchOlder?: boolean;
-  /** installArchive's `locate` / `up`: keep only the folder holding this file. */
+  /** downloader.archive's `locate` / `up`: keep only the folder holding this file. */
   locate?: string;
   up?: number;
 }
@@ -35,7 +35,7 @@ interface GithubInstall {
 export const installFromGithub = async (repo: string, pattern: RegExp, o: GithubInstall): Promise<void> => {
   const asset = await githubAsset(repo, pattern, o.searchOlder);
   log('Downloading ' + (typeof o.what === 'string' ? o.what : o.what(asset)) + ' ...');
-  await installArchive(asset.url, o.dest, {
+  await downloader.archive(asset.url, o.dest, {
     sha256: asset.sha256,
     fileName: asset.name,
     ...(o.locate ? { locate: o.locate } : {}),

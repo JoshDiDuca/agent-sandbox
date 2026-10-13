@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson } from '../../../shared/download/index.js';
 import { dryRun } from '../../runtime/paths.js';
 import { execAsync } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
@@ -31,7 +31,7 @@ export const setupGo = async (env: ToolEnv, config: Toolchains['go']): Promise<v
     );
     if (!file) throw new Error(version + ' has no Windows ' + goArch + ' zip');
     log('Downloading Go ' + version.replace(/^go/, '') + ' (~80 MB once) ...');
-    await installArchive('https://go.dev/dl/' + file.filename, root, {
+    await downloader.archive('https://go.dev/dl/' + file.filename, root, {
       sha256: file.sha256,
       locate: 'VERSION',
       fileName: file.filename,

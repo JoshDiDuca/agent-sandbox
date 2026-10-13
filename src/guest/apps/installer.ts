@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config, GitAccess } from '../../core/types.js';
 import { appsToInstall, type AppEntry } from '../../shared/apps/index.js';
-import { download, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
+import { downloader, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
 import { safeRemove } from '../../shared/io/safe-remove.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun } from '../runtime/paths.js';
@@ -47,7 +47,7 @@ const installApp = async (entry: AppEntry, dest: string): Promise<void> => {
       const d = await resolve(entry);
       log('Downloading ' + entry.name + ' (' + d.fileName + ', ~' + entry.size + ' once) ...');
       const file = path.join(mkdirp(work), d.fileName.replace(/[\\/:*?"<>|]/g, '_'));
-      await download(d.url, file, { sha256: d.sha256 ?? null });
+      await downloader.file(d.url, file, { sha256: d.sha256 ?? null });
       await unpack(entry, file, out, d);
     }
     fs.writeFileSync(path.join(out, MARKER), JSON.stringify({ id: entry.id, at: new Date().toISOString() }));

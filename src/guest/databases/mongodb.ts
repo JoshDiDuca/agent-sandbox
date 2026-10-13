@@ -1,7 +1,7 @@
 // MongoDB Community, with mongosh.
 import path from 'node:path';
 import type { DatabasePlan } from '../../core/types.js';
-import { fetchJson, installArchive } from '../../shared/download/index.js';
+import { downloader, fetchJson } from '../../shared/download/index.js';
 import { exists, mkdirp } from '../runtime/fs.js';
 import { log } from '../runtime/log.js';
 import { installFromGithub } from '../toolchains/install.js';
@@ -37,7 +37,7 @@ export const setupMongo = async (env: ToolEnv, plan: DatabasePlan): Promise<void
   if (!exists(path.join(home, 'bin', 'mongod.exe'))) {
     const { archive } = await find();
     log('Downloading MongoDB ' + version + ' (~400 MB once) ...');
-    await installArchive(archive.url, home, { sha256: archive.sha256, locate: 'mongod.exe', up: 1 });
+    await downloader.archive(archive.url, home, { sha256: archive.sha256, locate: 'mongod.exe', up: 1 });
   }
   const shell = tool('mongosh');
   if (!exists(path.join(shell, 'mongosh.exe'))) {

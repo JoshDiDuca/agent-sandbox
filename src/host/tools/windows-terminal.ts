@@ -2,7 +2,7 @@
 // logon.cmd can open it the moment the sandbox logs in (no PowerShell window first).
 import fs from 'node:fs';
 import path from 'node:path';
-import { githubAsset, installArchive } from '../../shared/download/index.js';
+import { downloader, githubAsset } from '../../shared/download/index.js';
 import { safeRemove } from '../../shared/io/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { z } from 'zod';
@@ -116,7 +116,7 @@ const installTerminal = async (
   const dir = terminalDir(dataPath);
   assertTestWritable(dir);
   const settings = path.join(dir, 'settings');
-  // installArchive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also when
+  // downloader.archive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also when
   // the download fails). One still parked from an interrupted earlier run is the one to keep.
   const parked = path.join(dataPath, 'tools', 'terminal-settings.parked');
   assertNoLinks(dataPath, settings);
@@ -133,7 +133,7 @@ const installTerminal = async (
         'microsoft/terminal',
         new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'),
       );
-      await installArchive(asset.url, dir, {
+      await downloader.archive(asset.url, dir, {
         sha256: asset.sha256,
         locate: 'WindowsTerminal.exe',
         fileName: asset.name,

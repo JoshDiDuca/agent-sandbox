@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
-import { installArchive, latestGithubTag } from '../../shared/download/index.js';
+import { downloader, latestGithubTag } from '../../shared/download/index.js';
 import { dryRun } from '../runtime/paths.js';
 import { execAsync } from '../runtime/process.js';
 import { exists, mkdirp } from '../runtime/fs.js';
@@ -100,7 +100,7 @@ export const setupPyenv = async (env: ToolEnv): Promise<void> => {
     const tag = await resolveCached('pyenv-win', () => latestGithubTag('pyenv-win/pyenv-win'));
     log('Downloading pyenv-win ' + tag + ' (~5 MB once) ...');
     // GitHub's tag archive: no published checksum, but HTTPS from github.com for the project's own tag.
-    await installArchive(
+    await downloader.archive(
       'https://github.com/pyenv-win/pyenv-win/archive/refs/tags/' + encodeURIComponent(tag) + '.zip',
       root,
       { locate: 'pyenv.bat', up: 1, fileName: 'pyenv-win.zip' },

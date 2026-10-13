@@ -4,7 +4,6 @@ import crypto from 'node:crypto';
 import { safeRemove } from '../io/index.js';
 import { SYSTEM } from '../system.js';
 import { spawnAsync } from './spawn.js';
-import { download } from './downloader.js';
 
 /**
  * A fresh `<destination>.staging-<hex>` folder next to `destination`: fill it, then moveIntoPlace. An interrupted copy
@@ -55,39 +54,4 @@ export const findFile = (root: string, name: string, maxDepth = 4): string | nul
       if (found) return found;
     }
   return null;
-};
-
-/**
- * Downloads + extracts into `destination` atomically (staging folder, then rename). With `locate`, only the folder holding
- * that file is kept (`up` folders above it, e.g. locate ruby.exe with up 1 keeps the folder around bin).
- */
-export const installArchive = async (
-  url: string,
-  destination: string,
-  options: {
-    sha256?: string | null;
-    sha512?: string | null;
-    locate?: string;
-    up?: number;
-    fileName?: string;
-    members?: string[];
-  } = {},
-): Promise<void> => {
-  const work = stagingFolder(destination);
-  try {
-    const archive = path.join(work, options.fileName ?? path.basename(new URL(url).pathname));
-    await download(url, archive, { sha256: options.sha256, sha512: options.sha512 });
-    const extracted = path.join(work, 'x');
-    await extractArchive(archive, extracted, options.members);
-    let root = extracted;
-    if (options.locate) {
-      const found = findFile(extracted, options.locate);
-      if (!found) throw new Error(options.locate + ' not found in ' + url);
-      root = path.dirname(found);
-      for (let i = 0; i < (options.up ?? 0) && path.dirname(root).startsWith(extracted); i++) root = path.dirname(root);
-    }
-    moveIntoPlace(root, destination);
-  } finally {
-    safeRemove(work, path.dirname(work));
-  }
 };

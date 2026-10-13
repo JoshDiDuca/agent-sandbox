@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../../core/types.js';
-import { download, extractArchive, fetchJson } from '../../../../shared/download/index.js';
+import { downloader, extractArchive, fetchJson } from '../../../../shared/download/index.js';
 import { safeRemove } from '../../../../shared/io/safe-remove.js';
 import { system32 } from '../../../../shared/system.js';
 import { execAsync } from '../../../runtime/process.js';
@@ -77,7 +77,7 @@ const manifest = async (): Promise<Manifest> => {
   mkdirp(ROOT);
   // The channel's sha256 for the manifest is not the file's hash (portable-msvc.py does not check it either); the
   // manifest comes over HTTPS from Microsoft, and every package payload it lists IS checked against its own sha256.
-  await download(item.url, cached);
+  await downloader.file(item.url, cached);
   return JSON.parse(fs.readFileSync(cached, 'utf8')) as Manifest;
 };
 
@@ -145,7 +145,7 @@ const payloadFetcher =
   (work: string) =>
   async (p: Payload): Promise<string> => {
     const file = path.join(work, path.basename(p.fileName.replace(/\\/g, '/')));
-    if (!exists(file)) await download(p.url, file, p.sha256);
+    if (!exists(file)) await downloader.file(p.url, file, p.sha256);
     return file;
   };
 

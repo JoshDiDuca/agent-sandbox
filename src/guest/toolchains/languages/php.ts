@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, fetchText, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson, fetchText } from '../../../shared/download/index.js';
 import { dryRun } from '../../runtime/paths.js';
 import { execOutput } from '../../runtime/process.js';
 import { exists, mkdirp } from '../../runtime/fs.js';
@@ -100,7 +100,7 @@ export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise
   if (!exists(path.join(home, 'php.exe'))) {
     const build = await phpBuild(version);
     log('Downloading PHP ' + version + ' (~30 MB once) ...');
-    await installArchive('https://windows.php.net/downloads/releases/' + build.path, home, {
+    await downloader.archive('https://windows.php.net/downloads/releases/' + build.path, home, {
       sha256: build.sha256,
       locate: 'php.exe',
       fileName: build.path,

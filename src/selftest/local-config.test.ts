@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { download, setChecksumRequired } from '../shared/download/index.js';
+import { Downloader } from '../shared/download/index.js';
 import type { Config } from '../core/types.js';
 import { allowedAnswer, allowStorePath, saveAllowed } from '../core/local-config/index.js';
 import type { Suite } from './support/suite.js';
@@ -243,13 +243,13 @@ export const localConfigSuite: Suite = {
     t.equal(turnedOn.downloads.requireChecksum, true, 'a project file can switch the checksum requirement on');
     t.equal(f.baseConfig.downloads.requireChecksum, false, '(the requirement is off in the defaults)');
     // With the requirement on, a download without a hash is refused before anything is fetched.
-    setChecksumRequired(true);
+    const strict = new Downloader();
+    strict.requireChecksum = true;
     const target = path.join(os.tmpdir(), 'agent-sandbox-no-such-download.bin');
-    const refused = await download('http://127.0.0.1:9/tool.zip', target).then(
+    const refused = await strict.file('http://127.0.0.1:9/tool.zip', target).then(
       () => '',
       (e: Error) => e.message,
     );
-    setChecksumRequired(false);
     t.includes(refused, 'requireChecksum', 'a download with no hash is refused when checksums are required');
     t.includes(refused, 'tool.zip', 'the refusal names the download');
     t.check(!fs.existsSync(target) && !fs.existsSync(target + '.part'), 'a refused download leaves nothing behind');

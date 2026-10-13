@@ -1,7 +1,7 @@
 // MariaDB, the MySQL-compatible server.
 import path from 'node:path';
 import type { DatabasePlan } from '../../core/types.js';
-import { fetchJson, installArchive } from '../../shared/download/index.js';
+import { downloader, fetchJson } from '../../shared/download/index.js';
 import { execAsync } from '../runtime/process.js';
 import { exists } from '../runtime/fs.js';
 import { log } from '../runtime/log.js';
@@ -43,7 +43,7 @@ export const setupMysql = async (env: ToolEnv, plan: DatabasePlan): Promise<void
   if (!exists(path.join(bin, 'mariadbd.exe'))) {
     const { zip } = await latest();
     log('Downloading MariaDB ' + version + ' (~90 MB once) ...');
-    await installArchive(zip.file_download_url.replace(/^http:/, 'https:'), home, {
+    await downloader.archive(zip.file_download_url.replace(/^http:/, 'https:'), home, {
       sha256: zip.checksum?.sha256sum ?? null,
       locate: 'mariadbd.exe',
       up: 1,

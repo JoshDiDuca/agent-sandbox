@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains, ToolVersions } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson } from '../../../shared/download/index.js';
 import { dryRun } from '../../runtime/paths.js';
 import { execAsync } from '../../runtime/process.js';
 import { exists, mkdirp } from '../../runtime/fs.js';
@@ -27,7 +27,7 @@ const installPython = async (pkg: Package, spec: string): Promise<string> => {
   const exe = path.join(dir, 'python.exe');
   if (!exists(exe)) {
     log('Downloading Python ' + version + (pkg === 'python2' ? ' (Python 2, ' : ' (') + '~30 MB once) ...');
-    await installArchive(
+    await downloader.archive(
       'https://api.nuget.org/v3-flatcontainer/' + pkg + '/' + version + '/' + pkg + '.' + version + '.nupkg',
       dir,
       { locate: 'python.exe', fileName: pkg + '.' + version + '.zip' },

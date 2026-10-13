@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { download, extractArchive, fetchJson, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
+import { downloader, extractArchive, fetchJson, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
 import { safeRemove } from '../../shared/io/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { z } from 'zod';
@@ -42,7 +42,9 @@ export const ensureConpty = async (dataPath: string, refresh: boolean): Promise<
       'hex',
     );
     const pkg = path.join(work, 'conpty.nupkg');
-    await download(NUGET_CONPTY + version + '/microsoft.windows.console.conpty.' + version + '.nupkg', pkg, { sha512 });
+    await downloader.file(NUGET_CONPTY + version + '/microsoft.windows.console.conpty.' + version + '.nupkg', pkg, {
+      sha512,
+    });
     const files = {
       'conpty.dll': 'runtimes/win-' + arch + '/native/conpty.dll',
       'OpenConsole.exe': 'build/native/runtimes/' + arch + '/OpenConsole.exe',

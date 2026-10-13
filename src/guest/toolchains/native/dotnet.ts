@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson } from '../../../shared/download/index.js';
 import { readJsonFile, writeJsonAtomic } from '../../../shared/io/json.js';
 import { safeRemove } from '../../../shared/io/safe-remove.js';
 import { SYSTEM } from '../../../shared/system.js';
@@ -116,7 +116,7 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
       const version = versions.filter((v) => /^\d+(\.\d+)*$/.test(v)).pop();
       if (!version) throw new Error('no stable version of ' + id);
       log('Downloading the .NET Framework ' + target + ' reference assemblies (~30 MB once) ...');
-      await installArchive(
+      await downloader.archive(
         'https://api.nuget.org/v3-flatcontainer/' + id + '/' + version + '/' + id + '.' + version + '.nupkg',
         staging,
         { fileName: id + '.zip' },

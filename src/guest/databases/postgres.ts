@@ -1,7 +1,7 @@
 // PostgreSQL from EnterpriseDB's Windows binaries (without pgAdmin).
 import path from 'node:path';
 import type { DatabasePlan } from '../../core/types.js';
-import { fetchJson, installArchive } from '../../shared/download/index.js';
+import { downloader, fetchJson } from '../../shared/download/index.js';
 import { execAsync } from '../runtime/process.js';
 import { exists } from '../runtime/fs.js';
 import { log } from '../runtime/log.js';
@@ -39,7 +39,7 @@ export const setupPostgres = async (env: ToolEnv, plan: DatabasePlan): Promise<v
   if (!exists(path.join(bin, 'pg_ctl.exe'))) {
     log('Downloading PostgreSQL ' + exact + ' (~330 MB once) ...');
     // EDB publishes no checksums; the download is HTTPS from EnterpriseDB, PostgreSQL's official Windows packager.
-    await installArchive(
+    await downloader.archive(
       'https://get.enterprisedb.com/postgresql/postgresql-' + exact + '-1-windows-x64-binaries.zip',
       home,
       {

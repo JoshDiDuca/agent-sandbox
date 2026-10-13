@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { DatabasePlan } from '../../core/types.js';
-import { fetchText, installArchive } from '../../shared/download/index.js';
+import { downloader, fetchText } from '../../shared/download/index.js';
 import { execAsync } from '../runtime/process.js';
 import { exists, mkdirp } from '../runtime/fs.js';
 import { log } from '../runtime/log.js';
@@ -26,7 +26,7 @@ export const setupDynamo = async (env: ToolEnv, plan: DatabasePlan): Promise<voi
   if (!exists(path.join(home, 'DynamoDBLocal.jar'))) {
     log('Downloading DynamoDB Local (~60 MB once) ...');
     const sha256 = (await fetchText(DYNAMO_ZIP + '.sha256')).trim().split(/\s+/)[0];
-    await installArchive(DYNAMO_ZIP, home, { sha256, locate: 'DynamoDBLocal.jar', fileName: 'dynamodb_local.zip' });
+    await downloader.archive(DYNAMO_ZIP, home, { sha256, locate: 'DynamoDBLocal.jar', fileName: 'dynamodb_local.zip' });
   }
   const data = mkdirp(dataFor('dynamodb'));
   // -sharedDb: one database whatever region/credentials a client uses, so the admin UI and the app see the same tables.

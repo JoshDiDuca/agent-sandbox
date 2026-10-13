@@ -13,7 +13,7 @@ import { installFromGithub } from '../install.js';
 
 /**
  * cargo-binstall.exe into CARGO_HOME\bin (so `cargo binstall` works for the agent too). Downloaded into its own
- * tools\cargo-binstall folder first: installArchive replaces its destination, which must never be cargo's bin.
+ * tools\cargo-binstall folder first: downloader.archive replaces its destination, which must never be cargo's bin.
  */
 const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
   const target = path.join(cargoBin, 'cargo-binstall.exe');

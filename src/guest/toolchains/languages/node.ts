@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { Toolchains, ToolVersions } from '../../../core/types.js';
-import { fetchJson, githubAsset, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson, githubAsset } from '../../../shared/download/index.js';
 import { safeRemove } from '../../../shared/io/safe-remove.js';
 import { copyNode, execAsync } from '../../runtime/process.js';
 import { dryRun, hostToolsDir, localDir } from '../../runtime/paths.js';
@@ -78,7 +78,7 @@ const ensureNvm = async (): Promise<void> => {
   // nvm-windows 2.x only ships installers; the portable build is the newest 1.x release that has nvm-noinstall.zip.
   const asset = await githubAsset('coreybutler/nvm-windows', /^nvm-noinstall\.zip$/, true);
   log('Downloading nvm-windows (' + asset.url.split('/').slice(-2, -1)[0] + ') ...');
-  await installArchive(asset.url, NVM_HOME, { sha256: asset.sha256, locate: 'nvm.exe', fileName: asset.name });
+  await downloader.archive(asset.url, NVM_HOME, { sha256: asset.sha256, locate: 'nvm.exe', fileName: asset.name });
 };
 
 /** A Node version: from the host's nvm when it has it (fast, offline), else `nvm install`. */

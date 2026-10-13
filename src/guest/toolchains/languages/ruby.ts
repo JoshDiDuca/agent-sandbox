@@ -1,7 +1,7 @@
 // Ruby from RubyInstaller. Gems live in persistent storage.
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun } from '../../runtime/paths.js';
 import { execAsync } from '../../runtime/process.js';
@@ -62,7 +62,7 @@ export const setupRuby = async (env: ToolEnv, config: Toolchains['ruby']): Promi
     const asset = (await rubyBuilds()).get(version);
     if (!asset) throw new Error('RubyInstaller ' + version + ' is no longer published');
     log('Downloading Ruby ' + version + ' (~100 MB once) ...');
-    await installArchive(asset.browser_download_url, home, {
+    await downloader.archive(asset.browser_download_url, home, {
       sha256: sha256Of(asset),
       locate: 'ruby.exe',
       up: 1,

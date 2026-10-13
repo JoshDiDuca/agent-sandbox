@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../../core/types.js';
-import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../../shared/download/index.js';
+import { downloader, githubAsset, moveIntoPlace, stagingFolder } from '../../../shared/download/index.js';
 import { safeRemove } from '../../../shared/io/safe-remove.js';
 import { dataDir, dryRun, hostToolsDir, launchDir, toolsDir } from '../../runtime/paths.js';
 import { execAsync, execOutput, robocopy } from '../../runtime/process.js';
@@ -33,7 +33,7 @@ const installPortableGit = async (root: string): Promise<void> => {
   const sfx = tool(asset.name);
   log('Downloading Git for Windows (' + asset.name + ', ~60 MB once) ...');
   try {
-    await download(asset.url, sfx, asset.sha256);
+    await downloader.file(asset.url, sfx, asset.sha256);
     await execAsync(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
   } finally {
     fs.rmSync(sfx, { force: true });

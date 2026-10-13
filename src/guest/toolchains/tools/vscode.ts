@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun, isWin, logsDir } from '../../runtime/paths.js';
 import { exists, mkdirp } from '../../runtime/fs.js';
@@ -179,7 +179,7 @@ export const setupVscode = async (env: ToolEnv, refresh: boolean): Promise<void>
       fs.renameSync(keep, parked);
     }
     try {
-      await installArchive(release.url, root, {
+      await downloader.archive(release.url, root, {
         sha256: release.sha256hash,
         locate: 'Code.exe',
         fileName: 'vscode.zip',

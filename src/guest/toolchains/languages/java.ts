@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, fetchText, installArchive } from '../../../shared/download/index.js';
+import { downloader, fetchJson, fetchText } from '../../../shared/download/index.js';
 import { dryRun } from '../../runtime/paths.js';
 import { exists } from '../../runtime/fs.js';
 import { log, warn } from '../../runtime/log.js';
@@ -56,7 +56,7 @@ const setupJdk = async (env: ToolEnv, config: Toolchains['java']): Promise<void>
   if (!exists(path.join(home, 'bin', 'java.exe'))) {
     const asset = await temurin(major);
     log('Downloading Java ' + release + ' (JDK, ~200 MB once) ...');
-    await installArchive(asset.binary.package.link, home, {
+    await downloader.archive(asset.binary.package.link, home, {
       sha256: asset.binary.package.checksum,
       locate: 'release',
       fileName: asset.binary.package.name,
@@ -96,7 +96,7 @@ const setupMaven = async (env: ToolEnv): Promise<void> => {
   if (!exists(path.join(home, 'bin', 'mvn.cmd'))) {
     const url = MAVEN + version + '/apache-maven-' + version + '-bin.zip';
     log('Downloading Maven ' + version + ' (~10 MB once) ...');
-    await installArchive(url, home, {
+    await downloader.archive(url, home, {
       sha512: (await fetchText(url + '.sha512')).trim().split(/\s+/)[0],
       locate: 'LICENSE',
     });
@@ -120,7 +120,7 @@ const setupGradle = async (env: ToolEnv): Promise<void> => {
     if (!current || current.version !== version)
       throw new Error('Gradle ' + version + ' is not installed and cannot be downloaded right now');
     log('Downloading Gradle ' + version + ' (~130 MB once) ...');
-    await installArchive(current.downloadUrl, home, {
+    await downloader.archive(current.downloadUrl, home, {
       sha256: (await fetchText(current.checksumUrl)).trim(),
       locate: 'LICENSE',
       fileName: 'gradle-' + version + '.zip',

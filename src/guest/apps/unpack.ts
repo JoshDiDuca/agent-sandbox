@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { type AppEntry } from '../../shared/apps/index.js';
-import { download, extractArchive, githubAsset } from '../../shared/download/index.js';
+import { downloader, extractArchive, githubAsset } from '../../shared/download/index.js';
 import { SYSTEM } from '../../shared/system.js';
 import { execAsync } from '../runtime/process.js';
 import { exists, mkdirp } from '../runtime/fs.js';
@@ -16,7 +16,7 @@ export const unpack = async (entry: AppEntry, file: string, out: string, d: Down
     // 7zr.exe (the small standalone 7-Zip) opens the full 7-Zip's installer.
     const sevenZr = path.join(path.dirname(file), '7zr.exe');
     const zr = await githubAsset('ip7z/7zip', /^7zr\.exe$/);
-    await download(zr.url, sevenZr, zr.sha256);
+    await downloader.file(zr.url, sevenZr, zr.sha256);
     await execAsync(sevenZr, ['x', '-y', '-o' + out, file], { stdio: 'ignore' });
     return;
   }
