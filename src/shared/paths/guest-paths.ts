@@ -37,9 +37,6 @@ export const isValidGuestPath = (guest: string): boolean => {
   return MIRROR_LETTER.test(letter);
 };
 
-/** Where a mapping lands when the path it asks for (or the PC path) cannot be used inside the sandbox. */
-export const MAPPED_ROOT = 'C:\\Mapped';
-
 /** A guest path as typed, tidied: '/' -> '\', no doubled or trailing backslashes, upper-case drive letter. */
 export const tidyGuestPath = (guest: string): string => {
   const p = guest
@@ -58,19 +55,14 @@ export const guestPathProblem = (guest: string): string | null => {
     return guest + ' is a folder the sandbox keeps for itself (Windows, Program Files, Users, AgentData, ...)';
   if (letter && !MIRROR_LETTER.test(letter) && letter !== 'C') return 'the sandbox cannot show drive ' + letter + ':';
   if (letter && /^[A-Za-z]:\\?$/.test(guest)) return guest + ' is a whole drive';
+  if (!letter)
+    return (
+      guest +
+      ' is not a full path (guest paths start with a drive, such as C:\\Games\\' +
+      (guest.split('\\').pop() || 'Name') +
+      ')'
+    );
   return guest + ' is not a folder path the sandbox can use';
-};
-
-/** C:\Mapped\<drive>\<rest of path>: a safe place for a folder whose own path cannot be used (odd characters made safe). */
-export const mappedFallback = (path: string): string => {
-  const m = /^([A-Za-z]):\\?(.*)$/.exec(tidyGuestPath(path)) ?? /^\\\\(.*)$/.exec(path);
-  const letter = m && m.length === 3 ? m[1].toUpperCase() : 'UNC';
-  const rest = (m ? m[m.length - 1] : path)
-    .split(/[\\/]+/)
-    .map((s) => s.replace(/[<>:"|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, ''))
-    .filter((s) => s !== '' && s !== '..')
-    .join('\\');
-  return MAPPED_ROOT + '\\' + letter + (rest ? '\\' + rest : '');
 };
 
 /** Two guest folders overlap where they really are (F:\x is C:\Mirror\F\x): the same, or one inside the other. */
@@ -80,29 +72,27 @@ export const guestOverlaps = (a: string, b: string): boolean => {
   return x === y || x.startsWith(y + '\\') || y.startsWith(x + '\\');
 };
 
+/** How to fix a mapping whose guest path cannot be used: `guest` is what it asked for (none = the PC path). */
+export const guestFix = (guest: string | undefined): string =>
+  guest
+    ? 'set "guest" to a full path of a free folder, such as C:\\Games\\<name>, or leave it out to use the same path as on this PC.'
+    : 'its path on this PC cannot be used inside the sandbox; give it a "guest" path such as C:\\Games\\<name>.';
+
 /**
- * Where an extra folder appears in the sandbox. `wanted` is the guest path asked for (or the one derived from the PC
- * path); when the sandbox cannot use it (reserved, invalid, or overlapping a folder in `taken`), the folder goes to
- * C:\Mapped\<drive>\<path> instead (made unique with -2, -3 ...), and `note` says where and why.
+ * Why a folder cannot appear at `guest` in the sandbox (null: it can): a path the sandbox cannot use, or one that
+ * overlaps a folder in `taken`. Folders are never moved somewhere else: the launch names the problem and the fix.
  */
-export const placeGuest = (
-  host: string,
-  wanted: string,
-  taken: { guest: string; what: string }[],
-): { guest: string; note: string | null } => {
-  const clash = (g: string) => taken.find((t) => guestOverlaps(g, t.guest));
-  const tidy = tidyGuestPath(wanted);
-  const problem = guestPathProblem(tidy);
-  const other = problem ? null : clash(tidy);
-  if (!problem && !other) return { guest: tidy, note: null };
-  const why =
-    problem ??
-    tidy +
-      ' is already used by ' +
-      other!.what +
-      (other!.guest.toLowerCase() === tidy.toLowerCase() ? '' : ' (' + other!.guest + ')');
-  const guest = freePlace(mappedFallback(/^[A-Za-z]:/.test(tidy) ? tidy : host), clash);
-  return { guest, note: host + ': ' + why + ', so it is at ' + guest + ' in the sandbox.' };
+export const guestConflict = (guest: string, taken: readonly { guest: string; what: string }[]): string | null => {
+  const problem = guestPathProblem(guest);
+  if (problem) return problem;
+  const other = taken.find((t) => guestOverlaps(guest, t.guest));
+  if (!other) return null;
+  return (
+    guest +
+    ' is already used by ' +
+    other.what +
+    (other.guest.toLowerCase() === guest.toLowerCase() ? '' : ' (' + other.guest + ')')
+  );
 };
 
 /**
@@ -113,13 +103,6 @@ export const deriveGuest = (host: string, projectHost: string, projectGuest: str
   const rel = win32.relative(win32.resolve(projectHost), win32.resolve(host));
   const inside = rel === '' || (!rel.startsWith('..') && !win32.isAbsolute(rel));
   return inside ? (rel ? win32.join(projectGuest, rel) : projectGuest) : tidyGuestPath(win32.resolve(host));
-};
-
-const freePlace = (base: string, clash: (g: string) => unknown): string => {
-  const ok = (g: string) => isValidGuestPath(g) && !clash(g);
-  if (ok(base)) return base;
-  for (let i = 2; i < 1000; i++) if (ok(base + '-' + i)) return base + '-' + i;
-  return base + '-' + Date.now();
 };
 
 /** Where a guest path really is inside the sandbox (the .wsb SandboxFolder): C: paths as-is, F:\x -> C:\Mirror\F\x. */

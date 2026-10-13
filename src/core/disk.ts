@@ -27,6 +27,32 @@ export const sizeOf = (p: string): number => {
   }
 };
 
+/** sizeOf with a time budget: null when measuring would take longer than `ms` (a big data folder can take minutes). */
+export const sizeWithin = (p: string, ms: number): number | null => {
+  const deadline = Date.now() + ms;
+  const overBudget = Symbol('over budget');
+  const walk = (at: string): number => {
+    if (Date.now() > deadline) throw overBudget;
+    let stat: fs.Stats;
+    let entries: fs.Dirent[] = [];
+    try {
+      stat = fs.lstatSync(at);
+      if (stat.isDirectory() && !stat.isSymbolicLink()) entries = fs.readdirSync(at, { withFileTypes: true });
+    } catch {
+      return 0; /* gone or unreadable: counts as nothing, like sizeOf */
+    }
+    if (stat.isSymbolicLink()) return 0;
+    if (!stat.isDirectory()) return stat.size;
+    return _.sumBy(entries, (d) => (d.isSymbolicLink() ? 0 : walk(path.join(at, d.name))));
+  };
+  try {
+    return walk(p);
+  } catch (e) {
+    if (e === overBudget) return null;
+    throw e;
+  }
+};
+
 /** Free bytes on the drive that holds `dir` (which may not exist yet: the nearest existing parent is asked); null if unknown. */
 export const freeBytesAt = (dir: string): number | null => {
   let at = path.resolve(dir);

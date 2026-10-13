@@ -9,7 +9,8 @@ import { shownByRoot, type BootProjects } from './boot-projects.js';
 import {
   deriveGuest,
   isValidGuestPath,
-  placeGuest,
+  guestConflict,
+  guestFix,
   PROJECTS_GUEST,
   sandboxFolder,
   tidyGuestPath,
@@ -18,9 +19,9 @@ import { GUEST } from './wsb-file.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
 /**
- * Every mapping, placed. Your extra folders never stop a launch because of their guest path: one the sandbox cannot
- * use (reserved, invalid, or already in use) goes to C:\Mapped\<drive>\<path>, and `notes` says where and why. What
- * does stop it (a folder that is not there, a whole drive, this tool's own folders) is listed in one message.
+ * Every mapping, placed. An extra folder appears at its `guest` path, or at the same path as on this PC when it has
+ * none. A folder that cannot appear there (a reserved or relative path, one already in use, a folder that is not
+ * there, a whole drive, this tool's own folders) stops the launch; every such folder is listed in one message.
  */
 export function collectMappings(
   o: GenerateOptions,
@@ -92,10 +93,13 @@ export function collectMappings(
       extra.some((x) => x.host.toLowerCase() === host.toLowerCase() && x.guest.toLowerCase() === wanted.toLowerCase())
     )
       continue;
-    const placed = placeGuest(host, wanted, [...taken, ...extra.map((x) => ({ guest: x.guest, what: x.host }))]);
-    if (placed.note) notes.push(placed.note);
+    const conflict = guestConflict(wanted, [...taken, ...extra.map((x) => ({ guest: x.guest, what: x.host }))]);
+    if (conflict) {
+      problems.push(host + ': ' + conflict + '. Fix: ' + guestFix(m.guest));
+      continue;
+    }
     const label = outside.has(path.resolve(host).toLowerCase()) ? 'outside the project, allowed' : undefined;
-    extra.push({ host, guest: placed.guest, readOnly: m.readOnly, ...(label ? { label } : {}) });
+    extra.push({ host, guest: wanted, readOnly: m.readOnly, ...(label ? { label } : {}) });
   }
   if (problems.length)
     fail(

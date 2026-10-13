@@ -91,6 +91,19 @@ export async function joinHere(ctx: Context, status: SandboxStatus, o: { noResta
         pythonVersion: options.python,
         ask: askYesNo,
       }),
+    // Its own settings are stricter than the sandbox's: --yes or a "yes" in a terminal joins with the sandbox's.
+    acceptStricter: async (name, stricter): Promise<boolean> => {
+      if (options.yes) return true;
+      if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+      console.log(
+        c.yellow(
+          name +
+            "'s settings are stricter than this sandbox's (they apply to every session in it):\n  " +
+            stricter.join('\n  '),
+        ),
+      );
+      return askYesNo("Join with the sandbox's settings?");
+    },
     // Something it wants only comes with a restart: --yes restarts, a terminal asks, anything else continues.
     decide: async (name, missing): Promise<MissingChoice> => {
       // Once per command: what a restart could not give (see the launch notes) never restarts it again.

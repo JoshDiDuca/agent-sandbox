@@ -3,10 +3,12 @@ import type { Config, Mapping } from '../types.js';
 import {
   autoGuestFolder,
   deriveGuest,
-  placeGuest,
+  guestConflict,
+  guestFix,
   planMirrorWorkspace,
   PROJECTS_GUEST,
   rootGuestDir,
+  tidyGuestPath,
   usableRoots,
 } from '../../shared/paths/index.js';
 import { dirExists, isInsideOrEqual } from '../util/index.js';
@@ -58,8 +60,10 @@ export function previewGuest(
   workspaceHost: string,
   workspaceGuest: string,
 ): { guest: string; note: string | null } {
-  return placeGuest(m.host, m.guest ?? deriveGuest(m.host, workspaceHost, workspaceGuest), [
+  const guest = tidyGuestPath(m.guest ?? deriveGuest(m.host, workspaceHost, workspaceGuest));
+  const conflict = guestConflict(guest, [
     ...(m.guest || !isInsideOrEqual(workspaceHost, m.host) ? [{ guest: workspaceGuest, what: 'the project' }] : []),
     { guest: PROJECTS_GUEST, what: 'other projects' },
   ]);
+  return { guest, note: conflict ? m.host + ': ' + conflict + '. Fix: ' + guestFix(m.guest) : null };
 }

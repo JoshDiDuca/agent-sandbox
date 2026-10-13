@@ -13,7 +13,7 @@ import { WorkspaceView } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/network/index.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
-import { sizeOf } from '../core/disk.js';
+import { sizeWithin } from '../core/disk.js';
 import { causeSince, KeepAwake, LifeRecord } from '../host/life/index.js';
 import { storageOf } from '../host/storage/index.js';
 import { syncBack } from './sync-cycle.js';
@@ -21,6 +21,9 @@ import { syncBack } from './sync-cycle.js';
 const WATCH_INTERVAL_MS = 60 * 1000;
 
 const hostRunDir = (dataPath: string): string => path.join(storageOf(dataPath), 'run');
+/** The longest the watcher may take after the sandbox closed (final syncs) before it stops anyway. */
+const END_DEADLINE_MS = 3 * 60 * 1000;
+
 const watcherPidFile = (dataPath: string): string =>
   path.join(hostRunDir(dataPath), 'watcher-' + path.basename(dataPath) + '.pid');
 const watcherLog = (dataPath: string): string =>
@@ -125,6 +128,12 @@ export const watch = async (dataPath: string): Promise<void> => {
       note('could not record how the sandbox ended: ' + errMsg(e));
     }
     await sleep(3000);
+    // The sandbox is gone: this process ends within minutes whatever happens below (it must never outlive the sandbox).
+    setTimeout(() => {
+      note('final work took too long; stopped.');
+      fs.rmSync(watcherPidFile(dataPath), { force: true });
+      process.exit(0);
+    }, END_DEADLINE_MS).unref();
     sync(true);
   } finally {
     awake?.stop();
@@ -145,9 +154,10 @@ export const watch = async (dataPath: string): Promise<void> => {
         note('workspace ' + v.host + ': final sync failed: ' + errMsg(e));
       }
     }
-    // For the next launch's storage.warnDataGb (measuring then would be slow).
+    // For the next launch's storage.warnDataGb, only when it can be measured quickly (a big data folder takes minutes).
     try {
-      saveDataSize(storageOf(dataPath), dataPath, sizeOf(dataPath));
+      const bytes = sizeWithin(dataPath, 20000);
+      if (bytes !== null) saveDataSize(storageOf(dataPath), dataPath, bytes);
     } catch {
       /* best effort */
     }

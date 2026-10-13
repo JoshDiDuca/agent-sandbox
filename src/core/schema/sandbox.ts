@@ -16,7 +16,7 @@ export const MappingSchema = z.strictObject({
     .max(1024)
     .optional()
     .describe(
-      'Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game (shown as F: at boot). Leave it out to use the same path as on this PC (a folder inside the project stays where it is in the project). A path the sandbox cannot use (C:\\Windows\\..., C:\\Users\\..., one already in use) goes to C:\\Mapped\\<drive>\\<path> instead, and the launch says so.',
+      'Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game (shown as F: at boot). Leave it out to use the same path as on this PC (a folder inside the project stays where it is in the project). A full path only; one the sandbox cannot use (C:\\Windows\\..., C:\\Users\\..., one already in use) stops the launch with the fix.',
     ),
   readOnly: z.boolean().describe('true = the agent can only read it.'),
   optional: z.boolean().optional().describe('true = skip it quietly when the host folder does not exist.'),

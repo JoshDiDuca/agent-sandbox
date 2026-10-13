@@ -334,12 +334,33 @@ export const projectsSuite: Suite = {
     );
     await t.throws(
       () => join(tightDir, resolveFor(tight)),
-      'stricter protection than the running sandbox',
-      'a project whose .sandbox-config.json tightens git access beyond the running sandbox is refused, with the reason',
+      'stricter than the running sandbox',
+      'a project whose .sandbox-config.json tightens git access beyond the running sandbox is refused without your consent, with the reason',
     );
     t.check(
       new ProjectRegistry(storage).read()?.projects.every((p) => p.host !== tightDir) === true,
       'a refused project is not registered',
+    );
+    let asked: string[] = [];
+    const agreed = await t.thrownMessage(() =>
+      joinRunning({
+        storageRoot: storage,
+        dataPath: data,
+        packageRoot: f.install,
+        hostDir: tightDir,
+        wsbShare: false,
+        resolve: resolveFor(tight),
+        acceptStricter: async (_name, stricter) => {
+          asked = stricter;
+          return true;
+        },
+      }),
+    );
+    t.check(
+      asked.some((s) => s.startsWith('provisioning.git.access')) &&
+        !agreed.includes('stricter than the running sandbox'),
+      'with your consent it is not refused for its stricter settings (it goes on to joining: here a restart, as its folder is outside every root)',
+      agreed,
     );
     const outsideRun = await f.run({ cwd: outside });
     await t.throws(
