@@ -13,7 +13,7 @@ export const DEFAULTS: Config = {
   workspaceFilter: { enabled: false, exclude: [], include: [] },
   audit: { enabled: false, days: 14, maxMb: 100, processes: true, files: true },
   mappings: [],
-  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, maxMemoryPercent: 80, cpuLimit: 80, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
+  sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, maxMemoryPercent: 80, cpuLimit: 80, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false, keepAwake: true },
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default', markSandboxFiles: true, warnDataGb: 50 },
   network: { blockPrivateRanges: true, allowOnly: [], blockHosts: [], forwardPorts: [], dns: [], proxy: '' },
   provisioning: { copyFromHost: true, fallbackToInstall: true, refresh: false, git: { enabled: true, access: 'full' }, terminal: { enabled: true }, conpty: { enabled: true } },

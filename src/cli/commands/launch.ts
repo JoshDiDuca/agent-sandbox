@@ -37,6 +37,7 @@ import _ from 'lodash';
 import { hereDir, joinHere, readyHere, type Joined } from './project.js';
 import { offerRestart } from './restart.js';
 import { addToList, setSetting } from './user-config.js';
+import { lastStopWarning, startLife, UPDATE_RESTART_WARNING, updateRestartPending } from '../../host/stops.js';
 
 /** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
 export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
@@ -233,6 +234,9 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const history = syncSummary(config, dataPath, run.workspaceHost);
   const guarded = checkRepo(dataPath);
   if (guarded.length) console.warn(c.yellow('SECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).'));
+  const stopped = lastStopWarning(storageRoot, dataPath, watcherRunning(dataPath));
+  if (stopped) console.warn(c.yellow(stopped));
+  if (updateRestartPending()) console.warn(c.yellow(UPDATE_RESTART_WARNING));
   resetRunDir(dataPath);
   const filter = await prepareWorkspaceView(ctx, run);
   return { account, terminal: terminal.message + '; pseudo console: ' + conpty, history, pruned: describePrune(pruneStorage(storageRoot)), filter };
@@ -301,6 +305,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   saveRepoSnapshot(dataPath, run.workspaceHost, projects.map((p) => p.host), roots.map((r) => r.host));
   startRegistry(storageRoot, { launchId: generated.launchId, protections: protectionsOf(config), primary: { host: run.workspaceHost, guest: config.guestWorkspace }, roots, boot: projects });
   rememberProject(storageRoot, run.workspaceHost);
+  startLife(storageRoot, dataPath, config.sandbox.keepAwake);
   startSandbox(generated.wsbPath);
   // Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently.
   if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', path.resolve(options.config)] : [])]);

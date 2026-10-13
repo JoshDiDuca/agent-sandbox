@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { syncClaudeMem } from '../sync/claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, syncStatePath, translatePaths, type SyncState } from '../sync/history.js';
+import { beatLife, endLife, explainStop, lastStopWarning, startLife, type StopEvent } from '../host/stops.js';
 import type { Suite } from './suite.js';
 
 export const syncSuite: Suite = {
@@ -113,5 +114,33 @@ export const syncSuite: Suite = {
     t.touch(t.write(hostDb, 'host-v3'), 30);
     t.equal(syncClaudeMem(memHost, memGuest, memState, 'out'), 'conflict', 'claude-mem: both sides changed is reported as a conflict');
     t.check(fs.readdirSync(t.temp).some((name) => name.startsWith('mem-host.conflict-')), 'claude-mem: this PC\'s database is kept as .conflict-<time> first', fs.readdirSync(t.temp).join(', '));
+
+    t.section('how the last sandbox ended');
+    const ev = (id: number, provider: string, at: string, process = ''): StopEvent => ({ id, provider, at, process });
+    t.equal(explainStop([ev(1074, 'User32', '2026-10-13T02:10:30Z', 'C:\\Windows\\servicing\\TrustedInstaller.exe (HOST)')])?.kind, 'updates', 'a restart by Windows Update is recognised');
+    t.equal(explainStop([ev(1074, 'User32', '2026-10-13T02:10:30Z', 'C:\\Windows\\System32\\winlogon.exe (HOST)')])?.text, 'this PC was restarted or shut down (by winlogon.exe)', 'another restart names the program');
+    t.equal(explainStop([ev(41, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:20:00Z'), ev(42, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:10:00Z')])?.kind, 'sleep', 'the first event counts (sleep, then a crash)');
+    t.equal(explainStop([ev(2004, 'Microsoft-Windows-Resource-Exhaustion-Detector', '2026-10-13T02:10:00Z')])?.kind, 'memory', 'low memory is recognised');
+    t.equal(explainStop([ev(41, 'SomethingElse', '2026-10-13T02:10:00Z')]), null, 'the same event id from another source is ignored');
+
+    const lifeRoot = t.at('life-storage');
+    const lifeData = path.join(lifeRoot, 'data', 'testdata');
+    const noEvents = (): null => null;
+    t.equal(lastStopWarning(lifeRoot, lifeData, false, noEvents), null, 'no record: nothing to say');
+    startLife(lifeRoot, lifeData, true, new Date('2026-10-12T20:16:00Z'));
+    beatLife(lifeRoot, lifeData, new Date('2026-10-13T02:09:00Z'));
+    t.equal(lastStopWarning(lifeRoot, lifeData, true, noEvents), null, 'its watcher still runs: the sandbox has not ended');
+    let since = '';
+    const warning = lastStopWarning(lifeRoot, lifeData, false, (s) => { since = s; return { kind: 'updates', at: '2026-10-13T02:10:30Z', text: 'Windows restarted this PC to install updates' }; });
+    t.includes(warning ?? '', 'Windows restarted this PC to install updates', 'the PC stopped under a running sandbox: the next launch says why');
+    t.includes(warning ?? '', 'Pause updates', '... and what keeps it from happening again');
+    t.equal(since, '2026-10-13T02:09:00.000Z', 'the System log is read from the last time the sandbox was seen running');
+    t.equal(lastStopWarning(lifeRoot, lifeData, false, noEvents), null, 'said once only');
+    startLife(lifeRoot, lifeData, true);
+    endLife(lifeRoot, lifeData, null);
+    t.equal(lastStopWarning(lifeRoot, lifeData, false, noEvents), null, 'closed while this PC ran (by you): nothing to say');
+    startLife(lifeRoot, lifeData, true);
+    endLife(lifeRoot, lifeData, { kind: 'sleep', at: '2026-10-13T02:10:00Z', text: 'this PC went to sleep or hibernated' });
+    t.includes(lastStopWarning(lifeRoot, lifeData, false, noEvents) ?? '', 'sandbox.keepAwake', 'ended by sleep: the next launch names keepAwake');
   },
 };

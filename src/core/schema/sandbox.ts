@@ -25,6 +25,7 @@ export const Sandbox = z.strictObject({
   printerRedirection: z.boolean().describe('Printers from this PC.'),
   protectedClient: z.boolean().describe('Run the sandbox window in Protected Client mode (recommended).'),
   headless: z.boolean().describe('Hide the sandbox window (sbx-show brings it back). A headless sandbox shuts down when its last session ends.'),
+  keepAwake: z.boolean().describe('Keep this PC from sleeping while a sandbox runs, so agents left working overnight keep going (the screen may still turn off; closing a laptop lid still sleeps it).'),
 });
 const Port = z.number().int().min(1).max(65535);
 const HostEntry = z.string().max(253).regex(/^(@developer|(\*\.)?([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+)$/, 'a host name like example.com, *.example.com, or @developer');

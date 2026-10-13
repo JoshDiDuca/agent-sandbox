@@ -21,6 +21,7 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
+| `sandbox.keepAwake` | keep this PC from sleeping while a sandbox runs (default `true`), so agents left overnight keep working. The screen may still turn off; closing a laptop lid still sleeps it |
 | `sandbox.cpuLimit` | most of your PC's CPU the sandbox may use, in percent (default `80`; `"none"` = all of it). Your setting only: a project file cannot change it |
 | `sandbox.maxMemoryPercent`, `.maxMemoryMb`, `.reserveHostMb` | `memoryMb: "auto"` = free RAM minus `reserveHostMb` (8 GB), at most `maxMemoryPercent` (80) of your RAM and `maxMemoryMb` |
 | `attach.auto` | starting an agent attaches this terminal automatically (like `-t`) |
@@ -160,7 +161,10 @@ A repo can ship this file, so it is treated as untrusted:
 - It may add apps from the catalogue (`apps.install`, added to yours), never programs of its own (`apps.custom`).
 - It can only make protections **stricter**: read-only, git `readonly`/`none`, the LAN block, protected client, and
   turning off network, clipboard, microphone, camera, printers, vGPU, login copying and history / claude-mem sync, and
-  turning on `downloads.requireChecksum`. Looser values are ignored.
+  turning on `downloads.requireChecksum`. A looser value is used only if you allow it: starting the project from an
+  interactive terminal asks once per setting ("Allow it for this project only?"). Your answer is kept on this PC
+  (`<storage>\allowed-requests.json`, which no repo or sandbox can write) for that project file only; `--trust-config`
+  never allows one. Otherwise the launch names what was not used. Or set it in your own settings for every project.
 - It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.
 
 ## Accounts

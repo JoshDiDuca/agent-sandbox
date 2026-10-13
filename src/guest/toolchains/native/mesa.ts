@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
 import { installArchive } from '../../../shared/download.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { dryRun, execAsync, exists, log } from '../../env.js';
+import { dryRun, execAsync, execOutput, exists, log } from '../../env.js';
 import { arch, installFromGithub, tool, type ToolEnv } from '../common.js';
 
 /**
@@ -39,7 +39,17 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
     // The zip has x86 and x64 folders: only the 64-bit loader (and vulkaninfo) is extracted.
     await installArchive(VULKAN_RUNTIME, dir, { locate: 'vulkan-1.dll', fileName: 'vulkan-runtime.zip', members: ['*/x64/*'] });
   }
-  await execAsync(SYSTEM.reg(), ['add', 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers', '/v', icd, '/t', 'REG_DWORD', '/d', '0', '/f'], { stdio: 'ignore' });
+  const register = (file: string): Promise<void> => execAsync(SYSTEM.reg(), ['add', 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers', '/v', file, '/t', 'REG_DWORD', '/d', '0', '/f'], { stdio: 'ignore' });
+  await register(icd);
+  // sandbox.vGpu: the sandbox sees this PC's GPU through Direct3D 12, and Dozen runs Vulkan on it. Programs prefer it
+  // over lavapipe (a GPU before a CPU device); lavapipe stays for the ones that need it.
+  const dozen = path.join(mesaDir, arch === 'arm64' ? 'dzn_icd.aarch64.json' : 'dzn_icd.x86_64.json');
+  const gpu = hasGpu();
+  if (gpu && exists(dozen)) await register(dozen);
   env.prepend.push(dir);
-  env.summary.push('vulkan: lavapipe (software Vulkan 1.4 on the CPU), vulkaninfo on PATH; WGPU_BACKEND=vulkan for wgpu');
+  env.summary.push('vulkan: ' + (gpu && exists(dozen) ? 'Dozen (Vulkan on the GPU via Direct3D 12) and ' : '') + 'lavapipe (software Vulkan 1.4 on the CPU), vulkaninfo on PATH; WGPU_BACKEND=vulkan for wgpu');
 };
+
+/** A real display adapter (sandbox.vGpu on), not only the remote display or basic render driver. */
+const hasGpu = (): boolean => execOutput(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_VideoController).Name'], { timeout: 30000 })
+  .split(/\r?\n/).map((n) => n.trim()).some((n) => n && !/^Microsoft (Remote Display|Basic (Render|Display))/i.test(n));

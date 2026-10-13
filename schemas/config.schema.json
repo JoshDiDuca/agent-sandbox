@@ -195,6 +195,10 @@
         "headless": {
           "type": "boolean",
           "description": "Hide the sandbox window (sbx-show brings it back). A headless sandbox shuts down when its last session ends."
+        },
+        "keepAwake": {
+          "type": "boolean",
+          "description": "Keep this PC from sleeping while a sandbox runs, so agents left working overnight keep going (the screen may still turn off; closing a laptop lid still sleeps it)."
         }
       },
       "additionalProperties": false

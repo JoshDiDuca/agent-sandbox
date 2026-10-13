@@ -15,6 +15,7 @@ import { readForwards, sandboxAddress, startPortForwards } from '../host/port-fo
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/motw.js';
 import { sizeOf } from '../core/disk.js';
+import { beatLife, causeSince, endLife, keepAwake, readLife } from '../host/stops.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
 
@@ -120,12 +121,21 @@ export const watch = async (dataPath: string): Promise<void> => {
   const stops = views.flatMap((v) => {
     try { return [new WorkspaceView({ ...v, note: (m) => note('workspace ' + v.host + ': ' + m) }).watch()]; } catch (e) { note('workspace ' + v.host + ': could not watch: ' + errMsg(e)); return []; }
   });
+  // sandbox.keepAwake, and the life record that tells the next launch how this run ended (host/stops.ts).
+  const awake = readLife(storageOf(dataPath), dataPath)?.keepAwake ? keepAwake(process.pid) : null;
   try {
     await sleep(30000);
-    while (isSandboxRunning()) { sync(false); await sleep(WATCH_INTERVAL_MS); }
+    while (isSandboxRunning()) { beatLife(storageOf(dataPath), dataPath); sync(false); await sleep(WATCH_INTERVAL_MS); }
+    try {
+      const life = readLife(storageOf(dataPath), dataPath);
+      const cause = life ? causeSince(life.lastSeen) : null;
+      endLife(storageOf(dataPath), dataPath, cause);
+      if (cause) note('sandbox ended: ' + cause.text);
+    } catch (e) { note('could not record how the sandbox ended: ' + errMsg(e)); }
     await sleep(3000);
     sync(true);
   } finally {
+    awake?.kill();
     stops.forEach((stop) => stop());
     stopForwards();
     stopMarking();

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { download, setChecksumRequired } from '../shared/download.js';
 import type { Config } from '../core/types.js';
+import { allowedAnswer, allowStorePath, saveAllowed } from '../core/local-config.js';
 import type { Suite } from './suite.js';
 
 export const localConfigSuite: Suite = {
@@ -101,6 +102,14 @@ export const localConfigSuite: Suite = {
       { readOnly: true, blockPrivateRanges: true, gitAccess: 'readonly', vGpu: false, clipboard: false, networking: false, protectedClient: true, copyCredentials: false },
       'a project file can never loosen network, git, read-only, GPU, clipboard or login settings',
     );
+    // You allowed one request for this project (asked once at an interactive launch): only that one is let through.
+    const store = allowStorePath(strictUser.storage.root);
+    saveAllowed(store, path.join(dirC, '.sandbox-config.json'), 'sandbox.vGpu', true, true);
+    saveAllowed(store, path.join(dirC, '.sandbox-config.json'), 'sandbox.clipboard', true, false);
+    const allowedRun = await f.run({ cwd: dirC, trustConfig: true }, strictUser);
+    t.equal({ vGpu: allowedRun.config.sandbox.vGpu, clipboard: allowedRun.config.sandbox.clipboard, networking: allowedRun.config.sandbox.networking }, { vGpu: true, clipboard: false, networking: false }, 'a request you allowed for this project is used; one you declined and the others are not');
+    t.check(allowedRun.notes.some((n) => n.includes('Allowed for this project: sandbox.vGpu')) && allowedRun.notes.some((n) => n.includes('sandbox.clipboard') && n.includes('You said no')), 'launch says what was allowed and what you declined', allowedRun.notes.join('\n'));
+    t.equal(allowedAnswer(store, path.join(f.workB, '.sandbox-config.json'), 'sandbox.vGpu', true), null, 'an answer is kept per project file');
     f.writeLocal(dirC, { readOnly: true, network: { blockPrivateRanges: true }, provisioning: { git: { access: 'none' } }, sandbox: { networking: false, clipboard: false } });
     const tightened = (await f.run({ cwd: dirC, trustConfig: true })).config;
     t.equal(

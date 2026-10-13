@@ -5,6 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import type { Config, HostProbe } from '../core/types.js';
 import { SYSTEM } from '../shared/system.js';
 import { refuseInSelfTest } from './test-guard.js';
+import { updateRestartPending } from './stops.js';
 import { commandsDir, realAgent } from './agent-commands.js';
 import { dirExists, ensureDir, fail, fileExists, findOnPath, homeDir, isWin, realPath } from '../core/util.js';
 
@@ -118,6 +119,8 @@ export const doctorRows = (config: Config, harnessName: string, storageRoot: str
     ['Windows Sandbox feature', sandboxFeatureInstalled() ? 'enabled' : 'NOT enabled'],
     ['Sandbox running', isSandboxRunning() ? 'YES' : 'no'],
     ['Free host RAM (MB)', String(Math.floor(os.freemem() / 1048576))],
+    ['Update restart pending', updateRestartPending() ? 'YES (Windows may restart on its own and close the sandbox; restart first or pause updates)' : 'no'],
+    ['Keep this PC awake', config.sandbox.keepAwake ? 'yes, while a sandbox runs' : 'no (sandbox.keepAwake is off: the PC may sleep under running agents)'],
     ['Provisioning', config.provisioning.copyFromHost ? 'copy from this PC' + (config.provisioning.fallbackToInstall ? ', fall back to download' : ', no fallback') : 'download inside sandbox'],
     ['Host Node (runner)', probe.nvmNode ? 'nvm ' + probe.hostNodeVersion : probe.nodeDir ?? '(none; will download)'],
     ['Host nvm versions', probe.nvmDir ?? '(no NVM_HOME; versions will be downloaded)'],

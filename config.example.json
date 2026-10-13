@@ -29,7 +29,8 @@
     "videoInput": false,
     "printerRedirection": false,
     "protectedClient": true,
-    "headless": false
+    "headless": false,
+    "keepAwake": true
   },
   "storage": {
     "root": "%LOCALAPPDATA%\\AgentSandbox",
