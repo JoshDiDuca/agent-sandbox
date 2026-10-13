@@ -2,8 +2,8 @@
 // and commands planted in the repository are quarantined before anything on this PC can run them.
 import fs from 'node:fs';
 import path from 'node:path';
-import { guardRepo, snapshotRepo } from '../host/repo-guard.js';
-import { isMarked, markFromSandbox, watchAndMark } from '../host/motw.js';
+import { guardRepo, snapshotRepo } from '../host/guard/index.js';
+import { isMarked, markFromSandbox, watchAndMark } from '../host/guard/index.js';
 import type { Suite } from './suite.js';
 
 export const repoGuardSuite: Suite = {

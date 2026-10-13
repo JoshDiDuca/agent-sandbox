@@ -10,7 +10,7 @@ import _ from 'lodash';
 import { dirExists, homeDir, isLink } from '../core/util/index.js';
 import { safeRemove } from '../shared/io/index.js';
 import { assertTestWritable } from '../host/test-guard.js';
-import type { SyncState } from './history.js';
+import type { SyncState } from './sync-state.js';
 
 // Never in: its settings (provider API keys), .env files and backups; nor run-time files that mean nothing elsewhere.
 const SKIP_IN =

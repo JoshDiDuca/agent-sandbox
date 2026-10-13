@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertSafeWorkspace } from '../../core/safe-paths.js';
 import { errMsg, expandPath } from '../../core/util/index.js';
-import { readKnown } from '../../host/projects.js';
+import { readKnown } from '../../host/projects/index.js';
 import { isWithin } from '../../shared/paths/index.js';
 import type { Context } from '../commands/context.js';
 import { commandLine } from '../history.js';

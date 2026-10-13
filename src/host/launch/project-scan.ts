@@ -1,0 +1,91 @@
+// Reads a project the way detect-databases.ts and detect-toolchains.ts need it (only manifest/config files, bounded).
+import fs from 'node:fs';
+import path from 'node:path';
+import { INTERESTING_FILE, type ProjectFile } from '../../core/detect/index.js';
+
+const SKIP =
+  /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;
+const MAX_FILES = 400;
+const MAX_BYTES = 256 * 1024;
+const MAX_FOLDERS = 2000;
+
+/** Reads a file through one handle, only if that handle is a regular file of at most MAX_BYTES. */
+const readSmallFile = (file: string): string | null => {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, 'r');
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_BYTES) return null;
+    const buffer = Buffer.alloc(stat.size);
+    fs.readSync(fd, buffer, 0, stat.size, 0);
+    return buffer.toString('utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+};
+
+/** Manifest-type files in the project, up to 3 folders deep. Links are not followed (the workspace may be guest-written). */
+export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
+  const files: ProjectFile[] = [];
+  let folders = 0;
+  const walk = (dir: string, level: number): void => {
+    if (++folders > MAX_FOLDERS) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (files.length >= MAX_FILES) return;
+      const full = path.join(dir, entry.name);
+      if (entry.isFile() && INTERESTING_FILE.test(entry.name)) {
+        const text = readSmallFile(full);
+        if (text !== null) files.push({ path: path.relative(root, full), text });
+      } else if (entry.isDirectory() && level < depth && !SKIP.test(entry.name)) walk(full, level + 1);
+    }
+  };
+  walk(root, 0);
+  return files;
+};
+
+/** File names in the project and its direct sub-folders ("api/go.mod"), for toolchain detection. No links followed. */
+export const projectEntries = (root: string): string[] => {
+  const list = (dir: string): fs.Dirent[] => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000);
+    } catch {
+      return [];
+    }
+  };
+  const top = list(root);
+  const below = top
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name))
+    .slice(0, 200)
+    .flatMap((d) =>
+      list(path.join(root, d.name))
+        .filter((f) => f.isFile())
+        .map((f) => d.name + '/' + f.name),
+    );
+  return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
+};
+
+/** Scripts in the project root or one folder down that set up MSVC (vcvars*.bat, vswhere): read with bounded effort. */
+export const msvcHint = (root: string): string | undefined => {
+  const scripts = projectEntries(root)
+    .filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e))
+    .slice(0, 60);
+  for (const rel of scripts) {
+    let text = '';
+    try {
+      const file = path.join(root, rel);
+      if (fs.statSync(file).size <= 256 * 1024) text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    if (/vcvars(all|64|32)?\.bat|vswhere(\.exe)?/i.test(text)) return rel + ' sets up MSVC';
+  }
+  return undefined;
+};

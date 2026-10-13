@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assertCmdSafePath } from '../host/platform.js';
+import { assertCmdSafePath } from '../host/sandbox/index.js';
 import { assertSafeMapping } from '../core/safe-paths.js';
 import { safeText } from '../core/util/index.js';
 import { isSafeFileName } from '../shared/paths/index.js';

@@ -6,22 +6,14 @@ import path from 'node:path';
 import type { ResolvedRun, SessionStatus } from '../core/types.js';
 import { LocalOverrides } from '../core/schema/index.js';
 import { checkJoin, protectionsOf } from '../core/local-config/index.js';
-import { sessionsFirstIn } from '../host/channel.js';
-import { buildWsb } from '../host/launch/wsb.js';
-import { projectSpec, joinRunning } from '../host/join.js';
-import {
-  allProjectsToMap,
-  forgetProject,
-  NeedsRestart,
-  projectHere,
-  projectMapper,
-  readKnown,
-  readRegistry,
-  rememberProject,
-  startRegistry,
-} from '../host/projects.js';
-import { checkRepo, saveRepoSnapshot } from '../host/repo-guard.js';
-import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/wsb.js';
+import { sessionsFirstIn } from '../host/channel/index.js';
+import { buildWsb } from '../host/launch/index.js';
+import { projectSpec, joinRunning } from '../host/projects/index.js';
+import { allProjectsToMap, forgetProject, readKnown, rememberProject } from '../host/projects/index.js';
+import { NeedsRestart, projectMapper } from '../host/projects/index.js';
+import { projectHere, readRegistry, startRegistry } from '../host/projects/index.js';
+import { checkRepo, saveRepoSnapshot } from '../host/guard/index.js';
+import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/sandbox/index.js';
 import { baseEnvFor } from '../guest/project-env.js';
 import {
   guestDirFor,
@@ -37,12 +29,12 @@ import {
 } from '../shared/paths/index.js';
 import { GuestRequest, ProjectSpec } from '../shared/channel/index.js';
 import { projectFolderName } from '../shared/paths/index.js';
-import { syncHistoryOut } from '../sync/history.js';
+import { syncHistoryOut } from '../sync/index.js';
 import { validateOptions, validateProjectsArgs } from '../cli/validate.js';
 import { parseCli, parseSessionWant } from '../cli/args.js';
 import { candidateFolders, severalAgentsArgv } from '../cli/menu/index.js';
 import type { Context } from '../cli/commands/context.js';
-import { generateSandbox } from '../host/generate.js';
+import { generateSandbox } from '../host/launch/index.js';
 import { askedWhen } from '../cli/manifest.js';
 import { describeSessions } from '../cli/commands/restart.js';
 import type { Suite } from './suite.js';

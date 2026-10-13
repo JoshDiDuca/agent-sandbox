@@ -4,9 +4,9 @@ import type { GenerateOptions, ResolvedMapping } from '../../core/types.js';
 import { assertNoGuestOverlap } from '../../core/config/index.js';
 import { assertSafeMapping } from '../../core/safe-paths.js';
 import { dirExists, fail } from '../../core/util/index.js';
-import type { BootProjects } from './projects.js';
+import type { BootProjects } from './boot-projects.js';
 import { isValidGuestPath, sandboxFolder } from '../../shared/paths/index.js';
-import { GUEST } from './wsb.js';
+import { GUEST } from './wsb-file.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
 export const collectMappings = (

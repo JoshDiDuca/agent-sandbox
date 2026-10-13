@@ -6,10 +6,10 @@ import {
   saveAccount,
   setDefaultAccount,
   type Account,
-} from '../../host/accounts.js';
-import { restartSessions, runningSessions } from '../../host/channel.js';
-import { hostClaudeDir, hostGlobalStateFile } from '../../host/claude-profile.js';
-import { isSandboxRunning } from '../../host/platform.js';
+} from '../../host/profile/index.js';
+import { restartSessions, runningSessions } from '../../host/channel/index.js';
+import { hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
+import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { fail, safeText } from '../../core/util/index.js';
 import { printJson, sandboxAlive, table, type Context } from './context.js';
 

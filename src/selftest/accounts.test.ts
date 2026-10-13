@@ -10,7 +10,7 @@ import {
   removeAccount,
   saveAccount,
   setDefaultAccount,
-} from '../host/accounts.js';
+} from '../host/profile/index.js';
 import type { Suite } from './suite.js';
 
 export const accountsSuite: Suite = {

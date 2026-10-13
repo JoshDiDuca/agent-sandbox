@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { GuestSession } from '../core/types.js';
 import { Config, Mapping } from '../core/schema/index.js';
 import { guestPathFor } from '../cli/commands/context.js';
-import { buildWsb } from '../host/launch/wsb.js';
+import { buildWsb } from '../host/launch/index.js';
 import {
   guestDrive,
   isValidGuestPath,
@@ -13,7 +13,7 @@ import {
   substDrives,
 } from '../shared/paths/index.js';
 import { guestWorkspaceAliases, projectFolderName } from '../shared/paths/index.js';
-import { syncHistoryIn, syncHistoryOut } from '../sync/history.js';
+import { syncHistoryIn, syncHistoryOut } from '../sync/index.js';
 import type { Suite } from './suite.js';
 
 export const mirrorSuite: Suite = {

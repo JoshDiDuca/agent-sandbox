@@ -2,11 +2,11 @@
 // must never write, delete or walk through them.
 import fs from 'node:fs';
 import path from 'node:path';
-import { activateAccount, saveAccount } from '../host/accounts.js';
-import { resetRunDir, sendRequest } from '../host/channel.js';
-import { pruneStorage } from '../host/cleanup.js';
+import { activateAccount, saveAccount } from '../host/profile/index.js';
+import { resetRunDir, sendRequest } from '../host/channel/index.js';
+import { pruneStorage } from '../host/storage/index.js';
 import { assertNoLinks } from '../core/util/index.js';
-import { syncHistoryIn } from '../sync/history.js';
+import { syncHistoryIn } from '../sync/index.js';
 import type { Suite } from './suite.js';
 
 export const linksSuite: Suite = {

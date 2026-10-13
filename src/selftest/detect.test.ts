@@ -1,7 +1,7 @@
 // "What does this project need?": databases and toolchains detected from project files, and the plans built from them.
 import { databasesFromServices, detectDatabases, type ProjectFile } from '../core/detect/index.js';
 import { DEFAULTS } from '../core/config/index.js';
-import { databaseCatalog, planDatabases } from '../host/database-plan.js';
+import { databaseCatalog, planDatabases } from '../host/launch/index.js';
 import { decideToolchains, resolveToolchains } from '../core/detect/index.js';
 import type { Suite } from './suite.js';
 

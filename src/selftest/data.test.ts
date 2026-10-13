@@ -6,7 +6,7 @@ import { resolveCleanTargets } from '../cli/commands/data/clean.js';
 import { removeTree } from '../cli/commands/data/remove.js';
 import { findLinks } from '../cli/commands/repair/finders.js';
 import { humanBytes, sizeOf } from '../core/disk.js';
-import { pruneStorage } from '../host/cleanup.js';
+import { pruneStorage } from '../host/storage/index.js';
 import type { Suite } from './suite.js';
 
 export const dataSuite: Suite = {

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATABASES } from '../core/detect/index.js';
 import { fail } from '../core/util/index.js';
-import { listAccounts } from '../host/accounts.js';
+import { listAccounts } from '../host/profile/index.js';
 import type { CliOptions } from './args.js';
 import type { Context } from './commands/context.js';
 

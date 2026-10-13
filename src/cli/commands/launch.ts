@@ -4,32 +4,38 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { select } from '@inquirer/prompts';
-import { activateAccount, activeAccount, defaultAccount } from '../../host/accounts.js';
-import { attachTerminal, findUnwatchedSession } from '../../host/attach.js';
-import { requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel.js';
-import { describePrune, pruneStorage } from '../../host/cleanup.js';
-import { generateSandbox } from '../../host/generate.js';
-import { findSecretFiles } from '../../host/secrets.js';
-import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
+import { activateAccount, activeAccount, defaultAccount } from '../../host/profile/index.js';
+import { attachTerminal, findUnwatchedSession } from '../../host/channel/index.js';
+import { requestSession, resetRunDir, waitForReady, waitForSession } from '../../host/channel/index.js';
+import { describePrune, pruneStorage } from '../../host/storage/index.js';
+import { generateSandbox } from '../../host/launch/index.js';
+import { findSecretFiles } from '../../host/profile/index.js';
+import { checkRepo, saveRepoSnapshot } from '../../host/guard/index.js';
 import {
   assertCanLaunch,
   insideSandbox,
   isSandboxRunning,
-  probeHost,
   spawnDetached,
   startSandbox,
-} from '../../host/platform.js';
-import { NeedsRestart, rememberProject, startRegistry } from '../../host/projects.js';
-import { ensureConpty, ensureTerminal } from '../../host/terminal.js';
-import { planView, saveActiveViews, viewSkipped, WorkspaceView } from '../../host/workspace-view/index.js';
-import { saveForwards } from '../../host/port-forward.js';
+} from '../../host/sandbox/index.js';
+import { probeHost } from '../../host/sandbox/index.js';
+import { NeedsRestart } from '../../host/projects/index.js';
+import { rememberProject } from '../../host/projects/index.js';
+import { startRegistry } from '../../host/projects/index.js';
+import { ensureConpty } from '../../host/tools/index.js';
+import { ensureTerminal } from '../../host/tools/index.js';
+import { planView, viewSkipped } from '../../host/workspace-view/index.js';
+import { saveActiveViews } from '../../host/workspace-view/index.js';
+import { WorkspaceView } from '../../host/workspace-view/index.js';
+import { saveForwards } from '../../host/network/index.js';
 import { saveAuditSettings } from '../../host/audit/collect.js';
-import { readDataSize, saveMarkedProjects } from '../../host/motw.js';
+import { readDataSize, saveMarkedProjects } from '../../host/guard/index.js';
 import { humanBytes } from '../../core/disk.js';
-import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
+import { hideSandboxWindow, showSandboxWindow } from '../../host/sandbox/index.js';
 import { readSandboxStatus } from '../../shared/channel/index.js';
 import { isWithin } from '../../shared/paths/index.js';
-import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
+import { syncBeforeLaunch } from '../../sync/index.js';
+import { watcherRunning } from '../../sync/index.js';
 import type { Config, ResolvedRun, SandboxStatus, SessionStatus } from '../../core/types.js';
 import { protectionsOf } from '../../core/local-config/index.js';
 import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js';
@@ -44,7 +50,9 @@ import _ from 'lodash';
 import { hereDir, joinHere, readyHere, type Joined } from './project.js';
 import { offerRestart } from './restart.js';
 import { addToList, setSetting } from './user-config.js';
-import { lastStopWarning, startLife, UPDATE_RESTART_WARNING, updateRestartPending } from '../../host/stops.js';
+import { lastStopWarning } from '../../host/life/index.js';
+import { startLife } from '../../host/life/index.js';
+import { UPDATE_RESTART_WARNING, updateRestartPending } from '../../host/life/index.js';
 
 /** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
 export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {

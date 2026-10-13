@@ -2,8 +2,8 @@
 // PowerShell 7 profile. The Windows Terminal part is only tried on temp copies.
 import fs from 'node:fs';
 import path from 'node:path';
-import { toRegFile } from '../host/personalize.js';
-import { PWSH_PROFILE_GUID, syncPwshProfile, withPwshProfile } from '../host/terminal.js';
+import { toRegFile } from '../host/profile/index.js';
+import { PWSH_PROFILE_GUID, syncPwshProfile, withPwshProfile } from '../host/tools/index.js';
 import type { Suite } from './suite.js';
 
 interface TerminalSettings {

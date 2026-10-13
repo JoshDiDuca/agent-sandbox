@@ -4,16 +4,17 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { saveAccount } from '../host/accounts.js';
-import { sendRequest } from '../host/channel.js';
-import { hostClaude, spawnDetached, startSandbox } from '../host/platform.js';
-import { hideSandboxWindow, showSandboxWindow } from '../host/window.js';
-import { ensureTerminal, syncPwshProfile } from '../host/terminal.js';
+import { saveAccount } from '../host/profile/index.js';
+import { sendRequest } from '../host/channel/index.js';
+import { hostClaude } from '../host/sandbox/index.js';
+import { spawnDetached, startSandbox } from '../host/sandbox/index.js';
+import { hideSandboxWindow, showSandboxWindow } from '../host/sandbox/index.js';
+import { ensureTerminal, syncPwshProfile } from '../host/tools/index.js';
 import { safeRemove } from '../shared/io/index.js';
 import { writeJsonAtomic } from '../shared/io/index.js';
-import { syncClaudeMem } from '../sync/claude-mem.js';
-import { syncHistoryIn, syncHistoryOut } from '../sync/history.js';
-import { watch } from '../sync/watcher.js';
+import { syncClaudeMem } from '../sync/index.js';
+import { syncHistoryIn, syncHistoryOut } from '../sync/index.js';
+import { watch } from '../sync/index.js';
 import type { Suite } from './suite.js';
 
 export const testGuardSuite: Suite = {

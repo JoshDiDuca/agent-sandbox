@@ -1,8 +1,8 @@
 // workspaceFilter: the sandbox works on a copy of the project without what git ignores, kept in step both ways.
 import fs from 'node:fs';
 import path from 'node:path';
-import { IgnoreRules } from '../host/workspace-view/rules.js';
-import { WorkspaceView } from '../host/workspace-view/view.js';
+import { IgnoreRules } from '../host/workspace-view/index.js';
+import { WorkspaceView } from '../host/workspace-view/index.js';
 import type { Suite } from './suite.js';
 
 export const workspaceViewSuite: Suite = {

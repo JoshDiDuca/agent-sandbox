@@ -2,16 +2,12 @@
 // the sandbox can never send anything but transcripts and databases back.
 import fs from 'node:fs';
 import path from 'node:path';
-import { syncClaudeMem } from '../sync/claude-mem.js';
-import {
-  readSyncState,
-  syncHistoryIn,
-  syncHistoryOut,
-  syncStatePath,
-  translatePaths,
-  type SyncState,
-} from '../sync/history.js';
-import { beatLife, endLife, explainStop, lastStopWarning, startLife, type StopEvent } from '../host/stops.js';
+import { syncClaudeMem } from '../sync/index.js';
+import { readSyncState, syncStatePath, type SyncState } from '../sync/index.js';
+import { syncHistoryIn, syncHistoryOut, translatePaths } from '../sync/index.js';
+import { beatLife, endLife, startLife } from '../host/life/index.js';
+import { explainStop, type StopEvent } from '../host/life/index.js';
+import { lastStopWarning } from '../host/life/index.js';
 import type { Suite } from './suite.js';
 
 export const syncSuite: Suite = {

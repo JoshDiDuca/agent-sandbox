@@ -4,7 +4,7 @@
 // Toolchain installers run as a dry run (no downloads); everything else is real. cmd.exe stands in for the agent.
 import fs from 'node:fs';
 import path from 'node:path';
-import { projectSpec } from '../host/join.js';
+import { projectSpec } from '../host/projects/index.js';
 import { resizeFrame, type Endpoint } from '../shared/pty/index.js';
 import { readJsonFile } from '../shared/io/index.js';
 import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, type Viewer } from './live.js';

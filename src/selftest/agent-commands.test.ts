@@ -3,14 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS } from '../core/config/index.js';
-import {
-  agentCommands,
-  commandsDir,
-  forwardingCmd,
-  forwardingSh,
-  realAgent,
-  reconcileAgentCommands,
-} from '../host/agent-commands.js';
+import { agentCommands, commandsDir, realAgent } from '../host/agent-commands/index.js';
+import { forwardingCmd, forwardingSh } from '../host/agent-commands/index.js';
+import { reconcileAgentCommands } from '../host/agent-commands/index.js';
 import type { Suite } from './suite.js';
 
 export const agentCommandsSuite: Suite = {

@@ -15,12 +15,16 @@ import {
 import { assertNoLinks, expandPath, fail, plainText, safeText, sleep, writeJson } from '../../core/util/index.js';
 import { humanBytes } from '../../core/disk.js';
 import { AuditLog } from '../../host/audit/log.js';
-import { readKnown, readRegistry } from '../../host/projects.js';
-import { detectWsb } from '../../host/wsb.js';
-import { describePrune, pruneStorage } from '../../host/cleanup.js';
-import { doctorRows, hostClaude, insideSandbox, isSandboxRunning } from '../../host/platform.js';
+import { readKnown } from '../../host/projects/index.js';
+import { readRegistry } from '../../host/projects/index.js';
+import { detectWsb } from '../../host/sandbox/index.js';
+import { describePrune, pruneStorage } from '../../host/storage/index.js';
+import { doctorRows } from '../../host/sandbox/index.js';
+import { hostClaude } from '../../host/sandbox/index.js';
+import { insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
 import { readSandboxStatus } from '../../shared/channel/index.js';
-import { syncBack, watch } from '../../sync/watcher.js';
+import { syncBack } from '../../sync/index.js';
+import { watch } from '../../sync/index.js';
 import { printJson, table, type Context } from './context.js';
 import { c } from '../colors.js';
 

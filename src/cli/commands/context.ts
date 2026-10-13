@@ -6,7 +6,7 @@ import type { CliOptions } from '../args.js';
 import type { LoadedConfig } from '../../core/types.js';
 import { loadConfig, userDir } from '../../core/config/index.js';
 import { expandPath, fail, isInsideOrEqual } from '../../core/util/index.js';
-import { GUEST_DATA_DIR, insideSandbox, isSandboxRunning } from '../../host/platform.js';
+import { GUEST_DATA_DIR, insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
 
 export interface Context {
   packageRoot: string;

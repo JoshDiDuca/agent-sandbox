@@ -7,7 +7,7 @@ import { select } from '@inquirer/prompts';
 import _ from 'lodash';
 import type { GuestResponse, SessionStatus } from '../../core/types.js';
 import { askYesNo } from '../../core/prompt.js';
-import { activeAccount } from '../../host/accounts.js';
+import { activeAccount } from '../../host/profile/index.js';
 import {
   execInSandbox,
   pickSession,
@@ -16,16 +16,17 @@ import {
   currentSessions,
   runningSessions,
   sessionsFirstIn,
-} from '../../host/channel.js';
-import { sessionViewers } from '../../host/attach.js';
+} from '../../host/channel/index.js';
+import { sessionViewers } from '../../host/channel/index.js';
 import type { Viewers } from '../../shared/pty/index.js';
-import { insideSandbox, isSandboxRunning } from '../../host/platform.js';
-import { NeedsRestart, readRegistry, type RegistryEntry } from '../../host/projects.js';
-import { guardedProjects, repoFindings } from '../../host/repo-guard.js';
-import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
+import { insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
+import { NeedsRestart } from '../../host/projects/index.js';
+import { readRegistry, type RegistryEntry } from '../../host/projects/index.js';
+import { guardedProjects, repoFindings } from '../../host/guard/index.js';
+import { hideSandboxWindow, showSandboxWindow } from '../../host/sandbox/index.js';
 import { isWithin, projectForGuestDir } from '../../shared/paths/index.js';
 import { listProjectStatus, listSessions, readSandboxStatus } from '../../shared/channel/index.js';
-import { watcherRunning } from '../../sync/watcher.js';
+import { watcherRunning } from '../../sync/index.js';
 import { errMsg, fail, safeText, sleep } from '../../core/util/index.js';
 import { printJson, requireOnPc, requireRunning, sandboxAlive, table, type Context } from './context.js';
 import { attachHere, readySandbox } from './launch.js';

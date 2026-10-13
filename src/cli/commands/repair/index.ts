@@ -5,7 +5,7 @@ import path from 'node:path';
 import _ from 'lodash';
 import { DEFAULTS, loadConfig, userDir } from '../../../core/config/index.js';
 import { errMsg, expandPath, UserError } from '../../../core/util/index.js';
-import { isSandboxRunning } from '../../../host/platform.js';
+import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import type { CliOptions } from '../../args.js';
 import { createContext, printJson, table, type Context } from '../context.js';
 import { CHECKS } from './checks.js';
