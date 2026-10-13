@@ -26,6 +26,11 @@ export const Sandbox = z.strictObject({
   protectedClient: z.boolean().describe('Run the sandbox window in Protected Client mode (recommended).'),
   headless: z.boolean().describe('Hide the sandbox window (sbx-show brings it back). A headless sandbox shuts down when its last session ends.'),
 });
+export const WorkspaceFilter = z.strictObject({
+  enabled: z.boolean().describe('Keep what your .gitignore lists (.env files, node_modules, build output ...) out of the sandbox. The sandbox works on a copy of the project without those files, kept in step with it both ways within about a second; what it creates that is ignored (its own node_modules, builds) stays in the sandbox. Git works as usual. Off = the project folder itself is mapped.'),
+  exclude: z.array(z.string().max(500)).describe('Also keep these out, as .gitignore patterns, e.g. secrets/, *.pem, data/private/.'),
+  include: z.array(z.string().max(500)).describe('Let these in although .gitignore lists them, e.g. .env.example, data/fixtures/.'),
+});
 export const Git = z.strictObject({ enabled: z.boolean().describe('Provide Git for Windows (and Git Bash, which Claude Code needs).'), access: GitAccess });
 export const Provisioning = z.strictObject({
   copyFromHost: z.boolean().describe('Copy Node, Git, nvm and the agent from this PC when they are installed here.'),

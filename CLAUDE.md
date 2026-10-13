@@ -35,7 +35,9 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   `accounts.ts`, `personalize.ts`, `cleanup.ts`, `test-guard.ts`. Several projects: `projects.ts` (host-only registry
   of the running sandbox's projects + known projects, and `ProjectMapper`: roots, then `wsb share`, else
   `NeedsRestart`), `join.ts` (resolve + check + register a folder, build its `ProjectSpec`), `launch/projects.ts`
-  (roots and projects mapped at boot), `wsb.ts` (the Windows Sandbox CLI adapter, untested).
+  (roots and projects mapped at boot), `wsb.ts` (the Windows Sandbox CLI adapter, untested). `workspace-view/`
+  (workspaceFilter: `IgnoreRules` reads .gitignore like git, `WorkspaceView` the filtered copy with three-way sync and
+  file watching, `index.ts` the launch plan, the `.git` mapping and the views the watcher keeps in step).
 - `src/guest/`: runs in the sandbox (bundled by esbuild into `dist/runtime/*.js`): `main.ts` (boot), `daemon.ts`
   (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`, `project` = provisioning a project
   that joined after boot, per-session env), `project-context.ts` (AsyncLocalStorage: which project a toolchain step

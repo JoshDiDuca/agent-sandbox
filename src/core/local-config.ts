@@ -40,7 +40,7 @@ const insideProject = (dir: string, folder: string): boolean => {
  * Protections a project file may only make stricter, never looser. A repo can ship the file, so it must not be able to
  * switch off what you turned on (or turn on what you turned off). The strictest of the two values always wins.
  */
-export const ON_IS_SAFER = ['readOnly', 'network.blockPrivateRanges', 'sandbox.protectedClient', 'downloads.requireChecksum'];
+export const ON_IS_SAFER = ['readOnly', 'workspaceFilter.enabled', 'network.blockPrivateRanges', 'sandbox.protectedClient', 'downloads.requireChecksum'];
 export const OFF_IS_SAFER = ['sandbox.networking', 'sandbox.clipboard', 'sandbox.audioInput', 'sandbox.videoInput', 'sandbox.printerRedirection', 'sandbox.vGpu', 'claudeProfile.copyCredentials', 'claudeProfile.enabled', 'claudeProfile.syncHistory', 'claudeProfile.syncClaudeMem'];
 export const GIT_STRICTNESS: Record<string, number> = { full: 0, readonly: 1, none: 2 };
 export const NEVER_LOOSER = [...ON_IS_SAFER, ...OFF_IS_SAFER, 'provisioning.git.access'];
@@ -66,6 +66,8 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   if (harness) next.defaultHarness = harness;
   // A project adds catalogue apps to yours; it never removes the ones you chose.
   if (rest.apps?.install) next.apps.install = _.union(config.apps.install, rest.apps.install);
+  // Its patterns keep more out on top of yours; yours stay.
+  if (rest.workspaceFilter?.exclude) next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
   if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
   return next;
 };

@@ -6,6 +6,9 @@ The sandbox is treated as hostile and your PC as precious.
 
 - The agent writes only your project folder (and the other projects you map, see [several projects](#several-projects)) and its own storage.
 - Drive roots, your user profile, system folders and this tool's folders are refused as workspaces.
+- `workspaceFilter.enabled` keeps what git ignores (`.env` files with real keys, your `node_modules`, build output) out
+  of the sandbox entirely: it works on a copy without them, synced both ways
+  ([details](configuration.md#git-ignored-files)).
 - Your LAN is blocked from inside the sandbox (DNS excepted). `sandbox.networking: false` cuts all network access.
 - vGPU is off by default.
 

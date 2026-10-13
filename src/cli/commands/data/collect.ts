@@ -40,7 +40,7 @@ export const collectDataEntries = (dataPath: string, storageRoot: string): DataE
   });
   const otherData = entriesOf(path.join(storageRoot, 'data')).filter((d) => d.isDirectory() && path.join(storageRoot, 'data', d.name).toLowerCase() !== path.resolve(dataPath).toLowerCase());
   const host: DataEntry[] = [
-    ...['launches', 'accounts', 'sync', 'logs', 'run', 'host'].map((name) => ({ area: 'host' as const, name, path: path.join(storageRoot, name), bytes: sizeOf(path.join(storageRoot, name)) })),
+    ...['launches', 'views', 'accounts', 'sync', 'logs', 'run', 'host'].map((name) => ({ area: 'host' as const, name, path: path.join(storageRoot, name), bytes: sizeOf(path.join(storageRoot, name)) })),
     ...otherData.map((d) => ({ area: 'host' as const, name: 'other data folder: ' + d.name, path: path.join(storageRoot, 'data', d.name), bytes: sizeOf(path.join(storageRoot, 'data', d.name)) })),
   ].filter((r) => fs.existsSync(r.path));
   return _.sortBy([...rows, ...host], (r) => AREA_ORDER.indexOf(r.area), (r) => -r.bytes, (r) => r.name.toLowerCase());
@@ -51,6 +51,6 @@ export const cleanTargetOf = (entry: DataEntry): string | null => {
   if (entry.area === 'tools') return entry.name.startsWith('(') ? null : 'tools/' + entry.name;
   if (entry.area === 'databases' || entry.area === 'state') return entry.name;
   if (entry.area === 'logs') return 'logs';
-  if (entry.area === 'host' && entry.name === 'launches') return 'launches';
+  if (entry.area === 'host' && (entry.name === 'launches' || entry.name === 'views')) return entry.name;
   return null;
 };

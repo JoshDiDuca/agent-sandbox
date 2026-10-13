@@ -21,7 +21,7 @@ design decision first).
 
 | Item | Status |
 | --- | --- |
-| Git-ignored files and folders (node_modules, .env, build output ...) kept out of the sandbox, seamlessly | planned |
+| Git-ignored files and folders (node_modules, .env, build output ...) kept out of the sandbox, seamlessly (`workspaceFilter`: a filtered copy synced both ways, the real .git mapped beside it) | done |
 | Settings scope tabs: "All projects" and "This project" side by side, Tab switches, each with its own colour and badge | done (in 1.2) |
 | A project asking for something only you can allow (vGPU, ...) is said at launch, with how to allow it, instead of being dropped silently | done |
 | Rust: `CARGO_TARGET_DIR` per checkout (git worktrees of several agents no longer share one target folder); gnu defaults that fit Windows (fewer jobs, `debug = "line-tables-only"` under the 2 GB executable limit) | done |

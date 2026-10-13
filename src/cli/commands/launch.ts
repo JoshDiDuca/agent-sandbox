@@ -14,6 +14,7 @@ import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
 import { assertCanLaunch, insideSandbox, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
 import { NeedsRestart, rememberProject, startRegistry } from '../../host/projects.js';
 import { ensureConpty, ensureTerminal } from '../../host/terminal.js';
+import { planView, saveActiveViews, viewSkipped, WorkspaceView } from '../../host/workspace-view/index.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { isWithin } from '../../shared/projects.js';
@@ -199,6 +200,18 @@ const maybeAddRoot = async (ctx: Context, run: ResolvedRun): Promise<void> => {
   if (answer === 'never') setSetting(ctx, ['projects', 'askToAddRoot'], false);
 };
 
+/**
+ * workspaceFilter: brings the project's filtered view in step before the sandbox maps it, and tells the background
+ * watcher to keep it in step while the sandbox runs. Returns the line for the launch table.
+ */
+const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<string> => {
+  const plan = planView(run.config, ctx.storageRoot, run.workspaceHost);
+  saveActiveViews(ctx.storageRoot, ctx.dataPath, plan ? [plan.options] : []);
+  if (!plan) return viewSkipped(run.config, run.workspaceHost) ?? 'off (git-ignored files are visible in the sandbox; workspaceFilter.enabled keeps them out)';
+  const stats = await working('Preparing the workspace without its git-ignored files', () => new WorkspaceView(plan.options).prepare());
+  return 'on: git-ignored files stay on this PC' + (stats.toView || stats.toHost ? ' (' + stats.toView + ' copied in, ' + stats.toHost + ' out' + (stats.conflicts ? ', ' + stats.conflicts + ' conflicts kept next to the file' : '') + ')' : '') + '; ' + plan.options.view;
+};
+
 /** Everything a real launch does before the sandbox starts (skipped by `generate`, which only writes files). */
 const prepare = async (ctx: Context, run: ResolvedRun) => {
   const { options, dataPath, storageRoot } = ctx;
@@ -211,7 +224,8 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   const guarded = checkRepo(dataPath);
   if (guarded.length) console.warn(c.yellow('SECURITY: neutralised ' + guarded.length + ' change(s) the last sandbox made that could run code on this PC (see sandbox status).'));
   resetRunDir(dataPath);
-  return { account, terminal: terminal.message + '; pseudo console: ' + conpty, history, pruned: describePrune(pruneStorage(storageRoot)) };
+  const filter = await prepareWorkspaceView(ctx, run);
+  return { account, terminal: terminal.message + '; pseudo console: ' + conpty, history, pruned: describePrune(pruneStorage(storageRoot)), filter };
 };
 
 /** A restart that adds a project: map these too, start no session at boot (restart.ts opens them), wait until ready. */
@@ -257,7 +271,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
     ['Workspace', run.workspaceHost + '  ->  ' + config.guestWorkspace + (config.readOnly ? '  (read-only)' : '')],
     ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   CPU: ' + (config.sandbox.cpuLimit === 'none' ? 'all' : 'max ' + config.sandbox.cpuLimit + '%') + '   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
     ['Node', run.versions.node.spec + ' (' + run.versions.node.source + ')   Python: ' + run.versions.python.spec + ' (' + run.versions.python.source + ')'],
-    ...(prepared ? [['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
+    ...(prepared ? [['Ignored files', prepared.filter], ['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Toolchains', Object.entries(generated.toolchains).filter(([, d]) => d.on).map(([name, d]) => name + ' (' + d.reason + ')').join(', ') || 'Node only (nothing else used by this project)'],
     ...(generated.databases.length
       ? generated.databases.map((d, i) => [i ? '' : 'Databases', d.database + (d.database === 'sqlserver' ? ' (cannot run in the sandbox; use Postgres or SQLite for local work)' : ' on port ' + d.port) + '  because ' + d.reasons[0] + (d.reasons.length > 1 ? ' (+' + (d.reasons.length - 1) + ' more)' : '')])

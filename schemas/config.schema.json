@@ -32,6 +32,32 @@
       "type": "boolean",
       "description": "Map the workspace read-only."
     },
+    "workspaceFilter": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Keep what your .gitignore lists (.env files, node_modules, build output ...) out of the sandbox. The sandbox works on a copy of the project without those files, kept in step with it both ways within about a second; what it creates that is ignored (its own node_modules, builds) stays in the sandbox. Git works as usual. Off = the project folder itself is mapped."
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "description": "Also keep these out, as .gitignore patterns, e.g. secrets/, *.pem, data/private/."
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "description": "Let these in although .gitignore lists them, e.g. .env.example, data/fixtures/."
+        }
+      },
+      "additionalProperties": false
+    },
     "mappings": {
       "type": "array",
       "items": {

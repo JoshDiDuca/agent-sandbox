@@ -6,7 +6,7 @@ import { Name, SchemaRef, Strings, toggle } from './common.js';
 import { Databases } from './databases.js';
 import { Harness } from './harness.js';
 import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
-import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
+import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox, WorkspaceFilter } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
 import { Apps } from './apps.js';
 import { Projects } from './projects.js';
@@ -16,6 +16,7 @@ export const Config = z.strictObject({
   defaultHarness: Name.describe('Agent started by `sandbox launch` (sandbox claude always runs claude).'),
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map the workspace read-only.'),
+  workspaceFilter: WorkspaceFilter,
   mappings: z.array(Mapping).describe('Extra folders from this PC.'),
   sandbox: Sandbox,
   storage: z.strictObject({
@@ -48,6 +49,8 @@ export const LocalOverrides = z.strictObject({
   harness: Name.describe('Agent for this project.'),
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map this project read-only.'),
+  // A project may turn the filter on and keep more out, never let ignored files in.
+  workspaceFilter: WorkspaceFilter.pick({ enabled: true, exclude: true }).partial(),
   mappings: z.array(Mapping).describe('Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
   sandbox: Sandbox.omit({ cpuLimit: true }).partial(),

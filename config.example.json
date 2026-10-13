@@ -3,6 +3,11 @@
   "defaultHarness": "claude",
   "guestWorkspace": "auto",
   "readOnly": false,
+  "workspaceFilter": {
+    "enabled": false,
+    "exclude": [],
+    "include": []
+  },
   "mappings": [],
   "sandbox": {
     "memoryMb": "auto",

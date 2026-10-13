@@ -10,6 +10,7 @@ export const DEFAULTS: Config = {
   defaultHarness: 'claude',
   guestWorkspace: 'auto',
   readOnly: false,
+  workspaceFilter: { enabled: false, exclude: [], include: [] },
   mappings: [],
   sandbox: { memoryMb: 'auto', maxMemoryMb: 32768, maxMemoryPercent: 80, cpuLimit: 80, reserveHostMb: 8192, vGpu: false, networking: true, clipboard: true, audioInput: false, videoInput: false, printerRedirection: false, protectedClient: true, headless: false },
   storage: { root: '%LOCALAPPDATA%\\AgentSandbox', persistAgentState: true, dataName: 'default' },

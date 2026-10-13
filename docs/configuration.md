@@ -81,6 +81,30 @@ On older Windows: folders inside a project root open instantly; anything else of
 Settings > Windows Update ("Get the latest updates as soon as they're available") or the Windows 11 Installation
 Assistant, then update Windows Sandbox from the Microsoft Store; check with `wsb --version`.
 
+## Git-ignored files
+
+`workspaceFilter.enabled: true` keeps what your `.gitignore` lists out of the sandbox: `.env` files, your
+`node_modules`, build output, local notes. The sandbox then works on a copy of the project (in
+`<storage>\views\<project>`) that has only what git does not ignore, and the two are kept in step both ways while the
+sandbox runs (changes arrive within about a second; a full check runs every minute and when the sandbox closes):
+
+- Your edits reach the sandbox; the agent's edits, new files and deletions reach your project.
+- What the sandbox creates that is ignored (its own `node_modules`, `target`, `dist` ...) stays in the copy, so it
+  never mixes with what you build on your PC, and is there again next time.
+- A file changed on both sides at once keeps yours; the sandbox's version is saved next to it as
+  `<name>.sandbox-conflict-<time><ext>`.
+- Git works as usual: the project's real `.git` is mapped next to the workspace (`C:\Workspace\<name>.git`), so commits
+  and branches made in the sandbox are in your repository (and the repo guard still watches it). With git access
+  `none` no `.git` is mapped at all.
+- The rules are git's: every `.gitignore` in the project, `!` exceptions and `.git/info/exclude`.
+  `workspaceFilter.exclude` keeps more out (`secrets/`, `*.pem`), `workspaceFilter.include` lets something in that
+  git ignores (`.env.example`, `data/fixtures/`).
+
+It applies to the folder you start from. Projects that join a running sandbox, and a project that is itself a git
+worktree (its `.git` is a file), are mapped as they are. A project's `.sandbox-config.json` can turn the filter on and
+add `exclude` patterns, never turn it off. `sandbox data clean views` removes the copies (your projects are not
+touched).
+
 ## Project settings
 
 A project can carry a `.sandbox-config.json` (see the [example](../.sandbox-config.example.json)) for its agent,

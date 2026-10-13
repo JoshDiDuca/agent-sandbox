@@ -41,6 +41,7 @@ import { syncSuite } from './sync.test.js';
 import { testGuardSuite } from './test-guard.test.js';
 import { toolchainsSuite } from './toolchains.test.js';
 import { workspaceSuite } from './workspace.test.js';
+import { workspaceViewSuite } from './workspace-view.test.js';
 
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
@@ -49,7 +50,7 @@ export const SUITES: Suite[] = [
   // the generated sandbox and the guest that boots it
   generateSuite, guestBootSuite, mirrorSuite, projectsSuite,
   // syncing with this PC
-  syncSuite, accountsSuite,
+  syncSuite, accountsSuite, workspaceViewSuite,
   // an untrusted sandbox: what the host refuses to do with what it finds
   linksSuite, channelSuite, gitAccessSuite, repoGuardSuite, secretsSuite, hostileInputSuite, testGuardSuite,
   // pure helpers and the command line

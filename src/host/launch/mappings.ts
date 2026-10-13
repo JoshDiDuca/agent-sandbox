@@ -7,14 +7,18 @@ import { dirExists, fail } from '../../core/util.js';
 import type { BootProjects } from './projects.js';
 import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
 import { GUEST } from './wsb.js';
+import { guestGitDir, planView } from '../workspace-view/index.js';
 
 export const collectMappings = (o: GenerateOptions, launchPath: string, boot: BootProjects = { roots: [], projects: [], notes: [] }): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
+  // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
+  const view = planView(config, o.run.storageRoot, workspaceHost);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
     { host: dataPath, guest: GUEST.data, readOnly: false },
-    { host: workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
+    { host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
+    ...(view?.hostGit ? [{ host: view.hostGit, guest: guestGitDir(config.guestWorkspace), readOnly: config.readOnly }] : []),
   ];
   for (const m of config.mappings) {
     const host = m.host;

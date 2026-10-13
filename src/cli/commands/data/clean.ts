@@ -28,7 +28,7 @@ const ALL_WARNING = 'removes EVERYTHING the sandbox keeps: toolchains, databases
  * not a plain relative target inside the data folder: absolute paths, drive letters, `..`, wildcards, unknown areas.
  */
 export const resolveCleanTargets = (inputs: string[], dataPath: string, storageRoot: string): CleanTarget[] => {
-  const usage = 'Targets: all | tools | tools/<name> | tools/agents/<name> | databases | databases/<name> | state | state/<agent> | logs | launches. See them with: sandbox data';
+  const usage = 'Targets: all | tools | tools/<name> | tools/agents/<name> | databases | databases/<name> | state | state/<agent> | logs | launches | views. See them with: sandbox data';
   if (!inputs.length) fail('Say what to remove.', usage);
   const resolved = inputs.map((raw): CleanTarget => {
     const input = raw.trim();
@@ -43,6 +43,10 @@ export const resolveCleanTargets = (inputs: string[], dataPath: string, storageR
     const target = [area, ...rest].join('/');
     if (area === 'all' && !rest.length) return { target: 'all', path: dataPath, root: path.join(storageRoot, 'data'), warning: ALL_WARNING };
     if (area === 'launches') return { target, path: path.join(storageRoot, 'launches', ...rest), root: storageRoot };
+    if (area === 'views') {
+      if (rest.length) fail('Remove all views ("views"), not single ones.', usage);
+      return { target, path: path.join(storageRoot, 'views'), root: storageRoot, warning: 'Views are the copies of your projects without their git-ignored files (workspaceFilter). Your projects are not touched; what the sandbox built or installed in them (node_modules, build output) goes, and the next start copies the projects again.' };
+    }
     if (area === 'accounts' || area === 'sync') fail('"' + area + '" is kept on this PC on purpose and is not removed here.', area === 'accounts' ? 'Remove a saved login with: sandbox account remove <name>' : usage);
     if (!(DATA_AREAS as readonly string[]).includes(area)) fail('Unknown target "' + raw + '".', usage);
     if (area === 'logs' && rest.length) fail('Remove all logs ("logs"), not single files.', usage);
