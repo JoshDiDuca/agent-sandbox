@@ -25,6 +25,8 @@ export const Toolchains = z.strictObject({
     targets: Packages('Extra rustup targets', '["wasm32-unknown-unknown"]'),
     crates: Packages('Binaries for cargo: prebuilt via cargo-binstall when the crate publishes a Windows build, else compiled with `cargo install --locked` (slow the first time)', '["sccache", "cargo-nextest", "cargo-deny"]'),
     targetDir: z.string().min(1).describe('"shared": cargo\'s default target\\ (shared with builds on this PC, so builds on either side invalidate the other), "separate": <workspace>\\target\\sandbox (kept, no cross-talk), "local": on the sandbox\'s own disk (fastest, lost every boot), or a guest path.'),
+    linker: z.enum(['lld', 'gnu']).describe('GNU host: "lld" links with Rust\'s own lld through MinGW\'s gcc (much less memory than GNU ld), "gnu" with GNU ld.'),
+    linkSlots: z.union([z.literal('auto'), z.number().int().min(1).max(32)]).describe('GNU host: how many programs may link at the same time in the whole sandbox (other links wait). "auto" = one per 8 GB of sandbox memory, 2 to 4. Several agents linking big programs at once can take Windows down.'),
   }),
   msvc: z.strictObject({
     enabled: enabled('MSVC (cl, link) and the Windows SDK, portable from Microsoft\'s Visual Studio manifest (~1-2 GB once), with vcvars64.bat and vswhere.', 'a .vcxproj, CMakePresets.json, a script calling vcvars/vswhere, or a Rust project when this PC builds Rust with MSVC'),

@@ -21,7 +21,7 @@ export const DEFAULTS: Config = {
   toolchains: {
     node: { version: 'host', extraVersions: [], corepack: true, volta: 'auto', globalPackages: [] },
     python: { enabled: 'auto', version: '3', python2: true, pyenv: 'auto', tools: [] },
-    rust: { enabled: 'auto', toolchain: 'stable', host: 'auto', components: [], targets: [], crates: [], targetDir: 'separate' },
+    rust: { enabled: 'auto', toolchain: 'stable', host: 'auto', components: [], targets: [], crates: [], targetDir: 'separate', linker: 'lld', linkSlots: 'auto' },
     msvc: { enabled: 'auto', acceptLicense: false, msvcVersion: 'latest', sdkVersion: 'latest' },
     cpp: { enabled: 'auto', flexBison: true },
     dotnet: { enabled: 'auto', channels: ['LTS'], tools: [], workloads: [], frameworkTargets: ['net48', 'net472'], netfx35: false },

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { syncClaudeMem } from '../sync/claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, syncStatePath, translatePaths, type SyncState } from '../sync/history.js';
-import { beatLife, endLife, explainStop, lastStopWarning, startLife, type StopEvent } from '../host/stops.js';
+import { beatLife, crashReportText, endLife, explainStop, lastStopWarning, startLife, type StopEvent } from '../host/stops.js';
 import type { Suite } from './suite.js';
 
 export const syncSuite: Suite = {
@@ -126,6 +126,11 @@ export const syncSuite: Suite = {
     const crashMessage = "'8abb707a-972e-42e2-9599-01d125d4595c' has encountered a fatal error.  The guest operating system reported that it failed with the following error codes: ErrorCode0: 0x1A, ErrorCode1: 0x13003, ErrorCode2: 0x2346E5, ErrorCode3: 0x1";
     t.equal(explainStop([ev(18590, 'Microsoft-Windows-Hyper-V-Worker', '2026-10-13T08:49:08Z', crashMessage)])?.text, 'Windows inside the sandbox crashed (stop code 0x1A, 0x13003)', 'a crash of Windows inside the sandbox is recognised, with its stop code');
     t.equal(explainStop([ev(24, 'Microsoft-Windows-TerminalServices-LocalSessionManager', '2026-10-13T08:41:40Z', 'PC\\Admin')]), null, 'switching user is not taken for the cause (the sandbox keeps running)');
+    const bugcheck = ev(1001, 'Microsoft-Windows-WER-SystemErrorReporting', '2026-10-13T19:55:00Z', 'The computer has rebooted from a bugcheck.  The bugcheck was: 0x0000001a (0x0000000000041792, 0x0, 0x0, 0x0).');
+    t.equal(explainStop([bugcheck])?.text, 'this PC blue-screened (stop code 0x0000001a)', 'a blue screen of this PC is recognised, with its stop code');
+    const report = crashReportText({ kind: 'sandboxCrash', at: '2026-10-13T08:49:08Z', text: 'Windows inside the sandbox crashed (stop code 0x1A, 0x13003)' }, [ev(18590, 'Microsoft-Windows-Hyper-V-Worker', '2026-10-13T08:49:08Z', crashMessage)], 'time | RAM\n20:50:28 | 16847/32767 | 23552/49151 | rustc 2535\x1b]52;c;evil\x07\n', '2026-10-13T08:48:30Z');
+    t.check(report.includes('stop code 0x1A, 0x13003') && report.includes('Hyper-V-Worker 18590') && report.includes('20:50:28 | 16847/32767'), 'the crash report has what happened, the Windows events and the last memory samples', report);
+    t.excludes(report, '\x1b]52', 'the sandbox\'s memory log is shown without escape codes');
 
     const lifeRoot = t.at('life-storage');
     const lifeData = path.join(lifeRoot, 'data', 'testdata');

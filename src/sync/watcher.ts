@@ -15,7 +15,7 @@ import { readForwards, sandboxAddress, startPortForwards } from '../host/port-fo
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/motw.js';
 import { sizeWithin } from '../core/disk.js';
-import { beatLife, causeSince, endLife, keepAwake, readLife } from '../host/stops.js';
+import { beatLife, causeSince, endLife, keepAwake, readLife, saveCrashReport } from '../host/stops.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
 
@@ -129,8 +129,9 @@ export const watch = async (dataPath: string): Promise<void> => {
     try {
       const life = readLife(storageOf(dataPath), dataPath);
       const cause = life ? causeSince(life.lastSeen) : null;
-      endLife(storageOf(dataPath), dataPath, cause);
-      if (cause) note('sandbox ended: ' + cause.text);
+      const report = life && cause ? saveCrashReport(storageOf(dataPath), dataPath, life.lastSeen) : null;
+      endLife(storageOf(dataPath), dataPath, cause, new Date(), report);
+      if (cause) note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));
     } catch (e) { note('could not record how the sandbox ended: ' + errMsg(e)); }
     await sleep(3000);
     // The sandbox is gone: this process ends within minutes whatever happens below (it must never outlive the sandbox).

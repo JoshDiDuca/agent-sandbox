@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Harness } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
 import { uvVars } from '../toolchains/runtimes.js';
+import { addMachineEnvironment } from './environment.js';
 import { dryRun, execAsync, exists, hostToolsDir, isWin, log, mkdirp, session, toolsDir, warn } from '../env.js';
 
 const harnessPaths = (name: string, harness: Harness) => {
@@ -42,9 +43,18 @@ const installing = new Map<string, Promise<void>>();
 export const provisionHarness = (name: string, harness: Harness, env: NodeJS.ProcessEnv, refresh = session.provisioning.refresh): Promise<void> => {
   const current = installing.get(name);
   if (current) return current;
-  const work = installHarness(name, harness, env, refresh).finally(() => installing.delete(name));
+  const work = installHarness(name, harness, env, refresh)
+    .then(() => onPath(harnessPaths(name, harness).dir, env))
+    .finally(() => installing.delete(name));
   installing.set(name, work);
   return work;
+};
+
+/** The agent's folder at the end of PATH: `claude` (or `codex` ...) works in every new terminal tab and in sessions. */
+const onPath = (dir: string, env: NodeJS.ProcessEnv): void => {
+  const parts = (env.PATH ?? '').split(path.delimiter);
+  if (!parts.some((p) => p.toLowerCase() === dir.toLowerCase())) env.PATH = [...parts, dir].join(path.delimiter);
+  addMachineEnvironment({}, [dir], true);
 };
 
 const installHarness = async (name: string, harness: Harness, env: NodeJS.ProcessEnv, refresh: boolean): Promise<void> => {

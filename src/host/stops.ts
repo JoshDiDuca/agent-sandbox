@@ -3,17 +3,18 @@
 // (sandbox.keepAwake). When the PC restarts, sleeps or crashes, the watcher stops too and the record has no end: the
 // next launch reads Windows' System log from that moment on and says what happened, and what keeps it from happening.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { SYSTEM } from '../shared/system.js';
 import { readValid, writeJsonAtomic } from '../shared/rundir.js';
-import { isWin } from '../core/util.js';
+import { assertNoLinks, isWin, safeText } from '../core/util.js';
 import { refuseInSelfTest } from './test-guard.js';
 
 const Iso = z.string().max(40);
 const Life = z.object({
   started: Iso, lastSeen: Iso, keepAwake: z.boolean(),
-  ended: z.object({ at: Iso, cause: z.object({ kind: z.enum(['updates', 'restart', 'crash', 'sleep', 'memory', 'sandboxCrash']), at: Iso, text: z.string().max(400) }).nullable() }).optional(),
+  ended: z.object({ at: Iso, cause: z.object({ kind: z.enum(['updates', 'restart', 'crash', 'sleep', 'memory', 'sandboxCrash']), at: Iso, text: z.string().max(400) }).nullable(), report: z.string().max(1000).optional() }).optional(),
   reported: z.boolean().optional(),
 });
 type LifeT = z.infer<typeof Life>;
@@ -33,9 +34,9 @@ export const beatLife = (storageRoot: string, dataPath: string, now = new Date()
 };
 
 /** The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory. */
-export const endLife = (storageRoot: string, dataPath: string, cause: StopCause | null, now = new Date()): void => {
+export const endLife = (storageRoot: string, dataPath: string, cause: StopCause | null, now = new Date(), report: string | null = null): void => {
   const life = readLife(storageRoot, dataPath);
-  if (life && !life.ended) writeLife(storageRoot, dataPath, { ...life, ended: { at: now.toISOString(), cause } });
+  if (life && !life.ended) writeLife(storageRoot, dataPath, { ...life, ended: { at: now.toISOString(), cause, ...(report ? { report } : {}) } });
 };
 
 // ---- Windows' System log ----------------------------------------------------------------------------------------
@@ -65,6 +66,10 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
     if ((e.id === 41 && p.includes('kernel-power')) || (e.id === 6008 && p.includes('eventlog'))) return [{ kind: 'crash', at: e.at, text: 'Windows stopped unexpectedly (a crash, a power cut, or the power button held down)' }];
     if (e.id === 42 && p.includes('kernel-power')) return [{ kind: 'sleep', at: e.at, text: 'this PC went to sleep or hibernated' }];
     if (e.id === 2004 && p.includes('resource-exhaustion')) return [{ kind: 'memory', at: e.at, text: 'this PC ran out of memory' }];
+    if (e.id === 1001 && p.includes('systemerrorreporting')) {
+      const code = /bugcheck was:\s*(0x[0-9a-f]{1,8})/i.exec(e.process)?.[1];
+      return [{ kind: 'crash', at: e.at, text: 'this PC blue-screened' + (code ? ' (stop code ' + code + ')' : '') }];
+    }
     if (e.id === 18590 && p.includes('hyper-v-worker')) {
       const code = /ErrorCode0:\s*(0x[0-9a-f]{1,8})/i.exec(e.process)?.[1];
       const sub = /ErrorCode1:\s*(0x[0-9a-f]{1,16})/i.exec(e.process)?.[1];
@@ -88,13 +93,65 @@ const ADVICE: Record<StopKind, string> = {
 export const readStopEvents = (since: Date): StopEvent[] => {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');
-  const script = "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" + since.toISOString() + "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='Microsoft-Windows-Hyper-V-Worker-Admin'; Id=18590; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -eq 1074) { [string]$_.Properties[0].Value } elseif ($_.Id -eq 18590) { ([string]$_.Message).Substring(0, [math]::Min(390, ([string]$_.Message).Length)) } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
+  const script = "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" + since.toISOString() + "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='System'; Id=1001; ProviderName='Microsoft-Windows-WER-SystemErrorReporting'; StartTime=$t}, @{LogName='Microsoft-Windows-Hyper-V-Worker-Admin'; Id=18590,40001; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -eq 1074) { [string]$_.Properties[0].Value } elseif ($_.Id -in 18590,40001,1001) { ([string]$_.Message).Substring(0, [math]::Min(390, ([string]$_.Message).Length)) } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
   const result = spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   try { return StopEvents.parse(JSON.parse(result.stdout || '[]')); } catch { return []; }
 };
 
 /** Looking back from the last time the sandbox was seen running (a minute between checks, plus margin). */
 export const causeSince = (lastSeen: string): StopCause | null => explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000)));
+
+const crashDir = (storageRoot: string): string => path.join(storageRoot, 'logs', 'crashes');
+
+/**
+ * The crash report: what Windows logged when the sandbox ended (the sandbox's or this PC's stop code, where the dump
+ * is) and the last minutes of the sandbox's memory log. Pure text building; `memoryLog` is the sandbox's own file, so
+ * it is shown through safeText. Kept in <storage>\logs\crashes.
+ */
+export const crashReportText = (cause: StopCause, events: StopEvent[], memoryLog: string, lastSeen: string): string => [
+  'Sandbox crash report, written ' + new Date().toISOString(),
+  'What happened: ' + cause.text + ' at ' + cause.at + ' (the sandbox was last seen running at ' + lastSeen + ').',
+  '',
+  'Windows events around then:',
+  ...(events.length ? events.map((e) => '  ' + e.at + '  ' + e.provider + ' ' + e.id + (e.process ? ': ' + e.process.replace(/\s+/g, ' ') : '')) : ['  (none)']),
+  '',
+  'The sandbox\'s memory log, last lines (C:\\AgentData\\logs\\memory-*.log inside it):',
+  ...(memoryLog ? memoryLog.split(/\r?\n/).filter(Boolean).slice(-30).map((l) => '  ' + safeText(l)) : ['  (none found)']),
+  '',
+].join('\n');
+
+/** The newest memory log the sandbox wrote, last 16 KB at most, without following links in the data folder. */
+const memoryLogTail = (dataPath: string): string => {
+  try {
+    const logs = path.join(dataPath, 'logs');
+    assertNoLinks(dataPath, logs);
+    const newest = fs.readdirSync(logs).filter((f) => /^memory-\d{8}-\d{6}\.log$/.test(f)).sort().pop();
+    if (!newest) return '';
+    const file = path.join(logs, newest);
+    if (!fs.lstatSync(file).isFile()) return '';
+    const size = fs.statSync(file).size;
+    const fd = fs.openSync(file, 'r');
+    try {
+      const length = Math.min(size, 16 * 1024);
+      const buffer = Buffer.alloc(length);
+      fs.readSync(fd, buffer, 0, length, size - length);
+      return buffer.toString('utf8');
+    } finally { fs.closeSync(fd); }
+  } catch { return ''; }
+};
+
+/** When the sandbox ended in a crash (its own, this PC's, power, low memory): writes the report and returns its path. */
+export const saveCrashReport = (storageRoot: string, dataPath: string, lastSeen: string): string | null => {
+  const events = readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000));
+  const cause = explainStop(events);
+  if (!cause || !['sandboxCrash', 'crash', 'memory'].includes(cause.kind)) return null;
+  fs.mkdirSync(crashDir(storageRoot), { recursive: true });
+  const file = path.join(crashDir(storageRoot), 'crash-' + cause.at.replace(/[:.]/g, '-') + '.txt');
+  fs.writeFileSync(file, crashReportText(cause, events, memoryLogTail(dataPath), lastSeen));
+  // Only the newest 20 are kept.
+  for (const old of fs.readdirSync(crashDir(storageRoot)).filter((f) => f.startsWith('crash-')).sort().slice(0, -20)) fs.rmSync(path.join(crashDir(storageRoot), old), { force: true });
+  return file;
+};
 
 const when = (iso: string): string => new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -109,7 +166,9 @@ export const lastStopWarning = (storageRoot: string, dataPath: string, watcherAl
   if (life.ended && !life.ended.cause) return null;
   const cause = life.ended ? life.ended.cause : find(life.lastSeen);
   const what = cause ? cause.text + ' at ' + when(cause.at) + '. ' + ADVICE[cause.kind] : 'this PC stopped (Windows logged no reason). ' + ADVICE.crash;
-  return 'The last sandbox did not close normally: it was last seen running at ' + when(life.lastSeen) + ', and ' + what + ' Agent conversations are kept: /resume in Claude picks one up.';
+  // The watcher writes the report when it sees the end; when this PC itself went down, it is written now.
+  const report = life.ended?.report ?? (find === causeSince ? saveCrashReport(storageRoot, dataPath, life.lastSeen) : null);
+  return 'The last sandbox did not close normally: it was last seen running at ' + when(life.lastSeen) + ', and ' + what + ' Agent conversations are kept: /resume in Claude picks one up.' + (report ? ' Crash report: ' + report : '');
 };
 
 // ---- Windows Update and keeping awake ----------------------------------------------------------------------------

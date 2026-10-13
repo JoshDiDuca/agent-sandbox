@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Config, DatabasePlan, GitAccess, Toolchains, ToolVersions } from '../../core/types.js';
 import { appsNeedMesa, setupApps } from '../apps/index.js';
-import { dataDir, dryRun, execAsync, exists, localDir, mkdirp } from '../env.js';
+import { dataDir, dryRun, execAsync, execOutput, exists, localDir, mkdirp } from '../env.js';
 import { ensureCompiled } from '../helpers.js';
 import { arch, installOnce, tool, wanted, type ToolEnv } from './common.js';
 import { DATABASE_NAMES, setupDatabase } from './databases/index.js';
@@ -67,6 +67,25 @@ const cargoShim = (env: ToolEnv, rust: Toolchains['rust']): void => {
 };
 
 /**
+ * GNU host: Rust links through tools\shims\linkgate.exe (sandbox/linkgate.cs), which lets only `linkSlots` links run
+ * at once in the whole sandbox and, with linker "lld", has MinGW's gcc use Rust's own lld instead of GNU ld.
+ */
+const linkGate = (env: ToolEnv, rust: Toolchains['rust'], host: string): void => {
+  const gcc = tool('mingw', 'mingw64', 'bin', 'gcc.exe');
+  if (!host.endsWith('-pc-windows-gnu') || !exists(gcc)) return;
+  const gate = path.join(mkdirp(tool('shims')), 'linkgate.exe');
+  fs.copyFileSync(ensureCompiled('linkgate'), gate);
+  const memoryGb = os.totalmem() / 1024 ** 3;
+  env.vars.AGENT_LINK_SLOTS = String(rust.linkSlots === 'auto' ? Math.max(2, Math.min(4, Math.floor(memoryGb / 8))) : rust.linkSlots);
+  env.vars.AGENT_REAL_LINKER = gcc;
+  env.vars.CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = gate;
+  const sysroot = rust.linker === 'lld' ? execOutput(tool('rust', 'cargo', 'bin', 'rustc.exe'), ['--print', 'sysroot'], { env: { ...process.env, RUSTUP_HOME: tool('rust', 'rustup'), CARGO_HOME: tool('rust', 'cargo') } }) : '';
+  const lld = sysroot ? path.join(sysroot, 'lib', 'rustlib', host, 'bin', 'gcc-ld') : '';
+  if (lld && exists(path.join(lld, 'ld.lld.exe'))) env.vars.AGENT_LLD_DIR = lld;
+  env.summary.push('rust linking: ' + (env.vars.AGENT_LLD_DIR ? 'lld' : 'GNU ld') + ', at most ' + env.vars.AGENT_LINK_SLOTS + ' at once');
+};
+
+/**
  * Cargo defaults that fit Windows, written only when there is no $CARGO_HOME\config.toml yet: fewer parallel jobs
  * (parallel rustc ran out of paging file) and, for the GNU host, only line tables as debug info (full debug info made
  * test executables bigger than the 2 GB Windows allows).
@@ -120,7 +139,7 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
       run: async (env) => {
         await setupRust(env, { ...config.rust, host: rustHost(config) }, o.refresh);
         Object.assign(env.vars, rustCaches(config.rust));
-        if (!dryRun) { cargoDefaults(rustHost(config)); cargoShim(env, config.rust); }
+        if (!dryRun) { cargoDefaults(rustHost(config)); cargoShim(env, config.rust); linkGate(env, config.rust, rustHost(config)); }
       },
     },
     { name: '.NET', on: wanted(config.dotnet.enabled, 'dotnet'), run: (env) => setupDotnet(env, config.dotnet, o.refresh) },
