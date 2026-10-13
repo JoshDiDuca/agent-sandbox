@@ -1,3 +1,7 @@
+import { filesIn } from './file-hash.js';
+import { quarantine } from './quarantine.js';
+import type { GuardRule, RepoFinding, RepoSnapshot } from './types.js';
+
 /** Names you are likely to run in a project folder; with any of these extensions Windows would pick the local copy. */
 export const COMMANDS = new RegExp(
   '^(' +
@@ -110,3 +114,23 @@ export const COMMANDS = new RegExp(
     ')\\.(exe|com|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|ps1)$',
   'i',
 );
+
+/** Fingerprints of the files in the project root named like one of COMMANDS. */
+export function plantedCommands(workspace: string): Record<string, string> {
+  return filesIn(workspace, (n) => COMMANDS.test(n));
+}
+
+/** Executables dropped in the project root under the name of something you type there (Windows runs those first). */
+export class PlantedCommandsRule implements GuardRule {
+  readonly kind = 'commands';
+
+  check(workspace: string, before: RepoSnapshot): RepoFinding[] {
+    const now = plantedCommands(workspace);
+    return quarantine(
+      workspace,
+      Object.keys(now).filter((n) => before.commands[n] !== now[n]),
+      workspace,
+      'command',
+    );
+  }
+}

@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RepoFinding } from './repo-guard.js';
+import type { FindingKind, RepoFinding } from './types.js';
 
 /** Moves files into <dir>\agent-sandbox-quarantine\<time>\ and reports them. */
-export const quarantine = (from: string, names: string[], into: string, kind: RepoFinding['kind']): RepoFinding[] => {
+export function quarantine(from: string, names: readonly string[], into: string, kind: FindingKind): RepoFinding[] {
   if (names.length === 0) return [];
   const target = path.join(into, 'agent-sandbox-quarantine', String(Date.now()));
   fs.mkdirSync(target, { recursive: true });
@@ -22,4 +22,4 @@ export const quarantine = (from: string, names: string[], into: string, kind: Re
     }
     return { kind, detail: name + ' (moved to ' + target + ')' };
   });
-};
+}

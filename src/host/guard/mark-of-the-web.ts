@@ -1,12 +1,8 @@
 // storage.markSandboxFiles: programs and scripts that appear or change in a project while a sandbox runs get Windows'
-// "downloaded from the internet" mark (the Zone.Identifier stream, zone 3). Running one on this PC then goes through
-// SmartScreen, and PowerShell's RemoteSigned policy refuses an unsigned marked script. So something an agent planted is
-// not run by a double-click or a habit. Runs in the background watcher; only the mark is written, never the file.
+// "downloaded from the internet" mark (Zone.Identifier, zone 3), so SmartScreen and PowerShell's RemoteSigned policy
+// stop a planted file from running on a double-click or a habit. Runs in the watcher; only the mark is written.
 import fs from 'node:fs';
 import path from 'node:path';
-import { z } from 'zod';
-import { JsonFile } from '../../shared/io/index.js';
-import { hostStateFile } from '../storage/index.js';
 
 /** What Windows runs when you open it (not source files such as .js or .py: those need a program you choose). */
 export const RISKY =
@@ -14,9 +10,10 @@ export const RISKY =
 const MARK = '[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=about:windows-development-sandbox\r\n';
 /** Folders not worth watching closely (git's own files; dependency and build folders are still marked). */
 const SKIP = /(^|[\\/])\.git([\\/]|$)/i;
+const MAX_NAMED = 10;
 
 /** Marks one file if it is a program or script (and a plain file, not a link). Returns true when it marked it. */
-export const markFromSandbox = (file: string): boolean => {
+export function markFromSandbox(file: string): boolean {
   if (!RISKY.test(file) || SKIP.test(file)) return false;
   try {
     const stat = fs.lstatSync(file);
@@ -26,19 +23,22 @@ export const markFromSandbox = (file: string): boolean => {
   } catch {
     return false;
   }
-};
+}
 
 /** Has this file the mark? */
-export const isMarked = (file: string): boolean => {
+export function isMarked(file: string): boolean {
   try {
     return fs.readFileSync(file + ':Zone.Identifier', 'utf8').includes('ZoneId=3');
   } catch {
     return false;
   }
-};
+}
 
 /** Watches the projects while the sandbox runs and marks what appears or changes; returns a function that stops it. */
-export const watchAndMark = (projects: string[], note: (message: string) => void = () => undefined): (() => void) => {
+export function watchAndMark(
+  projects: readonly string[],
+  note: (message: string) => void = () => undefined,
+): () => void {
   const pending = new Set<string>();
   let timer: NodeJS.Timeout | undefined;
   const flush = (): void => {
@@ -49,10 +49,10 @@ export const watchAndMark = (projects: string[], note: (message: string) => void
       note(
         'marked as from the sandbox (SmartScreen asks before they run here): ' +
           marked
-            .slice(0, 10)
+            .slice(0, MAX_NAMED)
             .map((f) => path.basename(f))
             .join(', ') +
-          (marked.length > 10 ? ' and ' + (marked.length - 10) + ' more' : ''),
+          (marked.length > MAX_NAMED ? ' and ' + (marked.length - MAX_NAMED) + ' more' : ''),
       );
   };
   const watchers = projects.flatMap((project) => {
@@ -74,25 +74,4 @@ export const watchAndMark = (projects: string[], note: (message: string) => void
     clearTimeout(timer);
     if (pending.size) flush();
   };
-};
-
-// ---- what the watcher marks, and the size of the persisted data (host-only files next to the sync state) ----------
-
-const MarkedSchema = z.array(z.string().max(1024)).max(64);
-const DataSizeSchema = z.object({ bytes: z.number().min(0), at: z.string().max(40) });
-const marksFile = (storageRoot: string, dataPath: string): JsonFile<string[]> =>
-  new JsonFile(MarkedSchema, hostStateFile(storageRoot, dataPath, '-mark.json'));
-const sizeFile = (storageRoot: string, dataPath: string): JsonFile<z.output<typeof DataSizeSchema>> =>
-  new JsonFile(DataSizeSchema, hostStateFile(storageRoot, dataPath, '-size.json'));
-
-/** The projects to watch and mark (empty: storage.markSandboxFiles is off). */
-export const saveMarkedProjects = (storageRoot: string, dataPath: string, projects: string[]): void =>
-  marksFile(storageRoot, dataPath).write(projects);
-export const readMarkedProjects = (storageRoot: string, dataPath: string): string[] =>
-  marksFile(storageRoot, dataPath).read() ?? [];
-
-/** The data folder's size, measured by the watcher when a sandbox closes (measuring at launch would be slow). */
-export const saveDataSize = (storageRoot: string, dataPath: string, bytes: number): void =>
-  sizeFile(storageRoot, dataPath).write({ bytes, at: new Date().toISOString() });
-export const readDataSize = (storageRoot: string, dataPath: string): { bytes: number; at: string } | null =>
-  sizeFile(storageRoot, dataPath).read();
+}
