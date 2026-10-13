@@ -70,7 +70,7 @@ export interface GuestSession {
   launchId: string; project: string; workspace: string; workspaceHost: string;
   /** The launch folder's project id (file-name safe; status files and sessions use it). Older launch folders lack it. */
   projectId?: string;
-  /** Where other projects appear (C:\Projects), and the project roots' guest folders. Older launch folders lack them. */
+  /** Where project roots appear (C:\Projects), and the guest folders of the roots and the projects mapped at boot. Older launch folders lack them. */
   projectsDir?: string;
   roots?: string[];
   /** false: start no agent session at boot (a restart that adds a project opens its sessions itself). */

@@ -4,7 +4,7 @@ import type { GenerateOptions, ResolvedMapping } from '../../core/types.js';
 import { assertNoGuestOverlap } from '../../core/config.js';
 import { assertSafeMapping } from '../../core/safe-paths.js';
 import { dirExists, fail } from '../../core/util.js';
-import type { BootProjects } from './projects.js';
+import { shownByRoot, type BootProjects } from './projects.js';
 import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
 import { GUEST } from './wsb.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
@@ -14,10 +14,12 @@ export const collectMappings = (o: GenerateOptions, launchPath: string, boot: Bo
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
   const view = planView(config, o.run.storageRoot, workspaceHost);
+  // A launch folder inside a project root is shown by the root, at the place it has whichever project starts the sandbox.
+  const inRoot = !view && shownByRoot(boot.roots, workspaceHost, config.guestWorkspace);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
     { host: dataPath, guest: GUEST.data, readOnly: false },
-    { host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
+    ...(inRoot ? [] : [{ host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly }]),
     ...(view?.hostGit ? [{ host: view.hostGit, guest: guestGitDir(config.guestWorkspace), readOnly: config.readOnly }] : []),
   ];
   for (const m of config.mappings) {

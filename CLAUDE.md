@@ -85,8 +85,10 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   `common.ts` for `auto`. Long-running work uses `execAsync` / async downloads so parallel steps keep going. Update docs.
 - New setting or command: schema.ts / manifest.ts first (flags, menu and JSON Schema follow), then docs. The self-test
   checks that `config.example.json` equals `DEFAULTS`.
-- Several projects: the launch folder is the primary workspace; other projects are under `C:\Projects` (roots, boot
-  mapped, wsb shares). Anything that assumed ONE workspace must take the project from `ProjectSpec` / the registry.
+- Several projects: the launch folder is the primary workspace. A project's guest path never depends on which project
+  started the sandbox (git worktrees store absolute paths): inside a root it is `C:\Projects\<root>\<name>` (the launch
+  folder too: the root shows it, no own mapping), otherwise `C:\Workspace\<name>` (launch, boot mapped, wsb shares),
+  all decided in `shared/projects.ts`. Anything that assumed ONE workspace must take the project from `ProjectSpec` / the registry.
   Toolchain steps read the project folder through `projectWorkspace()`, and with `duringSession()` must not change
   machine-wide state that running sessions use. Machine-wide protections are never loosened (`core/project-policy.ts`).
 - C# helpers: C# 5 only (the compiler that ships with Windows).

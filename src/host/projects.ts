@@ -10,7 +10,7 @@ import { assertSafeWorkspace } from '../core/safe-paths.js';
 import { dirExists, fail } from '../core/util.js';
 import { Id } from '../shared/schema.js';
 import { readValid, writeJsonAtomic } from '../shared/rundir.js';
-import { guestDirFor, hubName, isWithin, PROJECTS_GUEST, projectForHostDir, type Mechanism, type ProjectEntry, type RootMapping } from '../shared/projects.js';
+import { guestDirFor, hubName, isWithin, ownGuestFolder, PROJECTS_GUEST, projectForHostDir, type Mechanism, type ProjectEntry, type RootMapping } from '../shared/projects.js';
 import { detectWsb, runningSandboxId, shareFolder, type Wsb } from './wsb.js';
 
 export { PROJECTS_GUEST };
@@ -91,7 +91,8 @@ export const projectMapper = (o: MapperOptions): ProjectMapper => {
       if (!wsb?.has('share')) throw new NeedsRestart(host, 'it is not inside a project root (projects.roots), and this Windows has no Windows Sandbox command line (wsb share needs Windows 11 24H2+ with the updated Windows Sandbox)');
       const sandbox = runningSandboxId(wsb);
       if (!sandbox.id) throw new NeedsRestart(host, 'wsb share could not find the running sandbox: ' + sandbox.error);
-      const guest = path.win32.join(PROJECTS_GUEST, name);
+      // Where it is as a launch folder too (C:\Workspace\<name>), unless another project already uses that place.
+      const guest = ownGuestFolder(host, false, [...reg.projects.map((p) => p.guest), ...reg.roots.map((r) => r.guest)]);
       const shared = shareFolder(wsb, sandbox.id, host, guest);
       if (!shared.ok) throw new NeedsRestart(host, 'wsb share failed (untested on this Windows): ' + shared.error);
       return add(reg, host, guest, 'wsb', name);

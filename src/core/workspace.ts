@@ -3,18 +3,29 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
 import { planMirrorWorkspace } from '../shared/guest-paths.js';
+import { autoGuestFolder, rootGuestDir, usableRoots } from '../shared/projects.js';
 import { DATABASES, type Database } from './detect-databases.js';
 import { allowedAnswer, allowRequests, allowStorePath, applyOverrides, describeOverrides, isTrusted, loosenedRequests, saveAllowed, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { assertSafeWorkspace } from './safe-paths.js';
 import { dirExists, expandPath, fail, fileExists, plainText } from './util.js';
 
+/** 'auto' guest workspace: C:\Workspace\<folder name> (shared/projects.ts, where every project's place is decided). */
+export const autoGuestWorkspace = autoGuestFolder;
+
 /**
- * 'auto' guest workspace: C:\Workspace\<folder name>. Keeping the real folder name means Claude's per-project history
- * and claude-mem's project name match this PC instead of every project being "Workspace".
+ * A launch folder inside a project root appears under the root's folder (C:\Projects\<root>\<name>, or its PC path
+ * with "mirror"), where it also is when another project started the sandbox, so git worktrees and Claude's project
+ * folders keep working whichever project starts it. Only for "auto" / "mirror"; a filtered or read-only workspace
+ * keeps its own mapping (the root would show the folder unfiltered and writable at that place).
  */
-export const autoGuestWorkspace = (workspaceHost: string): string => {
-  const name = path.basename(workspaceHost).replace(/[^A-Za-z0-9._ -]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
-  return 'C:\\Workspace\\' + (name || 'project');
+export const placeInRoot = (config: Config, workspaceHost: string, mirror: boolean, notes: string[]): Config => {
+  const guest = rootGuestDir(usableRoots(config.projects.roots, dirExists), mirror, workspaceHost);
+  if (!guest) return config;
+  if (config.workspaceFilter.enabled || config.readOnly) {
+    notes.push(workspaceHost + ' is inside a project root, but ' + (config.readOnly ? 'readOnly' : 'workspaceFilter') + ' is on, so it is mapped on its own at ' + config.guestWorkspace + ' (when another project starts the sandbox it is at ' + guest + ').');
+    return config;
+  }
+  return { ...config, guestWorkspace: guest };
 };
 
 const firstLine = (file: string): string | null => {
@@ -112,11 +123,12 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
     if (!DATABASES.includes(db)) fail('Unknown database "' + name + '".', 'Choose from: ' + DATABASES.join(', '));
     config = { ...config, databases: { ...config.databases, [db]: { ...config.databases[db], enabled: true } } };
   }
-  if (config.guestWorkspace === 'auto') config = { ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) };
+  if (config.guestWorkspace === 'auto') config = placeInRoot({ ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) }, workspaceHost, mirror, notes);
   else if (config.guestWorkspace === 'mirror') {
     const plan = planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));
-    if (plan.note) notes.push(plan.note);
-    config = { ...config, guestWorkspace: plan.guest };
+    const placed = placeInRoot({ ...config, guestWorkspace: plan.guest }, workspaceHost, mirror, notes);
+    if (plan.note && placed.guestWorkspace === plan.guest) notes.push(plan.note);
+    config = placed;
   }
 
   scripts.push(...req.scripts.map((s: string) => path.resolve(s)));

@@ -13,7 +13,7 @@ import { allProjectsToMap, forgetProject, NeedsRestart, projectHere, projectMapp
 import { checkRepo, saveRepoSnapshot } from '../host/repo-guard.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/wsb.js';
 import { baseEnvFor } from '../guest/project-env.js';
-import { guestDirFor, hostDirFor, hubName, insideProjects, isBelow, isWithin, planProjectMappings, projectForGuestDir, projectForHostDir, PROJECTS_GUEST } from '../shared/projects.js';
+import { guestDirFor, hostDirFor, hubName, insideProjects, isBelow, isWithin, planProjectMappings, projectForGuestDir, projectForHostDir, PROJECTS_GUEST, rootGuestDir } from '../shared/projects.js';
 import { GuestRequest, ProjectSpec } from '../shared/schema.js';
 import { projectFolderName } from '../shared/paths.js';
 import { syncHistoryOut } from '../sync/history.js';
@@ -56,7 +56,11 @@ export const projectsSuite: Suite = {
     t.check(isBelow('C:\\a', 'C:\\a\\b') && !isBelow('C:\\a', 'C:\\a'), 'isBelow is strict');
     const plan = planProjectMappings(['F:\\Code', 'E:\\Work\\Code', 'C:\\Users\\me\\src'], ['D:\\x\\api', 'D:\\y\\api'], false);
     t.equal(plan.roots.map((r) => r.guest), ['C:\\Projects\\Code', 'C:\\Projects\\Code-2', 'C:\\Projects\\src'], 'roots get unique C:\\Projects\\<name> folders');
-    t.equal(plan.projects.map((p) => p.guest), ['C:\\Projects\\api', 'C:\\Projects\\api-2'], 'projects get unique C:\\Projects\\<name> folders');
+    t.equal(plan.projects.map((p) => p.guest), ['C:\\Workspace\\api', 'C:\\Workspace\\api-2'], 'projects mapped on their own get unique C:\\Workspace\\<name> folders (where they are as the launch folder)');
+    t.equal(planProjectMappings([], ['D:\\x\\app'], false, ['C:\\Workspace\\app']).projects[0].guest, 'C:\\Workspace\\app-2', 'a project mapped on its own never lands on the launch folder\'s place');
+    t.equal(planProjectMappings(['F:\\Code'], ['D:\\x\\api'], true).projects[0].guest, 'D:\\x\\api', 'with "mirror" a project mapped on its own appears at its PC path, as it would as the launch folder');
+    t.equal(rootGuestDir(['F:\\Code'], false, 'F:\\Code\\web\\src'), 'C:\\Projects\\Code\\web\\src', 'a folder inside a root is placed under the root\'s guest folder');
+    t.equal(rootGuestDir(['F:\\Code'], false, 'F:\\Other'), null, 'a folder in no root has no root place');
     const mirror = planProjectMappings(['F:\\Code', 'C:\\Users\\me\\src'], [], true);
     t.equal(mirror.roots.map((r) => r.guest), ['F:\\Code', 'C:\\Projects\\src'], 'with "mirror" a root appears at its PC path when the sandbox can show it there (C:\\Users\\... cannot)');
 
@@ -164,7 +168,23 @@ export const projectsSuite: Suite = {
     t.check(gen.projects.notes.some((n) => n.includes('no-such-root')), 'a missing root is skipped with a note', JSON.stringify(gen.projects.notes));
     t.check(gen.projects.projects.some((p) => p.host === outside), 'projects.all maps the known projects too');
     t.includes(wsb, '<HostFolder>' + root + '</HostFolder><SandboxFolder>C:\\Projects\\proj-root</SandboxFolder><ReadOnly>false</ReadOnly>', 'roots are mapped read/write in the .wsb');
-    t.equal({ projectsDir: session.projectsDir, roots: session.roots, projectId: session.projectId }, { projectsDir: PROJECTS_GUEST, roots: ['C:\\Projects\\proj-root'], projectId: 'work-a' }, 'session.json tells the guest where other projects can be');
+    t.equal({ projectsDir: session.projectsDir, roots: session.roots, projectId: session.projectId }, { projectsDir: PROJECTS_GUEST, roots: ['C:\\Projects\\proj-root', 'C:\\Workspace\\proj-outside'], projectId: 'work-a' }, 'session.json tells the guest where other projects can be');
+    // The same project is at the same place whether it started the sandbox or joined one another project started.
+    const fromRoot = f.generate(await f.run({ cwd: inRoot }, rootConfig));
+    const joinedAt = guestDirFor(gen.projects.roots[0], inRoot);
+    t.equal([f.readJson(fromRoot.sessionPath).workspace, joinedAt], ['C:\\Projects\\proj-root\\web', 'C:\\Projects\\proj-root\\web'], 'a project in a root: the same guest folder as the launch folder and when another project started the sandbox');
+    t.check(!fromRoot.mappings.some((m) => m.host.toLowerCase() === inRoot.toLowerCase()), 'a launch folder inside a root is shown by the root (no second mapping of it)');
+    t.includes(fs.readFileSync(path.join(fromRoot.launchPath, 'env.cmd'), 'utf8'), 'AGENT_WORKSPACE=C:\\Projects\\proj-root\\web', 'env.cmd: AGENT_WORKSPACE follows');
+    const asLaunch = f.readJson(f.generate(await f.run({ cwd: outside })).sessionPath).workspace;
+    t.equal([asLaunch, gen.projects.projects.find((p) => p.host === outside)?.guest], ['C:\\Workspace\\proj-outside', 'C:\\Workspace\\proj-outside'], 'a project outside the roots: the same guest folder as the launch folder and when mapped at boot by another');
+    const mirrorRoot = structuredClone(rootConfig);
+    mirrorRoot.guestWorkspace = 'mirror';
+    t.equal(f.readJson(f.generate(await f.run({ cwd: inRoot }, mirrorRoot)).sessionPath).workspace, rootGuestDir([root], true, inRoot), 'with "mirror" a launch folder inside a root is where the root shows it (no overlapping mappings)');
+    const filtered = structuredClone(rootConfig);
+    filtered.workspaceFilter = { ...filtered.workspaceFilter, enabled: true };
+    const filteredRun = await f.run({ cwd: inRoot }, filtered);
+    t.equal(filteredRun.config.guestWorkspace, 'C:\\Workspace\\web', 'workspaceFilter: a launch folder inside a root keeps its own (filtered) mapping');
+    t.check(filteredRun.notes.some((n) => n.includes('C:\\Projects\\proj-root\\web')), 'and a note says where it is when another project starts the sandbox', JSON.stringify(filteredRun.notes));
     const badRoot = structuredClone(f.baseConfig);
     badRoot.projects = { ...badRoot.projects, roots: [f.baseConfig.storage.root] };
     await t.throws(async () => f.generate(await f.run({}, badRoot)), 'projects.roots', 'a root that would expose the storage folder is refused');
@@ -244,8 +264,8 @@ export const projectsSuite: Suite = {
     const multiGen = generateSandbox({ packageRoot: t.packageRoot, run: await f.run(), harnessArgs: [], probe: f.probe, extraProjects: [f.workB, path.join(f.workA, 'sub'), f.workB], autoSession: false });
     const multiSession = f.readJson(multiGen.sessionPath);
     const multiWsb = fs.readFileSync(multiGen.wsbPath, 'utf8');
-    t.equal(multiGen.projects.projects.map((p) => p.guest), ['C:\\Projects\\work-b'], 'a multi-project launch maps every other project once (folders inside the launch folder and duplicates need nothing)');
-    t.includes(multiWsb, '<HostFolder>' + f.workB + '</HostFolder><SandboxFolder>C:\\Projects\\work-b</SandboxFolder>', 'a multi-project launch maps the other project in the .wsb');
+    t.equal(multiGen.projects.projects.map((p) => p.guest), ['C:\\Workspace\\work-b'], 'a multi-project launch maps every other project once (folders inside the launch folder and duplicates need nothing)');
+    t.includes(multiWsb, '<HostFolder>' + f.workB + '</HostFolder><SandboxFolder>C:\\Workspace\\work-b</SandboxFolder>', 'a multi-project launch maps the other project in the .wsb');
     t.equal({ autoSession: multiSession.autoSession, workspaceHost: multiSession.workspaceHost }, { autoSession: false, workspaceHost: f.workA }, 'the boot provisions the launch folder only; the host then opens every session (each project set up on demand, in parallel)');
 
     t.section('projects: wsb (Windows Sandbox command line) adapter');

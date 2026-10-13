@@ -29,7 +29,8 @@ import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js
 import { errMsg, fail, isRootPath, sleep } from '../../core/util.js';
 import { syncAgentCommands } from './agent-commands.js';
 import { askYesNo } from '../../core/prompt.js';
-import { resolveRun } from '../../core/workspace.js';
+import { autoGuestWorkspace, placeInRoot, resolveRun } from '../../core/workspace.js';
+import { planMirrorWorkspace } from '../../shared/guest-paths.js';
 import { c } from '../colors.js';
 import { working } from '../progress.js';
 import { requireOnPc, sandboxAlive, table, type Context } from './context.js';
@@ -200,7 +201,17 @@ const maybeAddRoot = async (ctx: Context, run: ResolvedRun): Promise<void> => {
       { name: 'Never ask this again', value: 'never' },
     ],
   });
-  if (answer === 'yes') { addToList(ctx, ['projects', 'roots'], parent); run.config.projects.roots.push(parent); console.log('Added ' + parent + ' to projects.roots (sandbox projects roots remove ' + parent + ' undoes it).'); }
+  if (answer === 'yes') {
+    addToList(ctx, ['projects', 'roots'], parent);
+    run.config.projects.roots.push(parent);
+    console.log('Added ' + parent + ' to projects.roots (sandbox projects roots remove ' + parent + ' undoes it).');
+    // From now on this project is under the root's folder inside the sandbox, from this start on (one move, not two).
+    const before = run.config.guestWorkspace;
+    const derived = [autoGuestWorkspace(run.workspaceHost), planMirrorWorkspace(run.workspaceHost, autoGuestWorkspace(run.workspaceHost)).guest];
+    // In place: the caller holds run.config already.
+    if (derived.some((g) => g.toLowerCase() === before.toLowerCase())) run.config.guestWorkspace = placeInRoot(run.config, run.workspaceHost, Boolean(run.mirror), run.notes).guestWorkspace;
+    if (run.config.guestWorkspace !== before) console.log('Inside the sandbox this project is now at ' + run.config.guestWorkspace + ' (was ' + before + '): git worktrees made at the old place need `git worktree repair` once.');
+  }
   if (answer === 'no') addToList(ctx, ['projects', 'declinedRoots'], parent);
   if (answer === 'never') setSetting(ctx, ['projects', 'askToAddRoot'], false);
 };
@@ -295,7 +306,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
     ['Secrets', !config.secrets.strip ? 'NOT stripped (secrets.strip is off)' : generated.profile.secretsRemoved.length ? 'kept on this PC: ' + generated.profile.secretsRemoved.join(', ') + '  (secrets.allow lets one through)' : 'none found in what is copied'],
     ...roots.map((r, i) => [i ? '' : 'Project roots', r.host + '  ->  ' + r.guest + '  (every project in it opens without a restart)']),
     ...projects.map((p, i) => [i ? '' : 'Projects', p.host + '  ->  ' + p.guest]),
-    ...generated.mappings.slice(3).filter((m) => ![...roots, ...projects].some((p) => p.guest === m.guest)).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
+    ...generated.mappings.slice(2).filter((m) => m.guest !== config.guestWorkspace && ![...roots, ...projects].some((p) => p.guest === m.guest)).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
     ['Generated', generated.wsbPath],
   ]);
   if (generateOnly) return 0;

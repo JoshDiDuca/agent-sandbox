@@ -66,13 +66,27 @@ because they map folders of your PC), decide which folders are already there:
 
 | Setting | Default | |
 |---|---|---|
-| `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart |
+| `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart, and is always under that folder (also when it started the sandbox) |
 | `projects.all` | `false` | also map every project you have started before, at every start (`sandbox projects choose` / `all on`) |
 | `projects.exclude` | none | projects left out of `all` |
 | `projects.askToAddRoot` | `true` | when you start a project whose parent is not a root, ask once whether to add it (answers are saved: yes adds it, no is remembered in `projects.declinedRoots`, never turns this off) |
 | `projects.wsbShare` | `true` | on Windows 11 24H2+ with the updated Windows Sandbox, add other folders live with `wsb share` (untested; otherwise a restart is offered) |
 
-Other projects appear under `C:\Projects`. Machine-wide protections were fixed when the sandbox started: a project
+**A project is at the same place inside the sandbox whichever project started it**, so git worktrees and Claude's
+project history (both store absolute paths) keep working:
+
+| The project is | Inside the sandbox (default) | With `guestWorkspace: "mirror"` |
+|---|---|---|
+| inside a project root, e.g. `F:\AgentProjects\app` with root `F:\AgentProjects` | `C:\Projects\AgentProjects\app`, also when it started the sandbox | `F:\AgentProjects\app` |
+| anywhere else | `C:\Workspace\app`, also when mapped at boot by a restart or shared with `wsb share` | its PC path (a shared folder: `C:\Workspace\app`) |
+
+The root decides: starting from `app` maps the whole root and opens `app` under it (no second mapping). Exceptions keep
+the project's own `C:\Workspace\app` mapping, with a note at launch: a fixed `guestWorkspace` path, `readOnly` and
+`workspaceFilter` (the root would show the folder unfiltered and writable). Two projects with the same folder name
+get `C:\Workspace\app-2` for the second one. Adding a root moves its projects from `C:\Workspace\<name>` to
+`C:\Projects\<root>\<name>` once ([git worktrees after a move](troubleshooting.md)).
+
+Machine-wide protections were fixed when the sandbox started: a project
 that needs a stricter one (git access, network, the LAN block, read-only, ...) cannot join and says so; one that asks
 for less simply gets the sandbox's stricter value. Every agent in the sandbox can see every mapped project
 ([security](security.md#several-projects)). Each mapped folder passes the same checks as a launch folder (no drives,

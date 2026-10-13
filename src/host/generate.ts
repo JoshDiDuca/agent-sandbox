@@ -78,7 +78,8 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
     workspace: config.guestWorkspace,
     workspaceHost,
     projectsDir: PROJECTS_GUEST,
-    roots: boot.roots.map((r) => r.guest),
+    // Every folder mapped for other projects (roots and projects mapped at boot): the guest accepts projects in them.
+    roots: [...boot.roots, ...boot.projects].map((r) => r.guest),
     ...(o.autoSession === false ? { autoSession: false } : {}),
     harnessName,
     harness,
