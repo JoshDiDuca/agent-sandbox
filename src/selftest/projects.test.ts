@@ -14,7 +14,7 @@ import { NeedsRestart, projectMapper } from '../host/projects/index.js';
 import { projectHere, readRegistry, startRegistry } from '../host/projects/index.js';
 import { checkRepo, saveRepoSnapshot } from '../host/guard/index.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/sandbox/index.js';
-import { baseEnvFor } from '../guest/project-env.js';
+import { baseEnvFor } from '../guest/boot/project-env.js';
 import {
   guestDirFor,
   hostDirFor,

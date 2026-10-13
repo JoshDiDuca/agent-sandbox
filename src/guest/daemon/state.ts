@@ -5,7 +5,10 @@ import type { GuestResponse, SessionStatus } from '../../core/types.js';
 import { now } from '../../shared/channel/run-dir.js';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { insideProjects } from '../../shared/paths/projects.js';
-import { errMsg, run, session, warn, workspace } from '../env.js';
+import { run } from '../runtime/paths.js';
+import { session, workspace } from '../runtime/session.js';
+import { warn } from '../runtime/log.js';
+import { errMsg } from '../../core/util/errors.js';
 
 const MAX_MESSAGE = 3500;
 

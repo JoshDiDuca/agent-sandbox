@@ -13,7 +13,7 @@ import {
 import { parseReleasePage, parseReleaseTags } from '../shared/download/index.js';
 import { decidePwsh, pcHasPwsh, PWSH_MAX_BYTES, readPwshScripts, usesPwsh } from '../core/detect/index.js';
 import { binstallAsset, CLI_TOOLS, decideCli, pwshAsset, type CliSettings } from '../guest/toolchains/catalogue.js';
-import { missingExtensions, vscodeExtensions, vscodeSettings } from '../guest/toolchains/vscode-profile.js';
+import { missingExtensions, vscodeExtensions, vscodeSettings } from '../guest/toolchains/tools/vscode-profile.js';
 import { APP_CATEGORIES, APPS, appsNeedMesa, appsToInstall, exeMatcher } from '../shared/apps/index.js';
 import { Config, LocalOverrides } from '../core/schema/index.js';
 import type { Suite } from './suite.js';

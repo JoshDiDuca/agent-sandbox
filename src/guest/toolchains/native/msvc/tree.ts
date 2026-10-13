@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { exists } from '../../../env.js';
-import { tool } from '../../common.js';
+import { exists } from '../../../runtime/fs.js';
+import { tool } from '../../tool-env.js';
 
 export const ROOT = tool('msvc');
 export const MARKER = path.join(ROOT, '.installed.json');

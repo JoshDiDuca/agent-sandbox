@@ -1,7 +1,10 @@
 // Bun, uv and Deno: single-binary tools from GitHub releases (claude-mem needs Bun and uv).
 import path from 'node:path';
-import { dryRun, exists, localDir, log } from '../env.js';
-import { arch, installFromGithub, tool, versionOf, type ToolEnv } from './common.js';
+import { dryRun, localDir } from '../runtime/paths.js';
+import { exists } from '../runtime/fs.js';
+import { log } from '../runtime/log.js';
+import { arch, tool, versionOf, type ToolEnv } from './tool-env.js';
+import { installFromGithub } from './install.js';
 
 export interface SingleExeOptions {
   /** Download again even when installed (provisioning.refresh). */

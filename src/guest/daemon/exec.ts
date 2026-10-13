@@ -2,8 +2,9 @@
 import { spawn } from 'node:child_process';
 import type { GuestRequest } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
-import { errMsg, exists } from '../env.js';
-import { provisionedFor } from './project.js';
+import { exists } from '../runtime/fs.js';
+import { errMsg } from '../../core/util/errors.js';
+import { provisionedFor } from './project-provisioner.js';
 import { insideWorkspace, respond } from './state.js';
 
 const MAX_OUTPUT = 1024 * 1024;

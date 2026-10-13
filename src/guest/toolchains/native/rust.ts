@@ -1,8 +1,12 @@
 // Rust: rustup + cargo, with crates installed prebuilt where possible (binstall.ts).
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { dryRun, execAsync, exists, log } from '../../env.js';
-import { arch, downloadFile, installOnce, tool, versionOf, type ToolEnv } from '../common.js';
+import { dryRun } from '../../runtime/paths.js';
+import { execAsync } from '../../runtime/process.js';
+import { exists } from '../../runtime/fs.js';
+import { log } from '../../runtime/log.js';
+import { arch, tool, versionOf, type ToolEnv } from '../tool-env.js';
+import { downloadFile, installOnce } from '../install.js';
 import { crateInstaller } from './binstall.js';
 import { installedMsvcEnv } from './msvc/index.js';
 

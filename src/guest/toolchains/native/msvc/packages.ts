@@ -7,7 +7,9 @@ import type { Toolchains } from '../../../../core/types.js';
 import { download, extractArchive, fetchJson } from '../../../../shared/download/index.js';
 import { safeRemove } from '../../../../shared/io/safe-remove.js';
 import { system32 } from '../../../../shared/system.js';
-import { execAsync, exists, log, mkdirp } from '../../../env.js';
+import { execAsync } from '../../../runtime/process.js';
+import { exists, mkdirp } from '../../../runtime/fs.js';
+import { log } from '../../../runtime/log.js';
 import { msiCabs, pickMsvcVersion, pickWindowsSdk } from '../../../../core/detect/versions.js';
 import { hostBin, ROOT } from './tree.js';
 

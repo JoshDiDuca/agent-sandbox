@@ -7,9 +7,14 @@ import { fetchJson, installArchive } from '../../../shared/download/index.js';
 import { readJsonFile, writeJsonAtomic } from '../../../shared/io/json.js';
 import { safeRemove } from '../../../shared/io/safe-remove.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, log, mkdirp, warn } from '../../env.js';
-import { projectWorkspace } from '../../project-context.js';
-import { downloadFile, installOnce, tool, type ToolEnv } from '../common.js';
+import { dataDir, dryRun } from '../../runtime/paths.js';
+import { execAsync, execOutput } from '../../runtime/process.js';
+import { exists, mkdirp } from '../../runtime/fs.js';
+import { log, warn } from '../../runtime/log.js';
+import { errMsg } from '../../../core/util/errors.js';
+import { projectWorkspace } from '../../runtime/project-context.js';
+import { downloadFile, installOnce } from '../install.js';
+import { tool, type ToolEnv } from '../tool-env.js';
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
 const DotnetMarker = z.record(z.string(), z.boolean());

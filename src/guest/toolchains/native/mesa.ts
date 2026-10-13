@@ -3,8 +3,12 @@ import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
 import { installArchive } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { dryRun, execAsync, execOutput, exists, log } from '../../env.js';
-import { arch, installFromGithub, tool, type ToolEnv } from '../common.js';
+import { dryRun } from '../../runtime/paths.js';
+import { execAsync, execOutput } from '../../runtime/process.js';
+import { exists } from '../../runtime/fs.js';
+import { log } from '../../runtime/log.js';
+import { arch, tool, type ToolEnv } from '../tool-env.js';
+import { installFromGithub } from '../install.js';
 
 /**
  * Mesa 3D for Windows (llvmpipe): OpenGL 4.5 on the CPU when the sandbox has no GPU. Windows only offers OpenGL 1.1 in

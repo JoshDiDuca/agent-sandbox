@@ -1,8 +1,11 @@
 // C/C++: MinGW-w64 GCC (with CMake, Ninja, make) and the flex/bison parser generators.
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { dryRun, exists, log, warn } from '../../env.js';
-import { arch, installFromGithub, tool, versionOf, type ToolEnv } from '../common.js';
+import { dryRun } from '../../runtime/paths.js';
+import { exists } from '../../runtime/fs.js';
+import { log, warn } from '../../runtime/log.js';
+import { arch, tool, versionOf, type ToolEnv } from '../tool-env.js';
+import { installFromGithub } from '../install.js';
 import { CMAKE_FLOOR, cmakeTooOld } from '../../../core/detect/versions.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */

@@ -1,8 +1,10 @@
 // What makes the unpacked tree behave like a Build Tools install: the vcvars environment, vcvars64.bat, vswhere.
 import fs from 'node:fs';
 import path from 'node:path';
-import { errMsg, mkdirp, warn } from '../../../env.js';
-import { ensureCompiled } from '../../../helpers.js';
+import { mkdirp } from '../../../runtime/fs.js';
+import { warn } from '../../../runtime/log.js';
+import { errMsg } from '../../../../core/util/errors.js';
+import { ensureCompiled } from '../../../runtime/csc.js';
 import { hostBin, ROOT } from './tree.js';
 
 /** Where build tools look for vswhere (local to the sandbox, so it is written each boot). */

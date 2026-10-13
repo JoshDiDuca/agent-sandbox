@@ -3,9 +3,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SpawnOptions } from 'node:child_process';
-import { errMsg, execAsync, exists, log, warn } from '../../env.js';
+import { execAsync } from '../../runtime/process.js';
+import { exists } from '../../runtime/fs.js';
+import { log, warn } from '../../runtime/log.js';
+import { errMsg } from '../../../core/util/errors.js';
 import { binstallAsset } from '../catalogue.js';
-import { arch, installFromGithub, tool } from '../common.js';
+import { arch, tool } from '../tool-env.js';
+import { installFromGithub } from '../install.js';
 
 /**
  * cargo-binstall.exe into CARGO_HOME\bin (so `cargo binstall` works for the agent too). Downloaded into its own

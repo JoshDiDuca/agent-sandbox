@@ -4,7 +4,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { spawnAsync } from '../../shared/download/index.js';
-import { exists, isWin, launchDir, log, session, warn, workspace } from '../env.js';
+import { exists } from '../runtime/fs.js';
+import { isWin, launchDir } from '../runtime/paths.js';
+import { log, warn } from '../runtime/log.js';
+import { session, workspace } from '../runtime/session.js';
 
 const commandFor = (file: string): [string, string[]] | null => {
   const ext = path.extname(file).toLowerCase();

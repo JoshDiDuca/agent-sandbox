@@ -3,7 +3,9 @@
 // localhost:<sandbox port>. So a dev server that only listens on localhost is reachable from the PC too.
 import net from 'node:net';
 import { relayPort } from '../../shared/network/policy.js';
-import { errMsg, log, session, warn } from '../env.js';
+import { log, warn } from '../runtime/log.js';
+import { session } from '../runtime/session.js';
+import { errMsg } from '../../core/util/errors.js';
 
 export const startRelays = (): void => {
   (session.network.forwardPorts ?? []).forEach((f, i) => {

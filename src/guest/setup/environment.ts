@@ -1,21 +1,12 @@
 // The environment every agent session, hook and terminal tab in the sandbox gets.
 import path from 'node:path';
 import type { ToolEnv } from '../toolchains/index.js';
-import {
-  claudeDir,
-  dataDir,
-  dryRun,
-  errMsg,
-  isWin,
-  testMode,
-  mkdirp,
-  powershell,
-  session,
-  stateDir,
-  toolsDir,
-  warn,
-  workspace,
-} from '../env.js';
+import { claudeDir, session, stateDir, workspace } from '../runtime/session.js';
+import { dataDir, dryRun, isWin, testMode, toolsDir } from '../runtime/paths.js';
+import { mkdirp } from '../runtime/fs.js';
+import { powershell } from '../runtime/process.js';
+import { warn } from '../runtime/log.js';
+import { errMsg } from '../../core/util/errors.js';
 
 /** Variables agent-sandbox itself sets (besides the toolchains' own). */
 const AGENT_VARS = [

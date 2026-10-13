@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeRemove } from '../../shared/io/safe-remove.js';
-import { toolsDir } from '../env.js';
+import { toolsDir } from '../runtime/paths.js';
 
 const STAGING = /\.staging-[0-9a-f]+$/i;
 const entries = (dir: string): fs.Dirent[] => {

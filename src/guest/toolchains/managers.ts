@@ -4,9 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
 import { installArchive, latestGithubTag } from '../../shared/download/index.js';
-import { dryRun, errMsg, execAsync, exists, log, mkdirp, session, warn } from '../env.js';
-import { projectWorkspace } from '../project-context.js';
-import { arch, installFromGithub, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
+import { dryRun } from '../runtime/paths.js';
+import { execAsync } from '../runtime/process.js';
+import { exists, mkdirp } from '../runtime/fs.js';
+import { log, warn } from '../runtime/log.js';
+import { session } from '../runtime/session.js';
+import { errMsg } from '../../core/util/errors.js';
+import { projectWorkspace } from '../runtime/project-context.js';
+import { arch, tool, versionOf, type ToolEnv } from './tool-env.js';
+import { installFromGithub } from './install.js';
+import { resolveCached } from './version-cache.js';
 
 /** The "volta" block of the workspace's package.json ({ node, npm, yarn, pnpm }), if any. */
 export const voltaPins = (): Record<string, string> => {

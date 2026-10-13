@@ -45,7 +45,7 @@ export const cmdlineSuite: Suite = {
         '--input-type=module',
         '-e',
         script,
-        pathToFileURL(path.join(t.packageRoot, 'dist', 'guest', 'cmdline.js')).href,
+        pathToFileURL(path.join(t.packageRoot, 'dist', 'guest', 'sessions', 'cmdline.js')).href,
         JSON.stringify([agentCmd, TRICKY_ARGUMENTS]),
       ],
       {
