@@ -1,16 +1,15 @@
 import os from 'node:os';
 import path from 'node:path';
-import { powershell } from '../runtime/process.js';
+import { runScriptWithJson } from '../runtime/process.js';
 
 export interface Shortcut {
   readonly name: string;
   readonly exe: string;
 }
 
-/** Desktop and Start menu shortcuts, all in one PowerShell call. */
+/** Desktop and Start menu shortcuts, all in one PowerShell call (sandbox\shortcuts.ps1). */
 export function shortcuts(apps: readonly Shortcut[]): void {
   if (!apps.length) return;
-  const q = (s: string): string => "'" + s.replace(/'/g, "''") + "'";
   const desktop = path.join(os.homedir(), 'Desktop');
   const start = path.join(
     process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'),
@@ -20,23 +19,13 @@ export function shortcuts(apps: readonly Shortcut[]): void {
     'Programs',
     'Sandbox apps',
   );
-  const lines = [
-    '$w = New-Object -ComObject WScript.Shell',
-    'New-Item -ItemType Directory -Force -Path ' + q(start) + ' | Out-Null',
-  ];
-  for (const app of apps) {
-    for (const folder of [desktop, start]) {
-      const name = app.name.replace(/[\\/:*?"<>|]/g, '');
-      lines.push(
-        '$s = $w.CreateShortcut(' +
-          q(path.join(folder, name + '.lnk')) +
-          '); $s.TargetPath = ' +
-          q(app.exe) +
-          '; $s.WorkingDirectory = ' +
-          q(path.dirname(app.exe)) +
-          '; $s.Save()',
-      );
-    }
-  }
-  powershell(lines.join('\n'));
+  const links = apps.flatMap((app) => {
+    const name = app.name.replace(/[\\/:*?"<>|]/g, '');
+    return [desktop, start].map((folder) => ({
+      link: path.join(folder, name + '.lnk'),
+      target: app.exe,
+      workingDirectory: path.dirname(app.exe),
+    }));
+  });
+  runScriptWithJson('shortcuts.ps1', 'ListFile', links);
 }

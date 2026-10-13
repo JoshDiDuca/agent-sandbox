@@ -4,7 +4,7 @@ import type { Toolchains } from '../../../core/types.js';
 import { downloader } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun } from '../../runtime/paths.js';
-import { execAsync, execOutput } from '../../runtime/process.js';
+import { execAsync, scriptOutput } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
 import { arch, tool, type ToolEnv } from '../tool-env.js';
@@ -79,11 +79,7 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
 
 /** A real display adapter (sandbox.vGpu on), not only the remote display or basic render driver. */
 const hasGpu = (): boolean =>
-  execOutput(
-    SYSTEM.powershell(),
-    ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_VideoController).Name'],
-    { timeout: 30000 },
-  )
+  scriptOutput('gpu-names.ps1', [], { timeout: 30000 })
     .split(/\r?\n/)
     .map((n) => n.trim())
     .some((n) => n && !/^Microsoft (Remote Display|Basic (Render|Display))/i.test(n));

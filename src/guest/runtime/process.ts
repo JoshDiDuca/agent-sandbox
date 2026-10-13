@@ -1,9 +1,11 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
 import { moveIntoPlace, spawnAsync, stagingFolder } from '../../shared/download/index.js';
 import { safeRemove } from '../../shared/io/safe-remove.js';
 import { SYSTEM } from '../../shared/system.js';
+import { scriptArgs } from '../../shared/scripts.js';
 import { isWin } from './paths.js';
 
 /** Runs a program, streaming output, and throws with a readable message when it fails. */
@@ -26,8 +28,27 @@ export const execOutput = (file: string, args: string[], options: SpawnSyncOptio
   return result.status === 0 ? String(result.stdout ?? '').trim() : '';
 };
 
-export const powershell = (script: string): void =>
-  exec(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+/** Runs sandbox\<name> (a .ps1 in the launch folder) with `args`; throws when it fails. */
+export function runScript(name: string, args: readonly string[] = []): void {
+  exec(SYSTEM.powershell(), scriptArgs(name, args));
+}
+
+/** runScript for what it prints ('' when it fails). */
+export function scriptOutput(name: string, args: readonly string[] = [], options: SpawnSyncOptions = {}): string {
+  return execOutput(SYSTEM.powershell(), scriptArgs(name, args), options);
+}
+
+/** Runs sandbox\<name> with a JSON file (-<param> path) holding `data`, removed afterwards. */
+export function runScriptWithJson(name: string, param: string, data: unknown, args: readonly string[] = []): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sbx-'));
+  const file = path.join(dir, 'input.json');
+  try {
+    fs.writeFileSync(file, JSON.stringify(data), 'utf8');
+    runScript(name, ['-' + param, file, ...args]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Copies a folder with robocopy (fast, restartable), or just the named files in it; exit codes below 8 mean success. */
 export const robocopy = (from: string, to: string, files: string[] = []): void => {

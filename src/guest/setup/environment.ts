@@ -4,7 +4,7 @@ import type { ToolEnv } from '../toolchains/index.js';
 import { claudeDir, session, stateDir, workspace } from '../runtime/session.js';
 import { dataDir, dryRun, isWin, testMode, toolsDir } from '../runtime/paths.js';
 import { mkdirp } from '../runtime/fs.js';
-import { powershell } from '../runtime/process.js';
+import { runScriptWithJson } from '../runtime/process.js';
 import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
 
@@ -65,13 +65,8 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
   const vars = Object.fromEntries(
     [...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]),
   );
-  const script = [
-    "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",
-    "foreach ($p in $vars.PSObject.Properties) { [Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
-    "[Environment]::SetEnvironmentVariable('Path', '" + (env.PATH ?? '').replace(/'/g, "''") + "', 'Machine')",
-  ].join('\n');
   try {
-    powershell(script);
+    runScriptWithJson('machine-env.ps1', 'SettingsFile', { vars, path: env.PATH ?? '', add: [], additive: false });
   } catch (e) {
     warn('Could not persist the environment machine-wide: ' + errMsg(e));
   }
@@ -84,21 +79,8 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
  */
 export const addMachineEnvironment = (vars: Record<string, string>, dirs: string[], additive = false): void => {
   if (!isWin || dryRun || testMode) return;
-  const script = [
-    "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",
-    'foreach ($p in $vars.PSObject.Properties) { ' +
-      (additive ? "if ([Environment]::GetEnvironmentVariable($p.Name, 'Machine')) { continue }; " : '') +
-      "[Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
-    "$path = [Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';'",
-    "$add = '" +
-      JSON.stringify(dirs).replace(/'/g, "''") +
-      "' | ConvertFrom-Json | Where-Object { $path -notcontains $_ }",
-    "if ($add) { [Environment]::SetEnvironmentVariable('Path', (" +
-      (additive ? '($path + @($add))' : '(@($add) + $path)') +
-      " -join ';'), 'Machine') }",
-  ].join('\n');
   try {
-    powershell(script);
+    runScriptWithJson('machine-env.ps1', 'SettingsFile', { vars, path: null, add: dirs, additive });
   } catch (e) {
     warn('Could not add to the environment: ' + errMsg(e));
   }

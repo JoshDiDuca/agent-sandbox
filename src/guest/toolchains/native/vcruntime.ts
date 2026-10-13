@@ -2,9 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnAsync } from '../../../shared/download/index.js';
-import { SYSTEM } from '../../../shared/system.js';
 import { dryRun } from '../../runtime/paths.js';
-import { execOutput } from '../../runtime/process.js';
+import { scriptOutput } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
 import { downloadFile } from '../install.js';
@@ -16,15 +15,7 @@ const MICROSOFT_SIGNER = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=R
 const OK_EXIT_CODES: readonly number[] = [0, 1638, 3010];
 
 /** The subject of a valid Authenticode signature, or '' when the file is unsigned or tampered with. */
-const signerOf = (file: string): string =>
-  execOutput(SYSTEM.powershell(), [
-    '-NoLogo',
-    '-NoProfile',
-    '-Command',
-    "$s = Get-AuthenticodeSignature -LiteralPath '" +
-      file.replace(/'/g, "''") +
-      "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }",
-  ]).trim();
+const signerOf = (file: string): string => scriptOutput('signer.ps1', ['-Path', file]).trim();
 
 /**
  * A real installer (it writes to System32), so it runs on every boot; the installer itself is kept in persistent

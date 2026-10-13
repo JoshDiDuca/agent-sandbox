@@ -11,7 +11,7 @@ import { SYSTEM } from '../../../shared/system.js';
 import { dryRun, isWin, logsDir } from '../../runtime/paths.js';
 import { exists, mkdirp } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
-import { powershell } from '../../runtime/process.js';
+import { runScriptWithJson } from '../../runtime/process.js';
 import { arch, tool, type ToolEnv } from '../tool-env.js';
 import { EXTENSION_ID, missingExtensions, vscodeExtensions, vscodeSettings } from './vscode-profile.js';
 
@@ -27,16 +27,9 @@ const VERSION_MARKER = '.agent-sandbox-version';
 const desktopShortcut = (exe: string): void => {
   if (!isWin) return;
   const link = path.join(os.homedir(), 'Desktop', 'Visual Studio Code.lnk');
-  const q = (s: string): string => "'" + s.replace(/'/g, "''") + "'";
-  powershell(
-    '$s = (New-Object -ComObject WScript.Shell).CreateShortcut(' +
-      q(link) +
-      '); $s.TargetPath = ' +
-      q(exe) +
-      '; $s.Arguments = ' +
-      q('"' + (process.env.AGENT_WORKSPACE ?? '') + '"') +
-      '; $s.Save()',
-  );
+  runScriptWithJson('shortcuts.ps1', 'ListFile', [
+    { link, target: exe, arguments: '"' + (process.env.AGENT_WORKSPACE ?? '') + '"' },
+  ]);
 };
 
 /** The first of `names` in one of `dirs`. */

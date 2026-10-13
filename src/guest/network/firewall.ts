@@ -12,6 +12,7 @@ import {
   parseDnsServers,
 } from '../../shared/network/firewall-rules.js';
 import { SYSTEM } from '../../shared/system.js';
+import { scriptArgs } from '../../shared/scripts.js';
 import { dryRun, isWin } from '../runtime/paths.js';
 import { log, warn } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
@@ -166,17 +167,10 @@ const applyBlockedHosts = (): void => {
 const applyDns = (): void => {
   const servers = (session.network.dns ?? []).filter(isIPv4);
   if (!servers.length) return;
-  const r = spawnSync(
-    SYSTEM.powershell(),
-    [
-      '-NoLogo',
-      '-NoProfile',
-      '-Command',
-      "Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -ServerAddresses " +
-        servers.map((s) => "'" + s + "'").join(','),
-    ],
-    { encoding: 'utf8', windowsHide: true },
-  );
+  const r = spawnSync(SYSTEM.powershell(), scriptArgs('dns.ps1', ['-Servers', servers.join(',')]), {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
   if (r.status !== 0) throw new Error('could not set the DNS servers: ' + (r.stderr ?? '').trim().slice(0, 300));
   log('DNS servers (network.dns): ' + servers.join(', '));
 };

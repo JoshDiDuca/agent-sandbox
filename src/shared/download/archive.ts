@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { safeRemove } from '../io/index.js';
 import { SYSTEM } from '../system.js';
+import { scriptArgs } from '../scripts.js';
 import { spawnAsync } from './spawn.js';
 
 /**
@@ -29,16 +30,10 @@ export const extractArchive = async (archive: string, destination: string, membe
   if (status !== 0 && /\.(zip|nupkg)$/i.test(archive)) {
     const zip = archive.endsWith('.zip') ? archive : archive + '.zip';
     if (zip !== archive) fs.copyFileSync(archive, zip);
-    status = await spawnAsync(SYSTEM.powershell(), [
-      '-NoLogo',
-      '-NoProfile',
-      '-Command',
-      "Expand-Archive -LiteralPath '" +
-        zip.replace(/'/g, "''") +
-        "' -DestinationPath '" +
-        destination.replace(/'/g, "''") +
-        "' -Force",
-    ]);
+    status = await spawnAsync(
+      SYSTEM.powershell(),
+      scriptArgs('expand-archive.ps1', ['-Archive', zip, '-Destination', destination]),
+    );
   }
   if (status !== 0) throw new Error('Could not extract ' + archive);
 };
