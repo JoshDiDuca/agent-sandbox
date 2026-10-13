@@ -6,11 +6,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedRun } from '../core/types.js';
-import { checkJoin, protectionsOf } from '../core/project-policy.js';
-import { resolveToolchains } from '../core/detect-toolchains.js';
-import { assertNoLinks, fail } from '../core/util.js';
-import { Id, type ProjectSpecT } from '../shared/schema.js';
-import { readSandboxStatus } from '../shared/rundir.js';
+import { checkJoin, protectionsOf } from '../core/local-config/index.js';
+import { resolveToolchains } from '../core/detect/index.js';
+import { assertNoLinks, fail } from '../core/util/index.js';
+import { Id, type ProjectSpecT } from '../shared/channel/index.js';
+import { readSandboxStatus } from '../shared/channel/index.js';
 import { syncProjectIn } from '../sync/watcher.js';
 import { planDatabases } from './database-plan.js';
 import { decideProjectToolchains } from './generate.js';

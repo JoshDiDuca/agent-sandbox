@@ -1,7 +1,7 @@
 // Clean-up of what interrupted or older installs left in the tools folder.
 import fs from 'node:fs';
 import path from 'node:path';
-import { safeRemove } from '../../shared/safe-remove.js';
+import { safeRemove } from '../../shared/io/safe-remove.js';
 import { toolsDir } from '../env.js';
 
 const STAGING = /\.staging-[0-9a-f]+$/i;

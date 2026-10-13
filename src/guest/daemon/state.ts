@@ -2,8 +2,9 @@
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { GuestResponse, SessionStatus } from '../../core/types.js';
-import { now, writeJsonAtomic } from '../../shared/rundir.js';
-import { insideProjects } from '../../shared/projects.js';
+import { now } from '../../shared/channel/run-dir.js';
+import { writeJsonAtomic } from '../../shared/io/json.js';
+import { insideProjects } from '../../shared/paths/projects.js';
 import { errMsg, run, session, warn, workspace } from '../env.js';
 
 const MAX_MESSAGE = 3500;

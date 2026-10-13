@@ -4,7 +4,7 @@
 // project's, so project A's Node, Rust target folder or database variables never leak into project B's sessions.
 import fs from 'node:fs';
 import path from 'node:path';
-import { writeJsonAtomic } from '../shared/rundir.js';
+import { writeJsonAtomic } from '../shared/io/json.js';
 import { localDir } from './env.js';
 import { BootEnv, type BootEnvT } from './project-env.js';
 

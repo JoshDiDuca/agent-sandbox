@@ -4,8 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../../core/types.js';
-import { writeJsonAtomic } from '../../../../shared/rundir.js';
-import { safeRemove } from '../../../../shared/safe-remove.js';
+import { writeJsonAtomic } from '../../../../shared/io/json.js';
+import { safeRemove } from '../../../../shared/io/safe-remove.js';
 import { dryRun, exists, log } from '../../../env.js';
 import type { ToolEnv } from '../../common.js';
 import { installVswhere, removeTelemetry, vcvars, writeVcvars, type VcEnv } from './environment.js';

@@ -5,8 +5,8 @@
 // message. A project asking for less than the sandbox has simply runs with the sandbox's (stricter) setting.
 // Pure: the host checks it before registering a project, the tests drive it directly.
 import _ from 'lodash';
-import type { Config } from './types.js';
-import { GIT_STRICTNESS, NEVER_LOOSER, OFF_IS_SAFER, ON_IS_SAFER } from './local-config.js';
+import type { Config } from '../types.js';
+import { GIT_STRICTNESS, NEVER_LOOSER, OFF_IS_SAFER, ON_IS_SAFER } from './overrides.js';
 
 /** The protections of a running sandbox, by setting path (`sandbox.networking`, `provisioning.git.access`, ...). */
 export type Protections = Record<string, boolean | string>;

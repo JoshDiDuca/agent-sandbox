@@ -15,9 +15,9 @@ import path from 'node:path';
 import _ from 'lodash';
 import { z } from 'zod';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
-import { readValid, writeFileAtomic, writeJsonAtomic } from '../shared/rundir.js';
+import { readValid, writeFileAtomic, writeJsonAtomic } from '../shared/io/index.js';
 import { assertTestWritable } from './test-guard.js';
-import { dirExists, fileExists, isLink } from '../core/util.js';
+import { dirExists, fileExists, isLink } from '../core/util/index.js';
 
 /** Config keys that make git run a program, or load more config. */
 const DANGEROUS_KEY =

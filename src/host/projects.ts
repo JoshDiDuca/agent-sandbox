@@ -7,9 +7,9 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { assertSafeWorkspace } from '../core/safe-paths.js';
-import { dirExists, fail } from '../core/util.js';
-import { Id } from '../shared/schema.js';
-import { readValid, writeJsonAtomic } from '../shared/rundir.js';
+import { dirExists, fail } from '../core/util/index.js';
+import { Id } from '../shared/channel/index.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
 import {
   guestDirFor,
   hubName,
@@ -19,7 +19,7 @@ import {
   type Mechanism,
   type ProjectEntry,
   type RootMapping,
-} from '../shared/projects.js';
+} from '../shared/paths/index.js';
 import { detectWsb, runningSandboxId, shareFolder, type Wsb } from './wsb.js';
 
 export { PROJECTS_GUEST };

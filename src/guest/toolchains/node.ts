@@ -4,12 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { Toolchains, ToolVersions } from '../../core/types.js';
-import { fetchJson, githubAsset, installArchive } from '../../shared/download.js';
-import { safeRemove } from '../../shared/safe-remove.js';
+import { fetchJson, githubAsset, installArchive } from '../../shared/download/index.js';
+import { safeRemove } from '../../shared/io/safe-remove.js';
 import { copyNode, dryRun, errMsg, execAsync, exists, hostToolsDir, localDir, log, mkdirp, warn } from '../env.js';
 import { arch, installOnce, resolveCached, tool, type ToolEnv } from './common.js';
 import { duringSession } from '../project-context.js';
-import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from './versions.js';
+import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from '../../core/detect/versions.js';
 
 const NVM_HOME = tool('nvm');
 const NVM_SYMLINK = path.join(localDir, 'nodejs');

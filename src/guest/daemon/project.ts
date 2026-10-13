@@ -6,8 +6,8 @@
 // variables only added, never replaced). A failure is that project's alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ProjectSpecT } from '../../shared/schema.js';
-import { isWithin } from '../../shared/projects.js';
+import type { ProjectSpecT } from '../../shared/channel/schema.js';
+import { isWithin } from '../../shared/paths/projects.js';
 import { insideWorkspace } from './state.js';
 import { baseEnvFor, readBootEnv } from '../boot-env.js';
 import { dryRun, errMsg, exists, localDir, log, mkdirp, session, warn } from '../env.js';

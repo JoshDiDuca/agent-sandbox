@@ -4,9 +4,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from '../core/types.js';
-import { writeFileAtomic } from '../shared/rundir.js';
+import { writeFileAtomic } from '../shared/io/index.js';
 import { refuseInSelfTest } from '../host/test-guard.js';
-import { assertNoLinks, errMsg, sleep } from '../core/util.js';
+import { assertNoLinks, errMsg, sleep } from '../core/util/index.js';
 import { hostClaudeDir } from '../host/claude-profile.js';
 import { checkRepo } from '../host/repo-guard.js';
 import { isSandboxRunning } from '../host/platform.js';

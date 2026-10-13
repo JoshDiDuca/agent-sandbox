@@ -18,15 +18,15 @@ import {
   sessionsFirstIn,
 } from '../../host/channel.js';
 import { sessionViewers } from '../../host/attach.js';
-import type { Viewers } from '../../shared/pty-client.js';
+import type { Viewers } from '../../shared/pty/index.js';
 import { insideSandbox, isSandboxRunning } from '../../host/platform.js';
 import { NeedsRestart, readRegistry, type RegistryEntry } from '../../host/projects.js';
 import { guardedProjects, repoFindings } from '../../host/repo-guard.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
-import { isWithin, projectForGuestDir } from '../../shared/projects.js';
-import { listProjectStatus, listSessions, readSandboxStatus } from '../../shared/rundir.js';
+import { isWithin, projectForGuestDir } from '../../shared/paths/index.js';
+import { listProjectStatus, listSessions, readSandboxStatus } from '../../shared/channel/index.js';
 import { watcherRunning } from '../../sync/watcher.js';
-import { errMsg, fail, safeText, sleep } from '../../core/util.js';
+import { errMsg, fail, safeText, sleep } from '../../core/util/index.js';
 import { printJson, requireOnPc, requireRunning, sandboxAlive, table, type Context } from './context.js';
 import { attachHere, readySandbox } from './launch.js';
 import { hereDir, joinHere, locateHere, provisionJoined } from './project.js';

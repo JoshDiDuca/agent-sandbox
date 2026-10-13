@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { humanBytes } from '../../core/disk.js';
-import { fail, plainText } from '../../core/util.js';
+import { fail, plainText } from '../../core/util/index.js';
 import { listAccounts } from '../../host/accounts.js';
 import { runningSessions } from '../../host/channel.js';
 import { isSandboxRunning } from '../../host/platform.js';

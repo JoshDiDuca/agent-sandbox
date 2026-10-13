@@ -13,7 +13,7 @@ import { hoistConfig, withoutConfig } from '../cli/index.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
 import { CATEGORIES, editConfigText, nameOf, SchemaNode } from '../cli/menu/settings/index.js';
 import { Frame, ListScreen, Text, TextScreen, type Key } from '../cli/tui/index.js';
-import { Config, LocalOverrides } from '../core/schema.js';
+import { Config, LocalOverrides } from '../core/schema/index.js';
 import type { Suite } from './suite.js';
 
 export const cliSuite: Suite = {

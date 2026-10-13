@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { readValid, writeJsonAtomic } from '../shared/rundir.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
 
 /** What Windows runs when you open it (not source files such as .js or .py: those need a program you choose). */
 export const RISKY =

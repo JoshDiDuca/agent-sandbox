@@ -1,6 +1,6 @@
 // Apps installed in the sandbox: entries from the catalogue (shared/apps.ts) and programs of your own.
 import { z } from 'zod';
-import { APPS } from '../../shared/apps.js';
+import { APPS } from '../../shared/apps/index.js';
 
 const CATALOGUE_IDS = APPS.filter((a) => !a.setting).map((a) => a.id) as [string, ...string[]];
 export const AppId = z.enum(CATALOGUE_IDS);

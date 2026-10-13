@@ -2,7 +2,7 @@
 // Everything happens in the test's temp folder with a made-up PATH; your real PATH is never read or written.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULTS } from '../core/config.js';
+import { DEFAULTS } from '../core/config/index.js';
 import {
   agentCommands,
   commandsDir,

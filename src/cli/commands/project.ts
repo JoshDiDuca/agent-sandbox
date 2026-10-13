@@ -4,12 +4,12 @@
 import path from 'node:path';
 import type { SandboxStatus } from '../../core/types.js';
 import { askYesNo } from '../../core/prompt.js';
-import { isInsideOrEqual } from '../../core/util.js';
-import { resolveRun } from '../../core/workspace.js';
+import { isInsideOrEqual } from '../../core/util/index.js';
+import { resolveRun } from '../../core/run/index.js';
 import { prepareProject } from '../../host/channel.js';
 import { projectHere, readRegistry, type RegistryEntry } from '../../host/projects.js';
 import { joinRunning } from '../../host/join.js';
-import type { ProjectSpecT } from '../../shared/schema.js';
+import type { ProjectSpecT } from '../../shared/channel/index.js';
 import { working } from '../progress.js';
 import { guestPathFor, sandboxAlive, type Context } from './context.js';
 

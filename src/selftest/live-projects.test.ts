@@ -5,8 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { projectSpec } from '../host/join.js';
-import { resizeFrame, type Endpoint } from '../shared/pty-client.js';
-import { readJsonFile } from '../shared/rundir.js';
+import { resizeFrame, type Endpoint } from '../shared/pty/index.js';
+import { readJsonFile } from '../shared/io/index.js';
 import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, type Viewer } from './live.js';
 import type { Suite } from './suite.js';
 

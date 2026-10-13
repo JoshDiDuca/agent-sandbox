@@ -3,7 +3,7 @@
 import net from 'node:net';
 import os from 'node:os';
 import type { SessionStatus } from '../core/types.js';
-import { fail, safeText, sleep } from '../core/util.js';
+import { fail, safeText, sleep } from '../core/util/index.js';
 import {
   connect,
   DETACH_KEY,
@@ -11,7 +11,7 @@ import {
   runTerminalClient,
   type Endpoint,
   type Viewers,
-} from '../shared/pty-client.js';
+} from '../shared/pty/index.js';
 import { currentSessions } from './channel.js';
 import { insideSandbox } from './platform.js';
 

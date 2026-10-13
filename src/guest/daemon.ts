@@ -4,7 +4,7 @@
 // The handlers live in daemon/ (session, exec); this file is the polling loop.
 import fs from 'node:fs';
 import type { GuestRequest } from '../core/types.js';
-import { readSession, scanRequests } from '../shared/rundir.js';
+import { readSession, scanRequests } from '../shared/channel/run-dir.js';
 import { saveClaudeMem } from './setup/claude.js';
 import { execCommand } from './daemon/exec.js';
 import { startRelays } from './daemon/relays.js';

@@ -2,9 +2,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { translatePaths } from '../../shared/paths.js';
-import { writeJsonAtomic } from '../../shared/rundir.js';
-import { safeRemove } from '../../shared/safe-remove.js';
+import { translatePaths } from '../../shared/paths/claude-paths.js';
+import { writeJsonAtomic } from '../../shared/io/json.js';
+import { safeRemove } from '../../shared/io/safe-remove.js';
 import {
   claudeDir,
   dryRun,

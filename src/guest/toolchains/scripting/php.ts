@@ -2,10 +2,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, fetchText, installArchive } from '../../../shared/download.js';
+import { fetchJson, fetchText, installArchive } from '../../../shared/download/index.js';
 import { dryRun, execOutput, exists, log, mkdirp } from '../../env.js';
 import { downloadFile, resolveCached, tool, versionFromFiles, type ToolEnv } from '../common.js';
-import { pickPackageVersion } from '../versions.js';
+import { pickPackageVersion } from '../../../core/detect/versions.js';
 import { setupVcRuntime } from './vcruntime.js';
 
 type PhpReleases = Record<

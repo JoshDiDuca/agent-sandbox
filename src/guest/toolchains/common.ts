@@ -3,12 +3,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { download, githubAsset, installArchive, type ReleaseAsset } from '../../shared/download.js';
-import { writeJsonAtomic } from '../../shared/rundir.js';
+import { download, githubAsset, installArchive, type ReleaseAsset } from '../../shared/download/index.js';
+import { writeJsonAtomic } from '../../shared/io/json.js';
 import { errMsg, execOutput, exists, log, session, toolsDir, warn } from '../env.js';
 import { projectWorkspace } from '../project-context.js';
-import { MARKERS } from '../../core/detect-toolchains.js';
-import { projectUses, specFromVersionFile } from './versions.js';
+import { MARKERS } from '../../core/detect/toolchains.js';
+import { projectUses, specFromVersionFile } from '../../core/detect/versions.js';
 
 /** What the toolchains contribute to the agent's environment. */
 export interface ToolEnv {

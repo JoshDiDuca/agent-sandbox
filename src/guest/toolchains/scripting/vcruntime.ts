@@ -1,7 +1,7 @@
 // The Visual C++ runtime (vcruntime140.dll & co.) that PHP and other native tools need.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnAsync } from '../../../shared/download.js';
+import { spawnAsync } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun, execOutput, exists, log } from '../../env.js';
 import { downloadFile, tool, type ToolEnv } from '../common.js';

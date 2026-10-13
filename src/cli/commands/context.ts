@@ -4,8 +4,8 @@ import path from 'node:path';
 import _ from 'lodash';
 import type { CliOptions } from '../args.js';
 import type { LoadedConfig } from '../../core/types.js';
-import { loadConfig, userDir } from '../../core/config.js';
-import { expandPath, fail, isInsideOrEqual } from '../../core/util.js';
+import { loadConfig, userDir } from '../../core/config/index.js';
+import { expandPath, fail, isInsideOrEqual } from '../../core/util/index.js';
 import { GUEST_DATA_DIR, insideSandbox, isSandboxRunning } from '../../host/platform.js';
 
 export interface Context {

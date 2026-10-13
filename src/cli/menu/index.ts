@@ -3,8 +3,8 @@
 // which then runs like typing it. Settings and the project's .sandbox-config.json are edited in place.
 import fs from 'node:fs';
 import path from 'node:path';
-import { errMsg, plainText } from '../../core/util.js';
-import { loadConfig } from '../../core/config.js';
+import { errMsg, plainText } from '../../core/util/index.js';
+import { loadConfig } from '../../core/config/index.js';
 import { runningSessions } from '../../host/channel.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { syncAgentCommands } from '../commands/agent-commands.js';

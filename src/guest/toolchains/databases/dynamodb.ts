@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { DatabasePlan } from '../../../core/types.js';
-import { fetchText, installArchive } from '../../../shared/download.js';
+import { fetchText, installArchive } from '../../../shared/download/index.js';
 import { execAsync, exists, log, logsDir, mkdirp } from '../../env.js';
 import { ensureJdk } from '../java.js';
 import { tool, type ToolEnv } from '../common.js';

@@ -12,10 +12,10 @@ import {
   waitForReady,
   waitForSession,
 } from './host/channel.js';
-import { loadConfig } from './core/config.js';
-import { listSessions, readSandboxStatus } from './shared/rundir.js';
+import { loadConfig } from './core/config/index.js';
+import { listSessions, readSandboxStatus } from './shared/channel/index.js';
 import { isSandboxRunning } from './host/platform.js';
-import { expandPath, fail } from './core/util.js';
+import { expandPath, fail } from './core/util/index.js';
 
 export interface SandboxClient {
   /** True while a Windows Sandbox is running. */

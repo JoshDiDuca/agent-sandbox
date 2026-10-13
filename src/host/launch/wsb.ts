@@ -1,8 +1,8 @@
 // The .wsb file Windows Sandbox starts from: memory, devices and the folders mapped in.
 import os from 'node:os';
 import type { Config, ResolvedMapping } from '../../core/types.js';
-import { fail, xmlEscape } from '../../core/util.js';
-import { MIRROR_ROOT, sandboxFolder } from '../../shared/guest-paths.js';
+import { fail, xmlEscape } from '../../core/util/index.js';
+import { MIRROR_ROOT, sandboxFolder } from '../../shared/paths/index.js';
 
 export const GUEST = {
   launch: 'C:\\AgentLaunch',

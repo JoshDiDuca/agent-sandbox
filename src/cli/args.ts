@@ -1,12 +1,11 @@
 // Command-line parsing with commander. parseCli() only parses (no side effects), so it is easy to test; cli/index.ts
 // dispatches the result. sandbox claude & co parse as `launch`: every option launch does not own goes to the agent, in order.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { z } from 'zod';
-import { fail, tryReadJson } from '../core/util.js';
+import { fail } from '../core/util/index.js';
 import { c } from './colors.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';
+import { packageVersion } from '../core/package-info.js';
 
 export interface CliOptions {
   command: string;
@@ -72,12 +71,6 @@ export const parseSessionWant = (input: string, cwd: string = process.cwd()): Se
       'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).',
     );
   return { harness, folder: path.resolve(cwd, folder || '.'), ...(args.length ? { args } : {}) };
-};
-
-/** This package's version (this file is dist/cli/args.js, two folders below package.json). */
-export const packageVersion = (): string => {
-  const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
-  return z.object({ version: z.string() }).safeParse(tryReadJson(file)).data?.version ?? 'unknown';
 };
 
 /** Reserved spelling for our launch options that can never clash with an agent's flags: --sbx-terminal, ... */

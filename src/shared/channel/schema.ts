@@ -1,7 +1,7 @@
 // The host <-> sandbox channel messages, defined once with zod. Both sides parse what they read: the guest only acts on
 // these request kinds, and the host treats everything the guest writes as untrusted (shapes checked, sizes capped).
 import { z } from 'zod';
-import { Harness, Toolchains } from '../core/schema.js';
+import { Harness, Toolchains } from '../../core/schema/index.js';
 
 export const Id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'invalid id');
 const Text = (max = 4096) => z.string().max(max);

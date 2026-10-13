@@ -1,7 +1,7 @@
 // PostgreSQL from EnterpriseDB's Windows binaries (without pgAdmin).
 import path from 'node:path';
 import type { DatabasePlan } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download/index.js';
 import { execAsync, exists, log, logsDir } from '../../env.js';
 import { resolveCached, tool, type ToolEnv } from '../common.js';
 import { portOpen } from '../../ports.js';

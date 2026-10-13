@@ -3,7 +3,7 @@
 // usesPwsh is pure; readPwshScripts reads a bounded sample of the workspace (no links followed, files and bytes capped).
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ProjectFile } from './detect-databases.js';
+import type { ProjectFile } from './databases.js';
 
 /** Scripts looked at: the workspace root and one folder down, at most this many, only their start. */
 export const PWSH_MAX_SCRIPTS = 40;

@@ -1,9 +1,9 @@
 // Headless mode: Windows Sandbox always opens its client window, so we hide it (ShowWindow SW_HIDE) as soon as it
 // appears. The VM and the logged-in session keep running; `sbx-show` brings the window back.
 import path from 'node:path';
-import { writeJsonAtomic } from '../shared/rundir.js';
+import { writeJsonAtomic } from '../shared/io/index.js';
 import { refuseInSelfTest } from './test-guard.js';
-import { isWin, runPowerShell, runPowerShellAsync, tryReadJson } from '../core/util.js';
+import { isWin, runPowerShell, runPowerShellAsync, tryReadJson } from '../core/util/index.js';
 
 const PRELUDE = `
 $ErrorActionPreference = 'Stop'

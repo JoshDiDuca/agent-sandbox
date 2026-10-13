@@ -1,6 +1,6 @@
 // Host side of the self-test guard (see shared/test-guard.ts): outward actions refuse, with a message the user can read.
 import { testWriteRefusal, selfTestRunning } from '../shared/test-guard.js';
-import { fail } from '../core/util.js';
+import { fail } from '../core/util/index.js';
 
 export { selfTestRunning };
 

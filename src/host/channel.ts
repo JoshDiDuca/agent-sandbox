@@ -3,9 +3,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { GuestRequest, GuestResponse, Harness, SandboxStatus, SessionStatus } from '../core/types.js';
-import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util.js';
-import { isWithin } from '../shared/projects.js';
-import type { ProjectSpecT } from '../shared/schema.js';
+import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../core/util/index.js';
+import { isWithin } from '../shared/paths/index.js';
+import type { ProjectSpecT } from '../shared/channel/index.js';
 import {
   listSessions,
   now,
@@ -14,9 +14,9 @@ import {
   readSandboxStatus,
   readSession,
   runPaths,
-  writeJsonAtomic,
-} from '../shared/rundir.js';
-import { safeRemove } from '../shared/safe-remove.js';
+} from '../shared/channel/index.js';
+import { writeJsonAtomic } from '../shared/io/index.js';
+import { safeRemove } from '../shared/io/index.js';
 import { assertTestWritable, refuseInSelfTest } from './test-guard.js';
 
 const BOOT_TIMEOUT_MS = 30 * 60 * 1000;

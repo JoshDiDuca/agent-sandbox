@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ClaudeProfileConfig, ProfileResult } from '../core/types.js';
 import { stripMcpServers, stripSettings, type SecretsConfig } from './secrets.js';
-import { dirExists, ensureDir, fileExists, homeDir, isLink, readJson, writeJson } from '../core/util.js';
+import { dirExists, ensureDir, fileExists, homeDir, isLink, readJson, writeJson } from '../core/util/index.js';
 
 const MAX_BYTES = 250 * 1024 * 1024;
 

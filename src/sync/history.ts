@@ -16,10 +16,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { z } from 'zod';
-import { guestWorkspaceAliases, isSafeFileName, projectFolderName, translatePaths } from '../shared/paths.js';
-import { readValid, writeJsonAtomic } from '../shared/rundir.js';
+import { guestWorkspaceAliases, isSafeFileName, projectFolderName, translatePaths } from '../shared/paths/index.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
 import { assertTestWritable } from '../host/test-guard.js';
-import { dirExists, ensureDir, fileExists, isLink, removeLink } from '../core/util.js';
+import { dirExists, ensureDir, fileExists, isLink, removeLink } from '../core/util/index.js';
 
 export { projectFolderName, translatePaths };
 

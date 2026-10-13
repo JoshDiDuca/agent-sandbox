@@ -7,7 +7,7 @@ import { SYSTEM } from '../shared/system.js';
 import { refuseInSelfTest } from './test-guard.js';
 import { updateRestartPending } from './stops.js';
 import { commandsDir, realAgent } from './agent-commands.js';
-import { dirExists, ensureDir, fail, fileExists, findOnPath, homeDir, isWin, realPath } from '../core/util.js';
+import { dirExists, ensureDir, fail, fileExists, findOnPath, homeDir, isWin, realPath } from '../core/util/index.js';
 
 const findHarnessExe = (config: Config, harnessName: string): HostProbe['harnessExe'] => {
   const harness = config.harnesses[harnessName];

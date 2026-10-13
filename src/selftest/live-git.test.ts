@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { findOnPath } from '../core/util.js';
+import { findOnPath } from '../core/util/index.js';
 import { CSC } from './live.js';
 import type { Suite } from './suite.js';
 

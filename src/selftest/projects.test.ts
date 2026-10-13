@@ -4,8 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedRun, SessionStatus } from '../core/types.js';
-import { LocalOverrides } from '../core/schema.js';
-import { checkJoin, protectionsOf } from '../core/project-policy.js';
+import { LocalOverrides } from '../core/schema/index.js';
+import { checkJoin, protectionsOf } from '../core/local-config/index.js';
 import { sessionsFirstIn } from '../host/channel.js';
 import { buildWsb } from '../host/launch/wsb.js';
 import { projectSpec, joinRunning } from '../host/join.js';
@@ -34,9 +34,9 @@ import {
   projectForGuestDir,
   projectForHostDir,
   PROJECTS_GUEST,
-} from '../shared/projects.js';
-import { GuestRequest, ProjectSpec } from '../shared/schema.js';
-import { projectFolderName } from '../shared/paths.js';
+} from '../shared/paths/index.js';
+import { GuestRequest, ProjectSpec } from '../shared/channel/index.js';
+import { projectFolderName } from '../shared/paths/index.js';
 import { syncHistoryOut } from '../sync/history.js';
 import { validateOptions, validateProjectsArgs } from '../cli/validate.js';
 import { parseCli, parseSessionWant } from '../cli/args.js';

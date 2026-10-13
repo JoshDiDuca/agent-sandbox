@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { readValid, writeJsonAtomic } from '../../shared/rundir.js';
+import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
 import { IgnoreRules } from './rules.js';
 
 /** [host size, host time, view size, view time] after the last sync; -1 = no such file. */

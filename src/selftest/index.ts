@@ -6,7 +6,7 @@
 // comma-separated list) to run only those: `sandbox self-test config`, `npm test -- live-daemon`.
 import os from 'node:os';
 import path from 'node:path';
-import { errMsg } from '../core/util.js';
+import { errMsg } from '../core/util/index.js';
 import { createFixtures } from './fixtures.js';
 import { createHarness, type RunningHarness } from './harness.js';
 import { liveTestsAvailable } from './live.js';

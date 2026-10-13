@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isWin } from '../core/util.js';
+import { isWin } from '../core/util/index.js';
 import { runNode } from './fixtures.js';
 import type { Suite } from './suite.js';
 

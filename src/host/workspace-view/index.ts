@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { Config } from '../../core/types.js';
-import { readValid, writeJsonAtomic } from '../../shared/rundir.js';
+import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
 import { WorkspaceView, type ViewOptions } from './view.js';
 
 export { IgnoreRules } from './rules.js';

@@ -10,11 +10,11 @@ import {
   installArchive,
   moveIntoPlace,
   stagingFolder,
-} from '../shared/download.js';
-import { safeRemove } from '../shared/safe-remove.js';
+} from '../shared/download/index.js';
+import { safeRemove } from '../shared/io/index.js';
 import { assertTestWritable } from './test-guard.js';
 import { z } from 'zod';
-import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../core/util.js';
+import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../core/util/index.js';
 
 export const terminalDir = (dataPath: string): string => path.join(dataPath, 'tools', 'terminal');
 export const terminalExe = (dataPath: string): string => path.join(terminalDir(dataPath), 'WindowsTerminal.exe');

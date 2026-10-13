@@ -1,7 +1,7 @@
 // MariaDB, the MySQL-compatible server.
 import path from 'node:path';
 import type { DatabasePlan } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download/index.js';
 import { execAsync, exists, log } from '../../env.js';
 import { resolveCached, tool, type ToolEnv } from '../common.js';
 import { createOnce, dataFor, startServer } from './server.js';

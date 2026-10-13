@@ -3,7 +3,7 @@
 // links, and targets resolve strictly inside the data folder.
 import _ from 'lodash';
 import { diskUsage, humanBytes } from '../../../core/disk.js';
-import { fail } from '../../../core/util.js';
+import { fail } from '../../../core/util/index.js';
 import { printJson, table, type Context } from '../context.js';
 import { working } from '../../progress.js';
 import { dataClean } from './clean.js';

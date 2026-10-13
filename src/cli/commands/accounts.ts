@@ -10,7 +10,7 @@ import {
 import { restartSessions, runningSessions } from '../../host/channel.js';
 import { hostClaudeDir, hostGlobalStateFile } from '../../host/claude-profile.js';
 import { isSandboxRunning } from '../../host/platform.js';
-import { fail, safeText } from '../../core/util.js';
+import { fail, safeText } from '../../core/util/index.js';
 import { printJson, sandboxAlive, table, type Context } from './context.js';
 
 const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');

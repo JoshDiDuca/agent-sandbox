@@ -6,8 +6,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { assertNoLinks } from '../../core/util.js';
-import { listSessions, readValid, runPaths, writeJsonAtomic } from '../../shared/rundir.js';
+import { assertNoLinks } from '../../core/util/index.js';
+import { listSessions, runPaths } from '../../shared/channel/index.js';
+import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
 import { AuditEvent, AuditLog, fold } from './log.js';
 
 const MAX_FILES_PER_PASS = 200;

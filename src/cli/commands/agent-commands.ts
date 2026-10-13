@@ -1,12 +1,12 @@
 // `sandbox agent-commands [status|on|off]` (Beta): typing claude, codex ... on this PC starts them in a hidden sandbox.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig, userConfigPath } from '../../core/config.js';
+import { loadConfig, userConfigPath } from '../../core/config/index.js';
 import type { Config } from '../../core/types.js';
-import { fail } from '../../core/util.js';
+import { fail } from '../../core/util/index.js';
 import { agentCommands, commandsDir, reconcileAgentCommands, type Reconciled } from '../../host/agent-commands.js';
 import { insideSandbox } from '../../host/platform.js';
-import { writeFileAtomic } from '../../shared/rundir.js';
+import { writeFileAtomic } from '../../shared/io/index.js';
 import { c } from '../colors.js';
 import { editConfigText } from '../menu/settings/config-file.js';
 import { table, type Context } from './context.js';

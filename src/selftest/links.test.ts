@@ -5,7 +5,7 @@ import path from 'node:path';
 import { activateAccount, saveAccount } from '../host/accounts.js';
 import { resetRunDir, sendRequest } from '../host/channel.js';
 import { pruneStorage } from '../host/cleanup.js';
-import { assertNoLinks } from '../core/util.js';
+import { assertNoLinks } from '../core/util/index.js';
 import { syncHistoryIn } from '../sync/history.js';
 import type { Suite } from './suite.js';
 

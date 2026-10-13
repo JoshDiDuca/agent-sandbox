@@ -5,8 +5,9 @@
 import net from 'node:net';
 import path from 'node:path';
 import { z } from 'zod';
-import { relayPort, type PortForward } from '../shared/netpolicy.js';
-import { readSandboxStatus, readValid, writeJsonAtomic } from '../shared/rundir.js';
+import { relayPort, type PortForward } from '../shared/network/index.js';
+import { readSandboxStatus } from '../shared/channel/index.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
 import { isSandboxAddress } from './attach.js';
 
 const Forwards = z

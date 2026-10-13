@@ -4,11 +4,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../../../core/types.js';
-import { download, extractArchive, fetchJson } from '../../../../shared/download.js';
-import { safeRemove } from '../../../../shared/safe-remove.js';
+import { download, extractArchive, fetchJson } from '../../../../shared/download/index.js';
+import { safeRemove } from '../../../../shared/io/safe-remove.js';
 import { system32 } from '../../../../shared/system.js';
 import { execAsync, exists, log, mkdirp } from '../../../env.js';
-import { msiCabs, pickMsvcVersion, pickWindowsSdk } from '../../versions.js';
+import { msiCabs, pickMsvcVersion, pickWindowsSdk } from '../../../../core/detect/versions.js';
 import { hostBin, ROOT } from './tree.js';
 
 interface Payload {

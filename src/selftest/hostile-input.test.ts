@@ -5,10 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { assertCmdSafePath } from '../host/platform.js';
 import { assertSafeMapping } from '../core/safe-paths.js';
-import { safeText } from '../core/util.js';
-import { isSafeFileName } from '../shared/paths.js';
-import { removeRefusal, safeRemove } from '../shared/safe-remove.js';
-import { writeJsonAtomic } from '../shared/rundir.js';
+import { safeText } from '../core/util/index.js';
+import { isSafeFileName } from '../shared/paths/index.js';
+import { removeRefusal, safeRemove } from '../shared/io/index.js';
+import { writeJsonAtomic } from '../shared/io/index.js';
 import type { Suite } from './suite.js';
 
 export const hostileInputSuite: Suite = {

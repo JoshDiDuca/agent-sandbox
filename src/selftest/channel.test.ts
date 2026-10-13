@@ -1,7 +1,7 @@
 // The host <-> sandbox channel and the terminal protocol: everything arriving from the sandbox is validated, sized and
 // filtered before this PC acts on it.
-import { safeId } from '../shared/rundir.js';
-import { GuestRequest, SessionStatus } from '../shared/schema.js';
+import { safeId } from '../shared/channel/index.js';
+import { GuestRequest, SessionStatus } from '../shared/channel/index.js';
 import {
   encodeFrame,
   FrameReader,
@@ -10,7 +10,7 @@ import {
   helloFrame,
   MAX_FRAME_BYTES,
   OutputFilter,
-} from '../shared/pty-client.js';
+} from '../shared/pty/index.js';
 import type { Suite } from './suite.js';
 
 export const channelSuite: Suite = {

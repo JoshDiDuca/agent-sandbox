@@ -1,7 +1,7 @@
 // `sandbox setup`: checks this PC can run Windows Sandbox and offers to turn the feature on.
 import { spawnSync } from 'node:child_process';
 import { askYesNo } from '../../../core/prompt.js';
-import { fail, isWin } from '../../../core/util.js';
+import { fail, isWin } from '../../../core/util/index.js';
 import { refuseInSelfTest } from '../../../host/test-guard.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { c } from '../../colors.js';

@@ -6,7 +6,7 @@ import type {
   Harness as HarnessSchema,
   LocalOverrides,
   Mapping as MappingSchema,
-} from './schema.js';
+} from './schema/index.js';
 
 export type {
   AttachEndpointT as AttachEndpoint,
@@ -14,7 +14,7 @@ export type {
   GuestResponseT as GuestResponse,
   SandboxStatusT as SandboxStatus,
   SessionStatusT as SessionStatus,
-} from '../shared/schema.js';
+} from '../shared/channel/index.js';
 
 export type Config = z.output<typeof ConfigSchema>;
 export type Overrides = z.output<typeof LocalOverrides>;
@@ -112,7 +112,7 @@ export interface GenerateOptions {
   probe: HostProbe;
   freeMemoryBytes?: number;
   databases?: DatabasePlan[];
-  pcLanguages?: import('./detect-toolchains.js').AutoToolchain[];
+  pcLanguages?: import('./detect/index.js').AutoToolchain[];
   /** More projects to map (a restart that adds one keeps the ones in use); knownProjects: instead of known-projects.json (tests). */
   extraProjects?: string[];
   knownProjects?: string[];
@@ -130,10 +130,7 @@ export interface Generated {
   databases: DatabasePlan[];
   /** Project roots and other projects mapped with the launch folder. */
   projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };
-  toolchains: Record<
-    import('./detect-toolchains.js').AutoToolchain,
-    import('./detect-toolchains.js').ToolchainDecision
-  >;
+  toolchains: Record<import('./detect/index.js').AutoToolchain, import('./detect/index.js').ToolchainDecision>;
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult {

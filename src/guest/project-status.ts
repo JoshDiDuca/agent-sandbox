@@ -1,8 +1,9 @@
 // run\projects\<name>.json: how far each project's provisioning is, for `sandbox status` and the host's progress lines.
 import type { DatabasePlan } from '../core/types.js';
-import type { ProjectStatusT } from '../shared/schema.js';
-import { now, writeJsonAtomic } from '../shared/rundir.js';
-import { hubName } from '../shared/projects.js';
+import type { ProjectStatusT } from '../shared/channel/schema.js';
+import { now } from '../shared/channel/run-dir.js';
+import { writeJsonAtomic } from '../shared/io/json.js';
+import { hubName } from '../shared/paths/projects.js';
 import { errMsg, run, session, warn } from './env.js';
 
 /** The launch folder's project id (older launch folders: derived from its name). */

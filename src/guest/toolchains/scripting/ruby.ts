@@ -1,11 +1,11 @@
 // Ruby from RubyInstaller. Gems live in persistent storage.
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun, execAsync, exists, log } from '../../env.js';
 import { installOnce, resolveCached, tool, versionFromFiles, versionOf, type ToolEnv } from '../common.js';
-import { pickPackageVersion } from '../versions.js';
+import { pickPackageVersion } from '../../../core/detect/versions.js';
 
 interface Asset {
   name: string;

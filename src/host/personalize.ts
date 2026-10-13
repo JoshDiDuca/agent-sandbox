@@ -2,7 +2,7 @@
 // regional formats) from HKCU as a .reg file the sandbox imports at logon. Only an allow-list of values is read.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureDir, errMsg, fileExists, isWin, runPowerShell } from '../core/util.js';
+import { ensureDir, errMsg, fileExists, isWin, runPowerShell } from '../core/util/index.js';
 
 const VALUES: Record<string, string[]> = {
   'Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize': [

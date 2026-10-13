@@ -4,7 +4,7 @@
 // flips at once), r resets. Edits keep the file's comments and formatting, and nothing is saved unless the whole file
 // stays valid.
 import _ from 'lodash';
-import { NEVER_LOOSER } from '../../../core/local-config.js';
+import { NEVER_LOOSER } from '../../../core/local-config/index.js';
 import type { Config } from '../../../core/types.js';
 import { App, Text, Theme, type Category, type ListItem, type Tab } from '../../tui/index.js';
 import { AppsCatalogue } from '../apps.js';

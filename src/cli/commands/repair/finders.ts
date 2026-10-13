@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { dirExists, fileExists, isLink } from '../../../core/util.js';
+import { dirExists, fileExists, isLink } from '../../../core/util/index.js';
 
 /** Interrupted downloads and copies: `<name>.staging-<hex>` and `node-staging`, in tools\ and one folder down (tools\go\1.23.staging-ab12). */
 export const findStagingLeftovers = (toolsDir: string): string[] => {

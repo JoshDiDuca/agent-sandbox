@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { sizeOf } from '../core/disk.js';
-import { dirExists, isLink } from '../core/util.js';
-import { safeRemove } from '../shared/safe-remove.js';
+import { dirExists, isLink } from '../core/util/index.js';
+import { safeRemove } from '../shared/io/index.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 

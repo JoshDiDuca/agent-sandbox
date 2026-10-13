@@ -1,7 +1,7 @@
 // A terminal tab inside the sandbox that shows one agent session (same pseudo console the host can attach to).
 // Usage: node view.js <sessionId>
-import { connect, runTerminalClient } from '../shared/pty-client.js';
-import { readSession } from '../shared/rundir.js';
+import { connect, runTerminalClient } from '../shared/pty/index.js';
+import { readSession } from '../shared/channel/run-dir.js';
 import { dataDir } from './env.js';
 
 /** A session that is still being set up (its project provisioning, its agent installing): show the progress until it runs. */

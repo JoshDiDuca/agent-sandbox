@@ -1,11 +1,11 @@
 // Which folders are mapped into the sandbox: the launch folder, the data folder, the workspace, your extra folders and
 // the tools copied from this PC. Everything is checked before it can reach the .wsb.
 import type { GenerateOptions, ResolvedMapping } from '../../core/types.js';
-import { assertNoGuestOverlap } from '../../core/config.js';
+import { assertNoGuestOverlap } from '../../core/config/index.js';
 import { assertSafeMapping } from '../../core/safe-paths.js';
-import { dirExists, fail } from '../../core/util.js';
+import { dirExists, fail } from '../../core/util/index.js';
 import type { BootProjects } from './projects.js';
-import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
+import { isValidGuestPath, sandboxFolder } from '../../shared/paths/index.js';
 import { GUEST } from './wsb.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 

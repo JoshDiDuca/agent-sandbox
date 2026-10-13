@@ -9,8 +9,8 @@ import {
   parseDefaultGateways,
   parseDnsServers,
   subtractIps,
-} from '../shared/netrules.js';
-import { expandAllowList, hostAllowed, withBlockedHosts } from '../shared/netpolicy.js';
+} from '../shared/network/index.js';
+import { expandAllowList, hostAllowed, withBlockedHosts } from '../shared/network/index.js';
 import type { Suite } from './suite.js';
 
 export const networkSuite: Suite = {

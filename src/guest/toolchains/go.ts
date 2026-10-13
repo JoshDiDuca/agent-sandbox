@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
-import { fetchJson, installArchive } from '../../shared/download.js';
+import { fetchJson, installArchive } from '../../shared/download/index.js';
 import { dryRun, execAsync, exists, log } from '../env.js';
 import { arch, installOnce, resolveCached, tool, versionOf, type ToolEnv } from './common.js';
-import { pickGoRelease, type GoRelease } from './versions.js';
+import { pickGoRelease, type GoRelease } from '../../core/detect/versions.js';
 
 const findRelease = async (spec: string): Promise<GoRelease> =>
   pickGoRelease(await fetchJson<GoRelease[]>('https://go.dev/dl/?mode=json&include=all'), spec) ??

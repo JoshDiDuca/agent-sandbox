@@ -1,5 +1,5 @@
 // What a repair check is and returns.
-import type { UserError } from '../../../core/util.js';
+import type { UserError } from '../../../core/util/index.js';
 import type { Context } from '../context.js';
 
 export type RepairStatus = 'ok' | 'fixed' | 'needs-you' | 'warn' | 'skipped';

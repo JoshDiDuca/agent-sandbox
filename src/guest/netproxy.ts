@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
-import { expandAllowList, hostAllowed, PROXY_PORT } from '../shared/netpolicy.js';
+import { expandAllowList, hostAllowed, PROXY_PORT } from '../shared/network/policy.js';
 import { logsDir, session } from './env.js';
 
 const allowed = expandAllowList(session.network.allowOnly ?? []);

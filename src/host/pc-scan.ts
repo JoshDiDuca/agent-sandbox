@@ -2,10 +2,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pcHasPwsh } from '../core/detect-pwsh.js';
-import { databasesFromServices, type Database } from '../core/detect-databases.js';
-import { AUTO_TOOLCHAINS, type AutoToolchain } from '../core/detect-toolchains.js';
-import { captureOutput, isWin } from '../core/util.js';
+import { pcHasPwsh } from '../core/detect/index.js';
+import { databasesFromServices, type Database } from '../core/detect/index.js';
+import { AUTO_TOOLCHAINS, type AutoToolchain } from '../core/detect/index.js';
+import { captureOutput, isWin } from '../core/util/index.js';
 import { system32 } from '../shared/system.js';
 
 /** This PC builds Rust with MSVC: rustup's default host is *-msvc (read from rustup's settings; nothing is run). */

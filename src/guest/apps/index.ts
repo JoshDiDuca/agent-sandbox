@@ -7,15 +7,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Config, GitAccess } from '../../core/types.js';
-import { appsToInstall, exeMatcher, type AppEntry } from '../../shared/apps.js';
-import { download, extractArchive, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
-import { safeRemove } from '../../shared/safe-remove.js';
+import { appsToInstall, exeMatcher, type AppEntry } from '../../shared/apps/index.js';
+import { download, extractArchive, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
+import { safeRemove } from '../../shared/io/safe-remove.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, errMsg, execAsync, exists, log, mkdirp, powershell, warn } from '../env.js';
 import { arch, tool, type ToolEnv } from '../toolchains/common.js';
 import { RESOLVERS, type Download } from './resolvers.js';
 
-export { appsNeedMesa } from '../../shared/apps.js';
+export { appsNeedMesa } from '../../shared/apps/index.js';
 
 export interface AppsOptions {
   gitAccess: GitAccess;

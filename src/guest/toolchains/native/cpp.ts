@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
 import { dryRun, exists, log, warn } from '../../env.js';
 import { arch, installFromGithub, tool, versionOf, type ToolEnv } from '../common.js';
-import { CMAKE_FLOOR, cmakeTooOld } from '../versions.js';
+import { CMAKE_FLOOR, cmakeTooOld } from '../../../core/detect/versions.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */
 export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise<void> => {

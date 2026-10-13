@@ -1,7 +1,7 @@
 // MongoDB Community, with mongosh.
 import path from 'node:path';
 import type { DatabasePlan } from '../../../core/types.js';
-import { fetchJson, installArchive } from '../../../shared/download.js';
+import { fetchJson, installArchive } from '../../../shared/download/index.js';
 import { exists, log, mkdirp } from '../../env.js';
 import { installFromGithub, resolveCached, tool, type ToolEnv } from '../common.js';
 import { clearStaleLocks, dataFor, startServer } from './server.js';

@@ -5,10 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { isSafeFileName } from '../shared/paths.js';
+import { isSafeFileName } from '../shared/paths/index.js';
 import { assertTestWritable } from './test-guard.js';
-import { readValid, writeJsonAtomic } from '../shared/rundir.js';
-import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../core/util.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
+import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../core/util/index.js';
 
 export interface Account {
   name: string;

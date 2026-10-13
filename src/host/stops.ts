@@ -6,8 +6,8 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { z } from 'zod';
 import { SYSTEM } from '../shared/system.js';
-import { readValid, writeJsonAtomic } from '../shared/rundir.js';
-import { isWin } from '../core/util.js';
+import { readValid, writeJsonAtomic } from '../shared/io/index.js';
+import { isWin } from '../core/util/index.js';
 import { refuseInSelfTest } from './test-guard.js';
 
 const Iso = z.string().max(40);

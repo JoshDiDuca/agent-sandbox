@@ -1,7 +1,7 @@
 // Which folders may be shared with the sandbox. The agent gets read/write access to what is mapped, so nothing that
 // would let it reach this tool, its storage, your settings or the OS may be mapped.
-import { userDir } from './config.js';
-import { fail, isInsideOrEqual, isRootPath, isUserProfile } from './util.js';
+import { userDir } from './config/index.js';
+import { fail, isInsideOrEqual, isRootPath, isUserProfile } from './util/index.js';
 
 /** Folders the agent must never be able to write: the tool itself, its storage and your settings for it. */
 const protectedFolders = (packageRoot: string, storageRoot: string): [string, string][] => [

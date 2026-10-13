@@ -1,7 +1,7 @@
 // A headless sandbox with nothing running (or starting) only wastes RAM, so it shuts itself down.
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
-import { scanRequests } from '../../shared/rundir.js';
+import { scanRequests } from '../../shared/channel/run-dir.js';
 import { saveClaudeMem } from '../setup/claude.js';
 import { dataDir, isWin, log, session } from '../env.js';
 import { live, pending, safely } from './state.js';

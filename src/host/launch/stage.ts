@@ -1,8 +1,8 @@
 // What is copied into the launch folder (C:\AgentLaunch inside the sandbox): hooks, the bundled runtime, the git identity.
 import fs from 'node:fs';
 import path from 'node:path';
-import { userDir } from '../../core/config.js';
-import { dirExists, ensureDir, fail, fileExists, homeDir } from '../../core/util.js';
+import { userDir } from '../../core/config/index.js';
+import { dirExists, ensureDir, fail, fileExists, homeDir } from '../../core/util/index.js';
 
 const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'];
 

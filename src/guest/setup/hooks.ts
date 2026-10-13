@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
-import { spawnAsync } from '../../shared/download.js';
+import { spawnAsync } from '../../shared/download/index.js';
 import { exists, isWin, launchDir, log, session, warn, workspace } from '../env.js';
 
 const commandFor = (file: string): [string, string[]] | null => {

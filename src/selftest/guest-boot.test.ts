@@ -2,7 +2,7 @@
 // what it copies in, and what it refuses to.
 import fs from 'node:fs';
 import path from 'node:path';
-import { readJsonFile } from '../shared/rundir.js';
+import { readJsonFile } from '../shared/io/index.js';
 import type { Suite } from './suite.js';
 
 export const guestBootSuite: Suite = {

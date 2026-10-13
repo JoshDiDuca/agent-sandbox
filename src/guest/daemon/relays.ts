@@ -2,7 +2,7 @@
 // sandbox's own subnet, i.e. the PC: see the firewall rule in setup/network.ts) and passing each connection on to
 // localhost:<sandbox port>. So a dev server that only listens on localhost is reachable from the PC too.
 import net from 'node:net';
-import { relayPort } from '../../shared/netpolicy.js';
+import { relayPort } from '../../shared/network/policy.js';
 import { errMsg, log, session, warn } from '../env.js';
 
 export const startRelays = (): void => {

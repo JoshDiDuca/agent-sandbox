@@ -6,9 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Config } from '../core/types.js';
-import { ensureDir, fileExists } from '../core/util.js';
-import { writeFileAtomic } from '../shared/rundir.js';
-import { safeRemove } from '../shared/safe-remove.js';
+import { ensureDir, fileExists } from '../core/util/index.js';
+import { writeFileAtomic } from '../shared/io/index.js';
+import { safeRemove } from '../shared/io/index.js';
 import { SYSTEM } from '../shared/system.js';
 import { refuseInSelfTest } from './test-guard.js';
 

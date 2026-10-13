@@ -1,8 +1,8 @@
 // Loading the settings: built-in defaults, a user config file, and the example config that ships with the tool.
 import path from 'node:path';
 import _ from 'lodash';
-import { DEFAULTS, loadConfig } from '../core/config.js';
-import { readJsonc } from '../core/util.js';
+import { DEFAULTS, loadConfig } from '../core/config/index.js';
+import { readJsonc } from '../core/util/index.js';
 import type { Suite } from './suite.js';
 
 export const configSuite: Suite = {

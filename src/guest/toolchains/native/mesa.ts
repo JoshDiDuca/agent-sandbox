@@ -1,7 +1,7 @@
 // Mesa for running OpenGL and Vulkan programs without a GPU (llvmpipe, lavapipe).
 import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
-import { installArchive } from '../../../shared/download.js';
+import { installArchive } from '../../../shared/download/index.js';
 import { SYSTEM } from '../../../shared/system.js';
 import { dryRun, execAsync, execOutput, exists, log } from '../../env.js';
 import { arch, installFromGithub, tool, type ToolEnv } from '../common.js';

@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import { AuditCollector } from '../host/audit/collect.js';
 import { AuditLog, fold, type AuditEvent } from '../host/audit/log.js';
 import { parseProcessEvents } from '../guest/audit-parse.js';
-import { runPaths } from '../shared/rundir.js';
+import { runPaths } from '../shared/channel/index.js';
 import type { Suite } from './suite.js';
 
 const ev = (t: string, extra: Partial<AuditEvent> = {}): AuditEvent => ({

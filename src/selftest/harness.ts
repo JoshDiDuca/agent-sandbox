@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { inspect, isDeepStrictEqual } from 'node:util';
-import { ensureDir, errMsg, sleep } from '../core/util.js';
+import { ensureDir, errMsg, sleep } from '../core/util/index.js';
 
 /** Text a failure message must contain (string) or match (RegExp). */
 export type Expected = string | RegExp;

@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
-import { moveIntoPlace, setChecksumRequired, spawnAsync, stagingFolder } from '../shared/download.js';
+import { moveIntoPlace, setChecksumRequired, spawnAsync, stagingFolder } from '../shared/download/index.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
-import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
-import { safeRemove } from '../shared/safe-remove.js';
+import { now, runPaths } from '../shared/channel/run-dir.js';
+import { writeJsonAtomic } from '../shared/io/json.js';
+import { safeRemove } from '../shared/io/safe-remove.js';
 import { SYSTEM } from '../shared/system.js';
 
 export const isWin = process.platform === 'win32';

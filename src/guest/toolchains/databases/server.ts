@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { safeRemove } from '../../../shared/safe-remove.js';
+import { safeRemove } from '../../../shared/io/safe-remove.js';
 import { dataDir, exists, logsDir, mkdirp } from '../../env.js';
 import { portOpen, waitForPort } from '../../ports.js';
 

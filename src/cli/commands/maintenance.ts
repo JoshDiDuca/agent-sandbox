@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import _ from 'lodash';
-import { DEFAULTS, userConfigPath, userDir } from '../../core/config.js';
+import { DEFAULTS, userConfigPath, userDir } from '../../core/config/index.js';
 import {
   describeOverrides,
   isTrusted,
@@ -11,15 +11,15 @@ import {
   normalizeOverrides,
   readLocalConfig,
   trustStorePath,
-} from '../../core/local-config.js';
-import { assertNoLinks, expandPath, fail, plainText, safeText, sleep, writeJson } from '../../core/util.js';
+} from '../../core/local-config/index.js';
+import { assertNoLinks, expandPath, fail, plainText, safeText, sleep, writeJson } from '../../core/util/index.js';
 import { humanBytes } from '../../core/disk.js';
 import { AuditLog } from '../../host/audit/log.js';
 import { readKnown, readRegistry } from '../../host/projects.js';
 import { detectWsb } from '../../host/wsb.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
 import { doctorRows, hostClaude, insideSandbox, isSandboxRunning } from '../../host/platform.js';
-import { readSandboxStatus } from '../../shared/rundir.js';
+import { readSandboxStatus } from '../../shared/channel/index.js';
 import { syncBack, watch } from '../../sync/watcher.js';
 import { printJson, table, type Context } from './context.js';
 import { c } from '../colors.js';

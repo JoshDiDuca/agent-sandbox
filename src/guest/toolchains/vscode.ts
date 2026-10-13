@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import type { Toolchains } from '../../core/types.js';
-import { fetchJson, installArchive } from '../../shared/download.js';
+import { fetchJson, installArchive } from '../../shared/download/index.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, exists, isWin, log, logsDir, mkdirp, powershell } from '../env.js';
 import { arch, tool, type ToolEnv } from './common.js';

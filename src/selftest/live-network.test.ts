@@ -4,7 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { startPortForwards } from '../host/port-forward.js';
-import { PROXY_PORT, relayPort } from '../shared/netpolicy.js';
+import { PROXY_PORT, relayPort } from '../shared/network/index.js';
 import { CSC } from './live.js';
 import type { Suite } from './suite.js';
 

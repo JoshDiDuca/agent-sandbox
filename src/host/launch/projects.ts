@@ -4,8 +4,8 @@
 import path from 'node:path';
 import type { ResolvedRun } from '../../core/types.js';
 import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js';
-import { dirExists, errMsg, fail } from '../../core/util.js';
-import { isWithin, planProjectMappings, type RootMapping } from '../../shared/projects.js';
+import { dirExists, errMsg, fail } from '../../core/util/index.js';
+import { isWithin, planProjectMappings, type RootMapping } from '../../shared/paths/index.js';
 import { allProjectsToMap, readKnown } from '../projects.js';
 
 /** More folders than this would make the .wsb (and every boot) unwieldy; the rest join with a restart later. */

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GuestSession } from '../core/types.js';
-import { Config, Mapping } from '../core/schema.js';
+import { Config, Mapping } from '../core/schema/index.js';
 import { guestPathFor } from '../cli/commands/context.js';
 import { buildWsb } from '../host/launch/wsb.js';
 import {
@@ -11,8 +11,8 @@ import {
   planMirrorWorkspace,
   sandboxFolder,
   substDrives,
-} from '../shared/guest-paths.js';
-import { guestWorkspaceAliases, projectFolderName } from '../shared/paths.js';
+} from '../shared/paths/index.js';
+import { guestWorkspaceAliases, projectFolderName } from '../shared/paths/index.js';
 import { syncHistoryIn, syncHistoryOut } from '../sync/history.js';
 import type { Suite } from './suite.js';
 

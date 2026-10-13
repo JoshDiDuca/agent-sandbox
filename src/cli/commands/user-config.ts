@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'jsonc-parser';
 import _ from 'lodash';
-import { userConfigPath } from '../../core/config.js';
-import { fail } from '../../core/util.js';
+import { userConfigPath } from '../../core/config/index.js';
+import { fail } from '../../core/util/index.js';
 import { editConfigText } from '../menu/settings/config-file.js';
 import type { Context } from './context.js';
 

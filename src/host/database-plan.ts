@@ -1,6 +1,6 @@
 // Which databases to run in the sandbox: the ones switched on, plus `auto` ones the project needs.
 import type { Config, DatabasePlan } from '../core/types.js';
-import { DATABASES, detectDatabases, type Database, type ProjectFile } from '../core/detect-databases.js';
+import { DATABASES, detectDatabases, type Database, type ProjectFile } from '../core/detect/index.js';
 import { hostDatabases } from './pc-scan.js';
 import { readProjectFiles } from './project-scan.js';
 

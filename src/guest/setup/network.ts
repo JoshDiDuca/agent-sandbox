@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { expandAllowList, PROXY_PORT, relayPort, withBlockedHosts } from '../../shared/netpolicy.js';
+import { expandAllowList, PROXY_PORT, relayPort, withBlockedHosts } from '../../shared/network/policy.js';
 import {
   buildFirewallCommands,
   ipv4DnsServers,
   isIPv4,
   parseDefaultGateways,
   parseDnsServers,
-} from '../../shared/netrules.js';
+} from '../../shared/network/firewall-rules.js';
 import { SYSTEM } from '../../shared/system.js';
 import { dryRun, errMsg, isWin, launchDir, log, session, toolsDir, warn } from '../env.js';
 

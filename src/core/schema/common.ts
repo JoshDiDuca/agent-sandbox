@@ -1,6 +1,6 @@
 // Building blocks shared by the settings schemas.
 import { z } from 'zod';
-import { isValidGuestPath } from '../../shared/guest-paths.js';
+import { isValidGuestPath } from '../../shared/paths/index.js';
 
 // Rules (and RESERVED_GUEST) live in shared/guest-paths.ts: the host re-checks them before writing the .wsb.
 export const GuestPath = z

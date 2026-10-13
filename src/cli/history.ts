@@ -1,9 +1,9 @@
 // The last commands run (menu or typed), kept in ~/.agent-sandbox/history.json so the menu can offer them again.
 import path from 'node:path';
 import { z } from 'zod';
-import { userDir } from '../core/config.js';
-import { writeJson } from '../core/util.js';
-import { readValid } from '../shared/rundir.js';
+import { userDir } from '../core/config/index.js';
+import { writeJson } from '../core/util/index.js';
+import { readValid } from '../shared/io/index.js';
 
 const History = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
 const historyFile = (): string => path.join(userDir(), 'history.json');

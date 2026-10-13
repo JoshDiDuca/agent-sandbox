@@ -6,10 +6,10 @@ import { spawnSync } from 'node:child_process';
 import _ from 'lodash';
 import { GB, freeBytesAt, humanBytes } from '../../../core/disk.js';
 import { assertTestWritable } from '../../../shared/test-guard.js';
-import { assertNoLinks, fileExists, isLink, isWin, removeLink } from '../../../core/util.js';
+import { assertNoLinks, fileExists, isLink, isWin, removeLink } from '../../../core/util/index.js';
 import { resetRunDir } from '../../../host/channel.js';
 import { sandboxFeatureInstalled } from '../../../host/platform.js';
-import { listSessions, runPaths, scanRequests } from '../../../shared/rundir.js';
+import { listSessions, runPaths, scanRequests } from '../../../shared/channel/index.js';
 import { removeTree } from '../data/remove.js';
 import {
   deadPidFiles,

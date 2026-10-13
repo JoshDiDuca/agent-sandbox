@@ -1,8 +1,8 @@
 // Which toolchains a sandbox gets for "auto" settings, decided on the host at launch (so the launch table can say why):
 // a language is installed when the project uses it, and a folder that is no project yet gets the languages this PC has.
 // Pure: file names and the PC's languages in, decisions out.
-import type { Toolchains } from './types.js';
-import { projectUses } from '../guest/toolchains/versions.js';
+import type { Toolchains } from '../types.js';
+import { projectUses } from './versions.js';
 
 /** Files that show a project uses a language (looked for in the workspace and one folder down). */
 export const MARKERS = {

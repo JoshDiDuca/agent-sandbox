@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { applyEdits, modify, parse } from 'jsonc-parser';
 import _ from 'lodash';
-import { DEFAULTS, loadConfig, mergeConfig, userConfigPath } from '../../../core/config.js';
-import { LOCAL_CONFIG_NAME } from '../../../core/local-config.js';
-import { Config as ConfigSchema, describeIssues, LocalOverrides } from '../../../core/schema.js';
+import { DEFAULTS, loadConfig, mergeConfig, userConfigPath } from '../../../core/config/index.js';
+import { LOCAL_CONFIG_NAME } from '../../../core/local-config/index.js';
+import { Config as ConfigSchema, describeIssues, LocalOverrides } from '../../../core/schema/index.js';
 import type { Config } from '../../../core/types.js';
 import { SchemaNode } from './schema-node.js';
 

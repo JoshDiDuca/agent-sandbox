@@ -1,6 +1,6 @@
 // Where the latest version of an app is, for apps that are not a plain GitHub release: each looks it up on the
 // vendor's own site (and its published checksum, where there is one). Named by AppSource.resolve in shared/apps.ts.
-import { fetchJson, fetchText, githubAsset, latestGithubTag } from '../../shared/download.js';
+import { fetchJson, fetchText, githubAsset, latestGithubTag } from '../../shared/download/index.js';
 
 export interface Download {
   url: string;

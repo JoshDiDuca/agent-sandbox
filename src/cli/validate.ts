@@ -2,8 +2,8 @@
 // instead of halfway into a sandbox boot. Pure helpers first, then validateOptions (the one call from the dispatcher).
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATABASES } from '../core/detect-databases.js';
-import { fail } from '../core/util.js';
+import { DATABASES } from '../core/detect/index.js';
+import { fail } from '../core/util/index.js';
 import { listAccounts } from '../host/accounts.js';
 import type { CliOptions } from './args.js';
 import type { Context } from './commands/context.js';

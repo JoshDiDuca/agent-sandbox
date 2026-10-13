@@ -1,7 +1,7 @@
 // Turning the folder you run in into a sandbox run: guest path, tool versions from version files, folders that are refused.
 import fs from 'node:fs';
 import path from 'node:path';
-import { voltaNode, autoGuestWorkspace } from '../core/workspace.js';
+import { voltaNode, autoGuestWorkspace } from '../core/run/index.js';
 import type { Suite } from './suite.js';
 
 export const workspaceSuite: Suite = {

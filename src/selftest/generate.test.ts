@@ -2,7 +2,7 @@
 // session.json, the staged Claude profile, and the values read from this PC (git identity, free RAM).
 import fs from 'node:fs';
 import path from 'node:path';
-import { LocalOverrides } from '../core/schema.js';
+import { LocalOverrides } from '../core/schema/index.js';
 import { logonEnv } from '../host/generate.js';
 import { gitIdentity } from '../host/launch/stage.js';
 import { buildWsb, resolveMemoryMb } from '../host/launch/wsb.js';

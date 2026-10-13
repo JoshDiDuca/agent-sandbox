@@ -4,10 +4,10 @@
 import path from 'node:path';
 import { checkbox } from '@inquirer/prompts';
 import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js';
-import { dirExists, expandPath, fail, isRootPath } from '../../core/util.js';
+import { dirExists, expandPath, fail, isRootPath } from '../../core/util/index.js';
 import { isSandboxRunning } from '../../host/platform.js';
 import { forgetProject, projectMapper, readKnown, readRegistry, rememberProject } from '../../host/projects.js';
-import { isWithin } from '../../shared/projects.js';
+import { isWithin } from '../../shared/paths/index.js';
 import { c, pageSizeFor, shortenMiddle, termWidth } from '../colors.js';
 import { printJson, table, type Context } from './context.js';
 import { hereDir } from './project.js';

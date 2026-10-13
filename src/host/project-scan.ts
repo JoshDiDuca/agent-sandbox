@@ -1,7 +1,7 @@
 // Reads a project the way detect-databases.ts and detect-toolchains.ts need it (only manifest/config files, bounded).
 import fs from 'node:fs';
 import path from 'node:path';
-import { INTERESTING_FILE, type ProjectFile } from '../core/detect-databases.js';
+import { INTERESTING_FILE, type ProjectFile } from '../core/detect/index.js';
 
 const SKIP =
   /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;

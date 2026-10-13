@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
-import { installArchive, latestGithubTag } from '../../shared/download.js';
+import { installArchive, latestGithubTag } from '../../shared/download/index.js';
 import { dryRun, errMsg, execAsync, exists, log, mkdirp, session, warn } from '../env.js';
 import { projectWorkspace } from '../project-context.js';
 import { arch, installFromGithub, resolveCached, tool, versionOf, type ToolEnv } from './common.js';

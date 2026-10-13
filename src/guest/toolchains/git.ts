@@ -3,8 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
-import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
-import { safeRemove } from '../../shared/safe-remove.js';
+import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
+import { safeRemove } from '../../shared/io/safe-remove.js';
 import {
   dataDir,
   dryRun,

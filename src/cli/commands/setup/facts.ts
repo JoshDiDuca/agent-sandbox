@@ -3,7 +3,7 @@ import os from 'node:os';
 import _ from 'lodash';
 import { z } from 'zod';
 import { freeBytesAt } from '../../../core/disk.js';
-import { captureOutput, fileExists } from '../../../core/util.js';
+import { captureOutput, fileExists } from '../../../core/util/index.js';
 import { SYSTEM, system32 } from '../../../shared/system.js';
 
 export type FeatureState = 'enabled' | 'pending' | 'disabled' | 'unknown';

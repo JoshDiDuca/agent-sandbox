@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CommanderError } from 'commander';
 import { buildProgram, parseCli } from './args.js';
 import { commandSpec } from './manifest.js';
@@ -7,13 +6,12 @@ import { c } from './colors.js';
 import { recordHistory } from './history.js';
 import { menu } from './menu/index.js';
 import { validateOptions } from './validate.js';
-import { loadConfig } from '../core/config.js';
+import { loadConfig } from '../core/config/index.js';
 import * as commands from './commands/index.js';
-import { UserError, errMsg, fail, plainText } from '../core/util.js';
+import { UserError, errMsg, fail, plainText } from '../core/util/index.js';
+import { PACKAGE_ROOT } from '../core/package-info.js';
 
-/** The package folder (this file is dist/cli/index.js). */
-export const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const entry = path.join(packageRoot, 'dist', 'bin', 'agent-sandbox.js');
+const entry = path.join(PACKAGE_ROOT, 'dist', 'bin', 'agent-sandbox.js');
 
 type Handler = (ctx: commands.Context) => number | Promise<number | void>;
 
@@ -97,14 +95,14 @@ export const main = async (rawArgv: string[], preset: Preset = {}): Promise<numb
       ? [preset.command, ...argv]
       : argv;
   if (options.command === 'menu')
-    return menu(commands.createContext(packageRoot, entry, options), runFromMenu(options.config));
+    return menu(commands.createContext(PACKAGE_ROOT, entry, options), runFromMenu(options.config));
   // Loaded only when asked for: normal commands never load test code.
   if (options.command === 'self-test')
-    return (await import('../selftest/index.js')).selfTest(packageRoot, options.positionals);
+    return (await import('../selftest/index.js')).selfTest(PACKAGE_ROOT, options.positionals);
   // repair must run even when the config file is broken (createContext would refuse it).
   if (options.command === 'repair') {
     recordHistory(withoutConfig(typed));
-    return commands.repairCommand(packageRoot, entry, options);
+    return commands.repairCommand(PACKAGE_ROOT, entry, options);
   }
   const handler = HANDLERS[options.command];
   if (!handler)
@@ -112,7 +110,7 @@ export const main = async (rawArgv: string[], preset: Preset = {}): Promise<numb
       'Unknown command "' + options.command + '".',
       'Run sandbox --help for the list of commands, or sandbox for the menu.',
     );
-  const ctx = commands.createContext(packageRoot, entry, options);
+  const ctx = commands.createContext(PACKAGE_ROOT, entry, options);
   validateOptions(ctx);
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));

@@ -1,16 +1,10 @@
-// A project's .sandbox-config.json: validated against the LocalOverrides schema (a safe subset of settings), applied
-// over the user config, and only used once you have approved this exact version of the file.
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import _ from 'lodash';
-import { z } from 'zod';
-import type { Config, LocalConfigFile, Overrides } from './types.js';
-import { mergeConfig } from './config.js';
-import { describeIssues, LocalOverrides } from './schema.js';
-import { expandPath, fail, fileExists, isInsideOrEqual, parseJsonc, tryReadJson, writeJson } from './util.js';
-
-export const LOCAL_CONFIG_NAME = '.sandbox-config.json';
+import type { Config, Overrides } from '../types.js';
+import { mergeConfig } from '../config/index.js';
+import { describeIssues, LocalOverrides } from '../schema/index.js';
+import { expandPath, fail, fileExists, isInsideOrEqual } from '../util/index.js';
 
 /** Validates a folder's settings and resolves its relative paths against that folder. */
 export const normalizeOverrides = (data: unknown, dir: string, source: string): Overrides => {
@@ -133,56 +127,6 @@ export const describeOverrides = (ov: Overrides): string[] => {
     (p) => p + ' is only used if it is stricter than your own setting',
   );
   return [...lines, ...risky.map((r) => '!! ' + r), ...limited.map((r) => '   ' + r)];
-};
-
-export const readLocalConfig = (dir: string): LocalConfigFile | null => {
-  const file = path.join(dir, LOCAL_CONFIG_NAME);
-  if (!fileExists(file)) return null;
-  const raw = fs.readFileSync(file);
-  return {
-    path: file,
-    hash: crypto.createHash('sha256').update(raw).digest('hex'),
-    data: parseJsonc<unknown>(raw.toString('utf8'), file),
-  };
-};
-
-// ---- approvals (host-only: <storage>\trusted-configs.json) ----------------------------------------------------------
-
-export const trustStorePath = (storageRoot: string): string => path.join(storageRoot, 'trusted-configs.json');
-const loadTrust = (store: string): Record<string, string> => tryReadJson<Record<string, string>>(store) ?? {};
-const key = (file: string): string => path.resolve(file).toLowerCase();
-export const isTrusted = (store: string, file: string, hash: string): boolean => loadTrust(store)[key(file)] === hash;
-export const saveTrust = (store: string, file: string, hash: string): void =>
-  writeJson(store, { ...loadTrust(store), [key(file)]: hash });
-
-// ---- looser settings you allowed for one project (host-only: <storage>\allowed-requests.json) ----------------------
-// A project file can never loosen a protection by itself. When it asks, you are asked once (interactively); a "yes"
-// is kept here, per project file and per "setting = value", so only that value is ever let through for that project.
-
-export const allowStorePath = (storageRoot: string): string => path.join(storageRoot, 'allowed-requests.json');
-const loadAllowed = (store: string): Record<string, string[]> => {
-  const parsed = z
-    .record(z.string(), z.array(z.string().max(300)).max(50))
-    .safeParse(tryReadJson<unknown>(store) ?? {});
-  return parsed.success ? parsed.data : {};
-};
-const allowKey = (setting: string, value: unknown): string => setting + ' = ' + JSON.stringify(value);
-/** true = you allowed it, false = you said no (not asked again), null = not asked yet. */
-export const allowedAnswer = (store: string, file: string, setting: string, value: unknown): boolean | null => {
-  const answers = loadAllowed(store)[key(file)] ?? [];
-  return answers.includes(allowKey(setting, value))
-    ? true
-    : answers.includes('no: ' + allowKey(setting, value))
-      ? false
-      : null;
-};
-export const saveAllowed = (store: string, file: string, setting: string, value: unknown, allow: boolean): void => {
-  const all = loadAllowed(store);
-  const entry = allowKey(setting, value);
-  writeJson(store, {
-    ...all,
-    [key(file)]: _.union(_.without(all[key(file)] ?? [], entry, 'no: ' + entry), [(allow ? '' : 'no: ') + entry]),
-  });
 };
 
 /** Your config with these requests let through, so applyOverrides' "strictest wins" keeps the project's value. */

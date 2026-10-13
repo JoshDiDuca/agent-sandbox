@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Toolchains } from '../../core/types.js';
-import { fetchJson, fetchText, installArchive } from '../../shared/download.js';
+import { fetchJson, fetchText, installArchive } from '../../shared/download/index.js';
 import { dryRun, errMsg, exists, log, warn } from '../env.js';
 import { arch, emptyEnv, resolveCached, tool, versionFromFiles, type ToolEnv } from './common.js';
-import { javaMajorFrom, pickPackageVersion } from './versions.js';
+import { javaMajorFrom, pickPackageVersion } from '../../core/detect/versions.js';
 
 interface TemurinAsset {
   release_name: string;
