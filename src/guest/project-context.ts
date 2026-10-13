@@ -5,7 +5,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { workspace } from './env.js';
 
-export interface ProjectContext { workspace: string; duringSession: boolean }
+export interface ProjectContext {
+  workspace: string;
+  duringSession: boolean;
+}
 
 const store = new AsyncLocalStorage<ProjectContext>();
 

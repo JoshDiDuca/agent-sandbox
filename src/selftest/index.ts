@@ -48,30 +48,69 @@ import { auditSuite } from './audit.test.js';
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
   // settings and project files
-  configSuite, workspaceSuite, localConfigSuite,
+  configSuite,
+  workspaceSuite,
+  localConfigSuite,
   // the generated sandbox and the guest that boots it
-  generateSuite, guestBootSuite, mirrorSuite, projectsSuite,
+  generateSuite,
+  guestBootSuite,
+  mirrorSuite,
+  projectsSuite,
   // syncing with this PC
-  syncSuite, accountsSuite, workspaceViewSuite, auditSuite,
+  syncSuite,
+  accountsSuite,
+  workspaceViewSuite,
+  auditSuite,
   // an untrusted sandbox: what the host refuses to do with what it finds
-  linksSuite, channelSuite, gitAccessSuite, repoGuardSuite, secretsSuite, hostileInputSuite, testGuardSuite,
+  linksSuite,
+  channelSuite,
+  gitAccessSuite,
+  repoGuardSuite,
+  secretsSuite,
+  hostileInputSuite,
+  testGuardSuite,
   // pure helpers and the command line
-  toolchainsSuite, detectSuite, networkSuite, personalizationSuite, cmdlineSuite, setupSuite, dataSuite, repairSuite, cliSuite, agentCommandsSuite,
+  toolchainsSuite,
+  detectSuite,
+  networkSuite,
+  personalizationSuite,
+  cmdlineSuite,
+  setupSuite,
+  dataSuite,
+  repairSuite,
+  cliSuite,
+  agentCommandsSuite,
   // every command as its own process
   hostSimSuite,
   // real processes
-  liveDaemonSuite, liveProjectsSuite, liveGitSuite, liveNetworkSuite,
+  liveDaemonSuite,
+  liveProjectsSuite,
+  liveGitSuite,
+  liveNetworkSuite,
 ];
 
 /** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */
-export const onThrowawayMachine = (): boolean => os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
+export const onThrowawayMachine = (): boolean =>
+  os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
 
-interface Result { suite: Suite; checks: number; failed: number; seconds: number; note?: string }
+interface Result {
+  suite: Suite;
+  checks: number;
+  failed: number;
+  seconds: number;
+  note?: string;
+}
 
 const withDeadline = async <T>(work: Promise<T>, ms: number, what: string): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
-  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(what + ' did not finish within ' + Math.round(ms / 1000) + ' s')), ms); });
-  try { return await Promise.race([work, deadline]); } finally { clearTimeout(timer); }
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(what + ' did not finish within ' + Math.round(ms / 1000) + ' s')), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const runSuite = async (suite: Suite, t: RunningHarness, f: ReturnType<typeof createFixtures>): Promise<Result> => {
@@ -87,10 +126,20 @@ const runSuite = async (suite: Suite, t: RunningHarness, f: ReturnType<typeof cr
     try {
       await withDeadline(Promise.resolve(suite.run(t, f)), suite.timeoutMs ?? 120000, 'suite "' + suite.name + '"');
     } catch (e) {
-      t.check(false, 'suite "' + suite.name + '" stopped with an unexpected error', errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : ''));
+      t.check(
+        false,
+        'suite "' + suite.name + '" stopped with an unexpected error',
+        errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : ''),
+      );
     }
   }
-  return { suite, checks: t.checks() - checksBefore, failed: t.failures() - failedBefore, seconds: (Date.now() - started) / 1000, note };
+  return {
+    suite,
+    checks: t.checks() - checksBefore,
+    failed: t.failures() - failedBefore,
+    seconds: (Date.now() - started) / 1000,
+    note,
+  };
 };
 
 const printSummary = (results: Result[]): void => {
@@ -98,28 +147,59 @@ const printSummary = (results: Result[]): void => {
   console.log('\n\x1b[36m-- summary\x1b[0m');
   for (const r of results) {
     const state = r.note ?? (r.failed ? r.failed + ' FAILED' : 'ok');
-    console.log('  ' + r.suite.name.padEnd(width) + '  ' + String(r.checks).padStart(4) + ' checks  ' + r.seconds.toFixed(1).padStart(6) + ' s  ' + state);
+    console.log(
+      '  ' +
+        r.suite.name.padEnd(width) +
+        '  ' +
+        String(r.checks).padStart(4) +
+        ' checks  ' +
+        r.seconds.toFixed(1).padStart(6) +
+        ' s  ' +
+        state,
+    );
   }
   const total = results.reduce((sum, r) => sum + r.checks, 0);
-  console.log('  ' + 'total'.padEnd(width) + '  ' + String(total).padStart(4) + ' checks  ' + results.reduce((sum, r) => sum + r.seconds, 0).toFixed(1).padStart(6) + ' s');
+  console.log(
+    '  ' +
+      'total'.padEnd(width) +
+      '  ' +
+      String(total).padStart(4) +
+      ' checks  ' +
+      results
+        .reduce((sum, r) => sum + r.seconds, 0)
+        .toFixed(1)
+        .padStart(6) +
+      ' s',
+  );
 };
 
 /** Resolves "a,b" / ["a", "b"] to suites; throws with the list of valid names for an unknown one. */
 export const pickSuites = (names: string[]): Suite[] => {
-  const wanted = names.flatMap((n) => n.split(',')).map((n) => n.trim()).filter(Boolean);
+  const wanted = names
+    .flatMap((n) => n.split(','))
+    .map((n) => n.trim())
+    .filter(Boolean);
   if (wanted.length === 0) return SUITES;
   const unknown = wanted.filter((name) => !SUITES.some((s) => s.name === name));
-  if (unknown.length) throw new Error('No test suite called ' + unknown.join(', ') + '. Suites: ' + SUITES.map((s) => s.name).join(', '));
+  if (unknown.length)
+    throw new Error('No test suite called ' + unknown.join(', ') + '. Suites: ' + SUITES.map((s) => s.name).join(', '));
   return SUITES.filter((s) => wanted.includes(s.name));
 };
 
 export const selfTest = async (packageRoot: string, suiteNames: string[] = []): Promise<number> => {
   if (!onThrowawayMachine()) {
-    console.error('The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox\'s terminal.');
+    console.error(
+      "The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox's terminal.",
+    );
     return 1;
   }
   let chosen: Suite[];
-  try { chosen = pickSuites(suiteNames); } catch (e) { console.error(errMsg(e)); return 1; }
+  try {
+    chosen = pickSuites(suiteNames);
+  } catch (e) {
+    console.error(errMsg(e));
+    return 1;
+  }
   // Defence in depth (shared/test-guard.ts): with this set, host code refuses outward actions and writes outside temp.
   process.env.AGENT_SANDBOX_SELFTEST = '1';
   const t = createHarness(packageRoot);
@@ -132,8 +212,10 @@ export const selfTest = async (packageRoot: string, suiteNames: string[] = []): 
   } catch (e) {
     t.check(false, 'unexpected error: ' + errMsg(e), e instanceof Error ? e.stack : undefined);
   } finally {
-    if (saved.home === undefined) delete process.env.AGENT_SANDBOX_HOME; else process.env.AGENT_SANDBOX_HOME = saved.home;
-    if (saved.windir === undefined) delete process.env.WINDIR; else process.env.WINDIR = saved.windir;
+    if (saved.home === undefined) delete process.env.AGENT_SANDBOX_HOME;
+    else process.env.AGENT_SANDBOX_HOME = saved.home;
+    if (saved.windir === undefined) delete process.env.WINDIR;
+    else process.env.WINDIR = saved.windir;
     t.dispose();
   }
   if (results.length > 1) printSummary(results);

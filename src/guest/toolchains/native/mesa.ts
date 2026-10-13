@@ -11,14 +11,24 @@ import { arch, installFromGithub, tool, type ToolEnv } from '../common.js';
  * software, and opengl32.dll cannot be replaced system-wide, so programs pick Mesa up from their own folder.
  */
 export const setupMesa = async (env: ToolEnv, config: Toolchains['mesa']): Promise<void> => {
-  if (dryRun) { log('(dry run) would provision Mesa 3D'); return; }
+  if (dryRun) {
+    log('(dry run) would provision Mesa 3D');
+    return;
+  }
   const root = tool('mesa');
   const dir = path.join(root, arch === 'arm64' ? 'arm64' : 'x64');
   if (!exists(path.join(dir, 'opengl32.dll'))) {
-    await installFromGithub('pal1000/mesa-dist-win', /^mesa3d-[\d.]+-release-msvc\.7z$/, { dest: root, what: 'Mesa 3D for software OpenGL (~100 MB once)', locate: 'opengl32.dll', up: 1 });
+    await installFromGithub('pal1000/mesa-dist-win', /^mesa3d-[\d.]+-release-msvc\.7z$/, {
+      dest: root,
+      what: 'Mesa 3D for software OpenGL (~100 MB once)',
+      locate: 'opengl32.dll',
+      up: 1,
+    });
   }
   Object.assign(env.vars, { MESA_DIR: dir, GALLIUM_DRIVER: 'llvmpipe' });
-  env.summary.push('mesa (software OpenGL 4.5): copy opengl32.dll + libgallium_wgl.dll from %MESA_DIR% next to a game\'s .exe');
+  env.summary.push(
+    "mesa (software OpenGL 4.5): copy opengl32.dll + libgallium_wgl.dll from %MESA_DIR% next to a game's .exe",
+  );
   if (config.vulkan) await setupLavapipe(env, dir);
 };
 
@@ -37,9 +47,18 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
     log('Downloading the Vulkan loader (~10 MB once) ...');
     // LunarG publishes no checksum for this zip; it comes over HTTPS from LunarG, the Khronos SDK's maintainer.
     // The zip has x86 and x64 folders: only the 64-bit loader (and vulkaninfo) is extracted.
-    await installArchive(VULKAN_RUNTIME, dir, { locate: 'vulkan-1.dll', fileName: 'vulkan-runtime.zip', members: ['*/x64/*'] });
+    await installArchive(VULKAN_RUNTIME, dir, {
+      locate: 'vulkan-1.dll',
+      fileName: 'vulkan-runtime.zip',
+      members: ['*/x64/*'],
+    });
   }
-  const register = (file: string): Promise<void> => execAsync(SYSTEM.reg(), ['add', 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers', '/v', file, '/t', 'REG_DWORD', '/d', '0', '/f'], { stdio: 'ignore' });
+  const register = (file: string): Promise<void> =>
+    execAsync(
+      SYSTEM.reg(),
+      ['add', 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers', '/v', file, '/t', 'REG_DWORD', '/d', '0', '/f'],
+      { stdio: 'ignore' },
+    );
   await register(icd);
   // sandbox.vGpu: the sandbox sees this PC's GPU through Direct3D 12, and Dozen runs Vulkan on it. Programs prefer it
   // over lavapipe (a GPU before a CPU device); lavapipe stays for the ones that need it.
@@ -47,9 +66,20 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
   const gpu = hasGpu();
   if (gpu && exists(dozen)) await register(dozen);
   env.prepend.push(dir);
-  env.summary.push('vulkan: ' + (gpu && exists(dozen) ? 'Dozen (Vulkan on the GPU via Direct3D 12) and ' : '') + 'lavapipe (software Vulkan 1.4 on the CPU), vulkaninfo on PATH; WGPU_BACKEND=vulkan for wgpu');
+  env.summary.push(
+    'vulkan: ' +
+      (gpu && exists(dozen) ? 'Dozen (Vulkan on the GPU via Direct3D 12) and ' : '') +
+      'lavapipe (software Vulkan 1.4 on the CPU), vulkaninfo on PATH; WGPU_BACKEND=vulkan for wgpu',
+  );
 };
 
 /** A real display adapter (sandbox.vGpu on), not only the remote display or basic render driver. */
-const hasGpu = (): boolean => execOutput(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_VideoController).Name'], { timeout: 30000 })
-  .split(/\r?\n/).map((n) => n.trim()).some((n) => n && !/^Microsoft (Remote Display|Basic (Render|Display))/i.test(n));
+const hasGpu = (): boolean =>
+  execOutput(
+    SYSTEM.powershell(),
+    ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_VideoController).Name'],
+    { timeout: 30000 },
+  )
+    .split(/\r?\n/)
+    .map((n) => n.trim())
+    .some((n) => n && !/^Microsoft (Remote Display|Basic (Render|Display))/i.test(n));

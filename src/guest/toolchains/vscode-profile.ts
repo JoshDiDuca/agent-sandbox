@@ -3,12 +3,26 @@
 
 /** Where the sandbox's tools are (absent = not installed). */
 export interface ToolPaths {
-  javaHome?: string; python?: string; goRoot?: string; go?: string; gcc?: string; cl?: string; cmake?: string; dotnet?: string;
-  node?: string; pwsh?: string; git?: string; bash?: string; php?: string; ruby?: string; deno?: string;
+  javaHome?: string;
+  python?: string;
+  goRoot?: string;
+  go?: string;
+  gcc?: string;
+  cl?: string;
+  cmake?: string;
+  dotnet?: string;
+  node?: string;
+  pwsh?: string;
+  git?: string;
+  bash?: string;
+  php?: string;
+  ruby?: string;
+  deno?: string;
 }
 
 /** The JDK's major version from its folder name (jdk-21.0.5+11 -> 21). */
-const javaMajor = (home: string): string | undefined => /(?:jdk|jre)?-?(\d{1,2})(?:[.+_-]|$)/i.exec(home.split(/[\\/]/).pop() ?? '')?.[1];
+const javaMajor = (home: string): string | undefined =>
+  /(?:jdk|jre)?-?(\d{1,2})(?:[.+_-]|$)/i.exec(home.split(/[\\/]/).pop() ?? '')?.[1];
 
 /** User settings for the sandbox's VS Code. Only keys with a value are set; the caller removes the ones it set before. */
 export const vscodeSettings = (p: ToolPaths): Record<string, unknown> => {
@@ -24,14 +38,18 @@ export const vscodeSettings = (p: ToolPaths): Record<string, unknown> => {
     'terminal.integrated.defaultProfile.windows': p.pwsh ? 'PowerShell 7' : undefined,
     'python.defaultInterpreterPath': p.python,
     'java.jdt.ls.java.home': p.javaHome,
-    'java.configuration.runtimes': p.javaHome ? [{ name: 'JavaSE-' + (javaMajor(p.javaHome) ?? '21'), path: p.javaHome, default: true }] : undefined,
+    'java.configuration.runtimes': p.javaHome
+      ? [{ name: 'JavaSE-' + (javaMajor(p.javaHome) ?? '21'), path: p.javaHome, default: true }]
+      : undefined,
     'maven.terminal.useJavaHome': p.javaHome ? true : undefined,
     'go.goroot': p.goRoot,
     'go.alternateTools': p.go ? { go: p.go } : undefined,
     'C_Cpp.default.compilerPath': p.cl ?? p.gcc,
     'cmake.cmakePath': p.cmake,
     'dotnet.dotnetPath': p.dotnet ? p.dotnet.replace(/[\\/]dotnet\.exe$/i, '') : undefined,
-    'dotnetAcquisitionExtension.existingDotnetPath': p.dotnet ? [{ extensionId: 'ms-dotnettools.csharp', path: p.dotnet }] : undefined,
+    'dotnetAcquisitionExtension.existingDotnetPath': p.dotnet
+      ? [{ extensionId: 'ms-dotnettools.csharp', path: p.dotnet }]
+      : undefined,
     'php.validate.executablePath': p.php,
     'php.debug.executablePath': p.php,
     'rubyLsp.rubyVersionManager': p.ruby ? { identifier: 'none' } : undefined,
@@ -46,7 +64,13 @@ export const vscodeSettings = (p: ToolPaths): Record<string, unknown> => {
 const BY_TOOLCHAIN: Record<string, string[]> = {
   node: ['dbaeumer.vscode-eslint', 'esbenp.prettier-vscode'],
   python: ['ms-python.python', 'ms-python.debugpy'],
-  java: ['redhat.java', 'vscjava.vscode-java-debug', 'vscjava.vscode-java-test', 'vscjava.vscode-maven', 'vscjava.vscode-gradle'],
+  java: [
+    'redhat.java',
+    'vscjava.vscode-java-debug',
+    'vscjava.vscode-java-test',
+    'vscjava.vscode-maven',
+    'vscjava.vscode-gradle',
+  ],
   go: ['golang.go'],
   rust: ['rust-lang.rust-analyzer', 'vadimcn.vscode-lldb'],
   cpp: ['ms-vscode.cpptools', 'ms-vscode.cmake-tools'],
@@ -66,8 +90,19 @@ const BY_DATABASE: Record<string, string[]> = {
 export const EXTENSION_ID = /^[\w-]+\.[\w-]+$/;
 
 /** The extensions to have: always EditorConfig, then per toolchain and database in use, the project's, and yours. */
-export const vscodeExtensions = (o: { toolchains: string[]; databases: string[]; recommended: string[]; extra: string[] }): string[] => {
-  const all = ['editorconfig.editorconfig', ...o.toolchains.flatMap((t) => BY_TOOLCHAIN[t] ?? []), ...o.databases.flatMap((d) => BY_DATABASE[d] ?? []), ...o.recommended, ...o.extra];
+export const vscodeExtensions = (o: {
+  toolchains: string[];
+  databases: string[];
+  recommended: string[];
+  extra: string[];
+}): string[] => {
+  const all = [
+    'editorconfig.editorconfig',
+    ...o.toolchains.flatMap((t) => BY_TOOLCHAIN[t] ?? []),
+    ...o.databases.flatMap((d) => BY_DATABASE[d] ?? []),
+    ...o.recommended,
+    ...o.extra,
+  ];
   return [...new Set(all.map((e) => e.toLowerCase()))].filter((e) => EXTENSION_ID.test(e));
 };
 

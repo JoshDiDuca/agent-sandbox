@@ -21,30 +21,61 @@ export const linksSuite: Suite = {
 
     t.section('writes under the data folder');
     fs.symlinkSync(victim, path.join(data, 'state', 'claude'), 'junction');
-    await t.throws(() => assertNoLinks(data, path.join(data, 'state', 'claude', 'x.json')), 'is a link', 'any host write under the data folder through a junction is refused');
-    await t.throws(() => activateAccount(storage, data, 'any'), 'Unknown account', 'accounts never read through a sandbox junction');
-    await t.throws(() => saveAccount(storage, data, 'a', null), 'is a link', 'accounts never write through a sandbox junction');
+    await t.throws(
+      () => assertNoLinks(data, path.join(data, 'state', 'claude', 'x.json')),
+      'is a link',
+      'any host write under the data folder through a junction is refused',
+    );
+    await t.throws(
+      () => activateAccount(storage, data, 'any'),
+      'Unknown account',
+      'accounts never read through a sandbox junction',
+    );
+    await t.throws(
+      () => saveAccount(storage, data, 'a', null),
+      'is a link',
+      'accounts never write through a sandbox junction',
+    );
 
     t.section('history sync');
-    const sides = { hostClaudeDir: t.at('link-host'), guestClaudeDir: t.at('link-guest'), hostWorkspace: 'D:\\Code\\my-app', guestWorkspace: 'C:\\Workspace\\my-app' };
+    const sides = {
+      hostClaudeDir: t.at('link-host'),
+      guestClaudeDir: t.at('link-guest'),
+      hostWorkspace: 'D:\\Code\\my-app',
+      guestWorkspace: 'C:\\Workspace\\my-app',
+    };
     t.dir('link-guest', 'projects');
     fs.symlinkSync(victim, path.join(sides.guestClaudeDir, 'projects', 'C--Workspace-my-app'), 'junction');
     t.write(path.join(sides.hostClaudeDir, 'projects', 'D--Code-my-app', 's.jsonl'), '{}\n');
     syncHistoryIn(sides);
-    t.check(!fs.existsSync(path.join(victim, 's.jsonl')), 'history sync never writes through a junction inside the sandbox state');
+    t.check(
+      !fs.existsSync(path.join(victim, 's.jsonl')),
+      'history sync never writes through a junction inside the sandbox state',
+    );
     fs.symlinkSync(precious, path.join(sides.guestClaudeDir, 'history.jsonl'), 'file');
     t.write(path.join(sides.hostClaudeDir, 'history.jsonl'), '{"display":"x","timestamp":1}\n');
     syncHistoryIn(sides);
-    t.equal(fs.readFileSync(precious, 'utf8'), 'keep me', 'a file symlink planted in place of history.jsonl is replaced, not written through');
+    t.equal(
+      fs.readFileSync(precious, 'utf8'),
+      'keep me',
+      'a file symlink planted in place of history.jsonl is replaced, not written through',
+    );
 
     t.section('the run folder and cleanup');
     t.dir('evil-storage', 'data', 'd', 'run');
     fs.symlinkSync(victim, path.join(data, 'run', 'requests'), 'junction');
-    await t.throws(() => sendRequest(data, { kind: 'ping', id: 'p1', createdAt: '' }), 'is a link', 'requests are never written through a junction');
-    t.check(!fs.existsSync(path.join(victim, 'p1.json')), 'nothing was written into the junction\'s target');
+    await t.throws(
+      () => sendRequest(data, { kind: 'ping', id: 'p1', createdAt: '' }),
+      'is a link',
+      'requests are never written through a junction',
+    );
+    t.check(!fs.existsSync(path.join(victim, 'p1.json')), "nothing was written into the junction's target");
     fs.symlinkSync(victim, path.join(data, 'run', 'sessions'), 'junction');
     resetRunDir(data);
-    t.check(!fs.existsSync(path.join(data, 'run', 'sessions')), 'resetting the run folder removes a junction itself...');
+    t.check(
+      !fs.existsSync(path.join(data, 'run', 'sessions')),
+      'resetting the run folder removes a junction itself...',
+    );
     t.check(fs.existsSync(precious), '... never its target');
     fs.symlinkSync(victim, path.join(data, 'logs'), 'junction');
     const longAgo = new Date(Date.now() - 60 * 86400000);

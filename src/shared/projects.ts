@@ -17,9 +17,19 @@ export const PROJECTS_GUEST = 'C:\\Projects';
 export type Mechanism = 'launch' | 'root' | 'boot' | 'wsb';
 
 /** One project the running sandbox works on. */
-export interface ProjectEntry { name: string; host: string; guest: string; primary: boolean; mechanism: Mechanism }
+export interface ProjectEntry {
+  name: string;
+  host: string;
+  guest: string;
+  primary: boolean;
+  mechanism: Mechanism;
+}
 
-const norm = (p: string): string => path.win32.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+const norm = (p: string): string =>
+  path.win32
+    .resolve(p)
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
 
 /** `child` is `parent` or somewhere below it (Windows paths, case-insensitive). */
 export const isWithin = (parent: string, child: string): boolean => {
@@ -33,7 +43,12 @@ export const isWithin = (parent: string, child: string): boolean => {
  * '_' (ids become file names on both sides), at most 48 characters, made unique against `taken` with -2, -3, ...
  */
 export const hubName = (hostDir: string, taken: Iterable<string>): string => {
-  const base = path.win32.basename(path.win32.resolve(hostDir)).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'project';
+  const base =
+    path.win32
+      .basename(path.win32.resolve(hostDir))
+      .replace(/[^A-Za-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'project';
   const used = new Set([...taken].map((t) => t.toLowerCase()));
   if (!used.has(base.toLowerCase())) return base;
   for (let i = 2; ; i++) if (!used.has((base + '-' + i).toLowerCase())) return base + '-' + i;
@@ -60,23 +75,33 @@ export const hostDirFor = (mapped: { host: string; guest: string }, guestDir: st
 };
 
 /** Strictly below `parent` (never `parent` itself). */
-export const isBelow = (parent: string, child: string): boolean => isWithin(parent, child) && norm(parent) !== norm(child);
+export const isBelow = (parent: string, child: string): boolean =>
+  isWithin(parent, child) && norm(parent) !== norm(child);
 
 /** A guest folder some project can be in: below C:\Projects, or inside one of the roots (their guest paths). */
 export const insideProjects = (guestDir: string, roots: string[] = [], projectsDir = PROJECTS_GUEST): boolean =>
   isBelow(projectsDir, guestDir) || roots.some((r) => isWithin(r, guestDir));
 
-export interface RootMapping { host: string; guest: string }
+export interface RootMapping {
+  host: string;
+  guest: string;
+}
 
 /**
  * Guest folders for the project roots and the projects mapped at boot: C:\Projects\<name>, unique; with
  * guestWorkspace "mirror" a root appears at its PC path when the sandbox can show it there.
  */
-export const planProjectMappings = (roots: string[], projects: string[], mirror: boolean, taken: string[] = []): { roots: RootMapping[]; projects: RootMapping[] } => {
+export const planProjectMappings = (
+  roots: string[],
+  projects: string[],
+  mirror: boolean,
+  taken: string[] = [],
+): { roots: RootMapping[]; projects: RootMapping[] } => {
   const names = [...taken];
   const place = (host: string, tryMirror: boolean): RootMapping => {
     const resolved = path.win32.resolve(host).replace(/[\\/]+$/, '');
-    if (tryMirror && isValidGuestPath(resolved) && !isWithin(PROJECTS_GUEST, resolved)) return { host: resolved, guest: resolved };
+    if (tryMirror && isValidGuestPath(resolved) && !isWithin(PROJECTS_GUEST, resolved))
+      return { host: resolved, guest: resolved };
     const name = hubName(resolved, names);
     names.push(name);
     return { host: resolved, guest: path.win32.join(PROJECTS_GUEST, name) };

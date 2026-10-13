@@ -16,13 +16,17 @@ export const applyPersonalization = (): void => {
   const wallpaper = fs.readdirSync(dir).find((f) => f.startsWith('wallpaper'));
   const local = wallpaper ? path.join(mkdirp(path.join(os.homedir(), 'Pictures')), wallpaper) : null;
   if (wallpaper && local) fs.copyFileSync(path.join(dir, wallpaper), local);
-  powershell([
-    local ? "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name WallPaper -Value " + psQuote(local) : '',
-    "Add-Type -Namespace AgentSandbox -Name Desk -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'",
-    local ? '[void][AgentSandbox.Desk]::SystemParametersInfo(20, 0, ' + psQuote(local) + ', 3)' : '',
-    // Explorer restarts by itself and picks up taskbar/theme changes.
-    'Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue',
-  ].filter(Boolean).join('\n'));
+  powershell(
+    [
+      local ? "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name WallPaper -Value " + psQuote(local) : '',
+      'Add-Type -Namespace AgentSandbox -Name Desk -MemberDefinition \'[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int SystemParametersInfo(int a, int b, string c, int d);\'',
+      local ? '[void][AgentSandbox.Desk]::SystemParametersInfo(20, 0, ' + psQuote(local) + ', 3)' : '',
+      // Explorer restarts by itself and picks up taskbar/theme changes.
+      'Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  );
   log('Desktop personalisation applied from this PC.');
 };
 
@@ -39,7 +43,11 @@ export const setupGitConfig = (env: NodeJS.ProcessEnv): void => {
   const git = path.join(toolsDir, 'git', 'cmd', 'git.exe');
   if (!exists(git)) return;
   const { GIT_DIR: _gitDir, ...rest } = env;
-  spawnSync(git, ['config', '--global', '--add', 'safe.directory', '*'], { env: rest, windowsHide: true, stdio: 'ignore' });
+  spawnSync(git, ['config', '--global', '--add', 'safe.directory', '*'], {
+    env: rest,
+    windowsHide: true,
+    stdio: 'ignore',
+  });
   // Windows long paths are on in the sandbox, but git skips files over 260 characters unless told.
   spawnSync(git, ['config', '--global', 'core.longpaths', 'true'], { env: rest, windowsHide: true, stdio: 'ignore' });
   // Git for Windows' system config says autocrlf=true: checkouts made in the sandbox (worktrees, clones) got CRLF and

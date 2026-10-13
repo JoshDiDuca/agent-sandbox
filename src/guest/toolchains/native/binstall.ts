@@ -17,11 +17,18 @@ const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
   try {
     const dir = tool('cargo-binstall');
     if (!exists(path.join(dir, 'cargo-binstall.exe'))) {
-      await installFromGithub('cargo-bins/cargo-binstall', binstallAsset(arch), { dest: dir, what: 'cargo-binstall for prebuilt Rust tools (~10 MB once)', locate: 'cargo-binstall.exe' });
+      await installFromGithub('cargo-bins/cargo-binstall', binstallAsset(arch), {
+        dest: dir,
+        what: 'cargo-binstall for prebuilt Rust tools (~10 MB once)',
+        locate: 'cargo-binstall.exe',
+      });
     }
     fs.copyFileSync(path.join(dir, 'cargo-binstall.exe'), target);
     return true;
-  } catch (e) { warn('cargo-binstall unavailable, compiling crates with cargo install instead: ' + errMsg(e)); return false; }
+  } catch (e) {
+    warn('cargo-binstall unavailable, compiling crates with cargo install instead: ' + errMsg(e));
+    return false;
+  }
 };
 
 /**
@@ -33,11 +40,21 @@ export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((cra
   const cargo = path.join(cargoHome, 'bin', 'cargo.exe');
   let binstall: Promise<boolean> | null = null;
   // quick-install's install statistics are opt-out; the sandbox opts out.
-  const binstallEnv: SpawnOptions = { ...cargoEnv, env: { ...(cargoEnv.env ?? process.env), BINSTALL_DISABLE_TELEMETRY: 'true' } };
+  const binstallEnv: SpawnOptions = {
+    ...cargoEnv,
+    env: { ...(cargoEnv.env ?? process.env), BINSTALL_DISABLE_TELEMETRY: 'true' },
+  };
   return async (crate) => {
     binstall ??= ensureBinstall(path.join(cargoHome, 'bin'));
     if (await binstall) {
-      try { await execAsync(cargo, ['binstall', '--no-confirm', '--locked', '--disable-strategies', 'compile', crate], binstallEnv); return; } catch {
+      try {
+        await execAsync(
+          cargo,
+          ['binstall', '--no-confirm', '--locked', '--disable-strategies', 'compile', crate],
+          binstallEnv,
+        );
+        return;
+      } catch {
         log('No prebuilt ' + crate + ' for Windows; compiling it with cargo (takes a few minutes) ...');
       }
     }

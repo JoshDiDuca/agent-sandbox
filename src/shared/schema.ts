@@ -29,7 +29,10 @@ export const SandboxStatus = z.object({
 const Version = z.strictObject({ spec: Text(128), source: Text(256) });
 const DatabasePlan = z.strictObject({
   database: z.enum(['postgres', 'mysql', 'sqlserver', 'mongodb', 'redis', 'dynamodb']),
-  reasons: z.array(Text(1024)).max(32), version: Text(64), port: z.number().int().min(1024).max(65535), adminPort: z.number().int().min(1024).max(65535).optional(),
+  reasons: z.array(Text(1024)).max(32),
+  version: Text(64),
+  port: z.number().int().min(1024).max(65535),
+  adminPort: z.number().int().min(1024).max(65535).optional(),
 });
 
 /**
@@ -53,12 +56,34 @@ export const ProjectSpec = z.strictObject({
 
 /** C:\AgentData\run\requests\<id>.json: the ONLY things the host can ask the sandbox to do. */
 export const GuestRequest = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('session'), id: Id, harness: Text(64), args: z.array(Text()).max(256), cwd: Text(), project: ProjectSpec.optional(), harnessSpec: Harness.optional(), createdAt: Time }),
+  z.strictObject({
+    kind: z.literal('session'),
+    id: Id,
+    harness: Text(64),
+    args: z.array(Text()).max(256),
+    cwd: Text(),
+    project: ProjectSpec.optional(),
+    harnessSpec: Harness.optional(),
+    createdAt: Time,
+  }),
   /** Provision a registered project without starting an agent (sandbox start / exec / db from its folder). */
   z.strictObject({ kind: z.literal('project'), id: Id, project: ProjectSpec, createdAt: Time }),
-  z.strictObject({ kind: z.literal('exec'), id: Id, command: z.array(Text()).min(1).max(256), cwd: Text(), timeoutSeconds: z.number().positive().max(86400), createdAt: Time }),
+  z.strictObject({
+    kind: z.literal('exec'),
+    id: Id,
+    command: z.array(Text()).min(1).max(256),
+    cwd: Text(),
+    timeoutSeconds: z.number().positive().max(86400),
+    createdAt: Time,
+  }),
   /** cwd: only the sessions in this folder or below (one project's); omitted = every session. */
-  z.strictObject({ kind: z.literal('restart'), id: Id, harness: Text(64).nullable(), cwd: Text().optional(), createdAt: Time }),
+  z.strictObject({
+    kind: z.literal('restart'),
+    id: Id,
+    harness: Text(64).nullable(),
+    cwd: Text().optional(),
+    createdAt: Time,
+  }),
   z.strictObject({ kind: z.literal('ping'), id: Id, createdAt: Time }),
 ]);
 

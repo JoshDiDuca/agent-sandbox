@@ -11,7 +11,9 @@ export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
 /** Resolves when ptyhost listens; rejects early if it exits first (e.g. the agent could not be started). */
 export const waitForPtyHost = async (child: ChildProcess, port: number, timeoutMs: number): Promise<void> => {
   let exitCode: number | null | undefined;
-  child.once('exit', (code) => { exitCode = code; });
+  child.once('exit', (code) => {
+    exitCode = code;
+  });
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (exitCode !== undefined) throw new Error('the session host stopped right away (exit ' + exitCode + ')');
@@ -25,15 +27,35 @@ export const ptyHostLog = (id: string): string => path.join(logsDir, 'ptyhost-' 
 
 /** The last lines of a session's ptyhost log (the agent's final output is written there when it exits). */
 export const ptyHostLogTail = (id: string, lines = 12): string => {
-  try { return fs.readFileSync(ptyHostLog(id), 'utf8').trim().split(/\r?\n/).slice(-lines).join('\n'); } catch { return ''; }
+  try {
+    return fs.readFileSync(ptyHostLog(id), 'utf8').trim().split(/\r?\n/).slice(-lines).join('\n');
+  } catch {
+    return '';
+  }
 };
 
-export interface PtyHostOptions { exe: string; port: number; token: string; cols: number; rows: number; command: string; restartCommand: string; cwd: string; env: NodeJS.ProcessEnv; id: string; remote: boolean }
+export interface PtyHostOptions {
+  exe: string;
+  port: number;
+  token: string;
+  cols: number;
+  rows: number;
+  command: string;
+  restartCommand: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  id: string;
+  remote: boolean;
+}
 
 /** conpty.dll (+ OpenConsole.exe) the host downloaded, when provisioning.conpty is on; ptyhost falls back to Windows' own. */
 const conptyDll = (): string | null => {
   const dll = path.join(toolsDir, 'conpty', 'conpty.dll');
-  return session.provisioning.conpty?.enabled !== false && fs.existsSync(dll) && fs.existsSync(path.join(toolsDir, 'conpty', 'OpenConsole.exe')) ? dll : null;
+  return session.provisioning.conpty?.enabled !== false &&
+    fs.existsSync(dll) &&
+    fs.existsSync(path.join(toolsDir, 'conpty', 'OpenConsole.exe'))
+    ? dll
+    : null;
 };
 
 /** Starts ptyhost detached, so closing a terminal tab never kills the agent; only the agent exiting ends it. */
@@ -42,5 +64,9 @@ export const startPtyHost = (o: PtyHostOptions): ChildProcess => {
   delete env.PTYHOST_CONPTY;
   const dll = conptyDll();
   if (dll) env.PTYHOST_CONPTY = dll;
-  return spawn(o.exe, [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand], { cwd: o.cwd, env, detached: true, stdio: 'ignore', windowsHide: true });
+  return spawn(
+    o.exe,
+    [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand],
+    { cwd: o.cwd, env, detached: true, stdio: 'ignore', windowsHide: true },
+  );
 };

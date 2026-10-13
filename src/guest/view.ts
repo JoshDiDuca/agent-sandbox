@@ -10,7 +10,10 @@ const waitUntilStarted = async (id: string): Promise<ReturnType<typeof readSessi
   for (let i = 0; i < 3600; i++) {
     const s = readSession(dataDir, id);
     if (s && s.phase !== 'starting') return s;
-    if (s && s.message !== last) { console.log('  ' + s.message); last = s.message; }
+    if (s && s.message !== last) {
+      console.log('  ' + s.message);
+      last = s.message;
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   return readSession(dataDir, id);
@@ -18,8 +21,15 @@ const waitUntilStarted = async (id: string): Promise<ReturnType<typeof readSessi
 
 export const viewSession = async (id: string): Promise<number> => {
   const session = await waitUntilStarted(id);
-  if (session?.phase === 'failed') { console.error('Session ' + id + ' could not start: ' + session.message); await new Promise((r) => setTimeout(r, 30000)); return 1; }
-  if (!session?.attach) { console.error('Session ' + id + ' is not running.'); return 1; }
+  if (session?.phase === 'failed') {
+    console.error('Session ' + id + ' could not start: ' + session.message);
+    await new Promise((r) => setTimeout(r, 30000));
+    return 1;
+  }
+  if (!session?.attach) {
+    console.error('Session ' + id + ' is not running.');
+    return 1;
+  }
   const socket = await connect({ ...session.attach, addresses: ['127.0.0.1'] });
   const result = await runTerminalClient(socket, session.attach.token);
   if (result.reason === 'exit') console.log(session.harness + ' exited with code ' + result.exitCode + '.');
@@ -28,5 +38,13 @@ export const viewSession = async (id: string): Promise<number> => {
 };
 
 if (process.argv[1]?.endsWith('view.js') && process.argv[2]) {
-  viewSession(process.argv[2]).then((code) => { process.exitCode = code; }, (e: unknown) => { console.error(e instanceof Error ? e.message : String(e)); process.exitCode = 1; });
+  viewSession(process.argv[2]).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    (e: unknown) => {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exitCode = 1;
+    },
+  );
 }

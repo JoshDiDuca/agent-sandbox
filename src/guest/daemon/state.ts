@@ -20,10 +20,25 @@ export const insidePrimary = (cwd: string): boolean => {
 
 /** Inside any project of this sandbox: the launch folder, a project root, or C:\Projects\<name> (older launch folders: only the first). */
 export const insideWorkspace = (cwd: string): boolean =>
-  insidePrimary(cwd) || (session.projectsDir !== undefined && insideProjects(path.resolve(cwd), session.roots ?? [], session.projectsDir));
+  insidePrimary(cwd) ||
+  (session.projectsDir !== undefined && insideProjects(path.resolve(cwd), session.roots ?? [], session.projectsDir));
 
 /** Status/response writes are best-effort: a briefly locked file (antivirus, the host's sync) must not kill the daemon. */
-const tryWrite = (file: string, value: unknown): void => { try { writeJsonAtomic(file, value); } catch (e) { warn('Could not write ' + file + ': ' + errMsg(e)); } };
-export const respond = (id: string, result: Omit<GuestResponse, 'id' | 'finishedAt'>): void => tryWrite(run.response(id), { id, ...result, message: result.message.slice(0, MAX_MESSAGE), finishedAt: now() });
-export const saveStatus = (status: SessionStatus): void => tryWrite(run.session(status.id), { ...status, message: status.message.slice(0, MAX_MESSAGE), updatedAt: now() });
-export const safely = (what: string, work: () => void): void => { try { work(); } catch (e) { warn(what + ' failed: ' + errMsg(e)); } };
+const tryWrite = (file: string, value: unknown): void => {
+  try {
+    writeJsonAtomic(file, value);
+  } catch (e) {
+    warn('Could not write ' + file + ': ' + errMsg(e));
+  }
+};
+export const respond = (id: string, result: Omit<GuestResponse, 'id' | 'finishedAt'>): void =>
+  tryWrite(run.response(id), { id, ...result, message: result.message.slice(0, MAX_MESSAGE), finishedAt: now() });
+export const saveStatus = (status: SessionStatus): void =>
+  tryWrite(run.session(status.id), { ...status, message: status.message.slice(0, MAX_MESSAGE), updatedAt: now() });
+export const safely = (what: string, work: () => void): void => {
+  try {
+    work();
+  } catch (e) {
+    warn(what + ' failed: ' + errMsg(e));
+  }
+};

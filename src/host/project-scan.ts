@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { INTERESTING_FILE, type ProjectFile } from '../core/detect-databases.js';
 
-const SKIP = /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;
+const SKIP =
+  /^(node_modules|\.git|\.hg|\.svn|vendor|target|bin|obj|dist|build|out|\.next|\.nuxt|\.venv|venv|env|__pycache__|\.gradle|\.idea|\.vs|coverage|packages)$/i;
 const MAX_FILES = 400;
 const MAX_BYTES = 256 * 1024;
 const MAX_FOLDERS = 2000;
@@ -18,7 +19,11 @@ const readSmallFile = (file: string): string | null => {
     const buffer = Buffer.alloc(stat.size);
     fs.readSync(fd, buffer, 0, stat.size, 0);
     return buffer.toString('utf8');
-  } catch { return null; } finally { if (fd !== null) fs.closeSync(fd); }
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
 };
 
 /** Manifest-type files in the project, up to 3 folders deep. Links are not followed (the workspace may be guest-written). */
@@ -28,7 +33,11 @@ export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
   const walk = (dir: string, level: number): void => {
     if (++folders > MAX_FOLDERS) return;
     let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       if (files.length >= MAX_FILES) return;
       const full = path.join(dir, entry.name);
@@ -44,21 +53,39 @@ export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
 
 /** File names in the project and its direct sub-folders ("api/go.mod"), for toolchain detection. No links followed. */
 export const projectEntries = (root: string): string[] => {
-  const list = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000); } catch { return []; } };
+  const list = (dir: string): fs.Dirent[] => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000);
+    } catch {
+      return [];
+    }
+  };
   const top = list(root);
-  const below = top.filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name)).slice(0, 200)
-    .flatMap((d) => list(path.join(root, d.name)).filter((f) => f.isFile()).map((f) => d.name + '/' + f.name));
+  const below = top
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name))
+    .slice(0, 200)
+    .flatMap((d) =>
+      list(path.join(root, d.name))
+        .filter((f) => f.isFile())
+        .map((f) => d.name + '/' + f.name),
+    );
   return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
 };
 
 /** Scripts in the project root or one folder down that set up MSVC (vcvars*.bat, vswhere): read with bounded effort. */
 export const msvcHint = (root: string): string | undefined => {
-  const scripts = projectEntries(root).filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e)).slice(0, 60);
+  const scripts = projectEntries(root)
+    .filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e))
+    .slice(0, 60);
   for (const rel of scripts) {
     let text = '';
-    try { const file = path.join(root, rel); if (fs.statSync(file).size <= 256 * 1024) text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    try {
+      const file = path.join(root, rel);
+      if (fs.statSync(file).size <= 256 * 1024) text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
     if (/vcvars(all|64|32)?\.bat|vswhere(\.exe)?/i.test(text)) return rel + ' sets up MSVC';
   }
   return undefined;
 };
-

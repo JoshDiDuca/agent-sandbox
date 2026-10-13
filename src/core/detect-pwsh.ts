@@ -30,7 +30,11 @@ const pwshLine = (raw: string): string | null => {
     const end = at + (line.startsWith('pwsh.exe', at) ? 8 : 4);
     if (at > 0 && /[\w.$-]/.test(line[at - 1])) continue;
     if (line[end] !== ' ' && line[end] !== '\t') continue;
-    const next = line.slice(end, end + 80).trimStart().split(/\s/, 1)[0] ?? '';
+    const next =
+      line
+        .slice(end, end + 80)
+        .trimStart()
+        .split(/\s/, 1)[0] ?? '';
     if (next.startsWith('-') || next.includes('.ps1')) return 'pwsh usage';
   }
   return null;
@@ -59,34 +63,63 @@ const readStart = (file: string): string | null => {
     const buffer = Buffer.alloc(Math.min(stat.size, PWSH_MAX_BYTES));
     const read = fs.readSync(fd, buffer, 0, buffer.length, 0);
     return buffer.subarray(0, read).toString('utf8');
-  } catch { return null; } finally { if (fd !== null) fs.closeSync(fd); }
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
 };
 
 /** *.ps1 / *.psm1 / *.psd1 in the workspace root and its direct sub-folders (root first), capped. Links are skipped. */
 export const readPwshScripts = (root: string): ProjectFile[] => {
-  const list = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000); } catch { return []; } };
+  const list = (dir: string): fs.Dirent[] => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000);
+    } catch {
+      return [];
+    }
+  };
   const isScript = (d: fs.Dirent): boolean => d.isFile() && /\.ps[dm]?1$/i.test(d.name);
   const top = list(root);
   const names = [
     ...top.filter(isScript).map((d) => d.name),
-    ...top.filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name)).slice(0, 200)
-      .flatMap((d) => list(path.join(root, d.name)).filter(isScript).map((f) => d.name + '/' + f.name)),
+    ...top
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.') && !SKIP.test(d.name))
+      .slice(0, 200)
+      .flatMap((d) =>
+        list(path.join(root, d.name))
+          .filter(isScript)
+          .map((f) => d.name + '/' + f.name),
+      ),
   ].slice(0, PWSH_MAX_SCRIPTS);
-  return names.flatMap((name) => { const text = readStart(path.join(root, name)); return text === null ? [] : [{ path: name, text }]; });
+  return names.flatMap((name) => {
+    const text = readStart(path.join(root, name));
+    return text === null ? [] : [{ path: name, text }];
+  });
 };
 
 /** PowerShell 7 installed on this PC (the MSI's folder, or a pwsh.exe on PATH other than a Store alias). */
-export const pcHasPwsh = (env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = fs.existsSync): boolean => {
+export const pcHasPwsh = (
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (p: string) => boolean = fs.existsSync,
+): boolean => {
   const programFiles = env.ProgramFiles ?? 'C:\\Program Files';
   if (exists(path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'))) return true;
-  return (env.PATH ?? env.Path ?? '').split(';').some((d) => d && !/WindowsApps/i.test(d) && exists(path.win32.join(d, 'pwsh.exe')));
+  return (env.PATH ?? env.Path ?? '')
+    .split(';')
+    .some((d) => d && !/WindowsApps/i.test(d) && exists(path.win32.join(d, 'pwsh.exe')));
 };
 
 /**
  * The decision for toolchains.pwsh.enabled: true/false are kept; "auto" is on when a script needs PowerShell 7, or, in
  * a folder that is no project yet (`fresh`), when this PC has it.
  */
-export const decidePwsh = (setting: boolean | 'auto', scripts: readonly ProjectFile[], fresh: boolean, pcHas: boolean): { on: boolean; reason: string } => {
+export const decidePwsh = (
+  setting: boolean | 'auto',
+  scripts: readonly ProjectFile[],
+  fresh: boolean,
+  pcHas: boolean,
+): { on: boolean; reason: string } => {
   if (setting !== 'auto') return { on: setting, reason: setting ? 'enabled in config' : 'disabled in config' };
   const why = usesPwsh(scripts);
   if (why) return { on: true, reason: why };

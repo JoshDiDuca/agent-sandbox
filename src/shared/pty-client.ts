@@ -2,7 +2,19 @@
 // `--terminal` / `attach` on the host, so it only depends on Node built-ins.
 import net from 'node:net';
 
-export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Ping: 5, Output: 16, Exit: 17, Error: 18, Restarting: 19, Status: 20, Console: 21 } as const;
+export const FrameType = {
+  Hello: 1,
+  Input: 2,
+  Resize: 3,
+  Restart: 4,
+  Ping: 5,
+  Output: 16,
+  Exit: 17,
+  Error: 18,
+  Restarting: 19,
+  Status: 20,
+  Console: 21,
+} as const;
 
 /** HELLO flags: control-only connections get no output and never size the console; a query only asks for STATUS. */
 export const HelloFlag = { ControlOnly: 1, Query: 2 } as const;
@@ -10,9 +22,17 @@ export const HelloFlag = { ControlOnly: 1, Query: 2 } as const;
 /** Viewers ping this often; ptyhost counts a viewer as gone after 15 s of silence (e.g. its terminal tab was closed). */
 export const PING_INTERVAL_MS = 5000;
 
-export interface Frame { type: number; payload: Buffer }
-export interface Endpoint { addresses: string[]; port: number; token: string }
-export type ClientResult = { reason: 'exit'; exitCode: number } | { reason: 'detach' | 'closed' } | { reason: 'error'; message: string };
+export interface Frame {
+  type: number;
+  payload: Buffer;
+}
+export interface Endpoint {
+  addresses: string[];
+  port: number;
+  token: string;
+}
+export type ClientResult =
+  { reason: 'exit'; exitCode: number } | { reason: 'detach' | 'closed' } | { reason: 'error'; message: string };
 
 /** Ctrl+] — the same detach key telnet uses; Claude Code does not bind it. */
 export const DETACH_KEY = 0x1d;
@@ -84,20 +104,37 @@ export class OutputFilter {
   push(chunk: Buffer): Buffer {
     const out = Buffer.allocUnsafe(chunk.length + MAX_KEPT_STRING + 8);
     let n = 0;
-    const put = (...bytes: number[]): void => { for (const b of bytes) out[n++] = b; };
+    const put = (...bytes: number[]): void => {
+      for (const b of bytes) out[n++] = b;
+    };
     /** After ESC (or the C1 form): ] opens an OSC (maybe kept), P X ^ _ open DCS / SOS / PM / APC (dropped). */
     const opens = (b: number, c1: boolean): boolean => {
-      if (b === (c1 ? 0x9d : 0x5d)) { this.body = c1 ? null : []; this.state = 'string'; return true; }
-      if ((c1 ? [0x90, 0x98, 0x9e, 0x9f] : [0x50, 0x58, 0x5e, 0x5f]).includes(b)) { this.body = null; this.state = 'string'; return true; }
+      if (b === (c1 ? 0x9d : 0x5d)) {
+        this.body = c1 ? null : [];
+        this.state = 'string';
+        return true;
+      }
+      if ((c1 ? [0x90, 0x98, 0x9e, 0x9f] : [0x50, 0x58, 0x5e, 0x5f]).includes(b)) {
+        this.body = null;
+        this.state = 'string';
+        return true;
+      }
       return false;
     };
     const endString = (terminator: number[]): void => {
       const body = this.body && Buffer.from(this.body).toString('latin1');
-      if (body !== null && KEPT_OSC(body)) { put(0x1b, 0x5d); out.write(body, n, 'latin1'); n += body.length; put(...terminator); }
+      if (body !== null && KEPT_OSC(body)) {
+        put(0x1b, 0x5d);
+        out.write(body, n, 'latin1');
+        n += body.length;
+        put(...terminator);
+      }
       this.body = null;
       this.state = 'text';
     };
-    const collect = (b: number): void => { if (this.body && this.body.push(b) > MAX_KEPT_STRING) this.body = null; };
+    const collect = (b: number): void => {
+      if (this.body && this.body.push(b) > MAX_KEPT_STRING) this.body = null;
+    };
     for (const b of chunk) {
       switch (this.state) {
         case 'text':
@@ -107,30 +144,55 @@ export class OutputFilter {
           break;
         case 'esc':
           if (opens(b, false)) break;
-          if (b !== 0x1b) { put(0x1b, b); this.state = 'text'; } else put(0x1b);
+          if (b !== 0x1b) {
+            put(0x1b, b);
+            this.state = 'text';
+          } else put(0x1b);
           break;
         case 'c2':
           if (opens(b, true)) break;
-          if (b === 0x1b) { put(0xc2); this.state = 'esc'; } else if (b === 0xc2) put(0xc2); else { put(0xc2, b); this.state = 'text'; }
+          if (b === 0x1b) {
+            put(0xc2);
+            this.state = 'esc';
+          } else if (b === 0xc2) put(0xc2);
+          else {
+            put(0xc2, b);
+            this.state = 'text';
+          }
           break;
         case 'string':
           if (b === 0x07) endString([0x07]);
           else if (b === 0x1b) this.state = 'stringEsc';
           else if (b === 0xc2) this.state = 'stringC2';
-          else if (b === 0x18 || b === 0x1a) { this.body = null; this.state = 'text'; }
-          else collect(b);
+          else if (b === 0x18 || b === 0x1a) {
+            this.body = null;
+            this.state = 'text';
+          } else collect(b);
           break;
         case 'stringC2':
           // U+009C is the C1 string terminator; any other character is part of the string.
           if (b === 0x9c) endString([0x1b, 0x5c]);
-          else { collect(0xc2); this.state = 'string'; if (b === 0x07) endString([0x07]); else if (b === 0x1b) this.state = 'stringEsc'; else if (b !== 0xc2) collect(b); else this.state = 'stringC2'; }
+          else {
+            collect(0xc2);
+            this.state = 'string';
+            if (b === 0x07) endString([0x07]);
+            else if (b === 0x1b) this.state = 'stringEsc';
+            else if (b !== 0xc2) collect(b);
+            else this.state = 'stringC2';
+          }
           break;
         case 'stringEsc':
-          if (b === 0x5c) { endString([0x1b, 0x5c]); break; }
+          if (b === 0x5c) {
+            endString([0x1b, 0x5c]);
+            break;
+          }
           // ESC inside a string ends it (dropped) and starts a new sequence.
           this.body = null;
           this.state = 'esc';
-          if (!opens(b, false) && b !== 0x1b) { put(0x1b, b); this.state = 'text'; }
+          if (!opens(b, false) && b !== 0x1b) {
+            put(0x1b, b);
+            this.state = 'text';
+          }
           break;
       }
     }
@@ -141,9 +203,19 @@ export class OutputFilter {
 const connectOnce = (host: string, port: number, timeoutMs: number): Promise<net.Socket> => {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host, port });
-    const timer = setTimeout(() => { socket.destroy(); reject(new Error('timed out connecting to ' + host + ':' + port)); }, timeoutMs);
-    socket.once('connect', () => { clearTimeout(timer); socket.setNoDelay(true); resolve(socket); });
-    socket.once('error', (e: Error) => { clearTimeout(timer); reject(e); });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('timed out connecting to ' + host + ':' + port));
+    }, timeoutMs);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      socket.setNoDelay(true);
+      resolve(socket);
+    });
+    socket.once('error', (e: Error) => {
+      clearTimeout(timer);
+      reject(e);
+    });
   });
 };
 
@@ -151,7 +223,11 @@ const connectOnce = (host: string, port: number, timeoutMs: number): Promise<net
 export const connect = async (endpoint: Endpoint, timeoutMs = 3000): Promise<net.Socket> => {
   const errors: string[] = [];
   for (const address of endpoint.addresses) {
-    try { return await connectOnce(address, endpoint.port, timeoutMs); } catch (e) { errors.push(address + ': ' + (e instanceof Error ? e.message : String(e))); }
+    try {
+      return await connectOnce(address, endpoint.port, timeoutMs);
+    } catch (e) {
+      errors.push(address + ': ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
   throw new Error('Could not reach the sandbox session (' + errors.join('; ') + ')');
 };
@@ -159,11 +235,16 @@ export const connect = async (endpoint: Endpoint, timeoutMs = 3000): Promise<net
 /** Sends one control frame (e.g. RESTART) without taking over the screen. */
 export const sendControl = async (endpoint: Endpoint, type: number): Promise<void> => {
   const socket = await connect(endpoint);
-  await new Promise<void>((resolve) => socket.end(Buffer.concat([helloFrame(endpoint.token, 80, 24, HelloFlag.ControlOnly), encodeFrame(type)]), resolve));
+  await new Promise<void>((resolve) =>
+    socket.end(Buffer.concat([helloFrame(endpoint.token, 80, 24, HelloFlag.ControlOnly), encodeFrame(type)]), resolve),
+  );
 };
 
 /** Who is watching a session right now: `remote` counts viewers on the PC (not the sandbox's own tabs). */
-export interface Viewers { viewers: number; remote: number }
+export interface Viewers {
+  viewers: number;
+  remote: number;
+}
 
 /**
  * Asks a session's ptyhost who is attached. Only viewers heard from in the last few seconds count, so a terminal that
@@ -172,14 +253,27 @@ export interface Viewers { viewers: number; remote: number }
  */
 export const queryViewers = async (endpoint: Endpoint, timeoutMs = 2000): Promise<Viewers | null> => {
   let socket: net.Socket;
-  try { socket = await connect(endpoint, timeoutMs); } catch { return null; }
+  try {
+    socket = await connect(endpoint, timeoutMs);
+  } catch {
+    return null;
+  }
   return new Promise((resolve) => {
     const reader = new FrameReader();
-    const done = (value: Viewers | null): void => { clearTimeout(timer); socket.destroy(); resolve(value); };
+    const done = (value: Viewers | null): void => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(value);
+    };
     const timer = setTimeout(() => done(null), timeoutMs);
     socket.on('data', (chunk: Buffer) => {
       let frames: Frame[];
-      try { frames = reader.push(chunk); } catch { done(null); return; }
+      try {
+        frames = reader.push(chunk);
+      } catch {
+        done(null);
+        return;
+      }
       const status = frames.find((f) => f.type === FrameType.Status && f.payload.length >= 4);
       if (status) done({ viewers: status.payload.readInt16LE(0), remote: status.payload.readInt16LE(2) });
       else if (frames.some((f) => f.type === FrameType.Error)) done(null);
@@ -203,11 +297,18 @@ export const fixWindowsKeys = (chunk: Buffer): Buffer => {
  * Bridges this process's terminal to the remote program until it exits, the connection drops, or the user presses
  * the detach key. Restores the terminal before resolving.
  */
-export const runTerminalClient = (socket: net.Socket, token: string, options: { detachKey?: number } = {}): Promise<ClientResult> => {
+export const runTerminalClient = (
+  socket: net.Socket,
+  token: string,
+  options: { detachKey?: number } = {},
+): Promise<ClientResult> => {
   const stdin = process.stdin;
   const stdout = process.stdout;
   // getWindowSize asks the console every time; columns/rows only change when Node noticed a resize.
-  const size = (): [number, number] => { const [c, r] = stdout.isTTY ? stdout.getWindowSize() : [0, 0]; return [c || 120, r || 30]; };
+  const size = (): [number, number] => {
+    const [c, r] = stdout.isTTY ? stdout.getWindowSize() : [0, 0];
+    return [c || 120, r || 30];
+  };
   const swapKeys = process.platform === 'win32' && stdin.isTTY;
   return new Promise((resolve) => {
     let done = false;
@@ -230,7 +331,10 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       resolve(result);
     };
     const onInput = (chunk: Buffer): void => {
-      if (options.detachKey !== undefined && chunk.includes(options.detachKey)) { finish({ reason: 'detach' }); return; }
+      if (options.detachKey !== undefined && chunk.includes(options.detachKey)) {
+        finish({ reason: 'detach' });
+        return;
+      }
       socket.write(encodeFrame(FrameType.Input, swapKeys ? fixWindowsKeys(chunk) : chunk));
     };
     // Windows' own ConPTY repaints the whole screen on every resize; dragging a window edge fires dozens of them, and
@@ -245,20 +349,41 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       if (!passthrough) stdout.write('\x1b[H\x1b[J');
       socket.write(resizeFrame(c, r));
     };
-    const onResize = (): void => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { resizeTimer = undefined; sendSize(); }, 120); };
+    const onResize = (): void => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeTimer = undefined;
+        sendSize();
+      }, 120);
+    };
     const heartbeat = setInterval(() => socket.write(encodeFrame(FrameType.Ping)), PING_INTERVAL_MS);
     // Windows does not always report a resize in raw mode, so the size is also checked twice a second.
-    const sizeWatch = setInterval(() => { if (!resizeTimer) sendSize(); }, 500);
+    const sizeWatch = setInterval(() => {
+      if (!resizeTimer) sendSize();
+    }, 500);
 
     socket.on('data', (chunk: Buffer) => {
       let frames: Frame[];
-      try { frames = reader.push(chunk); } catch { finish({ reason: 'error', message: 'invalid data from the sandbox' }); return; }
+      try {
+        frames = reader.push(chunk);
+      } catch {
+        finish({ reason: 'error', message: 'invalid data from the sandbox' });
+        return;
+      }
       for (const frame of frames) {
         if (frame.type === FrameType.Output) stdout.write(filter.push(frame.payload));
         else if (frame.type === FrameType.Console) passthrough = frame.payload.toString('latin1') === 'conpty.dll';
         else if (frame.type === FrameType.Restarting) stdout.write('\x1b[2J\x1b[3J\x1b[H');
-        else if (frame.type === FrameType.Exit) finish({ reason: 'exit', exitCode: frame.payload.length >= 4 ? frame.payload.readInt32LE(0) : 1 });
-        else if (frame.type === FrameType.Error) finish({ reason: 'error', message: frame.payload.toString('utf8').slice(0, 500).replace(/[\x00-\x1f\x7f]/g, ' ') });
+        else if (frame.type === FrameType.Exit)
+          finish({ reason: 'exit', exitCode: frame.payload.length >= 4 ? frame.payload.readInt32LE(0) : 1 });
+        else if (frame.type === FrameType.Error)
+          finish({
+            reason: 'error',
+            message: frame.payload
+              .toString('utf8')
+              .slice(0, 500)
+              .replace(/[\x00-\x1f\x7f]/g, ' '),
+          });
       }
     });
     socket.on('close', () => finish({ reason: 'closed' }));

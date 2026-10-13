@@ -12,29 +12,64 @@ const mirrorLine = (): string[] => {
   // Only the ones bootstrap.ps1 could create (a letter already in use is reported there and skipped).
   const drives = (session.substDrives ?? []).filter((d) => fs.existsSync(d.letter + ':\\'));
   if (!drives.length) return [];
-  return ['- ' + drives.map((d) => d.letter + ':').join(', ') + ' = mapped folders at their PC paths (subst onto `' + drives.map((d) => d.target).join('`, `') + '`; real-path tools may print that form).'];
+  return [
+    '- ' +
+      drives.map((d) => d.letter + ':').join(', ') +
+      ' = mapped folders at their PC paths (subst onto `' +
+      drives.map((d) => d.target).join('`, `') +
+      '`; real-path tools may print that form).',
+  ];
 };
 
 /** Deliberately tiny: it is loaded into every conversation. */
-export interface GuideProject { guest: string; host: string }
+export interface GuideProject {
+  guest: string;
+  host: string;
+}
 
-export const sandboxGuide = (toolSummary: string[], lan: 'blocked' | 'open' | 'offline' = 'blocked', projects: GuideProject[] = []): string => [
-  BEGIN,
-  '## Sandbox manifest — you are in a DISPOSABLE Windows Sandbox',
-  'Wiped on close: everything except the paths below (installers, winget/choco, C:\\Users, Program Files, registry).',
-  '- RW, persists: `' + workspace + '` = host folder ' + session.workspaceHost,
-  // Projects started from other folders while this sandbox runs: every agent here can see them.
-  ...projects.map((p) => '- RW, persists: `' + p.guest + '` = host folder ' + p.host + ' (another project in this sandbox; your own is `%AGENT_WORKSPACE%`)'),
-  '- RW, persists: `' + toolsDir + '` (toolchains) — put portable exes in `' + path.join(toolsDir, 'bin') + '` (on PATH)',
-  '- RW, persists: `' + stateDir + '` (agent config/history; do not edit logins) · logs: `' + path.join(dataDir, 'logs') + '`',
-  '- RO: `' + launchDir + '` (this boot\'s scripts) · lost on close: everything else, incl. `C:\\nvm` (Node symlink)',
-  ...mirrorLine(),
-  '- Tools: ' + toolSummary.join(' · '),
-  '- Persistent installs: `npm i -g` (per nvm version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`. Real installers must re-run each boot via a hook (ask the user).',
-  '- Mapped folders (workspace, C:\\AgentData) allow NO symlinks or junctions: pnpm runs hoisted (set), npm workspaces / `file:` deps and deno node_modules dirs fail there (use a folder on C:\\ outside them), bun cannot save its lockfile there (`bun install --no-save`).',
-  '- Network: ' + (lan === 'offline' ? 'OFF' : lan === 'blocked' ? 'internet yes, host LAN blocked' : 'internet yes, host LAN NOT blocked this time') + '. Other sessions may share this workspace; the user may be typing from the host.',
-  END,
-].join('\n');
+export const sandboxGuide = (
+  toolSummary: string[],
+  lan: 'blocked' | 'open' | 'offline' = 'blocked',
+  projects: GuideProject[] = [],
+): string =>
+  [
+    BEGIN,
+    '## Sandbox manifest — you are in a DISPOSABLE Windows Sandbox',
+    'Wiped on close: everything except the paths below (installers, winget/choco, C:\\Users, Program Files, registry).',
+    '- RW, persists: `' + workspace + '` = host folder ' + session.workspaceHost,
+    // Projects started from other folders while this sandbox runs: every agent here can see them.
+    ...projects.map(
+      (p) =>
+        '- RW, persists: `' +
+        p.guest +
+        '` = host folder ' +
+        p.host +
+        ' (another project in this sandbox; your own is `%AGENT_WORKSPACE%`)',
+    ),
+    '- RW, persists: `' +
+      toolsDir +
+      '` (toolchains) — put portable exes in `' +
+      path.join(toolsDir, 'bin') +
+      '` (on PATH)',
+    '- RW, persists: `' +
+      stateDir +
+      '` (agent config/history; do not edit logins) · logs: `' +
+      path.join(dataDir, 'logs') +
+      '`',
+    '- RO: `' + launchDir + "` (this boot's scripts) · lost on close: everything else, incl. `C:\\nvm` (Node symlink)",
+    ...mirrorLine(),
+    '- Tools: ' + toolSummary.join(' · '),
+    '- Persistent installs: `npm i -g` (per nvm version), `pip`, `cargo install`, `dotnet tool -g`, `uv tool`, `bun add -g`. Real installers must re-run each boot via a hook (ask the user).',
+    '- Mapped folders (workspace, C:\\AgentData) allow NO symlinks or junctions: pnpm runs hoisted (set), npm workspaces / `file:` deps and deno node_modules dirs fail there (use a folder on C:\\ outside them), bun cannot save its lockfile there (`bun install --no-save`).',
+    '- Network: ' +
+      (lan === 'offline'
+        ? 'OFF'
+        : lan === 'blocked'
+          ? 'internet yes, host LAN blocked'
+          : 'internet yes, host LAN NOT blocked this time') +
+      '. Other sessions may share this workspace; the user may be typing from the host.',
+    END,
+  ].join('\n');
 
 /** Inserts or replaces the generated section, keeping whatever else the file contains (the host's CLAUDE.md). */
 export const upsertGuide = (file: string, guide: string): void => {
@@ -52,9 +87,17 @@ export const upsertGuide = (file: string, guide: string): void => {
  * there: the user's own global CLAUDE.md and every project's CLAUDE.md stay exactly as they are.
  * Codex/Gemini have no machine-level file, so the block goes into their sandbox-only global instruction files.
  */
-export const managedClaudeMd = (): string => path.join(process.env.AGENT_MANAGED_DIR ?? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'ClaudeCode'), 'CLAUDE.md');
+export const managedClaudeMd = (): string =>
+  path.join(
+    process.env.AGENT_MANAGED_DIR ?? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'ClaudeCode'),
+    'CLAUDE.md',
+  );
 
-export const writeGuides = (toolSummary: string[], lan: 'blocked' | 'open' | 'offline', projects: GuideProject[] = []): string => {
+export const writeGuides = (
+  toolSummary: string[],
+  lan: 'blocked' | 'open' | 'offline',
+  projects: GuideProject[] = [],
+): string => {
   const guide = sandboxGuide(toolSummary, lan, projects);
   const managed = managedClaudeMd();
   fs.mkdirSync(path.dirname(managed), { recursive: true });
@@ -72,5 +115,6 @@ const removeGuide = (file: string): void => {
   const current = fs.readFileSync(file, 'utf8');
   const start = current.indexOf(BEGIN);
   const end = current.indexOf(END);
-  if (start >= 0 && end > start) fs.writeFileSync(file, (current.slice(0, start) + current.slice(end + END.length)).trim() + '\n', 'utf8');
+  if (start >= 0 && end > start)
+    fs.writeFileSync(file, (current.slice(0, start) + current.slice(end + END.length)).trim() + '\n', 'utf8');
 };

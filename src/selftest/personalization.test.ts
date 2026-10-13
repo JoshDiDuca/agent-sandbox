@@ -6,7 +6,10 @@ import { toRegFile } from '../host/personalize.js';
 import { PWSH_PROFILE_GUID, syncPwshProfile, withPwshProfile } from '../host/terminal.js';
 import type { Suite } from './suite.js';
 
-interface TerminalSettings { theme: string; profiles: { list: { guid: string; hidden?: boolean; name?: string; fontSize?: number }[] } }
+interface TerminalSettings {
+  theme: string;
+  profiles: { list: { guid: string; hidden?: boolean; name?: string; fontSize?: number }[] };
+}
 
 export const personalizationSuite: Suite = {
   name: 'personalization',
@@ -31,26 +34,51 @@ export const personalizationSuite: Suite = {
     t.includes(String(shownProfiles?.list[0].commandline), 'pwsh.exe', 'the added profile starts pwsh.exe');
     t.check(Boolean(shownProfiles?.defaults) && shown?.theme === 'dark', 'the rest of the settings are kept');
     t.equal(withPwshProfile(shown!, true), null, 'nothing is rewritten when the profile is already there');
-    t.equal(withPwshProfile({ profiles: { defaults: {} } }, false), null, 'nothing is rewritten when pwsh was never wanted');
+    t.equal(
+      withPwshProfile({ profiles: { defaults: {} } }, false),
+      null,
+      'nothing is rewritten when pwsh was never wanted',
+    );
 
-    const edited = { profiles: { list: [{ guid: 'other' }, { guid: PWSH_PROFILE_GUID.toUpperCase(), name: 'My pwsh', fontSize: 14 }] } };
+    const edited = {
+      profiles: { list: [{ guid: 'other' }, { guid: PWSH_PROFILE_GUID.toUpperCase(), name: 'My pwsh', fontSize: 14 }] },
+    };
     const hidden = withPwshProfile(edited, false)?.profiles as { list: Record<string, unknown>[] } | undefined;
-    t.equal({ hidden: hidden?.list[1].hidden, name: hidden?.list[1].name, fontSize: hidden?.list[1].fontSize, count: hidden?.list.length }, { hidden: true, name: 'My pwsh', fontSize: 14, count: 2 }, 'turning pwsh off hides the profile and keeps the user\'s edits');
+    t.equal(
+      {
+        hidden: hidden?.list[1].hidden,
+        name: hidden?.list[1].name,
+        fontSize: hidden?.list[1].fontSize,
+        count: hidden?.list.length,
+      },
+      { hidden: true, name: 'My pwsh', fontSize: 14, count: 2 },
+      "turning pwsh off hides the profile and keeps the user's edits",
+    );
     const oldForm = withPwshProfile({ profiles: [{ guid: 'a' }] }, true)?.profiles as { list: unknown[] };
     t.equal(oldForm.list.length, 2, 'the old array form of "profiles" works');
 
     t.section('Windows Terminal settings.json on disk (JSONC, temp copy)');
     const data = t.at('wt-data');
-    const settings = t.write(path.join(data, 'tools', 'terminal', 'settings', 'settings.json'), '// edited in the sandbox\n{ "theme": "light", "profiles": { "list": [{ "guid": "{x}", }] } }');
+    const settings = t.write(
+      path.join(data, 'tools', 'terminal', 'settings', 'settings.json'),
+      '// edited in the sandbox\n{ "theme": "light", "profiles": { "list": [{ "guid": "{x}", }] } }',
+    );
     const read = (): TerminalSettings => JSON.parse(fs.readFileSync(settings, 'utf8')) as TerminalSettings;
     syncPwshProfile(data, true);
     const untouched = fs.readFileSync(settings, 'utf8');
-    t.check(untouched.startsWith('// edited'), 'untouched until pwsh is installed (comments and trailing commas survive)');
+    t.check(
+      untouched.startsWith('// edited'),
+      'untouched until pwsh is installed (comments and trailing commas survive)',
+    );
     t.write(path.join(data, 'tools', 'pwsh', 'pwsh.exe'), 'MZ');
     syncPwshProfile(data, true);
     const added = read();
-    t.equal(added.theme, 'light', 'once pwsh is installed the profile is added and the user\'s settings are kept');
-    t.equal(added.profiles.list.map((p) => p.guid), ['{x}', PWSH_PROFILE_GUID], 'the profile is added after the existing ones');
+    t.equal(added.theme, 'light', "once pwsh is installed the profile is added and the user's settings are kept");
+    t.equal(
+      added.profiles.list.map((p) => p.guid),
+      ['{x}', PWSH_PROFILE_GUID],
+      'the profile is added after the existing ones',
+    );
     syncPwshProfile(data, false);
     t.equal(read().profiles.list[1].hidden, true, 'the profile is hidden when pwsh is turned off');
     t.write(settings, '{ not json');

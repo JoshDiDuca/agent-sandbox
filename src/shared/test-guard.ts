@@ -12,7 +12,9 @@ const canonical = (p: string): string => {
   let rest = '';
   let current = path.resolve(p);
   for (;;) {
-    try { return path.join(fs.realpathSync.native(current), rest).toLowerCase(); } catch {
+    try {
+      return path.join(fs.realpathSync.native(current), rest).toLowerCase();
+    } catch {
       const parent = path.dirname(current);
       if (parent === current) return path.resolve(p).toLowerCase();
       rest = path.join(path.basename(current), rest);
@@ -26,7 +28,9 @@ export const testWriteRefusal = (target: string): string | null => {
   if (!selfTestRunning()) return null;
   const temp = canonical(os.tmpdir());
   const t = canonical(target);
-  return t === temp || t.startsWith(temp + path.sep) ? null : 'The self-test refused to change ' + target + ': it only works in temp folders, so it can never change this PC.';
+  return t === temp || t.startsWith(temp + path.sep)
+    ? null
+    : 'The self-test refused to change ' + target + ': it only works in temp folders, so it can never change this PC.';
 };
 
 export const assertTestWritable = (target: string): void => {

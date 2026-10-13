@@ -1,7 +1,20 @@
 /** Private, carrier-grade NAT (Tailscale and similar live here), link-local and multicast ranges. */
-export const PRIVATE_V4 = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16', '224.0.0.0/4'];
+export const PRIVATE_V4 = [
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '100.64.0.0/10',
+  '169.254.0.0/16',
+  '224.0.0.0/4',
+];
 export const PRIVATE_V6 = ['fc00::/7', 'fe80::/10', 'ff00::/8'];
-export const RULE_NAMES = ['AgentSandbox-Block-Private', 'AgentSandbox-Block-IPv6-Local', 'AgentSandbox-Block-SMB', 'AgentSandbox-Gateway-TCP', 'AgentSandbox-Gateway-UDP'];
+export const RULE_NAMES = [
+  'AgentSandbox-Block-Private',
+  'AgentSandbox-Block-IPv6-Local',
+  'AgentSandbox-Block-SMB',
+  'AgentSandbox-Gateway-TCP',
+  'AgentSandbox-Gateway-UDP',
+];
 
 export const isIPv4 = (ip: string): boolean => {
   const parts = ip.split('.');
@@ -27,7 +40,10 @@ export const subtractIps = (ranges: [number, number][], ips: string[]): [number,
     const n = ipToInt(ip);
     const next: [number, number][] = [];
     for (const [start, end] of result) {
-      if (n < start || n > end) { next.push([start, end]); continue; }
+      if (n < start || n > end) {
+        next.push([start, end]);
+        continue;
+      }
       if (n > start) next.push([start, n - 1]);
       if (n < end) next.push([n + 1, end]);
     }
@@ -40,7 +56,10 @@ export const formatRange = (range: [number, number]): string => {
 };
 export const isPrivateV4 = (ip: string): boolean => {
   const n = ipToInt(ip);
-  return PRIVATE_V4.some((c: string) => { const [s, e] = cidrToRange(c); return n >= s && n <= e; });
+  return PRIVATE_V4.some((c: string) => {
+    const [s, e] = cidrToRange(c);
+    return n >= s && n <= e;
+  });
 };
 
 export const parseDefaultGateways = (routePrint: string): string[] => {
@@ -52,7 +71,8 @@ export const parseDefaultGateways = (routePrint: string): string[] => {
   return found;
 };
 /** The IPv4 servers in a dns.getServers() list ('8.8.8.8', '8.8.8.8:1053', '[::1]:53'); IPv6 ones are dropped. */
-export const ipv4DnsServers = (servers: string[]): string[] => servers.map((s: string) => s.replace(/:\d+$/, '')).filter(isIPv4);
+export const ipv4DnsServers = (servers: string[]): string[] =>
+  servers.map((s: string) => s.replace(/:\d+$/, '')).filter(isIPv4);
 
 /** Fallback only: the "DNS Servers" label is English, so this finds nothing on localised Windows (dns.getServers() does). */
 export const parseDnsServers = (ipconfigAll: string): string[] => {
@@ -75,7 +95,18 @@ export const parseDnsServers = (ipconfigAll: string): string[] => {
 export const buildFirewallCommands = (exemptIps: string[]): string[][] => {
   const exempt = [...new Set(exemptIps.filter((ip: string) => isIPv4(ip) && isPrivateV4(ip)))];
   const v4 = subtractIps(PRIVATE_V4.map(cidrToRange), exempt).map(formatRange);
-  const add = (name: string, extra: string[]): string[] => ['advfirewall', 'firewall', 'add', 'rule', 'name=' + name, 'dir=out', 'action=block', 'enable=yes', 'profile=any', ...extra];
+  const add = (name: string, extra: string[]): string[] => [
+    'advfirewall',
+    'firewall',
+    'add',
+    'rule',
+    'name=' + name,
+    'dir=out',
+    'action=block',
+    'enable=yes',
+    'profile=any',
+    ...extra,
+  ];
   const commands: string[][] = [];
   for (const name of RULE_NAMES) commands.push(['advfirewall', 'firewall', 'delete', 'rule', 'name=' + name]);
   commands.push(['advfirewall', 'set', 'allprofiles', 'state', 'on']);
@@ -83,8 +114,16 @@ export const buildFirewallCommands = (exemptIps: string[]): string[][] => {
   commands.push(add('AgentSandbox-Block-IPv6-Local', ['protocol=any', 'remoteip=' + PRIVATE_V6.join(',')]));
   commands.push(add('AgentSandbox-Block-SMB', ['protocol=tcp', 'remoteport=135,139,445']));
   if (exempt.length > 0) {
-    commands.push(add('AgentSandbox-Gateway-TCP', ['protocol=tcp', 'remoteip=' + exempt.join(','), 'remoteport=1-52,54-65535']));
-    commands.push(add('AgentSandbox-Gateway-UDP', ['protocol=udp', 'remoteip=' + exempt.join(','), 'remoteport=1-52,54-66,69-65535']));
+    commands.push(
+      add('AgentSandbox-Gateway-TCP', ['protocol=tcp', 'remoteip=' + exempt.join(','), 'remoteport=1-52,54-65535']),
+    );
+    commands.push(
+      add('AgentSandbox-Gateway-UDP', [
+        'protocol=udp',
+        'remoteip=' + exempt.join(','),
+        'remoteport=1-52,54-66,69-65535',
+      ]),
+    );
   }
   return commands;
 };

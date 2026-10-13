@@ -8,12 +8,28 @@ import { errMsg, run, session, warn } from './env.js';
 /** The launch folder's project id (older launch folders: derived from its name). */
 export const primaryProject = (): string => session.projectId ?? hubName(session.workspaceHost || session.project, []);
 
-export const saveProjectStatus = (name: string, workspace: string, phase: ProjectStatusT['phase'], message: string, databases: DatabasePlan[], summary: string[]): void => {
+export const saveProjectStatus = (
+  name: string,
+  workspace: string,
+  phase: ProjectStatusT['phase'],
+  message: string,
+  databases: DatabasePlan[],
+  summary: string[],
+): void => {
   try {
     writeJsonAtomic(run.project(name), {
-      name, workspace, phase, message: message.slice(0, 3500), updatedAt: now(),
-      databases: databases.filter((d) => d.database !== 'sqlserver').slice(0, 16).map((d) => ({ database: d.database, port: d.port })),
+      name,
+      workspace,
+      phase,
+      message: message.slice(0, 3500),
+      updatedAt: now(),
+      databases: databases
+        .filter((d) => d.database !== 'sqlserver')
+        .slice(0, 16)
+        .map((d) => ({ database: d.database, port: d.port })),
       summary: summary.slice(0, 64).map((s) => s.slice(0, 500)),
     } satisfies ProjectStatusT);
-  } catch (e) { warn('Could not write the status of project ' + name + ': ' + errMsg(e)); }
+  } catch (e) {
+    warn('Could not write the status of project ' + name + ': ' + errMsg(e));
+  }
 };

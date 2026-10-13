@@ -12,7 +12,10 @@ export const managedSettingsFile = (): string => path.join(path.dirname(managedC
 export const writeManagedSettings = (access: GitAccess): void => {
   const file = managedSettingsFile();
   const deny = gitDenyRules(access);
-  if (deny.length === 0) { fs.rmSync(file, { force: true }); return; }
+  if (deny.length === 0) {
+    fs.rmSync(file, { force: true });
+    return;
+  }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ permissions: { deny } }, null, 2) + '\n', 'utf8');
 };

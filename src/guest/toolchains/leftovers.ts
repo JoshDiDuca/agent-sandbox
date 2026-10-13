@@ -5,7 +5,13 @@ import { safeRemove } from '../../shared/safe-remove.js';
 import { toolsDir } from '../env.js';
 
 const STAGING = /\.staging-[0-9a-f]+$/i;
-const entries = (dir: string): fs.Dirent[] => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } };
+const entries = (dir: string): fs.Dirent[] => {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+};
 
 /** Removes helper builds older versions left in persistent storage, and interrupted installs' staging folders. */
 export const pruneToolLeftovers = (): void => {
@@ -14,6 +20,7 @@ export const pruneToolLeftovers = (): void => {
   for (const top of entries(toolsDir)) {
     const dir = path.join(toolsDir, top.name);
     if (STAGING.test(top.name)) safeRemove(dir, toolsDir);
-    else if (top.isDirectory()) for (const sub of entries(dir).filter((e) => STAGING.test(e.name))) safeRemove(path.join(dir, sub.name), dir);
+    else if (top.isDirectory())
+      for (const sub of entries(dir).filter((e) => STAGING.test(e.name))) safeRemove(path.join(dir, sub.name), dir);
   }
 };

@@ -29,10 +29,21 @@ export interface ListItem<T> {
   icon?: string;
 }
 
-export interface Category { id: string; label: string; description?: string }
-export interface ListAction { key: string; label: string }
+export interface Category {
+  id: string;
+  label: string;
+  description?: string;
+}
+export interface ListAction {
+  key: string;
+  label: string;
+}
 /** Tabs above the list (e.g. which settings file): Tab switches, the screen reopens on the other one. */
-export interface Tab { label: string; badge: string; paint: (text: string) => string }
+export interface Tab {
+  label: string;
+  badge: string;
+  paint: (text: string) => string;
+}
 
 export type ListResult<T> =
   | { kind: 'pick'; value: T }
@@ -77,7 +88,11 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     this.checked = new Set(o.items.flatMap((item, i) => (item.checked ? [i] : [])));
     const start = o.startAt === undefined ? -1 : o.items.findIndex((item) => item.value === o.startAt);
     const startCategory = start >= 0 ? o.items[start].category : o.startCategory;
-    if (o.categories && startCategory) this.category = Math.max(0, o.categories.findIndex((c) => c.id === startCategory));
+    if (o.categories && startCategory)
+      this.category = Math.max(
+        0,
+        o.categories.findIndex((c) => c.id === startCategory),
+      );
     if (start >= 0) this.cursor = Math.max(0, this.visible().indexOf(start));
   }
 
@@ -89,7 +104,9 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       const label = (id?: string): string => this.o.categories?.find((c) => c.id === id)?.label ?? '';
       return all.filter((i) => {
         const it = this.o.items[i];
-        const hay = [it.label, Text.strip(it.hint ?? ''), it.description, it.keywords, it.section, label(it.category)].join(' ').toLowerCase();
+        const hay = [it.label, Text.strip(it.hint ?? ''), it.description, it.keywords, it.section, label(it.category)]
+          .join(' ')
+          .toLowerCase();
         return words.every((w) => hay.includes(w));
       });
     }
@@ -103,7 +120,9 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const searchAll = Boolean(this.query.trim() && this.o.categories);
     for (const index of visible) {
       const it = this.o.items[index];
-      const heading = searchAll ? [this.o.categories?.find((c) => c.id === it.category)?.label, it.section].filter(Boolean).join(' › ') : it.section;
+      const heading = searchAll
+        ? [this.o.categories?.find((c) => c.id === it.category)?.label, it.section].filter(Boolean).join(' › ')
+        : it.section;
       if (heading && heading !== section) rows.push({ kind: 'section', text: heading });
       section = heading;
       rows.push({ kind: 'item', index });
@@ -114,17 +133,39 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
   render(size: Size): FrameParts {
     const visible = this.visible();
     this.cursor = Math.min(this.cursor, Math.max(0, visible.length - 1));
-    const sideWidth = this.o.categories ? Math.min(32, Math.max(...this.o.categories.map((c) => Text.width(c.label))) + 7) : 0;
+    const sideWidth = this.o.categories
+      ? Math.min(32, Math.max(...this.o.categories.map((c) => Text.width(c.label))) + 7)
+      : 0;
     const rest = size.width - 1 - (sideWidth ? sideWidth + 3 : 0);
     const detailsRight = rest >= 100;
     const detailsWidth = detailsRight ? Math.min(52, Math.floor(rest * 0.38)) : rest;
     const listWidth = detailsRight ? rest - detailsWidth - 3 : rest;
 
     const top: string[] = [];
-    if (this.o.tabs) top.push(' ' + this.o.tabs.items.map((tab, i) => (i === this.o.tabs!.active ? tab.paint(' ' + tab.badge + ' ' + tab.label + ' ') : Theme.muted('  ' + tab.label + '  '))).join(' ') + Theme.muted('   tab switches'), '');
-    const intro = typeof this.o.intro === 'string' ? [this.o.intro] : this.o.intro ?? [];
+    if (this.o.tabs)
+      top.push(
+        ' ' +
+          this.o.tabs.items
+            .map((tab, i) =>
+              i === this.o.tabs!.active
+                ? tab.paint(' ' + tab.badge + ' ' + tab.label + ' ')
+                : Theme.muted('  ' + tab.label + '  '),
+            )
+            .join(' ') +
+          Theme.muted('   tab switches'),
+        '',
+      );
+    const intro = typeof this.o.intro === 'string' ? [this.o.intro] : (this.o.intro ?? []);
     for (const line of intro) top.push(...Text.wrap(line, size.width - 3).map((l) => ' ' + Theme.muted(l)));
-    if (this.searching || this.query) top.push(' ' + Theme.accent(Theme.glyph.search) + ' ' + this.query + (this.searching ? Theme.accent('▏') : '') + Theme.muted('   ' + visible.length + ' match' + (visible.length === 1 ? '' : 'es')));
+    if (this.searching || this.query)
+      top.push(
+        ' ' +
+          Theme.accent(Theme.glyph.search) +
+          ' ' +
+          this.query +
+          (this.searching ? Theme.accent('▏') : '') +
+          Theme.muted('   ' + visible.length + ' match' + (visible.length === 1 ? '' : 'es')),
+      );
     if (top.length) top.push('');
 
     const details = this.detailsLines(visible[this.cursor], detailsWidth);
@@ -141,12 +182,26 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       if (cursorRow >= this.offset + listHeight) this.offset = cursorRow - listHeight + 1;
     }
     this.offset = Math.max(0, Math.min(this.offset, Math.max(0, rows.length - listHeight)));
-    const listLines = rows.slice(this.offset, this.offset + listHeight).map((row) => this.rowLine(row, visible, listWidth));
-    if (!visible.length) listLines.push('', '  ' + Theme.muted(this.query ? 'Nothing matches "' + this.query + '".' : this.o.empty ?? 'Nothing here yet.'));
+    const listLines = rows
+      .slice(this.offset, this.offset + listHeight)
+      .map((row) => this.rowLine(row, visible, listWidth));
+    if (!visible.length)
+      listLines.push(
+        '',
+        '  ' +
+          Theme.muted(this.query ? 'Nothing matches "' + this.query + '".' : (this.o.empty ?? 'Nothing here yet.')),
+      );
     if (rows.length > listHeight) {
       const above = this.offset;
       const below = rows.length - this.offset - listHeight;
-      listLines.push(Theme.muted('   ' + (above > 0 ? '▲ ' + above + ' above' : '') + (above > 0 && below > 0 ? '   ' : '') + (below > 0 ? '▼ ' + below + ' more' : '')));
+      listLines.push(
+        Theme.muted(
+          '   ' +
+            (above > 0 ? '▲ ' + above + ' above' : '') +
+            (above > 0 && below > 0 ? '   ' : '') +
+            (below > 0 ? '▼ ' + below + ' more' : ''),
+        ),
+      );
     }
 
     const sideLines = this.sideLines(sideWidth);
@@ -160,7 +215,12 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     }
     if (bottomDetails.length) {
       // The details sit at the bottom, whatever the length of the list.
-      while (body.length < size.height - bottomDetails.length - 1) body.push(sideWidth ? Text.fit(sideLines[body.length - top.length] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline) : '');
+      while (body.length < size.height - bottomDetails.length - 1)
+        body.push(
+          sideWidth
+            ? Text.fit(sideLines[body.length - top.length] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline)
+            : '',
+        );
       body.push(Theme.dim(' ' + Theme.glyph.line.repeat(size.width - 3)), ...bottomDetails.map((l) => ' ' + l));
     }
     return { path: this.o.path, status: this.o.status, body, keys: this.keys(), notice: this.notice };
@@ -170,13 +230,22 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (row.kind === 'section') return ' ' + Theme.accentBold(row.text);
     const it = this.o.items[row.index];
     const selected = visible[this.cursor] === row.index;
-    const box = this.o.multi ? (this.checked.has(row.index) ? Theme.ok(Theme.glyph.checked) : Theme.muted(Theme.glyph.unchecked)) + ' ' : '';
+    const box = this.o.multi
+      ? (this.checked.has(row.index) ? Theme.ok(Theme.glyph.checked) : Theme.muted(Theme.glyph.unchecked)) + ' '
+      : '';
     const icon = it.icon ? it.icon + ' ' : '';
     const hint = it.hint ?? '';
     const hintWidth = Math.min(Text.width(hint), Math.floor(width * 0.5));
     const labelWidth = width - 4 - Text.width(box) - Text.width(icon) - (hintWidth ? hintWidth + 2 : 0);
     const label = it.disabled ? Theme.muted(it.label) : it.label;
-    const line = (selected ? Theme.glyph.pointer : ' ') + ' ' + box + icon + Text.fit(label, labelWidth) + (hintWidth ? '  ' + Text.fit(hint, hintWidth, 'right') : '') + ' ';
+    const line =
+      (selected ? Theme.glyph.pointer : ' ') +
+      ' ' +
+      box +
+      icon +
+      Text.fit(label, labelWidth) +
+      (hintWidth ? '  ' + Text.fit(hint, hintWidth, 'right') : '') +
+      ' ';
     if (!selected) return ' ' + line;
     return this.focus === 'list' ? ' ' + Theme.selected(Text.strip(line)) : ' ' + Theme.accent(Text.strip(line));
   }
@@ -195,7 +264,10 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const w = Math.max(10, width - 1);
     if (this.focus === 'side' && this.o.categories) {
       const cat = this.o.categories[this.category];
-      return [Theme.bold(cat.label), ...(cat.description ? Text.wrap(cat.description, w).map((l) => Theme.muted(l)) : [])];
+      return [
+        Theme.bold(cat.label),
+        ...(cat.description ? Text.wrap(cat.description, w).map((l) => Theme.muted(l)) : []),
+      ];
     }
     if (index === undefined) return [];
     const it = this.o.items[index];
@@ -208,12 +280,26 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
   }
 
   private keys(): [string, string][] {
-    if (this.searching) return [['type', 'to search'], ['↑↓', 'move'], ['↵', this.o.multi ? 'done' : 'open'], ['esc', 'clear search']];
+    if (this.searching)
+      return [
+        ['type', 'to search'],
+        ['↑↓', 'move'],
+        ['↵', this.o.multi ? 'done' : 'open'],
+        ['esc', 'clear search'],
+      ];
     return [
       ['↑↓', 'move'],
-      ...(this.o.tabs ? [['tab', 'switch ' + this.o.tabs.items.map((t) => t.label.toLowerCase()).join(' / ')] as [string, string]] : []),
+      ...(this.o.tabs
+        ? [['tab', 'switch ' + this.o.tabs.items.map((t) => t.label.toLowerCase()).join(' / ')] as [string, string]]
+        : []),
       ...(this.o.categories ? [['←→', 'categories'] as [string, string]] : []),
-      ...(this.o.multi ? [['space', 'tick'], ['a', 'tick all shown'], ['↵', 'done']] as [string, string][] : [['↵', 'open'] as [string, string]]),
+      ...(this.o.multi
+        ? ([
+            ['space', 'tick'],
+            ['a', 'tick all shown'],
+            ['↵', 'done'],
+          ] as [string, string][])
+        : [['↵', 'open'] as [string, string]]),
       ['/', 'search'],
       ...(this.o.actions ?? []).map((a) => [a.key, a.label] as [string, string]),
       ['esc', this.o.escapeLabel ?? 'back'],
@@ -221,56 +307,137 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
   }
 
   /** Programmatic notice (e.g. "Saved") shown until the next key. */
-  setNotice(text: string | undefined): void { this.notice = text; }
+  setNotice(text: string | undefined): void {
+    this.notice = text;
+  }
 
   handle(key: Key): Step<ListResult<T>> {
     const visible = this.visible();
     const current = visible[this.cursor];
     this.notice = undefined;
-    const move = (by: number): void => { this.cursor = Math.max(0, Math.min(visible.length - 1, this.cursor + by)); };
-    if (key.name === 'up') { if (this.focus === 'side') this.switchCategory(-1); else move(-1); return; }
-    if (key.name === 'down') { if (this.focus === 'side') this.switchCategory(1); else move(1); return; }
-    if (key.name === 'pageup') { move(-10); return; }
-    if (key.name === 'pagedown') { move(10); return; }
-    if (key.name === 'home') { this.cursor = 0; return; }
-    if (key.name === 'end') { this.cursor = visible.length - 1; return; }
+    const move = (by: number): void => {
+      this.cursor = Math.max(0, Math.min(visible.length - 1, this.cursor + by));
+    };
+    if (key.name === 'up') {
+      if (this.focus === 'side') this.switchCategory(-1);
+      else move(-1);
+      return;
+    }
+    if (key.name === 'down') {
+      if (this.focus === 'side') this.switchCategory(1);
+      else move(1);
+      return;
+    }
+    if (key.name === 'pageup') {
+      move(-10);
+      return;
+    }
+    if (key.name === 'pagedown') {
+      move(10);
+      return;
+    }
+    if (key.name === 'home') {
+      this.cursor = 0;
+      return;
+    }
+    if (key.name === 'end') {
+      this.cursor = visible.length - 1;
+      return;
+    }
     if (this.searching) {
-      if (key.name === 'escape') { this.searching = false; this.query = ''; this.cursor = 0; return; }
-      if (key.name === 'backspace') { if (this.query) this.query = this.query.slice(0, -1); else this.searching = false; this.cursor = 0; return; }
+      if (key.name === 'escape') {
+        this.searching = false;
+        this.query = '';
+        this.cursor = 0;
+        return;
+      }
+      if (key.name === 'backspace') {
+        if (this.query) this.query = this.query.slice(0, -1);
+        else this.searching = false;
+        this.cursor = 0;
+        return;
+      }
       // In a tick list, space always ticks (even while searching).
-      if (key.name !== 'return' && key.text && !(this.o.multi && key.name === 'space')) { this.query += key.text; this.cursor = 0; return; }
+      if (key.name !== 'return' && key.text && !(this.o.multi && key.name === 'space')) {
+        this.query += key.text;
+        this.cursor = 0;
+        return;
+      }
     }
     if (this.o.tabs && key.name === 'tab') {
       const n = this.o.tabs.items.length;
       return { done: { kind: 'tab', index: (this.o.tabs.active + (key.shift ? n - 1 : 1)) % n } };
     }
     if (this.o.categories && !this.query) {
-      if (key.name === 'left' && this.focus === 'list') { this.focus = 'side'; return; }
-      if ((key.name === 'right' || key.name === 'return') && this.focus === 'side') { this.focus = 'list'; return; }
+      if (key.name === 'left' && this.focus === 'list') {
+        this.focus = 'side';
+        return;
+      }
+      if ((key.name === 'right' || key.name === 'return') && this.focus === 'side') {
+        this.focus = 'list';
+        return;
+      }
     }
     if (key.name === 'escape' || (key.name === 'backspace' && !this.searching)) {
-      if (this.query) { this.query = ''; this.cursor = 0; return; }
+      if (this.query) {
+        this.query = '';
+        this.cursor = 0;
+        return;
+      }
       return { done: { kind: 'back' } };
     }
-    if (key.text === '/' || (key.name === 'f' && key.ctrl)) { this.searching = true; this.focus = 'list'; return; }
-    if (this.o.multi) {
-      if (key.name === 'space' && current !== undefined) { this.toggle(current); return; }
-      if (key.text === 'a') { const all = visible.filter((i) => !this.o.items[i].disabled); const tick = all.some((i) => !this.checked.has(i)); all.forEach((i) => (tick ? this.checked.add(i) : this.checked.delete(i))); return; }
-      if (key.name === 'return') return { done: { kind: 'multi', values: this.o.items.filter((_, i) => this.checked.has(i)).map((it) => it.value) } };
+    if (key.text === '/' || (key.name === 'f' && key.ctrl)) {
+      this.searching = true;
+      this.focus = 'list';
+      return;
     }
-    if ((key.name === 'return' || key.name === 'right' || (key.name === 'space' && !this.searching)) && current !== undefined && !this.o.multi) {
+    if (this.o.multi) {
+      if (key.name === 'space' && current !== undefined) {
+        this.toggle(current);
+        return;
+      }
+      if (key.text === 'a') {
+        const all = visible.filter((i) => !this.o.items[i].disabled);
+        const tick = all.some((i) => !this.checked.has(i));
+        all.forEach((i) => (tick ? this.checked.add(i) : this.checked.delete(i)));
+        return;
+      }
+      if (key.name === 'return')
+        return {
+          done: { kind: 'multi', values: this.o.items.filter((_, i) => this.checked.has(i)).map((it) => it.value) },
+        };
+    }
+    if (
+      (key.name === 'return' || key.name === 'right' || (key.name === 'space' && !this.searching)) &&
+      current !== undefined &&
+      !this.o.multi
+    ) {
       const it = this.o.items[current];
-      if (it.disabled) { this.notice = Theme.warn(it.disabled); return; }
+      if (it.disabled) {
+        this.notice = Theme.warn(it.disabled);
+        return;
+      }
       return { done: { kind: 'pick', value: it.value } };
     }
     const action = !this.searching && key.text ? this.o.actions?.find((a) => a.key === key.text) : undefined;
-    if (action) return { done: { kind: 'action', key: action.key, value: current === undefined ? undefined : this.o.items[current].value } };
+    if (action)
+      return {
+        done: {
+          kind: 'action',
+          key: action.key,
+          value: current === undefined ? undefined : this.o.items[current].value,
+        },
+      };
     return;
   }
 
   private toggle(index: number): void {
-    if (this.o.items[index].disabled) { this.notice = Theme.warn(this.o.items[index].disabled!); return; }
-    if (this.checked.has(index)) this.checked.delete(index); else this.checked.add(index);
+    if (this.o.items[index].disabled) {
+      this.notice = Theme.warn(this.o.items[index].disabled!);
+      return;
+    }
+    if (this.checked.has(index)) this.checked.delete(index);
+    else this.checked.add(index);
   }
 
   private switchCategory(by: number): void {

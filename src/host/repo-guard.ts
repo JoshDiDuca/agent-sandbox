@@ -20,7 +20,8 @@ import { assertTestWritable } from './test-guard.js';
 import { dirExists, fileExists, isLink } from '../core/util.js';
 
 /** Config keys that make git run a program, or load more config. */
-const DANGEROUS_KEY = /^(fsmonitor|hookspath|sshcommand|pager|editor|askpass|program|gpgprogram|textconv|command|cmd|clean|smudge|process|driver|helper|uploadpack|receivepack|path|attributesfile|excludesfile|worktree|worktreeconfig|gitproxy|proxycommand|sendemailvalidate|tool|external|difffilter|defaultkeycommand|alternaterefscommand)\s*=/i;
+const DANGEROUS_KEY =
+  /^(fsmonitor|hookspath|sshcommand|pager|editor|askpass|program|gpgprogram|textconv|command|cmd|clean|smudge|process|driver|helper|uploadpack|receivepack|path|attributesfile|excludesfile|worktree|worktreeconfig|gitproxy|proxycommand|sendemailvalidate|tool|external|difffilter|defaultkeycommand|alternaterefscommand)\s*=/i;
 /** Sections where any key runs a program ([pager] log = x), or where a "!" value does ([alias] st = !x). */
 const dangerousInSection = (section: string, keyPart: string): boolean =>
   (section === 'pager' && keyPart.includes('=')) || (section === 'alias' && /^[^=]+=\s*"?\s*!/.test(keyPart));
@@ -29,17 +30,117 @@ const MARK = '# [agent-sandbox] disabled, added inside the sandbox: ';
 /** Files in .git that make git read config/hooks from somewhere else. */
 const REDIRECTS = ['commondir', 'config.worktree'];
 /** Names you are likely to run in a project folder; with any of these extensions Windows would pick the local copy. */
-const COMMANDS = new RegExp('^(' + [
-  // this tool's own commands (package.json "bin")
-  'sandbox', 'windows-development-sandbox', 'agent-sandbox', 'claude-sbx', 'claude-sandbox', 'codex-sbx', 'codex-sandbox', 'gemini-sbx', 'gemini-sandbox', 'claude-host', 'sbx-show', 'sbx-hide',
-  // agents
-  'claude', 'codex', 'gemini', 'opencode', 'qwen', 'crush', 'copilot', 'kilo', 'kilocode', 'amp', 'cline', 'cn', 'kimi', 'reasonix', 'codewhale', 'aider', 'cursor-agent', 'agent', 'goose',
-  // toolchains and everyday tools
-  'node', 'npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'corepack', 'volta', 'nvm', 'deno', 'bun', 'bunx', 'tsc', 'git', 'gh', 'code', 'python', 'python3', 'py', 'pip', 'pip3', 'uv', 'uvx', 'pyenv', 'poetry',
-  'cargo', 'rustc', 'rustup', 'dotnet', 'nuget', 'msbuild', 'go', 'java', 'javac', 'mvn', 'mvnw', 'gradle', 'gradlew', 'ruby', 'gem', 'bundle', 'rake', 'rails', 'php', 'composer',
-  'make', 'cmake', 'ninja', 'gcc', 'g\\+\\+', 'clang', 'psql', 'mysql', 'mariadb', 'mongosh', 'redis-cli', 'docker', 'kubectl', 'terraform', 'az', 'aws',
-  'powershell', 'pwsh', 'cmd', 'where', 'tasklist', 'tar', 'curl', 'ssh', 'scp',
-].join('|') + ')\\.(exe|com|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|ps1)$', 'i');
+const COMMANDS = new RegExp(
+  '^(' +
+    [
+      // this tool's own commands (package.json "bin")
+      'sandbox',
+      'windows-development-sandbox',
+      'agent-sandbox',
+      'claude-sbx',
+      'claude-sandbox',
+      'codex-sbx',
+      'codex-sandbox',
+      'gemini-sbx',
+      'gemini-sandbox',
+      'claude-host',
+      'sbx-show',
+      'sbx-hide',
+      // agents
+      'claude',
+      'codex',
+      'gemini',
+      'opencode',
+      'qwen',
+      'crush',
+      'copilot',
+      'kilo',
+      'kilocode',
+      'amp',
+      'cline',
+      'cn',
+      'kimi',
+      'reasonix',
+      'codewhale',
+      'aider',
+      'cursor-agent',
+      'agent',
+      'goose',
+      // toolchains and everyday tools
+      'node',
+      'npm',
+      'npx',
+      'pnpm',
+      'pnpx',
+      'yarn',
+      'corepack',
+      'volta',
+      'nvm',
+      'deno',
+      'bun',
+      'bunx',
+      'tsc',
+      'git',
+      'gh',
+      'code',
+      'python',
+      'python3',
+      'py',
+      'pip',
+      'pip3',
+      'uv',
+      'uvx',
+      'pyenv',
+      'poetry',
+      'cargo',
+      'rustc',
+      'rustup',
+      'dotnet',
+      'nuget',
+      'msbuild',
+      'go',
+      'java',
+      'javac',
+      'mvn',
+      'mvnw',
+      'gradle',
+      'gradlew',
+      'ruby',
+      'gem',
+      'bundle',
+      'rake',
+      'rails',
+      'php',
+      'composer',
+      'make',
+      'cmake',
+      'ninja',
+      'gcc',
+      'g\\+\\+',
+      'clang',
+      'psql',
+      'mysql',
+      'mariadb',
+      'mongosh',
+      'redis-cli',
+      'docker',
+      'kubectl',
+      'terraform',
+      'az',
+      'aws',
+      'powershell',
+      'pwsh',
+      'cmd',
+      'where',
+      'tasklist',
+      'tar',
+      'curl',
+      'ssh',
+      'scp',
+    ].join('|') +
+    ')\\.(exe|com|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|ps1)$',
+  'i',
+);
 
 /**
  * Project files that tools on this PC act on by themselves: Claude Code runs a project's hooks, helpers and MCP servers,
@@ -50,14 +151,31 @@ const AGENT_FILES: Record<string, (data: unknown, text: string) => unknown> = {
   '.claude/settings.json': (d) => claudeRisk(d),
   '.claude/settings.local.json': (d) => claudeRisk(d),
   '.mcp.json': (_d, text) => text,
-  '.vscode/tasks.json': (d) => JSON.stringify(d).match(/"runOn"\s*:\s*"folderOpen"/) ? d : null,
-  '.vscode/settings.json': (d) => _.pickBy(_.isPlainObject(d) ? d as object : {}, (_v, k) => /path|executable|command|interpreter|shell|profile|args|env|exec|program|server|launch|runtime|binary/i.test(k)),
+  '.vscode/tasks.json': (d) => (JSON.stringify(d).match(/"runOn"\s*:\s*"folderOpen"/) ? d : null),
+  '.vscode/settings.json': (d) =>
+    _.pickBy(_.isPlainObject(d) ? (d as object) : {}, (_v, k) =>
+      /path|executable|command|interpreter|shell|profile|args|env|exec|program|server|launch|runtime|binary/i.test(k),
+    ),
   '.envrc': (_d, text) => text,
 };
 const claudeRisk = (d: unknown): unknown => {
   const s = (_.isPlainObject(d) ? d : {}) as Record<string, unknown>;
   const permissions = (_.isPlainObject(s.permissions) ? s.permissions : {}) as Record<string, unknown>;
-  return { ..._.pick(s, ['hooks', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'otelHeadersHelper', 'statusLine', 'env', 'enableAllProjectMcpServers', 'enabledMcpjsonServers', 'disableAllHooks']), permissions: _.pick(permissions, ['defaultMode', 'additionalDirectories']) };
+  return {
+    ..._.pick(s, [
+      'hooks',
+      'apiKeyHelper',
+      'awsAuthRefresh',
+      'awsCredentialExport',
+      'otelHeadersHelper',
+      'statusLine',
+      'env',
+      'enableAllProjectMcpServers',
+      'enabledMcpjsonServers',
+      'disableAllHooks',
+    ]),
+    permissions: _.pick(permissions, ['defaultMode', 'additionalDirectories']),
+  };
 };
 const MAX_AGENT_FILE_BYTES = 1024 * 1024;
 
@@ -71,21 +189,37 @@ const agentRisk = (workspace: string, rel: string): string | null => {
   const errors: ParseError[] = [];
   const data = parseJsonc(text, errors, { allowTrailingComma: true });
   const risk = AGENT_FILES[rel](rel === '.envrc' ? null : data, text);
-  return crypto.createHash('sha256').update(JSON.stringify(risk ?? null) + (errors.length && rel !== '.envrc' && rel !== '.mcp.json' ? hash(file) : '')).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(risk ?? null) + (errors.length && rel !== '.envrc' && rel !== '.mcp.json' ? hash(file) : ''))
+    .digest('hex');
 };
 const agentSnapshot = (workspace: string): Record<string, string> =>
-  Object.fromEntries(Object.keys(AGENT_FILES).flatMap((rel) => { const r = agentRisk(workspace, rel); return r ? [[rel, r]] : []; }));
+  Object.fromEntries(
+    Object.keys(AGENT_FILES).flatMap((rel) => {
+      const r = agentRisk(workspace, rel);
+      return r ? [[rel, r]] : [];
+    }),
+  );
 
 /** A git folder's own state: config lines, hooks, redirect files. */
-export interface GitState { config: string[]; hooks: Record<string, string>; redirects: string[] }
+export interface GitState {
+  config: string[];
+  hooks: Record<string, string>;
+  redirects: string[];
+}
 export interface RepoSnapshot extends GitState {
-  gitDir: boolean; commands: Record<string, string>;
+  gitDir: boolean;
+  commands: Record<string, string>;
   /** Fingerprints of AGENT_FILES (missing in snapshots of older versions: then they are not checked). */
   agent?: Record<string, string>;
   /** Other git folders: submodules (.git/modules/...) and repositories nested in the project, by relative path. */
   repos?: Record<string, GitState>;
 }
-export interface RepoFinding { kind: 'hook' | 'config' | 'git' | 'command' | 'agent'; detail: string }
+export interface RepoFinding {
+  kind: 'hook' | 'config' | 'git' | 'command' | 'agent';
+  detail: string;
+}
 
 /** SHA-256 in small chunks: a sandbox can plant a multi-gigabyte "node.exe" to exhaust this PC's memory. */
 const hash = (file: string): string => {
@@ -94,8 +228,21 @@ const hash = (file: string): string => {
   const buffer = Buffer.alloc(1 << 20);
   let fd: number;
   // A file that cannot be read (locked by a program in the sandbox) never matches the snapshot, so it is dealt with.
-  try { fd = fs.openSync(file, 'r'); } catch { return 'unreadable-' + crypto.randomBytes(4).toString('hex'); }
-  try { for (let n = fs.readSync(fd, buffer, 0, buffer.length, null); n > 0; n = fs.readSync(fd, buffer, 0, buffer.length, null)) sum.update(buffer.subarray(0, n)); } finally { fs.closeSync(fd); }
+  try {
+    fd = fs.openSync(file, 'r');
+  } catch {
+    return 'unreadable-' + crypto.randomBytes(4).toString('hex');
+  }
+  try {
+    for (
+      let n = fs.readSync(fd, buffer, 0, buffer.length, null);
+      n > 0;
+      n = fs.readSync(fd, buffer, 0, buffer.length, null)
+    )
+      sum.update(buffer.subarray(0, n));
+  } finally {
+    fs.closeSync(fd);
+  }
   return sum.digest('hex');
 };
 const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
@@ -106,12 +253,19 @@ const plainGitDir = (workspace: string): string | null => {
 
 const filesIn = (dir: string, accept: (name: string) => boolean): Record<string, string> =>
   dirExists(dir) && !isLink(dir)
-    ? Object.fromEntries(fs.readdirSync(dir, { withFileTypes: true }).filter((e) => (e.isFile() || e.isSymbolicLink()) && accept(e.name)).map((e) => [e.name, hash(path.join(dir, e.name))]))
+    ? Object.fromEntries(
+        fs
+          .readdirSync(dir, { withFileTypes: true })
+          .filter((e) => (e.isFile() || e.isSymbolicLink()) && accept(e.name))
+          .map((e) => [e.name, hash(path.join(dir, e.name))]),
+      )
     : {};
 
 const configLines = (dir: string): string[] => {
   const file = path.join(dir, 'config');
-  return fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_CONFIG_BYTES ? fs.readFileSync(file, 'utf8').split(/\r?\n/) : [];
+  return fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_CONFIG_BYTES
+    ? fs.readFileSync(file, 'utf8').split(/\r?\n/)
+    : [];
 };
 
 const gitState = (dir: string | null): GitState => ({
@@ -122,9 +276,28 @@ const gitState = (dir: string | null): GitState => ({
 const EMPTY_GIT: GitState = { config: [], hooks: {}, redirects: [] };
 
 const MAX_OTHER_REPOS = 64;
-const SKIP_DIRS = new Set(['node_modules', '.git', 'agent-sandbox-quarantine', 'target', 'dist', 'build', 'bin', 'obj', '.venv', 'venv']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'agent-sandbox-quarantine',
+  'target',
+  'dist',
+  'build',
+  'bin',
+  'obj',
+  '.venv',
+  'venv',
+]);
 const plainDirs = (dir: string, limit: number): string[] => {
-  try { return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.isSymbolicLink()).slice(0, limit).map((e) => path.join(dir, e.name)); } catch { return []; }
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.isSymbolicLink())
+      .slice(0, limit)
+      .map((e) => path.join(dir, e.name));
+  } catch {
+    return [];
+  }
 };
 /**
  * Git folders other than the project's own: submodules (.git/modules/**) and repositories nested up to two levels deep.
@@ -138,13 +311,18 @@ const otherGitDirs = (workspace: string): string[] => {
   const walk = (dir: string, depth: number): void => {
     for (const d of plainDirs(dir, 200)) {
       if (found.length >= MAX_OTHER_REPOS) return;
-      if (fileExists(path.join(d, 'config')) && fileExists(path.join(d, 'HEAD'))) { found.push(d); if (depth < 3) walk(path.join(d, 'modules'), depth + 1); }
-      else if (depth < 3) walk(d, depth + 1);
+      if (fileExists(path.join(d, 'config')) && fileExists(path.join(d, 'HEAD'))) {
+        found.push(d);
+        if (depth < 3) walk(path.join(d, 'modules'), depth + 1);
+      } else if (depth < 3) walk(d, depth + 1);
     }
   };
   if (main) walk(path.join(main, 'modules'), 0);
   for (const sub of plainDirs(workspace, 500).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase()))) {
-    for (const candidate of [sub, ...plainDirs(sub, 200).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase()))]) {
+    for (const candidate of [
+      sub,
+      ...plainDirs(sub, 200).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase())),
+    ]) {
       if (found.length >= MAX_OTHER_REPOS) return found;
       const git = plainGitDir(candidate);
       if (git) found.push(git);
@@ -171,8 +349,17 @@ const quarantine = (from: string, names: string[], into: string, kind: RepoFindi
   const target = path.join(into, 'agent-sandbox-quarantine', String(Date.now()));
   fs.mkdirSync(target, { recursive: true });
   return names.map((name) => {
-    try { fs.renameSync(path.join(from, name), path.join(target, name)); } catch (e) {
-      return { kind, detail: name + ' (could not be moved: ' + (e as NodeJS.ErrnoException).code + '; delete it yourself before running anything here)' };
+    try {
+      fs.renameSync(path.join(from, name), path.join(target, name));
+    } catch (e) {
+      return {
+        kind,
+        detail:
+          name +
+          ' (could not be moved: ' +
+          (e as NodeJS.ErrnoException).code +
+          '; delete it yourself before running anything here)',
+      };
     }
     return { kind, detail: name + ' (moved to ' + target + ')' };
   });
@@ -188,20 +375,32 @@ const disableConfig = (dir: string, before: string[]): RepoFinding[] => {
   let section = '';
   const fixed = lines.map((line) => {
     const header = SECTION.exec(line);
-    if (header) { section = header[1].trim().toLowerCase().split(/\s/)[0]; inInclude = /^include(if\s+"[^"]*")?$/i.test(header[1].trim()); }
+    if (header) {
+      section = header[1].trim().toLowerCase().split(/\s/)[0];
+      inInclude = /^include(if\s+"[^"]*")?$/i.test(header[1].trim());
+    }
     seen[line] = (seen[line] ?? 0) + 1;
     if (line.startsWith(MARK) || seen[line] <= (known[line] ?? 0)) return line;
     // git also accepts "[core] fsmonitor = x" on one line, so look past a leading section header.
     const keyPart = line.replace(SECTION, '').trim();
-    if (!(DANGEROUS_KEY.test(keyPart) || (inInclude && keyPart.includes('=')) || dangerousInSection(section, keyPart))) return line;
+    if (!(DANGEROUS_KEY.test(keyPart) || (inInclude && keyPart.includes('=')) || dangerousInSection(section, keyPart)))
+      return line;
     findings.push({ kind: 'config', detail: line.trim() });
     return MARK + line.trim();
   });
   if (findings.length) writeFileAtomic(path.join(dir, 'config'), fixed.join('\n'));
   const file = path.join(dir, 'config');
   // A link or a huge file is not read at all, so say so instead of letting it pass as "nothing found".
-  const unchecked = isLink(file) ? '.git/config is a link' : lines.length === 0 && fileExists(file) && fs.statSync(file).size > MAX_CONFIG_BYTES ? '.git/config is over 4 MB' : null;
-  if (unchecked) findings.push({ kind: 'git', detail: unchecked + ', so it cannot be checked. Do not run git in this folder until you have looked at it.' });
+  const unchecked = isLink(file)
+    ? '.git/config is a link'
+    : lines.length === 0 && fileExists(file) && fs.statSync(file).size > MAX_CONFIG_BYTES
+      ? '.git/config is over 4 MB'
+      : null;
+  if (unchecked)
+    findings.push({
+      kind: 'git',
+      detail: unchecked + ', so it cannot be checked. Do not run git in this folder until you have looked at it.',
+    });
   return findings;
 };
 
@@ -213,21 +412,37 @@ export const guardRepo = (workspace: string, before: RepoSnapshot): RepoFinding[
   assertTestWritable(workspace);
   const findings: RepoFinding[] = [];
   const commandsNow = filesIn(workspace, (n) => COMMANDS.test(n));
-  findings.push(...quarantine(workspace, Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]), workspace, 'command'));
+  findings.push(
+    ...quarantine(
+      workspace,
+      Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]),
+      workspace,
+      'command',
+    ),
+  );
 
   // Snapshots from before these checks existed have no baseline: checking against nothing would move your own files.
   if (before.agent) findings.push(...guardAgentFiles(workspace, before.agent));
   if (before.repos) {
     for (const other of otherGitDirs(workspace)) {
       const rel = relative(workspace, other);
-      findings.push(...guardGitDir(other, before.repos[rel] ?? EMPTY_GIT).map((f) => ({ ...f, detail: rel + ': ' + f.detail })));
+      findings.push(
+        ...guardGitDir(other, before.repos[rel] ?? EMPTY_GIT).map((f) => ({ ...f, detail: rel + ': ' + f.detail })),
+      );
     }
   }
 
   const dir = plainGitDir(workspace);
   if (!dir) {
     const replaced = before.gitDir && fs.existsSync(path.join(workspace, '.git'));
-    if (replaced) findings.push({ kind: 'git', detail: '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' + workspace + ' until you have checked it.' });
+    if (replaced)
+      findings.push({
+        kind: 'git',
+        detail:
+          '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' +
+          workspace +
+          ' until you have checked it.',
+      });
     return findings;
   }
   findings.push(...guardGitDir(dir, before));
@@ -238,22 +453,45 @@ const guardGitDir = (dir: string, before: GitState): RepoFinding[] => {
   const hooksDir = path.join(dir, 'hooks');
   const hooksNow = filesIn(hooksDir, (n) => !n.endsWith('.sample'));
   return [
-    ...quarantine(hooksDir, Object.keys(hooksNow).filter((n) => before.hooks[n] !== hooksNow[n]), dir, 'hook'),
-    ...quarantine(dir, REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n)) && !before.redirects.includes(n)), dir, 'git'),
+    ...quarantine(
+      hooksDir,
+      Object.keys(hooksNow).filter((n) => before.hooks[n] !== hooksNow[n]),
+      dir,
+      'hook',
+    ),
+    ...quarantine(
+      dir,
+      REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n)) && !before.redirects.includes(n)),
+      dir,
+      'git',
+    ),
     ...disableConfig(dir, before.config),
   ];
 };
 
 /** Agent files whose runnable part changed are moved to the quarantine folder (the rest of your edits are in there too). */
 const guardAgentFiles = (workspace: string, before: Record<string, string>): RepoFinding[] => {
-  const changed = Object.keys(AGENT_FILES).filter((rel) => { const now = agentRisk(workspace, rel); return now !== null && now !== before[rel]; });
+  const changed = Object.keys(AGENT_FILES).filter((rel) => {
+    const now = agentRisk(workspace, rel);
+    return now !== null && now !== before[rel];
+  });
   if (!changed.length) return [];
   const target = path.join(workspace, 'agent-sandbox-quarantine', String(Date.now()));
   fs.mkdirSync(target, { recursive: true });
   return changed.map((rel) => {
-    const what = rel + ' (the sandbox added something it would run on this PC: hooks, MCP servers, helper commands or tasks';
-    try { fs.renameSync(path.join(workspace, ...rel.split('/')), path.join(target, rel.replace(/\//g, '_'))); } catch (e) {
-      return { kind: 'agent' as const, detail: what + '; could not be moved: ' + (e as NodeJS.ErrnoException).code + '. Check it before you open this folder in Claude Code or VS Code)' };
+    const what =
+      rel + ' (the sandbox added something it would run on this PC: hooks, MCP servers, helper commands or tasks';
+    try {
+      fs.renameSync(path.join(workspace, ...rel.split('/')), path.join(target, rel.replace(/\//g, '_')));
+    } catch (e) {
+      return {
+        kind: 'agent' as const,
+        detail:
+          what +
+          '; could not be moved: ' +
+          (e as NodeJS.ErrnoException).code +
+          '. Check it before you open this folder in Claude Code or VS Code)',
+      };
     }
     return { kind: 'agent' as const, detail: what + '; moved to ' + target + ')' };
   });
@@ -263,13 +501,30 @@ const guardAgentFiles = (workspace: string, before: Record<string, string>): Rep
 
 const syncDir = (dataPath: string): string => path.join(path.dirname(path.dirname(dataPath)), 'sync');
 const snapshotFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo.json');
-const findingsFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo-findings.json');
+const findingsFile = (dataPath: string): string =>
+  path.join(syncDir(dataPath), path.basename(dataPath) + '-repo-findings.json');
 
-const Finding = z.object({ kind: z.enum(['hook', 'config', 'git', 'command', 'agent']), detail: z.string().max(4096), at: z.string().max(64).optional() });
-const GitStateSchema = z.object({ config: z.array(z.string()), hooks: z.record(z.string(), z.string()), redirects: z.array(z.string()) });
+const Finding = z.object({
+  kind: z.enum(['hook', 'config', 'git', 'command', 'agent']),
+  detail: z.string().max(4096),
+  at: z.string().max(64).optional(),
+});
+const GitStateSchema = z.object({
+  config: z.array(z.string()),
+  hooks: z.record(z.string(), z.string()),
+  redirects: z.array(z.string()),
+});
 const Saved = z.object({
-  workspace: z.string().max(1024).refine((p) => path.isAbsolute(p)),
-  snapshot: GitStateSchema.extend({ gitDir: z.boolean(), commands: z.record(z.string(), z.string()), agent: z.record(z.string(), z.string()).optional(), repos: z.record(z.string(), GitStateSchema).optional() }),
+  workspace: z
+    .string()
+    .max(1024)
+    .refine((p) => path.isAbsolute(p)),
+  snapshot: GitStateSchema.extend({
+    gitDir: z.boolean(),
+    commands: z.record(z.string(), z.string()),
+    agent: z.record(z.string(), z.string()).optional(),
+    repos: z.record(z.string(), GitStateSchema).optional(),
+  }),
 });
 
 /**
@@ -277,26 +532,52 @@ const Saved = z.object({
  * versions saved a single object.
  */
 type SavedT = z.output<typeof Saved>;
-const Store = z.strictObject({ projects: z.array(Saved).max(4096), roots: z.array(z.string().max(1024).refine((p) => path.isAbsolute(p))).max(64) });
+const Store = z.strictObject({
+  projects: z.array(Saved).max(4096),
+  roots: z
+    .array(
+      z
+        .string()
+        .max(1024)
+        .refine((p) => path.isAbsolute(p)),
+    )
+    .max(64),
+});
 const StoreAny = z.union([Store, Saved.transform((s) => ({ projects: [s], roots: [] as string[] }))]);
-const readStore = (dataPath: string): z.output<typeof Store> => readValid(StoreAny, snapshotFile(dataPath)) ?? { projects: [], roots: [] };
+const readStore = (dataPath: string): z.output<typeof Store> =>
+  readValid(StoreAny, snapshotFile(dataPath)) ?? { projects: [], roots: [] };
 const EMPTY: RepoSnapshot = { gitDir: false, config: [], hooks: {}, redirects: [], commands: {}, agent: {}, repos: {} };
 const MAX_ROOT_PROJECTS = 2000;
 
 /** The folders directly inside a project root (plain folders only; links are never followed). */
 const rootProjects = (root: string): string[] => {
   if (!dirExists(root) || isLink(root)) return [];
-  return fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.isSymbolicLink()).slice(0, MAX_ROOT_PROJECTS).map((e) => path.join(root, e.name));
+  return fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.isSymbolicLink())
+    .slice(0, MAX_ROOT_PROJECTS)
+    .map((e) => path.join(root, e.name));
 };
-const has = (projects: SavedT[], workspace: string): boolean => projects.some((s) => s.workspace.toLowerCase() === workspace.toLowerCase());
+const has = (projects: SavedT[], workspace: string): boolean =>
+  projects.some((s) => s.workspace.toLowerCase() === workspace.toLowerCase());
 
 /**
  * At launch: every folder the sandbox will be able to write. The launch folder, projects mapped with it and every
  * project already inside a project root are snapshotted as they are now, before the sandbox can touch them.
  */
-export const saveRepoSnapshot = (dataPath: string, workspace: string, more: string[] = [], roots: string[] = []): void => {
-  const folders = _.uniqBy([workspace, ...more, ...roots.flatMap((r) => [r, ...rootProjects(r)])], (w) => w.toLowerCase());
-  writeJsonAtomic(snapshotFile(dataPath), { projects: folders.map((w) => ({ workspace: w, snapshot: snapshotRepo(w) })), roots });
+export const saveRepoSnapshot = (
+  dataPath: string,
+  workspace: string,
+  more: string[] = [],
+  roots: string[] = [],
+): void => {
+  const folders = _.uniqBy([workspace, ...more, ...roots.flatMap((r) => [r, ...rootProjects(r)])], (w) =>
+    w.toLowerCase(),
+  );
+  writeJsonAtomic(snapshotFile(dataPath), {
+    projects: folders.map((w) => ({ workspace: w, snapshot: snapshotRepo(w) })),
+    roots,
+  });
 };
 
 /**
@@ -307,7 +588,10 @@ export const addRepoSnapshot = (dataPath: string, workspace: string, o: { empty?
   const store = readStore(dataPath);
   // A folder inside one that is guarded already is covered by it only for its root files; it gets its own entry.
   if (has(store.projects, workspace)) return;
-  writeJsonAtomic(snapshotFile(dataPath), { ...store, projects: [...store.projects, { workspace, snapshot: o.empty ? EMPTY : snapshotRepo(workspace) }] });
+  writeJsonAtomic(snapshotFile(dataPath), {
+    ...store,
+    projects: [...store.projects, { workspace, snapshot: o.empty ? EMPTY : snapshotRepo(workspace) }],
+  });
 };
 
 /**
@@ -317,7 +601,10 @@ export const addRepoSnapshot = (dataPath: string, workspace: string, o: { empty?
  */
 const discoverRootProjects = (dataPath: string): SavedT[] => {
   const store = readStore(dataPath);
-  const found = store.roots.flatMap(rootProjects).filter((w) => !has(store.projects, w)).map((workspace) => ({ workspace, snapshot: EMPTY }));
+  const found = store.roots
+    .flatMap(rootProjects)
+    .filter((w) => !has(store.projects, w))
+    .map((workspace) => ({ workspace, snapshot: EMPTY }));
   if (!found.length) return store.projects;
   const projects = [...store.projects, ...found].slice(0, 4096);
   writeJsonAtomic(snapshotFile(dataPath), { ...store, projects });
@@ -333,10 +620,17 @@ export const checkRepo = (dataPath: string): RepoFinding[] => {
   if (!saved.length) return [];
   const old = repoFindings(dataPath);
   // A finding that cannot be fixed (a file locked in the sandbox) is reported once, not every minute.
-  const findings = saved.flatMap((s) => guardRepo(s.workspace, s.snapshot).map((f) => (saved.length > 1 ? { ...f, detail: s.workspace + ': ' + f.detail } : f)))
+  const findings = saved
+    .flatMap((s) =>
+      guardRepo(s.workspace, s.snapshot).map((f) =>
+        saved.length > 1 ? { ...f, detail: s.workspace + ': ' + f.detail } : f,
+      ),
+    )
     .filter((f) => !old.some((o) => o.kind === f.kind && o.detail === f.detail));
-  if (findings.length) writeJsonAtomic(findingsFile(dataPath), [...old, ...findings.map((f) => ({ ...f, at: new Date().toISOString() }))]);
+  if (findings.length)
+    writeJsonAtomic(findingsFile(dataPath), [...old, ...findings.map((f) => ({ ...f, at: new Date().toISOString() }))]);
   return findings;
 };
 
-export const repoFindings = (dataPath: string): (RepoFinding & { at?: string })[] => readValid(z.array(Finding).max(10000), findingsFile(dataPath)) ?? [];
+export const repoFindings = (dataPath: string): (RepoFinding & { at?: string })[] =>
+  readValid(z.array(Finding).max(10000), findingsFile(dataPath)) ?? [];

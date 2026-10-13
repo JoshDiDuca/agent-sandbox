@@ -21,14 +21,20 @@ export const installedMsvcEnv = (): VcEnv | null => {
 /** Empties tools\msvc for a fresh install, keeping the manifest and the verified downloads of an earlier attempt. */
 const clearTree = (): void => {
   if (!exists(ROOT)) return;
-  for (const name of fs.readdirSync(ROOT).filter((n) => n !== '.manifest.json' && n !== '.download')) safeRemove(path.join(ROOT, name), ROOT);
+  for (const name of fs.readdirSync(ROOT).filter((n) => n !== '.manifest.json' && n !== '.download'))
+    safeRemove(path.join(ROOT, name), ROOT);
 };
 
 export const setupMsvc = async (env: ToolEnv, config: Toolchains['msvc']): Promise<void> => {
   if (!config.acceptLicense) {
-    throw new Error('MSVC is installed only with toolchains.msvc.acceptLicense = true: its use is governed by the Visual Studio licence terms (https://visualstudio.microsoft.com/license-terms/), which need a Visual Studio licence');
+    throw new Error(
+      'MSVC is installed only with toolchains.msvc.acceptLicense = true: its use is governed by the Visual Studio licence terms (https://visualstudio.microsoft.com/license-terms/), which need a Visual Studio licence',
+    );
   }
-  if (dryRun) { log('(dry run) would provision MSVC ' + config.msvcVersion + ' and Windows SDK ' + config.sdkVersion); return; }
+  if (dryRun) {
+    log('(dry run) would provision MSVC ' + config.msvcVersion + ' and Windows SDK ' + config.sdkVersion);
+    return;
+  }
   const want = config.msvcVersion + '/' + config.sdkVersion;
   let done = readInstalled();
   if (!done || done.want !== want || !hasCompiler(done.msvc)) {

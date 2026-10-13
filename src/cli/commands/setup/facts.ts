@@ -28,7 +28,13 @@ export const ENABLE_COMMAND = 'Enable-WindowsOptionalFeature -Online -FeatureNam
 
 /** `reg query <key>` output to { valueName: data }. */
 export const parseRegQuery = (text: string): Record<string, string> =>
-  Object.fromEntries(_.compact(text.split(/\r?\n/).map((line) => /^\s+(\S+)\s+REG_\w+\s+(.*)$/.exec(line)?.slice(1, 3) as [string, string] | undefined)));
+  Object.fromEntries(
+    _.compact(
+      text
+        .split(/\r?\n/)
+        .map((line) => /^\s+(\S+)\s+REG_\w+\s+(.*)$/.exec(line)?.slice(1, 3) as [string, string] | undefined),
+    ),
+  );
 
 /** The "State : ..." line of `Dism /Get-FeatureInfo` (English output only; anything else is unknown). */
 export const parseDismState = (text: string): FeatureState => {
@@ -54,17 +60,31 @@ const PROBE = [
   '@{ virtualizationFirmware = $v; hypervisorPresent = $h; installState = $s } | ConvertTo-Json -Compress',
 ].join('; ');
 
-const Probe = z.object({ virtualizationFirmware: z.boolean().nullable(), hypervisorPresent: z.boolean().nullable(), installState: z.number().nullable() }).partial();
+const Probe = z
+  .object({
+    virtualizationFirmware: z.boolean().nullable(),
+    hypervisorPresent: z.boolean().nullable(),
+    installState: z.number().nullable(),
+  })
+  .partial();
 
 export const parseProbe = (text: string): z.infer<typeof Probe> => {
-  try { return Probe.parse(JSON.parse(_.last(text.trim().split(/\r?\n/)) ?? '')); } catch { return {}; }
+  try {
+    return Probe.parse(JSON.parse(_.last(text.trim().split(/\r?\n/)) ?? ''));
+  } catch {
+    return {};
+  }
 };
 
 export const gatherFacts = (storageRoot: string): MachineFacts => {
-  const reg = parseRegQuery(captureOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion']));
+  const reg = parseRegQuery(
+    captureOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion']),
+  );
   const probe = parseProbe(captureOutput(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', PROBE]));
   // DISM knows about a pending restart but needs admin rights; the CIM state works for everyone.
-  const dism = parseDismState(captureOutput(SYSTEM.dism(), ['/English', '/Online', '/Get-FeatureInfo', '/FeatureName:' + FEATURE]));
+  const dism = parseDismState(
+    captureOutput(SYSTEM.dism(), ['/English', '/Online', '/Get-FeatureInfo', '/FeatureName:' + FEATURE]),
+  );
   return {
     edition: reg.EditionID ?? null,
     build: Number(reg.CurrentBuildNumber ?? reg.CurrentBuild) || null,

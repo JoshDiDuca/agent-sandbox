@@ -21,21 +21,54 @@ import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
 import { saveBootEnv } from './boot-env.js';
 import { primaryProject, saveProjectStatus } from './project-status.js';
-import { dataDir, dryRun, errMsg, isWin, localDir, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
+import {
+  dataDir,
+  dryRun,
+  errMsg,
+  isWin,
+  localDir,
+  log,
+  logPath,
+  logsDir,
+  mkdirp,
+  run,
+  session,
+  setSandboxStatus,
+  toolsDir,
+  warn,
+  workspace,
+} from './env.js';
 
 const STEPS = 8;
-const step = (n: number, title: string): void => { log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m'); setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title); };
-const soft = async (what: string, work: () => unknown): Promise<void> => { try { await work(); } catch (e) { warn(what + ' failed (continuing): ' + errMsg(e)); } };
+const step = (n: number, title: string): void => {
+  log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m');
+  setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title);
+};
+const soft = async (what: string, work: () => unknown): Promise<void> => {
+  try {
+    await work();
+  } catch (e) {
+    warn(what + ' failed (continuing): ' + errMsg(e));
+  }
+};
 
 const startDaemon = (env: NodeJS.ProcessEnv): void => {
-  spawn(process.execPath, [path.join(path.dirname(process.argv[1]), 'daemon.js')], { detached: true, stdio: 'ignore', windowsHide: true, env: { ...env, AGENT_LOG_PREFIX: 'daemon' } }).unref();
+  spawn(process.execPath, [path.join(path.dirname(process.argv[1]), 'daemon.js')], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env: { ...env, AGENT_LOG_PREFIX: 'daemon' },
+  }).unref();
 };
 
 /** `sbx-db` for terminals and `sandbox db`: this boot's Node running runtime\db.js (on the sandbox's disk, rewritten each boot). */
 const writeDbCommand = (): string => {
   const dir = mkdirp(path.join(localDir, 'bin'));
   const db = path.join(path.dirname(process.argv[1]), 'db.js');
-  fs.writeFileSync(path.join(dir, 'sbx-db.cmd'), '@setlocal\r\n@set AGENT_LOG_PREFIX=db\r\n@"' + process.execPath + '" "' + db + '" %*\r\n');
+  fs.writeFileSync(
+    path.join(dir, 'sbx-db.cmd'),
+    '@setlocal\r\n@set AGENT_LOG_PREFIX=db\r\n@"' + process.execPath + '" "' + db + '" %*\r\n',
+  );
   return dir;
 };
 
@@ -43,23 +76,41 @@ const waitForPrimary = async (): Promise<boolean> => {
   for (let i = 0; i < 600; i++) {
     const s = readSession(dataDir, session.launchId);
     if (s?.phase === 'running') return true;
-    if (s?.phase === 'failed' || s?.phase === 'exited') { warn(s.message); return false; }
+    if (s?.phase === 'failed' || s?.phase === 'exited') {
+      warn(s.message);
+      return false;
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 };
 
 const main = async (): Promise<void> => {
-  log('Agent sandbox: ' + session.project + ' | workspace ' + workspace + ' | agent ' + session.harnessName + ' | log ' + logPath);
-  if (!fs.statSync(workspace, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
+  log(
+    'Agent sandbox: ' +
+      session.project +
+      ' | workspace ' +
+      workspace +
+      ' | agent ' +
+      session.harnessName +
+      ' | log ' +
+      logPath,
+  );
+  if (!fs.statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
+    throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
   mkdirp(toolsDir);
   mkdirp(run.run);
 
   step(1, 'Network and session host');
   let ptyHost: string | null = null;
-  if (isWin && !dryRun && session.attach.enabled) await soft('Building the session host', () => { ptyHost = ensurePtyHost(); });
+  if (isWin && !dryRun && session.attach.enabled)
+    await soft('Building the session host', () => {
+      ptyHost = ensurePtyHost();
+    });
   let lan: LanState = session.networking ? 'open' : 'offline';
-  await soft('Private-network blocking', async () => { lan = await applyNetworkPolicy(ptyHost); });
+  await soft('Private-network blocking', async () => {
+    lan = await applyNetworkPolicy(ptyHost);
+  });
   await soft('Audit', enableProcessAudit);
 
   step(2, 'Pre-provision hooks and desktop');
@@ -70,16 +121,37 @@ const main = async (): Promise<void> => {
   step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
   const basePath = process.env.PATH ?? '';
   const tools = await setupToolchains(session.toolchains, session.versions, {
-    gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [], apps: session.apps,
+    gitEnabled: session.provisioning.git.enabled,
+    gitAccess,
+    hostGit: session.hostTools.git,
+    refresh: session.provisioning.refresh,
+    databases: session.databases ?? [],
+    apps: session.apps,
   });
   if (!dryRun) tools.prepend.push(writeDbCommand());
   // network.allowOnly / network.proxy: everything started from now on uses the proxy.
   Object.assign(tools.vars, proxyEnv());
-  await soft('Network: allow only some hosts', async () => { if (await applyAllowOnly()) tools.summary.push('network: only network.allowOnly hosts (refused: logs\\netproxy.log)'); });
+  await soft('Network: allow only some hosts', async () => {
+    if (await applyAllowOnly())
+      tools.summary.push('network: only network.allowOnly hosts (refused: logs\\netproxy.log)');
+  });
   const vscode = session.toolchains.vscode;
   if (vscode.enabled && vscode.setup !== false) {
-    const languages = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'].filter((t) => wanted((session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>)[t]?.enabled ?? false, t));
-    await soft('VS Code setup', () => configureVscode(tools, { toolchains: ['node', ...languages], databases: (session.databases ?? []).map((d) => d.database), config: vscode, workspace }));
+    const languages = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'].filter(
+      (t) =>
+        wanted(
+          (session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>)[t]?.enabled ?? false,
+          t,
+        ),
+    );
+    await soft('VS Code setup', () =>
+      configureVscode(tools, {
+        toolchains: ['node', ...languages],
+        databases: (session.databases ?? []).map((d) => d.database),
+        config: vscode,
+        workspace,
+      }),
+    );
   }
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
@@ -106,15 +178,31 @@ const main = async (): Promise<void> => {
   step(8, 'Starting ' + session.harnessName);
   setSandboxStatus('ready', 'Ready');
   // No agent, or a restart that adds a project (the host opens its sessions itself once the sandbox is ready).
-  if (!session.harness || session.autoSession === false) { if (!dryRun) startDaemon(env); log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace); return; }
+  if (!session.harness || session.autoSession === false) {
+    if (!dryRun) startDaemon(env);
+    log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace);
+    return;
+  }
   if (dryRun) {
     const launch = resolveLaunch(session.harnessName, session.harness);
-    log('(dry run) would run: ' + [launch.file, ...launch.args, ...session.harness.arguments, ...session.harnessArguments].join(' ') + ' | cwd=' + workspace);
+    log(
+      '(dry run) would run: ' +
+        [launch.file, ...launch.args, ...session.harness.arguments, ...session.harnessArguments].join(' ') +
+        ' | cwd=' +
+        workspace,
+    );
     runHooks('post-agent', env);
     return;
   }
   startDaemon(env);
-  writeJsonAtomic(run.request(session.launchId), { kind: 'session', id: session.launchId, harness: session.harnessName, args: session.harnessArguments, cwd: workspace, createdAt: now() });
+  writeJsonAtomic(run.request(session.launchId), {
+    kind: 'session',
+    id: session.launchId,
+    harness: session.harnessName,
+    args: session.harnessArguments,
+    cwd: workspace,
+    createdAt: now(),
+  });
   if (!(await waitForPrimary())) throw new Error('The agent session did not start. Logs: ' + logsDir);
   log('If Claude asks you to sign in, do it once; the login is saved in persistent storage.');
   if (process.stdin.isTTY) await viewSession(session.launchId);
@@ -123,9 +211,18 @@ const main = async (): Promise<void> => {
 
 main().catch((e: unknown) => {
   const message = errMsg(e) + (e instanceof Error && e.stack ? '\n' + e.stack : '');
-  try { setSandboxStatus('failed', errMsg(e)); fs.writeFileSync(path.join(logsDir, 'guest-error.txt'), message); } catch { /* ignore */ }
+  try {
+    setSandboxStatus('failed', errMsg(e));
+    fs.writeFileSync(path.join(logsDir, 'guest-error.txt'), message);
+  } catch {
+    /* ignore */
+  }
   // The window gets the plain message; the stack trace is in guest-error.txt.
-  console.error('\n\x1b[31mThe sandbox could not start: ' + errMsg(e) + '\x1b[0m\nDetails: ' + path.join(logsDir, 'guest-error.txt'));
+  console.error(
+    '\n\x1b[31mThe sandbox could not start: ' +
+      errMsg(e) +
+      '\x1b[0m\nDetails: ' +
+      path.join(logsDir, 'guest-error.txt'),
+  );
   process.exitCode = 1;
 });
-

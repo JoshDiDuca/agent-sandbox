@@ -9,23 +9,50 @@ import { c } from './colors.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';
 
 export interface CliOptions {
-  command: string; positionals: string[]; passthrough: string[];
-  config?: string; workspace?: string; harness?: string; account?: string; node?: string; python?: string;
-  scripts: string[]; databases: string[]; headless?: boolean; terminal: boolean; newSession: boolean; noAgent: boolean; trustConfig: boolean; noLocalConfig: boolean;
-  personal: boolean; fromHost: boolean; noRestart: boolean; follow: boolean; json: boolean; yes: boolean; timeout: number; days: number;
+  command: string;
+  positionals: string[];
+  passthrough: string[];
+  config?: string;
+  workspace?: string;
+  harness?: string;
+  account?: string;
+  node?: string;
+  python?: string;
+  scripts: string[];
+  databases: string[];
+  headless?: boolean;
+  terminal: boolean;
+  newSession: boolean;
+  noAgent: boolean;
+  trustConfig: boolean;
+  noLocalConfig: boolean;
+  personal: boolean;
+  fromHost: boolean;
+  noRestart: boolean;
+  follow: boolean;
+  json: boolean;
+  yes: boolean;
+  timeout: number;
+  days: number;
   /** restart: every session, not only this folder's project's. */
   all: boolean;
   /** launch --session <agent>@<folder> (repeatable): several sessions at once, folders made absolute. */
   sessions: SessionWant[];
   /** audit: only events of this kind, and containing this text. */
-  kind?: string; grep?: string;
+  kind?: string;
+  grep?: string;
 }
 
 /** One session to start: an agent in a folder, with arguments of its own (after the ones given after --). */
-export interface SessionWant { harness: string; folder: string; args?: string[] }
+export interface SessionWant {
+  harness: string;
+  folder: string;
+  args?: string[];
+}
 
 /** Splits a command line like a shell: "quoted words" and 'quoted words' stay together. */
-export const splitArgs = (text: string): string[] => [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+export const splitArgs = (text: string): string[] =>
+  [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 
 /**
  * `<agent>@<folder>` (the folder may contain '@': only the first one splits), `<agent>` alone = the current folder,
@@ -39,7 +66,11 @@ export const parseSessionWant = (input: string, cwd: string = process.cwd()): Se
   const at = text.indexOf('@');
   const harness = (at < 0 ? text : text.slice(0, at)).trim();
   const folder = at < 0 ? '' : text.slice(at + 1).trim();
-  if (!harness) fail('--session "' + text + '" names no agent.', 'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).');
+  if (!harness)
+    fail(
+      '--session "' + text + '" names no agent.',
+      'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).',
+    );
   return { harness, folder: path.resolve(cwd, folder || '.'), ...(args.length ? { args } : {}) };
 };
 
@@ -61,7 +92,8 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 
 /** One commander option from its manifest entry. */
 const toOption = (o: OptionSpecT): Option => {
-  const flags = (o.short ? o.short + ', ' : '') + o.flag + (o.type === 'boolean' ? '' : ' <' + (o.value ?? 'value') + '>');
+  const flags =
+    (o.short ? o.short + ', ' : '') + o.flag + (o.type === 'boolean' ? '' : ' <' + (o.value ?? 'value') + '>');
   const option = new Option(flags, o.description);
   if (o.type === 'number') option.argParser(positiveNumber);
   if (o.type === 'list') option.argParser(collect);
@@ -72,19 +104,35 @@ const toOption = (o: OptionSpecT): Option => {
 /** Every command, its options and help text, from manifest.ts. Actions only record what was parsed. */
 export const buildProgram = (record: (name: string, cmd: Command) => void): Command => {
   const program = new Command('sandbox')
-    .description('A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.')
+    .description(
+      'A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.',
+    )
     .version(packageVersion(), '-v, --version', 'show the version')
     .enablePositionalOptions()
     .showHelpAfterError('  Fix:  run the command with --help to see how to use it.')
-    .configureOutput({ outputError: (text, write) => write(c.red('Error: ') + text.replace(/^error: /, '').replace(/^./, (ch) => ch.toUpperCase())) })
-    .addHelpText('after', '\nPut --config <file> before or after the command to use another settings file.\nExamples:\n  sandbox                       the menu\n  sandbox claude -t             start Claude and attach this terminal\n  sandbox data clean logs       delete the saved logs\n  sandbox exec -- npm test      run a command in the running sandbox')
+    .configureOutput({
+      outputError: (text, write) =>
+        write(c.red('Error: ') + text.replace(/^error: /, '').replace(/^./, (ch) => ch.toUpperCase())),
+    })
+    .addHelpText(
+      'after',
+      '\nPut --config <file> before or after the command to use another settings file.\nExamples:\n  sandbox                       the menu\n  sandbox claude -t             start Claude and attach this terminal\n  sandbox data clean logs       delete the saved logs\n  sandbox exec -- npm test      run a command in the running sandbox',
+    )
     .exitOverride();
   for (const spec of COMMANDS) {
-    const cmd = program.command(spec.name, { hidden: spec.hidden }).description(spec.summary).option('--config <file>', 'config file (default: ~/.agent-sandbox/config.json)');
+    const cmd = program
+      .command(spec.name, { hidden: spec.hidden })
+      .description(spec.summary)
+      .option('--config <file>', 'config file (default: ~/.agent-sandbox/config.json)');
     for (const option of spec.options) cmd.addOption(toOption(option));
     if (spec.json) cmd.option('--json', 'machine-readable output');
-    for (const arg of spec.args) cmd.argument((arg.required ? '<' : '[') + arg.name + (arg.variadic ? '...' : '') + (arg.required ? '>' : ']'), arg.description);
-    if (spec.passthrough === 'agent') cmd.argument('[agentArgs...]', 'passed to the agent').allowUnknownOption().allowExcessArguments();
+    for (const arg of spec.args)
+      cmd.argument(
+        (arg.required ? '<' : '[') + arg.name + (arg.variadic ? '...' : '') + (arg.required ? '>' : ']'),
+        arg.description,
+      );
+    if (spec.passthrough === 'agent')
+      cmd.argument('[agentArgs...]', 'passed to the agent').allowUnknownOption().allowExcessArguments();
     if (spec.passthrough === 'command') cmd.passThroughOptions();
     cmd.action((...args: unknown[]) => record(spec.name, args[args.length - 1] as Command));
   }
@@ -98,7 +146,11 @@ const expandReserved = (argv: string[], known: Set<string>): string[] => {
     if ((end !== -1 && i > end) || !token.startsWith(SBX_PREFIX)) return token;
     const [flag, value] = token.split(/=(.*)/s);
     const option = '--' + flag.slice(SBX_PREFIX.length);
-    if (!known.has(option)) fail('Unknown option: ' + flag, 'Reserved --sbx- options: ' + [...known].map((o) => o.replace('--', SBX_PREFIX)).join(', '));
+    if (!known.has(option))
+      fail(
+        'Unknown option: ' + flag,
+        'Reserved --sbx- options: ' + [...known].map((o) => o.replace('--', SBX_PREFIX)).join(', '),
+      );
     return value === undefined ? option : option + '=' + value;
   });
 };
@@ -106,8 +158,15 @@ const expandReserved = (argv: string[], known: Set<string>): string[] => {
 /** Parses argv into the command name and options. Throws commander errors for unknown commands/options. */
 export const parseCli = (argv: string[], wrapper = false): CliOptions => {
   let parsed: { name: string; cmd: Command } | null = null;
-  const program = buildProgram((name, cmd) => { parsed = { name, cmd }; });
-  const launchFlags = new Set(program.commands.find((c) => c.name() === 'launch')!.options.map((o) => o.long!).filter(Boolean));
+  const program = buildProgram((name, cmd) => {
+    parsed = { name, cmd };
+  });
+  const launchFlags = new Set(
+    program.commands
+      .find((c) => c.name() === 'launch')!
+      .options.map((o) => o.long!)
+      .filter(Boolean),
+  );
   const args = expandReserved(wrapper ? ['launch', ...argv] : argv, launchFlags);
   program.parse(args, { from: 'user' });
   if (!parsed) return { ...defaults(), command: '' };
@@ -130,7 +189,10 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     node: o.node as string | undefined,
     python: o.python as string | undefined,
     scripts: (o.script as string[] | undefined) ?? [],
-    databases: ((o.database as string[] | undefined) ?? []).flatMap((d) => d.split(',')).map((d) => d.trim()).filter(Boolean),
+    databases: ((o.database as string[] | undefined) ?? [])
+      .flatMap((d) => d.split(','))
+      .map((d) => d.trim())
+      .filter(Boolean),
     headless: o.window ? false : o.headless ? true : undefined,
     terminal: Boolean(o.terminal),
     newSession: Boolean(o.new),
@@ -153,6 +215,24 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
 };
 
 const defaults = (): CliOptions => ({
-  command: '', positionals: [], passthrough: [], scripts: [], databases: [], terminal: false, newSession: false, noAgent: false, trustConfig: false, noLocalConfig: false,
-  personal: false, fromHost: false, noRestart: false, follow: false, json: false, yes: false, all: false, sessions: [], timeout: 600, days: 7,
+  command: '',
+  positionals: [],
+  passthrough: [],
+  scripts: [],
+  databases: [],
+  terminal: false,
+  newSession: false,
+  noAgent: false,
+  trustConfig: false,
+  noLocalConfig: false,
+  personal: false,
+  fromHost: false,
+  noRestart: false,
+  follow: false,
+  json: false,
+  yes: false,
+  all: false,
+  sessions: [],
+  timeout: 600,
+  days: 7,
 });

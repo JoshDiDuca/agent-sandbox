@@ -52,7 +52,10 @@
     "release:major": "npm version major && git push --follow-tags",
     "install:global": "node scripts/install-global.mjs",
     "publish:npm": "node scripts/publish-npm.mjs",
-    "doctor": "node dist/bin/agent-sandbox.js doctor"
+    "doctor": "node dist/bin/agent-sandbox.js doctor",
+    "lint": "eslint src scripts",
+    "format": "prettier --write src scripts",
+    "format:check": "prettier --check src scripts"
   },
   "publishConfig": {
     "access": "public"
@@ -79,10 +82,14 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/lodash": "^4.17.26",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.2",
-    "typescript": "^5.8.0"
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.10",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.71.2"
   },
   "repository": {
     "type": "git",

@@ -11,22 +11,32 @@ const directorySize = (dir: string): number => {
   let total = 0;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) total += directorySize(full); else if (entry.isFile()) total += fs.statSync(full).size;
+    if (entry.isDirectory()) total += directorySize(full);
+    else if (entry.isFile()) total += fs.statSync(full).size;
   }
   return total;
 };
 
 const validJson = (file: string): boolean => {
-  try { JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); return true; } catch { return false; }
+  try {
+    JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const hostClaudeDir = (settings: ClaudeProfileConfig): string => {
-  return settings.hostDir === 'auto' ? (process.env.CLAUDE_CONFIG_DIR ?? path.join(homeDir(), '.claude')) : settings.hostDir;
+  return settings.hostDir === 'auto'
+    ? (process.env.CLAUDE_CONFIG_DIR ?? path.join(homeDir(), '.claude'))
+    : settings.hostDir;
 };
 
 export const hostGlobalStateFile = (settings: ClaudeProfileConfig): string => {
   if (settings.globalStateFile !== 'auto') return settings.globalStateFile;
-  return process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(homeDir(), '.claude.json');
+  return process.env.CLAUDE_CONFIG_DIR
+    ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json')
+    : path.join(homeDir(), '.claude.json');
 };
 
 /**
@@ -40,12 +50,19 @@ export const hostGlobalStateFile = (settings: ClaudeProfileConfig): string => {
  */
 export const sandboxGlobalState = (state: Record<string, unknown>, workspaceHost: string): Record<string, unknown> => {
   const { primaryApiKey: _key, customApiKeyResponses: _responses, oauthAccount: _account, projects, ...rest } = state;
-  const same = (key: string): boolean => key.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === workspaceHost.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const same = (key: string): boolean =>
+    key.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
+    workspaceHost.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   const own = Object.entries((projects ?? {}) as Record<string, unknown>).filter(([key]) => same(key));
   return { ...rest, projects: Object.fromEntries(own) };
 };
 
-export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: string, workspaceHost: string, secrets: SecretsConfig): ProfileResult => {
+export const stageClaudeProfile = (
+  settings: ClaudeProfileConfig,
+  launchPath: string,
+  workspaceHost: string,
+  secrets: SecretsConfig,
+): ProfileResult => {
   const result: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
   if (!settings.enabled) return result;
   const hostDir = hostClaudeDir(settings);
@@ -57,17 +74,34 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
   const items = settings.include.filter((name) => name.toLowerCase() !== '.credentials.json');
   if (settings.copyCredentials) items.push('.credentials.json');
   for (const name of items) {
-    if (!/^[A-Za-z0-9._-]+$/.test(name) || name === '.' || name === '..') { result.skipped.push(name + ' (invalid name)'); continue; }
+    if (!/^[A-Za-z0-9._-]+$/.test(name) || name === '.' || name === '..') {
+      result.skipped.push(name + ' (invalid name)');
+      continue;
+    }
     const source = path.join(hostDir, name);
     const destination = path.join(target, name);
     if (fileExists(source)) {
-      if (name.toLowerCase().endsWith('.json') && !validJson(source)) { result.skipped.push(name + ' (invalid JSON on host; fix or remove it)'); continue; }
+      if (name.toLowerCase().endsWith('.json') && !validJson(source)) {
+        result.skipped.push(name + ' (invalid JSON on host; fix or remove it)');
+        continue;
+      }
       // Claude's settings can carry credentials in "env" and commands that fetch them; those stay here.
-      if (/^settings(.local)?.json$/i.test(name)) writeJson(destination, stripSettings(readJson<Record<string, unknown>>(source), secrets, result.secretsRemoved));
+      if (/^settings(.local)?.json$/i.test(name))
+        writeJson(
+          destination,
+          stripSettings(readJson<Record<string, unknown>>(source), secrets, result.secretsRemoved),
+        );
       else fs.copyFileSync(source, destination);
     } else if (dirExists(source)) {
-      if (directorySize(source) > MAX_BYTES) { result.skipped.push(name + ' (over 250 MB)'); continue; }
-      fs.cpSync(source, destination, { recursive: true, force: true, filter: (from: string) => from === source || !isLink(from) });
+      if (directorySize(source) > MAX_BYTES) {
+        result.skipped.push(name + ' (over 250 MB)');
+        continue;
+      }
+      fs.cpSync(source, destination, {
+        recursive: true,
+        force: true,
+        filter: (from: string) => from === source || !isLink(from),
+      });
     } else {
       result.skipped.push(name + ' (not found)');
       continue;
@@ -80,7 +114,17 @@ export const stageClaudeProfile = (settings: ClaudeProfileConfig, launchPath: st
     const globalFile = hostGlobalStateFile(settings);
     if (!fileExists(globalFile)) result.skipped.push('.claude.json (not found)');
     else if (!validJson(globalFile)) result.skipped.push('.claude.json (invalid JSON on host)');
-    else { writeJson(path.join(target, '.claude.json'), stripMcpServers(sandboxGlobalState(readJson<Record<string, unknown>>(globalFile), workspaceHost), secrets, result.secretsRemoved)); result.staged.push('.claude.json'); }
+    else {
+      writeJson(
+        path.join(target, '.claude.json'),
+        stripMcpServers(
+          sandboxGlobalState(readJson<Record<string, unknown>>(globalFile), workspaceHost),
+          secrets,
+          result.secretsRemoved,
+        ),
+      );
+      result.staged.push('.claude.json');
+    }
   }
   return result;
 };

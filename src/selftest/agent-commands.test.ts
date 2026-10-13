@@ -3,7 +3,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS } from '../core/config.js';
-import { agentCommands, commandsDir, forwardingCmd, forwardingSh, realAgent, reconcileAgentCommands } from '../host/agent-commands.js';
+import {
+  agentCommands,
+  commandsDir,
+  forwardingCmd,
+  forwardingSh,
+  realAgent,
+  reconcileAgentCommands,
+} from '../host/agent-commands.js';
 import type { Suite } from './suite.js';
 
 export const agentCommandsSuite: Suite = {
@@ -22,31 +29,69 @@ export const agentCommandsSuite: Suite = {
     const on = { ...DEFAULTS, agentCommands: { enabled: true, agents: 'auto' as const } };
 
     t.section('finding agents');
-    t.equal(realAgent('claude', commandsDir(storage), PATH), path.join(localBin, 'claude.exe'), 'the real agent is found on PATH, skipping this tool\'s own forwarding files');
+    t.equal(
+      realAgent('claude', commandsDir(storage), PATH),
+      path.join(localBin, 'claude.exe'),
+      "the real agent is found on PATH, skipping this tool's own forwarding files",
+    );
     t.equal(realAgent('nope', commandsDir(storage), PATH), null, 'an agent that is not installed is not found');
-    const commandsOf = (config: typeof DEFAULTS, searchPath: string): string[] => agentCommands(config, storage, searchPath).map((a) => a.command).sort();
-    t.equal(commandsOf(on, PATH), ['claude', 'codex', 'gemini'], '"auto": every agent installed on this PC gets a command, agents not installed none');
-    t.equal(commandsOf({ ...on, agentCommands: { enabled: true, agents: ['codex'] } }, PATH), ['codex'], 'a list limits it to the named agents');
+    const commandsOf = (config: typeof DEFAULTS, searchPath: string): string[] =>
+      agentCommands(config, storage, searchPath)
+        .map((a) => a.command)
+        .sort();
+    t.equal(
+      commandsOf(on, PATH),
+      ['claude', 'codex', 'gemini'],
+      '"auto": every agent installed on this PC gets a command, agents not installed none',
+    );
+    t.equal(
+      commandsOf({ ...on, agentCommands: { enabled: true, agents: ['codex'] } }, PATH),
+      ['codex'],
+      'a list limits it to the named agents',
+    );
     const unsafeDir = t.at('agent%cmd^dir');
     t.write(path.join(unsafeDir, 'aider.cmd'), '@echo');
-    t.check(!agentCommands(on, storage, unsafeDir).some((a) => a.command === 'aider'), 'an agent in a folder whose path has % or ^ (which cmd.exe would expand) is left alone');
+    t.check(
+      !agentCommands(on, storage, unsafeDir).some((a) => a.command === 'aider'),
+      'an agent in a folder whose path has % or ^ (which cmd.exe would expand) is left alone',
+    );
 
     t.section('the forwarding files');
     const claude = { harness: 'claude', command: 'claude', real: path.join(localBin, 'claude.exe') };
     const cmd = forwardingCmd(claude, 'C:\\node\\node.exe', 'C:\\tool\\dist\\bin\\sandbox.js');
-    t.includes(cmd, '"C:\\node\\node.exe" "C:\\tool\\dist\\bin\\sandbox.js" launch --harness claude --headless --terminal -- %*', 'the .cmd starts the agent in a hidden sandbox attached to this terminal...');
+    t.includes(
+      cmd,
+      '"C:\\node\\node.exe" "C:\\tool\\dist\\bin\\sandbox.js" launch --harness claude --headless --terminal -- %*',
+      'the .cmd starts the agent in a hidden sandbox attached to this terminal...',
+    );
     t.includes(cmd, 'if "%SANDBOX_AGENT_DIRECT%"=="1" goto direct', '... unless SANDBOX_AGENT_DIRECT=1...');
     t.includes(cmd, 'call "' + claude.real + '" %*', '... which runs the real agent');
-    const sh = forwardingSh({ ...claude, real: 'C:\\Users\\me\\it\'s\\claude.exe' }, 'C:\\node\\node.exe', 'C:\\tool\\sandbox.js');
+    const sh = forwardingSh(
+      { ...claude, real: "C:\\Users\\me\\it's\\claude.exe" },
+      'C:\\node\\node.exe',
+      'C:\\tool\\sandbox.js',
+    );
     t.check(sh.startsWith('#!/bin/sh'), 'Git Bash gets a shell script');
-    t.includes(sh, "exec '/c/node/node.exe' '/c/tool/sandbox.js' launch --harness claude --headless --terminal -- \"$@\"", 'the shell script starts the same sandbox, with POSIX paths');
+    t.includes(
+      sh,
+      "exec '/c/node/node.exe' '/c/tool/sandbox.js' launch --harness claude --headless --terminal -- \"$@\"",
+      'the shell script starts the same sandbox, with POSIX paths',
+    );
     t.includes(sh, "'/c/Users/me/it'\\''s/claude.exe'", 'the shell script quotes awkward paths safely');
 
     t.section('off changes nothing');
     // Off with nothing set up: nothing to do, no PATH edit (which would be refused during the self-test anyway).
     const fresh = t.at('agent-cmd-fresh');
     const off = reconcileAgentCommands(DEFAULTS, fresh, 'C:\\node\\node.exe', 'C:\\tool\\sandbox.js');
-    t.equal({ on: off.on, changed: off.changed, wrote: fs.existsSync(commandsDir(fresh)) }, { on: false, changed: false, wrote: false }, 'off (the default) writes nothing and leaves your PATH alone');
-    await t.throws(() => reconcileAgentCommands(on, t.at('agent-cmd-on'), 'C:\\node\\node.exe', 'C:\\tool\\sandbox.js'), /self-test|PATH/i, 'turning it on edits your PATH, which the self-test refuses (it never changes this PC)');
+    t.equal(
+      { on: off.on, changed: off.changed, wrote: fs.existsSync(commandsDir(fresh)) },
+      { on: false, changed: false, wrote: false },
+      'off (the default) writes nothing and leaves your PATH alone',
+    );
+    await t.throws(
+      () => reconcileAgentCommands(on, t.at('agent-cmd-on'), 'C:\\node\\node.exe', 'C:\\tool\\sandbox.js'),
+      /self-test|PATH/i,
+      'turning it on edits your PATH, which the self-test refuses (it never changes this PC)',
+    );
   },
 };

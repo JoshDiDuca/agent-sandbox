@@ -4,19 +4,31 @@
 /** The colour policy as a pure function (tested); `isTTY` is that of the stream being written to. */
 export const colorEnabled = (env: NodeJS.ProcessEnv, isTTY: boolean): boolean => {
   if (env.NO_COLOR) return false;
-  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== '') return env.FORCE_COLOR !== '0' && env.FORCE_COLOR !== 'false';
+  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== '')
+    return env.FORCE_COLOR !== '0' && env.FORCE_COLOR !== 'false';
   return isTTY && env.TERM !== 'dumb';
 };
 
-const paint = (code: number) => (text: string): string => (colorEnabled(process.env, Boolean(process.stdout.isTTY)) ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text);
+const paint =
+  (code: number) =>
+  (text: string): string =>
+    colorEnabled(process.env, Boolean(process.stdout.isTTY)) ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
 
-export const c = { bold: paint(1), dim: paint(2), red: paint(31), green: paint(32), yellow: paint(33), cyan: paint(36) };
+export const c = {
+  bold: paint(1),
+  dim: paint(2),
+  red: paint(31),
+  green: paint(32),
+  yellow: paint(33),
+  cyan: paint(36),
+};
 
 /** Removes colour codes (for measuring or comparing text). */
 export const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 
 /** Cuts `text` to `max` visible characters, ending in an ellipsis (plain text only). */
-export const shorten = (text: string, max: number): string => (max < 2 || text.length <= max ? text : text.slice(0, max - 1) + '…');
+export const shorten = (text: string, max: number): string =>
+  max < 2 || text.length <= max ? text : text.slice(0, max - 1) + '…';
 
 /** Cuts the middle out of a long path or id so both ends stay readable. */
 export const shortenMiddle = (text: string, max: number): string => {
@@ -39,7 +51,9 @@ export const ago = (then: number | string | Date, now: number = Date.now()): str
 export const termWidth = (): number => Math.max(40, process.stdout.columns ?? 80);
 
 /** Each menu page starts on a clean screen (answered prompts would otherwise pile up above it). */
-export const clearScreen = (): void => { if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H'); };
+export const clearScreen = (): void => {
+  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+};
 
 /** Rows of a list that fit the terminal (leaving room for the prompt and the help line). */
 export const pageSizeFor = (wanted: number): number => Math.max(5, Math.min(wanted, (process.stdout.rows ?? 30) - 6));

@@ -26,7 +26,9 @@ export class Frame {
 
   static render(parts: FrameParts, width: number, height: number): string[] {
     const w = width - 1;
-    const crumbs = [Frame.title, ...parts.path].map((p, i, all) => (i === all.length - 1 ? Theme.bold(p) : p)).join(Theme.dim(' › '));
+    const crumbs = [Frame.title, ...parts.path]
+      .map((p, i, all) => (i === all.length - 1 ? Theme.bold(p) : p))
+      .join(Theme.dim(' › '));
     const right = Frame.version ? 'v' + Frame.version + ' ' : '';
     const title = Theme.bar(Text.fit(' ' + Theme.accent('◆') + ' ' + crumbs, w - Text.width(right)) + right);
     const status = ' ' + Text.truncate(parts.status ?? '', w - 2);

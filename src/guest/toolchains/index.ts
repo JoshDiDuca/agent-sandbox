@@ -21,11 +21,15 @@ const exclusive = async <T>(name: string, work: () => Promise<T>): Promise<T> =>
   const key = lockKey(name);
   const previous = locks.get(key) ?? Promise.resolve();
   let release = (): void => undefined;
-  const mine = new Promise<void>((r) => { release = r; });
+  const mine = new Promise<void>((r) => {
+    release = r;
+  });
   const chained = previous.then(() => mine);
   locks.set(key, chained);
   await previous;
-  try { return await work(); } finally {
+  try {
+    return await work();
+  } finally {
     release();
     if (locks.get(key) === chained) locks.delete(key);
   }
@@ -46,33 +50,51 @@ const runSteps = async (steps: Step[], o: RunOptions): Promise<Map<string, ToolE
   const waiting: (() => void)[] = [];
   let done = 0;
   const say = o.report ?? ((message: string) => setSandboxStatus('provisioning', message));
-  const report = (): void => { if (running.size) say('Installing ' + [...running].join(', ') + ' (' + done + ' of ' + steps.length + ' done)'); };
+  const report = (): void => {
+    if (running.size) say('Installing ' + [...running].join(', ') + ' (' + done + ' of ' + steps.length + ' done)');
+  };
   for (const s of steps) {
     // Dependencies first (they are earlier in the plan, so their promises exist), then a free slot.
-    finished.set(s.name, (async () => {
-      await Promise.all((s.after ?? []).map((name) => finished.get(name)));
-      const reused = s.shared ? o.reuse?.[s.name] : undefined;
-      if (reused) { envs.set(s.name, structuredClone(reused)); done++; return; }
-      while (running.size >= PARALLEL) await new Promise<void>((r) => waiting.push(r));
-      running.add(s.name);
-      report();
-      try { await exclusive(s.name, () => step(s.name, envs.get(s.name)!, async () => s.run(envs.get(s.name)!))); } finally {
-        running.delete(s.name);
-        done++;
+    finished.set(
+      s.name,
+      (async () => {
+        await Promise.all((s.after ?? []).map((name) => finished.get(name)));
+        const reused = s.shared ? o.reuse?.[s.name] : undefined;
+        if (reused) {
+          envs.set(s.name, structuredClone(reused));
+          done++;
+          return;
+        }
+        while (running.size >= PARALLEL) await new Promise<void>((r) => waiting.push(r));
+        running.add(s.name);
         report();
-        waiting.shift()?.();
-      }
-    })());
+        try {
+          await exclusive(s.name, () => step(s.name, envs.get(s.name)!, async () => s.run(envs.get(s.name)!)));
+        } finally {
+          running.delete(s.name);
+          done++;
+          report();
+          waiting.shift()?.();
+        }
+      })(),
+    );
   }
   await Promise.all(finished.values());
   return envs;
 };
 
 /** The combined environment, plus what each step contributed (the boot keeps it so later projects can reuse shared steps). */
-export interface ToolchainResult extends ToolEnv { steps: Record<string, ToolEnv> }
+export interface ToolchainResult extends ToolEnv {
+  steps: Record<string, ToolEnv>;
+}
 
 /** Provisions every enabled toolchain and database, and returns the combined environment for the agent. */
-export const setupToolchains = async (config: Toolchains, versions: ToolVersions, options: ToolchainOptions, run: RunOptions = {}): Promise<ToolchainResult> => {
+export const setupToolchains = async (
+  config: Toolchains,
+  versions: ToolVersions,
+  options: ToolchainOptions,
+  run: RunOptions = {},
+): Promise<ToolchainResult> => {
   const steps = plan(config, versions, options).filter((s) => s.on);
   const envs = await runSteps(steps, run);
   // Merged in plan order, so PATH order never depends on which download finished first.

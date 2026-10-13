@@ -19,31 +19,74 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   const root = tool('dotnet');
   const marker = path.join(root, '.agent-sandbox-installed.json');
   const script = tool('dotnet-install.ps1');
-  if (dryRun) { log('(dry run) would provision .NET SDK channels ' + config.channels.join(', ')); return; }
+  if (dryRun) {
+    log('(dry run) would provision .NET SDK channels ' + config.channels.join(', '));
+    return;
+  }
   // A corrupt or hand-edited marker just means "nothing recorded yet" (the installs are idempotent).
   const recorded = DotnetMarker.safeParse(exists(marker) && !refresh ? readJsonFile<unknown>(marker) : {});
   const done: Record<string, boolean> = recorded.success ? recorded.data : {};
   const globalJson = path.join(projectWorkspace(), 'global.json');
   const installs: [string, string[]][] = [
     ...config.channels.map((c): [string, string[]] => ['channel:' + c, ['-Channel', c]]),
-    ...(exists(globalJson) ? [['global.json:' + fs.readFileSync(globalJson, 'utf8').replace(/\s+/g, ''), ['-JSonFile', globalJson]] as [string, string[]]] : []),
+    ...(exists(globalJson)
+      ? [
+          ['global.json:' + fs.readFileSync(globalJson, 'utf8').replace(/\s+/g, ''), ['-JSonFile', globalJson]] as [
+            string,
+            string[],
+          ],
+        ]
+      : []),
   ];
   for (const [key, args] of installs.filter(([k]) => !done[k])) {
     // Fetched every time something is installed (it is small): an interrupted earlier download must not be run.
     await downloadFile('https://dot.net/v1/dotnet-install.ps1', script);
-    log('Installing the .NET SDK ' + (key.startsWith('channel:') ? key.slice(8) : 'pinned in global.json') + ' (~250 MB once) ...');
-    await execAsync(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args, '-InstallDir', root, '-NoPath']);
+    log(
+      'Installing the .NET SDK ' +
+        (key.startsWith('channel:') ? key.slice(8) : 'pinned in global.json') +
+        ' (~250 MB once) ...',
+    );
+    await execAsync(SYSTEM.powershell(), [
+      '-NoLogo',
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      script,
+      ...args,
+      '-InstallDir',
+      root,
+      '-NoPath',
+    ]);
     done[key] = true;
     writeJsonAtomic(marker, done);
   }
   const home = mkdirp(tool('dotnet-home'));
-  Object.assign(env.vars, { DOTNET_ROOT: root, DOTNET_CLI_HOME: home, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', NUGET_PACKAGES: tool('nuget', 'packages') });
+  Object.assign(env.vars, {
+    DOTNET_ROOT: root,
+    DOTNET_CLI_HOME: home,
+    DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+    DOTNET_NOLOGO: '1',
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
+    NUGET_PACKAGES: tool('nuget', 'packages'),
+  });
   env.prepend.push(root, path.join(home, '.dotnet', 'tools'));
-  env.summary.push('dotnet: ' + execOutput(path.join(root, 'dotnet.exe'), ['--list-sdks']).split(/\r?\n/).map((l) => l.split(' ')[0]).filter(Boolean).join(', '));
+  env.summary.push(
+    'dotnet: ' +
+      execOutput(path.join(root, 'dotnet.exe'), ['--list-sdks'])
+        .split(/\r?\n/)
+        .map((l) => l.split(' ')[0])
+        .filter(Boolean)
+        .join(', '),
+  );
   const dotnet = path.join(root, 'dotnet.exe');
   const dotnetEnv = { env: { ...process.env, ...env.vars, PATH: root + path.delimiter + (process.env.PATH ?? '') } };
-  await installOnce(env, 'dotnet workload', config.workloads, (w) => execAsync(dotnet, ['workload', 'install', w, '--skip-manifest-update'], dotnetEnv));
-  await installOnce(env, 'dotnet tool', config.tools, (t) => execAsync(dotnet, ['tool', 'install', '--global', t], dotnetEnv));
+  await installOnce(env, 'dotnet workload', config.workloads, (w) =>
+    execAsync(dotnet, ['workload', 'install', w, '--skip-manifest-update'], dotnetEnv),
+  );
+  await installOnce(env, 'dotnet tool', config.tools, (t) =>
+    execAsync(dotnet, ['tool', 'install', '--global', t], dotnetEnv),
+  );
   await setupFrameworkReferences(env, config.frameworkTargets);
   if (config.netfx35) await setupNetFx35(env);
 };
@@ -62,14 +105,27 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
     if (exists(marker)) continue;
     const staging = tool('netfx-references-' + target.toLowerCase());
     try {
-      const { versions } = await fetchJson<{ versions: string[] }>('https://api.nuget.org/v3-flatcontainer/' + id + '/index.json');
+      const { versions } = await fetchJson<{ versions: string[] }>(
+        'https://api.nuget.org/v3-flatcontainer/' + id + '/index.json',
+      );
       const version = versions.filter((v) => /^\d+(\.\d+)*$/.test(v)).pop();
       if (!version) throw new Error('no stable version of ' + id);
       log('Downloading the .NET Framework ' + target + ' reference assemblies (~30 MB once) ...');
-      await installArchive('https://api.nuget.org/v3-flatcontainer/' + id + '/' + version + '/' + id + '.' + version + '.nupkg', staging, { fileName: id + '.zip' });
+      await installArchive(
+        'https://api.nuget.org/v3-flatcontainer/' + id + '/' + version + '/' + id + '.' + version + '.nupkg',
+        staging,
+        { fileName: id + '.zip' },
+      );
       fs.cpSync(path.join(staging, 'build', '.NETFramework'), path.join(root, '.NETFramework'), { recursive: true });
       fs.writeFileSync(marker, version);
-    } catch (e) { warn('.NET Framework ' + target + ' reference assemblies could not be installed (projects targeting it will not build): ' + errMsg(e)); } finally {
+    } catch (e) {
+      warn(
+        '.NET Framework ' +
+          target +
+          ' reference assemblies could not be installed (projects targeting it will not build): ' +
+          errMsg(e),
+      );
+    } finally {
       safeRemove(staging, dataDir);
     }
   }
@@ -80,10 +136,27 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
 
 /** .NET Framework 3.5 is a Windows feature the sandbox image lacks; DISM fetches it from Windows Update on every boot. */
 const setupNetFx35 = async (env: ToolEnv): Promise<void> => {
-  if (execOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v3.5', '/v', 'Install']).includes('0x1')) { env.summary.push('.NET Framework 3.5: on'); return; }
+  if (
+    execOutput(SYSTEM.reg(), [
+      'query',
+      'HKLM\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v3.5',
+      '/v',
+      'Install',
+    ]).includes('0x1')
+  ) {
+    env.summary.push('.NET Framework 3.5: on');
+    return;
+  }
   log('Enabling .NET Framework 3.5 (downloads from Windows Update, a few minutes) ...');
   try {
-    await execAsync(SYSTEM.dism(), ['/Online', '/Enable-Feature', '/FeatureName:NetFx3', '/All', '/NoRestart', '/Quiet'], { stdio: 'ignore' });
+    await execAsync(
+      SYSTEM.dism(),
+      ['/Online', '/Enable-Feature', '/FeatureName:NetFx3', '/All', '/NoRestart', '/Quiet'],
+      { stdio: 'ignore' },
+    );
     env.summary.push('.NET Framework 3.5: on');
-  } catch (e) { warn('.NET Framework 3.5 could not be enabled: ' + errMsg(e)); env.summary.push('.NET Framework 3.5: FAILED'); }
+  } catch (e) {
+    warn('.NET Framework 3.5 could not be enabled: ' + errMsg(e));
+    env.summary.push('.NET Framework 3.5: FAILED');
+  }
 };

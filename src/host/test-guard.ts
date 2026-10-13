@@ -6,7 +6,8 @@ export { selfTestRunning };
 
 /** Refuses an action that reaches outside the test's own temp folder (a no-op outside the self-test). */
 export const refuseInSelfTest = (what: string): void => {
-  if (selfTestRunning()) fail('The self-test does not ' + what + '.', 'It only works in temp folders, so it can never change this PC.');
+  if (selfTestRunning())
+    fail('The self-test does not ' + what + '.', 'It only works in temp folders, so it can never change this PC.');
 };
 
 /** A write, copy or delete on the host: during the self-test only the temp folder is allowed. */

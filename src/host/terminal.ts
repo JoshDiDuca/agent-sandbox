@@ -2,7 +2,15 @@
 // logon.cmd can open it the moment the sandbox logs in (no PowerShell window first).
 import fs from 'node:fs';
 import path from 'node:path';
-import { download, extractArchive, fetchJson, githubAsset, installArchive, moveIntoPlace, stagingFolder } from '../shared/download.js';
+import {
+  download,
+  extractArchive,
+  fetchJson,
+  githubAsset,
+  installArchive,
+  moveIntoPlace,
+  stagingFolder,
+} from '../shared/download.js';
 import { safeRemove } from '../shared/safe-remove.js';
 import { assertTestWritable } from './test-guard.js';
 import { z } from 'zod';
@@ -23,7 +31,9 @@ const SETTINGS = {
   // New tabs pick up the PATH and variables the runner writes machine-wide after the window opened.
   compatibility: { reloadEnvironmentVariables: true },
   warning: { confirmCloseAllTabs: false, largePaste: false, multiLinePaste: false },
-  profiles: { defaults: { font: { face: 'Cascadia Mono' }, startingDirectory: '%AGENT_WORKSPACE%',closeOnExit: 'graceful' } },
+  profiles: {
+    defaults: { font: { face: 'Cascadia Mono' }, startingDirectory: '%AGENT_WORKSPACE%', closeOnExit: 'graceful' },
+  },
 };
 
 /** Our own profile id, so the profile is found again (and user edits to it are kept) on later launches. */
@@ -33,19 +43,34 @@ const GUEST_PWSH = 'C:\\AgentData\\tools\\pwsh\\pwsh.exe';
 
 const MAX_SETTINGS_BYTES = 1024 * 1024;
 const TerminalSettings = z.looseObject({
-  profiles: z.union([z.array(z.looseObject({ guid: z.string().optional() })), z.looseObject({ list: z.array(z.looseObject({ guid: z.string().optional() })).optional() })]).optional(),
+  profiles: z
+    .union([
+      z.array(z.looseObject({ guid: z.string().optional() })),
+      z.looseObject({ list: z.array(z.looseObject({ guid: z.string().optional() })).optional() }),
+    ])
+    .optional(),
 });
 
 /**
  * settings.json with the "PowerShell 7" profile shown when `visible`, else hidden (never deleted: a user's tweaks to it
  * survive turning pwsh off and on). Pure: returns null when nothing changes.
  */
-export const withPwshProfile = (settings: z.output<typeof TerminalSettings>, visible: boolean): z.output<typeof TerminalSettings> | null => {
+export const withPwshProfile = (
+  settings: z.output<typeof TerminalSettings>,
+  visible: boolean,
+): z.output<typeof TerminalSettings> | null => {
   const profiles = Array.isArray(settings.profiles) ? { list: settings.profiles } : { ...settings.profiles };
   const list = [...(profiles.list ?? [])];
   const at = list.findIndex((p) => p.guid?.toLowerCase() === PWSH_PROFILE_GUID);
   if (at === -1 && !visible) return null;
-  if (at === -1) list.push({ guid: PWSH_PROFILE_GUID, name: 'PowerShell 7', commandline: '"' + GUEST_PWSH + '" -NoLogo', icon: GUEST_PWSH, hidden: false });
+  if (at === -1)
+    list.push({
+      guid: PWSH_PROFILE_GUID,
+      name: 'PowerShell 7',
+      commandline: '"' + GUEST_PWSH + '" -NoLogo',
+      icon: GUEST_PWSH,
+      hidden: false,
+    });
   else if ((list[at].hidden === true) === !visible) return null;
   else list[at] = { ...list[at], hidden: !visible };
   return { ...settings, profiles: { ...profiles, list } };
@@ -67,16 +92,26 @@ export const syncPwshProfile = (dataPath: string, allowed: boolean): void => {
     const result = TerminalSettings.safeParse(parseJsonc<unknown>(fs.readFileSync(file, 'utf8'), file));
     if (!result.success) return;
     parsed = result.data;
-  } catch { return; }
+  } catch {
+    return;
+  }
   const next = withPwshProfile(parsed, visible);
   if (next) writeJson(file, next);
 };
 
-export const ensureTerminal = async (dataPath: string, refresh: boolean, options: { pwsh?: boolean } = {}): Promise<{ exe: string | null; message: string }> => {
+export const ensureTerminal = async (
+  dataPath: string,
+  refresh: boolean,
+  options: { pwsh?: boolean } = {},
+): Promise<{ exe: string | null; message: string }> => {
   const result = await installTerminal(dataPath, refresh);
   if (result.exe) {
     // The profile is a nicety: a settings problem never costs the sandbox its terminal.
-    try { syncPwshProfile(dataPath, options.pwsh ?? false); } catch (e) { return { ...result, message: result.message + ' (PowerShell 7 profile not updated: ' + errMsg(e) + ')' }; }
+    try {
+      syncPwshProfile(dataPath, options.pwsh ?? false);
+    } catch (e) {
+      return { ...result, message: result.message + ' (PowerShell 7 profile not updated: ' + errMsg(e) + ')' };
+    }
   }
   return result;
 };
@@ -99,31 +134,47 @@ export const ensureConpty = async (dataPath: string, refresh: boolean): Promise<
   const dir = conptyDir(dataPath);
   assertTestWritable(dir);
   assertNoLinks(dataPath, dir);
-  if (fileExists(path.join(dir, 'conpty.dll')) && fileExists(path.join(dir, 'OpenConsole.exe')) && !refresh) return 'cached';
+  if (fileExists(path.join(dir, 'conpty.dll')) && fileExists(path.join(dir, 'OpenConsole.exe')) && !refresh)
+    return 'cached';
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const work = stagingFolder(dir);
   try {
-    const version = NugetVersions.parse(await fetchJson(NUGET_CONPTY + 'index.json')).versions.filter((v) => !v.includes('-')).pop();
+    const version = NugetVersions.parse(await fetchJson(NUGET_CONPTY + 'index.json'))
+      .versions.filter((v) => !v.includes('-'))
+      .pop();
     if (!version) throw new Error('no release found');
-    const leaf = NugetLeaf.parse(await fetchJson('https://api.nuget.org/v3/registration5-gz-semver2/microsoft.windows.console.conpty/' + version + '.json'));
-    const sha512 = Buffer.from(NugetCatalog.parse(await fetchJson(leaf.catalogEntry)).packageHash, 'base64').toString('hex');
+    const leaf = NugetLeaf.parse(
+      await fetchJson(
+        'https://api.nuget.org/v3/registration5-gz-semver2/microsoft.windows.console.conpty/' + version + '.json',
+      ),
+    );
+    const sha512 = Buffer.from(NugetCatalog.parse(await fetchJson(leaf.catalogEntry)).packageHash, 'base64').toString(
+      'hex',
+    );
     const pkg = path.join(work, 'conpty.nupkg');
     await download(NUGET_CONPTY + version + '/microsoft.windows.console.conpty.' + version + '.nupkg', pkg, { sha512 });
-    const files = { 'conpty.dll': 'runtimes/win-' + arch + '/native/conpty.dll', 'OpenConsole.exe': 'build/native/runtimes/' + arch + '/OpenConsole.exe' };
+    const files = {
+      'conpty.dll': 'runtimes/win-' + arch + '/native/conpty.dll',
+      'OpenConsole.exe': 'build/native/runtimes/' + arch + '/OpenConsole.exe',
+    };
     await extractArchive(pkg, path.join(work, 'x'), Object.values(files));
     fs.mkdirSync(path.join(work, 'out'));
-    for (const [name, member] of Object.entries(files)) fs.copyFileSync(path.join(work, 'x', ...member.split('/')), path.join(work, 'out', name));
+    for (const [name, member] of Object.entries(files))
+      fs.copyFileSync(path.join(work, 'x', ...member.split('/')), path.join(work, 'out', name));
     fs.writeFileSync(path.join(work, 'out', 'VERSION'), version);
     moveIntoPlace(path.join(work, 'out'), dir);
     return 'downloaded ' + version;
   } catch (e) {
-    return 'not downloaded, sessions use Windows\' own pseudo console (' + errMsg(e) + ')';
+    return "not downloaded, sessions use Windows' own pseudo console (" + errMsg(e) + ')';
   } finally {
     safeRemove(work, path.dirname(work));
   }
 };
 
-const installTerminal = async(dataPath: string, refresh: boolean): Promise<{ exe: string | null; message: string }> => {
+const installTerminal = async (
+  dataPath: string,
+  refresh: boolean,
+): Promise<{ exe: string | null; message: string }> => {
   const exe = terminalExe(dataPath);
   const dir = terminalDir(dataPath);
   assertTestWritable(dir);
@@ -135,20 +186,37 @@ const installTerminal = async(dataPath: string, refresh: boolean): Promise<{ exe
   assertNoLinks(dataPath, parked);
   if (fileExists(exe) && !refresh) return { exe, message: 'cached' };
   try {
-    if (fs.existsSync(settings)) { safeRemove(parked, path.dirname(parked)); fs.renameSync(settings, parked); }
+    if (fs.existsSync(settings)) {
+      safeRemove(parked, path.dirname(parked));
+      fs.renameSync(settings, parked);
+    }
     try {
       const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-      const asset = await githubAsset('microsoft/terminal', new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'));
-      await installArchive(asset.url, dir, { sha256: asset.sha256, locate: 'WindowsTerminal.exe', fileName: asset.name });
+      const asset = await githubAsset(
+        'microsoft/terminal',
+        new RegExp('^Microsoft\\.WindowsTerminal_[\\d.]+_' + arch + '\\.zip$'),
+      );
+      await installArchive(asset.url, dir, {
+        sha256: asset.sha256,
+        locate: 'WindowsTerminal.exe',
+        fileName: asset.name,
+      });
       fs.writeFileSync(path.join(dir, '.portable'), '');
       return { exe, message: 'downloaded ' + asset.name };
     } finally {
-      if (fs.existsSync(parked)) { fs.mkdirSync(dir, { recursive: true }); safeRemove(settings, path.dirname(settings)); fs.renameSync(parked, settings); }
+      if (fs.existsSync(parked)) {
+        fs.mkdirSync(dir, { recursive: true });
+        safeRemove(settings, path.dirname(settings));
+        fs.renameSync(parked, settings);
+      }
       const settingsFile = path.join(settings, 'settings.json');
       assertNoLinks(dataPath, settingsFile);
       if (fileExists(path.join(dir, '.portable')) && !fs.existsSync(settingsFile)) writeJson(settingsFile, SETTINGS);
     }
   } catch (e) {
-    return { exe: null, message: 'download failed, the sandbox will use a plain PowerShell window (' + errMsg(e) + ')' };
+    return {
+      exe: null,
+      message: 'download failed, the sandbox will use a plain PowerShell window (' + errMsg(e) + ')',
+    };
   }
 };

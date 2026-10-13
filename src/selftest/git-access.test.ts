@@ -9,10 +9,56 @@ export const gitAccessSuite: Suite = {
   run: (t) => {
     t.section('readonly');
     const allowed = (args: string[], mode = 'readonly'): boolean => gitDecision(args, mode).allow;
-    const reading = ['status', 'log --oneline', 'diff HEAD~1', 'show HEAD', 'blame a.ts', 'branch', 'branch -a', 'branch --contains HEAD', 'tag', 'tag -l v*', 'remote -v', 'config --get user.name', 'stash list', '-C sub status', '--no-pager log'];
-    t.equal(reading.filter((command) => !allowed(command.split(' '))), [], 'readonly: reading commands are allowed');
-    const writing = ['commit -m x', 'push', 'add .', 'checkout main', 'switch -c x', 'reset --hard', 'stash', 'stash pop', 'branch new', 'branch -D x', 'tag v1', 'merge x', 'rebase main', 'fetch', 'pull', 'config user.name x', 'remote add o u', '-c core.hooksPath=x status', '--git-dir=x status', 'clean -fd', 'apply p.diff'];
-    t.equal(writing.filter((command) => allowed(command.split(' '))), [], 'readonly: anything that writes (or overrides config) is refused');
+    const reading = [
+      'status',
+      'log --oneline',
+      'diff HEAD~1',
+      'show HEAD',
+      'blame a.ts',
+      'branch',
+      'branch -a',
+      'branch --contains HEAD',
+      'tag',
+      'tag -l v*',
+      'remote -v',
+      'config --get user.name',
+      'stash list',
+      '-C sub status',
+      '--no-pager log',
+    ];
+    t.equal(
+      reading.filter((command) => !allowed(command.split(' '))),
+      [],
+      'readonly: reading commands are allowed',
+    );
+    const writing = [
+      'commit -m x',
+      'push',
+      'add .',
+      'checkout main',
+      'switch -c x',
+      'reset --hard',
+      'stash',
+      'stash pop',
+      'branch new',
+      'branch -D x',
+      'tag v1',
+      'merge x',
+      'rebase main',
+      'fetch',
+      'pull',
+      'config user.name x',
+      'remote add o u',
+      '-c core.hooksPath=x status',
+      '--git-dir=x status',
+      'clean -fd',
+      'apply p.diff',
+    ];
+    t.equal(
+      writing.filter((command) => allowed(command.split(' '))),
+      [],
+      'readonly: anything that writes (or overrides config) is refused',
+    );
 
     t.section('none and full');
     t.check(!allowed(['status'], 'none') && !allowed(['--version'], 'none'), 'none: every git call is refused');

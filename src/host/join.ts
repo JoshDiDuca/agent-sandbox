@@ -14,7 +14,15 @@ import { readSandboxStatus } from '../shared/rundir.js';
 import { syncProjectIn } from '../sync/watcher.js';
 import { planDatabases } from './database-plan.js';
 import { decideProjectToolchains } from './generate.js';
-import { projectHere, projectMapper, readRegistry, rememberProject, rootHere, type ProjectMapper, type RegistryEntry } from './projects.js';
+import {
+  projectHere,
+  projectMapper,
+  readRegistry,
+  rememberProject,
+  rootHere,
+  type ProjectMapper,
+  type RegistryEntry,
+} from './projects.js';
 import { stageScripts } from './launch/stage.js';
 import { addRepoSnapshot } from './repo-guard.js';
 
@@ -28,7 +36,13 @@ export const runningLaunchPath = (storageRoot: string, dataPath: string): string
 };
 
 /** What a session or command from this folder needs: where it is inside, and (for another project) its spec. */
-export interface Joined { project: RegistryEntry; guestDir: string; spec: ProjectSpecT | null; run: ResolvedRun | null; notes: string[] }
+export interface Joined {
+  project: RegistryEntry;
+  guestDir: string;
+  spec: ProjectSpecT | null;
+  run: ResolvedRun | null;
+  notes: string[];
+}
 
 /** The project spec the guest provisions from (scans the project folder like a launch does). */
 export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boolean): ProjectSpecT => {
@@ -36,7 +50,11 @@ export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boole
   const toolchains = resolveToolchains(config.toolchains, decideProjectToolchains({ run }));
   const harness = run.harnessName === 'none' ? null : config.harnesses[run.harnessName];
   return {
-    name: Id.parse(entry.name), workspace: entry.guest, workspaceHost: entry.host, toolchains, versions: run.versions,
+    name: Id.parse(entry.name),
+    workspace: entry.guest,
+    workspaceHost: entry.host,
+    toolchains,
+    versions: run.versions,
     databases: planDatabases(config.databases, run.workspaceHost).slice(0, 8),
     harnesses: harness ? { [run.harnessName]: harness } : {},
     hooks,
@@ -48,21 +66,37 @@ export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boole
  * folder is resolved with `resolve` (the caller's resolveRun, with the approval prompt), checked, and registered.
  */
 export const joinRunning = async (o: {
-  storageRoot: string; dataPath: string; packageRoot: string; hostDir: string; wsbShare: boolean;
-  resolve: (projectRoot: string) => Promise<ResolvedRun>; mapper?: ProjectMapper;
+  storageRoot: string;
+  dataPath: string;
+  packageRoot: string;
+  hostDir: string;
+  wsbShare: boolean;
+  resolve: (projectRoot: string) => Promise<ResolvedRun>;
+  mapper?: ProjectMapper;
 }): Promise<Joined> => {
   const here = projectHere(o.storageRoot, o.hostDir);
   if (here?.project.primary) return { ...here, spec: null, run: null, notes: [] };
-  const registry = readRegistry(o.storageRoot) ?? fail('The running sandbox was started by an older version, so it cannot take another folder.', 'Stop it (sandbox stop) and start it again.');
+  const registry =
+    readRegistry(o.storageRoot) ??
+    fail(
+      'The running sandbox was started by an older version, so it cannot take another folder.',
+      'Stop it (sandbox stop) and start it again.',
+    );
   // A folder below a project already in the sandbox uses that project; anything else becomes a project of its own.
   const root = here?.project.host ?? path.resolve(o.hostDir);
   const run = await o.resolve(root);
   const check = checkJoin(registry.protections, protectionsOf(run.config));
   if (check.stricter.length) {
-    fail('This project needs stricter protection than the running sandbox has, and those settings are machine-wide:\n  ' + check.stricter.join('\n  '),
-      'Its sessions cannot get them without changing them for the sessions already running. Stop the sandbox (sandbox stop) and start it from ' + root + '.');
+    fail(
+      'This project needs stricter protection than the running sandbox has, and those settings are machine-wide:\n  ' +
+        check.stricter.join('\n  '),
+      'Its sessions cannot get them without changing them for the sessions already running. Stop the sandbox (sandbox stop) and start it from ' +
+        root +
+        '.',
+    );
   }
-  const mapper = o.mapper ?? projectMapper({ storageRoot: o.storageRoot, packageRoot: o.packageRoot, wsbShare: o.wsbShare });
+  const mapper =
+    o.mapper ?? projectMapper({ storageRoot: o.storageRoot, packageRoot: o.packageRoot, wsbShare: o.wsbShare });
   // Guarded from now on. A folder the sandbox could already write (inside a root, or mapped at boot) and that has no
   // snapshot from the launch gets an empty one: what is there now may have been planted, so it counts as new.
   // Anything else is snapshotted before it becomes visible.
@@ -74,8 +108,19 @@ export const joinRunning = async (o: {
   // .sandbox-config.json, --script) run before its first agent. The launch folder is read-only for the sandbox, but
   // this side can still add them to it.
   const hooks = Boolean(launchPath) && run.scripts.length > 0;
-  if (launchPath && hooks) stageScripts(path.join(launchPath, 'projects', entry.name, 'hooks', 'pre-agent'), run.scripts);
-  try { syncProjectIn(o.dataPath, { hostWorkspace: entry.host, guestWorkspace: entry.guest }); } catch { /* history is a convenience; never block the session */ }
+  if (launchPath && hooks)
+    stageScripts(path.join(launchPath, 'projects', entry.name, 'hooks', 'pre-agent'), run.scripts);
+  try {
+    syncProjectIn(o.dataPath, { hostWorkspace: entry.host, guestWorkspace: entry.guest });
+  } catch {
+    /* history is a convenience; never block the session */
+  }
   const notes = [...run.notes, ...check.looser.map((l) => 'The running sandbox is stricter: ' + l + '.')];
-  return { project: entry, guestDir: here ? here.guestDir : entry.guest, spec: projectSpec(run, entry, hooks), run, notes };
+  return {
+    project: entry,
+    guestDir: here ? here.guestDir : entry.guest,
+    spec: projectSpec(run, entry, hooks),
+    run,
+    notes,
+  };
 };

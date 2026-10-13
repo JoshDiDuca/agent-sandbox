@@ -9,7 +9,16 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type net from 'node:net';
 import type { GuestResponse, SessionStatus } from '../core/types.js';
 import { ensureDir, sleep } from '../core/util.js';
-import { connect, encodeFrame, FrameReader, FrameType, helloFrame, queryViewers, type Endpoint, type Viewers } from '../shared/pty-client.js';
+import {
+  connect,
+  encodeFrame,
+  FrameReader,
+  FrameType,
+  helloFrame,
+  queryViewers,
+  type Endpoint,
+  type Viewers,
+} from '../shared/pty-client.js';
 import { readJsonFile, writeJsonAtomic } from '../shared/rundir.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
@@ -22,13 +31,16 @@ export const liveTestsAvailable = (): boolean => process.platform === 'win32' &&
 /** Deadlines, in ms. Generous on purpose: they only matter when something is really wrong. */
 export const WAIT = { start: 120000, screen: 45000, response: 60000, viewers: 45000, exit: 45000 } as const;
 
-export const tail = (text: string, chars = 500): string => (text.length > chars ? '...' + text.slice(-chars) : text).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+export const tail = (text: string, chars = 500): string =>
+  (text.length > chars ? '...' + text.slice(-chars) : text).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 
 /** Connects, retrying until `ms`: a connection attempt can time out while the machine is busy. */
 export const connectPatiently = async (endpoint: Endpoint, ms = 60000): Promise<net.Socket> => {
   const end = Date.now() + ms;
   for (;;) {
-    try { return await connect(endpoint, 10000); } catch (e) {
+    try {
+      return await connect(endpoint, 10000);
+    } catch (e) {
       if (Date.now() >= end) throw e;
       await sleep(250);
     }
@@ -51,7 +63,10 @@ export interface Viewer {
 }
 
 /** Connects like a terminal tab would (`token` can be wrong on purpose) and says hello. */
-export const openViewer = async (attach: Endpoint, options: { token?: string; cols?: number; rows?: number } = {}): Promise<Viewer> => {
+export const openViewer = async (
+  attach: Endpoint,
+  options: { token?: string; cols?: number; rows?: number } = {},
+): Promise<Viewer> => {
   const socket = await connectPatiently({ ...attach, addresses: ['127.0.0.1'] });
   const reader = new FrameReader();
   let output = '';
@@ -66,7 +81,9 @@ export const openViewer = async (attach: Endpoint, options: { token?: string; co
     }
   });
   socket.on('error', () => undefined);
-  socket.on('close', () => { closed = true; });
+  socket.on('close', () => {
+    closed = true;
+  });
   socket.write(helloFrame(options.token ?? attach.token, options.cols ?? 100, options.rows ?? 30));
   return {
     socket,
@@ -74,7 +91,9 @@ export const openViewer = async (attach: Endpoint, options: { token?: string; co
     exitCode: () => exitCode,
     error: () => error,
     closed: () => closed,
-    type: (text) => { socket.write(encodeFrame(FrameType.Input, Buffer.from(text + '\r'))); },
+    type: (text) => {
+      socket.write(encodeFrame(FrameType.Input, Buffer.from(text + '\r')));
+    },
     close: () => socket.destroy(),
   };
 };
@@ -84,7 +103,12 @@ export const sees = (t: Harness, viewer: Viewer, needle: string, ms: number = WA
   t.waitFor(() => viewer.output().includes(needle), ms);
 
 /** Polls the session's viewer count until `accept` is satisfied; null when it never was. A query that gets no answer is retried. */
-export const viewersWhen = (t: Harness, attach: Endpoint, accept: (v: Viewers) => boolean, ms: number = WAIT.viewers): Promise<Viewers | null> =>
+export const viewersWhen = (
+  t: Harness,
+  attach: Endpoint,
+  accept: (v: Viewers) => boolean,
+  ms: number = WAIT.viewers,
+): Promise<Viewers | null> =>
   t.waitFor(async () => {
     const v = await queryViewers({ ...attach, addresses: ['127.0.0.1'] }, 5000);
     return v && accept(v) ? v : null;
@@ -111,23 +135,49 @@ export interface LiveDaemon {
   stop: () => Promise<void>;
 }
 
-export const startDaemon = (t: Harness, f: Fixtures, options: { launchPath: string; data: string; workspace: string; env?: Record<string, string> }): LiveDaemon => {
+export const startDaemon = (
+  t: Harness,
+  f: Fixtures,
+  options: { launchPath: string; data: string; workspace: string; env?: Record<string, string> },
+): LiveDaemon => {
   const { launchPath, data } = options;
   const output = t.at(path.basename(data) + '-daemon.out');
   const fd = fs.openSync(output, 'w');
-  const env = { ...process.env, AGENT_LAUNCH_DIR: launchPath, AGENT_DATA_DIR: data, AGENT_WORKSPACE: options.workspace, AGENT_LOCAL_DIR: f.at(path.basename(data) + '-local'), AGENT_LOG_PREFIX: 'daemon', AGENT_NO_TABS: '1', ...options.env };
-  const child = spawn(process.execPath, [path.join(launchPath, 'runtime', 'daemon.js')], { env, stdio: ['ignore', fd, fd], windowsHide: true });
+  const env = {
+    ...process.env,
+    AGENT_LAUNCH_DIR: launchPath,
+    AGENT_DATA_DIR: data,
+    AGENT_WORKSPACE: options.workspace,
+    AGENT_LOCAL_DIR: f.at(path.basename(data) + '-local'),
+    AGENT_LOG_PREFIX: 'daemon',
+    AGENT_NO_TABS: '1',
+    ...options.env,
+  };
+  const child = spawn(process.execPath, [path.join(launchPath, 'runtime', 'daemon.js')], {
+    env,
+    stdio: ['ignore', fd, fd],
+    windowsHide: true,
+  });
   let exited = false;
-  child.on('exit', () => { exited = true; });
+  child.on('exit', () => {
+    exited = true;
+  });
   const run = path.join(data, 'run');
-  const status = (id: string): SessionStatus | null => readJsonFile<SessionStatus>(path.join(run, 'sessions', id + '.json'));
+  const status = (id: string): SessionStatus | null =>
+    readJsonFile<SessionStatus>(path.join(run, 'sessions', id + '.json'));
   return {
     run,
     child,
-    request: (body) => writeJsonAtomic(path.join(run, 'requests', body.id + '.json'), { createdAt: new Date().toISOString(), ...body }),
-    response: (id, ms = WAIT.response) => t.waitFor(() => readJsonFile<GuestResponse>(path.join(run, 'responses', id + '.json')), ms),
+    request: (body) =>
+      writeJsonAtomic(path.join(run, 'requests', body.id + '.json'), { createdAt: new Date().toISOString(), ...body }),
+    response: (id, ms = WAIT.response) =>
+      t.waitFor(() => readJsonFile<GuestResponse>(path.join(run, 'responses', id + '.json')), ms),
     status,
-    started: (id, ms = WAIT.start) => t.waitFor(() => { const s = status(id); return s && s.phase !== 'starting' ? s : null; }, ms),
+    started: (id, ms = WAIT.start) =>
+      t.waitFor(() => {
+        const s = status(id);
+        return s && s.phase !== 'starting' ? s : null;
+      }, ms),
     diagnostics: () => {
       const logs = path.join(data, 'logs');
       const files = fs.existsSync(logs) ? fs.readdirSync(logs).filter((n) => n.startsWith('daemon')) : [];
@@ -137,7 +187,11 @@ export const startDaemon = (t: Harness, f: Fixtures, options: { launchPath: stri
     stop: async () => {
       if (!exited) child.kill();
       await t.waitFor(() => exited, 10000);
-      try { fs.closeSync(fd); } catch { /* already closed */ }
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* already closed */
+      }
     },
   };
 };

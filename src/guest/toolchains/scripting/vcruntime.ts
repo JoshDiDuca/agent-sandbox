@@ -12,8 +12,15 @@ const MICROSOFT_SIGNER = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=R
 const OK_EXIT_CODES = [0, 1638, 3010];
 
 /** The subject of a valid Authenticode signature, or '' when the file is unsigned or tampered with. */
-const signerOf = (file: string): string => execOutput(SYSTEM.powershell(), ['-NoLogo', '-NoProfile', '-Command',
-  "$s = Get-AuthenticodeSignature -LiteralPath '" + file.replace(/'/g, "''") + "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }"]).trim();
+const signerOf = (file: string): string =>
+  execOutput(SYSTEM.powershell(), [
+    '-NoLogo',
+    '-NoProfile',
+    '-Command',
+    "$s = Get-AuthenticodeSignature -LiteralPath '" +
+      file.replace(/'/g, "''") +
+      "'; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }",
+  ]).trim();
 
 /**
  * A real installer (it writes to System32), so it runs on every boot; the installer itself is kept in persistent
@@ -21,16 +28,26 @@ const signerOf = (file: string): string => execOutput(SYSTEM.powershell(), ['-No
  * Only the "Visual C++ runtime" step reports it (`summary`); PHP calls it again just to be sure.
  */
 export const setupVcRuntime = async (env: ToolEnv, summary = true): Promise<boolean> => {
-  if (dryRun) { log('(dry run) would install the Visual C++ runtime'); return false; }
+  if (dryRun) {
+    log('(dry run) would install the Visual C++ runtime');
+    return false;
+  }
   const system32 = path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32');
   const missing = !exists(path.join(system32, 'vcruntime140.dll')) || !exists(path.join(system32, 'msvcp140.dll'));
   if (missing) {
     const installer = tool('vcredist', 'vc_redist.x64.exe');
-    if (!exists(installer)) { log('Downloading the Visual C++ runtime (~25 MB once) ...'); await downloadFile(VC_REDIST, installer); }
-    if (signerOf(installer) !== MICROSOFT_SIGNER) { fs.rmSync(installer, { force: true }); throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)'); }
+    if (!exists(installer)) {
+      log('Downloading the Visual C++ runtime (~25 MB once) ...');
+      await downloadFile(VC_REDIST, installer);
+    }
+    if (signerOf(installer) !== MICROSOFT_SIGNER) {
+      fs.rmSync(installer, { force: true });
+      throw new Error('vc_redist.x64.exe is not signed by Microsoft; deleted it (it is downloaded again next boot)');
+    }
     log('Installing the Visual C++ runtime ...');
     const code = await spawnAsync(installer, ['/install', '/quiet', '/norestart']);
-    if (!OK_EXIT_CODES.includes(code ?? -1) || !exists(path.join(system32, 'vcruntime140.dll'))) throw new Error('the Visual C++ runtime installer failed (exit ' + code + ')');
+    if (!OK_EXIT_CODES.includes(code ?? -1) || !exists(path.join(system32, 'vcruntime140.dll')))
+      throw new Error('the Visual C++ runtime installer failed (exit ' + code + ')');
   }
   if (summary) env.summary.push('vc++ runtime: installed');
   return missing;

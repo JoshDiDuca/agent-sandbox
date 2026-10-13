@@ -14,6 +14,8 @@ export const startRelays = (): void => {
       client.on('error', () => target.destroy());
     });
     server.on('error', (e) => warn('Port forward ' + f.pc + ' -> ' + f.sandbox + ' could not start: ' + errMsg(e)));
-    server.listen(relayPort(i), '0.0.0.0', () => log('Port forward: the PC\'s localhost:' + f.pc + ' reaches localhost:' + f.sandbox + ' here.'));
+    server.listen(relayPort(i), '0.0.0.0', () =>
+      log("Port forward: the PC's localhost:" + f.pc + ' reaches localhost:' + f.sandbox + ' here.'),
+    );
   });
 };

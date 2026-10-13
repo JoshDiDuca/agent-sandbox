@@ -27,24 +27,65 @@ export const setupDynamo = async (env: ToolEnv, plan: DatabasePlan): Promise<voi
   }
   const data = mkdirp(dataFor('dynamodb'));
   // -sharedDb: one database whatever region/credentials a client uses, so the admin UI and the app see the same tables.
-  await startServer('dynamodb', java, ['-Djava.library.path=' + path.join(home, 'DynamoDBLocal_lib'), '-jar', path.join(home, 'DynamoDBLocal.jar'), '-sharedDb', '-dbPath', data, '-port', String(plan.port)], plan.port);
+  await startServer(
+    'dynamodb',
+    java,
+    [
+      '-Djava.library.path=' + path.join(home, 'DynamoDBLocal_lib'),
+      '-jar',
+      path.join(home, 'DynamoDBLocal.jar'),
+      '-sharedDb',
+      '-dbPath',
+      data,
+      '-port',
+      String(plan.port),
+    ],
+    plan.port,
+  );
   const endpoint = 'http://localhost:' + plan.port;
-  const aws = { AWS_ENDPOINT_URL_DYNAMODB: endpoint, DYNAMO_ENDPOINT: endpoint, AWS_ACCESS_KEY_ID: 'local', AWS_SECRET_ACCESS_KEY: 'local', AWS_REGION: 'us-east-1', AWS_DEFAULT_REGION: 'us-east-1' };
+  const aws = {
+    AWS_ENDPOINT_URL_DYNAMODB: endpoint,
+    DYNAMO_ENDPOINT: endpoint,
+    AWS_ACCESS_KEY_ID: 'local',
+    AWS_SECRET_ACCESS_KEY: 'local',
+    AWS_REGION: 'us-east-1',
+    AWS_DEFAULT_REGION: 'us-east-1',
+  };
   Object.assign(env.vars, aws);
-  env.summary.push('dynamodb (DynamoDB Local): ' + endpoint + ' (AWS SDKs use it automatically via AWS_ENDPOINT_URL_DYNAMODB; dummy credentials)');
+  env.summary.push(
+    'dynamodb (DynamoDB Local): ' +
+      endpoint +
+      ' (AWS SDKs use it automatically via AWS_ENDPOINT_URL_DYNAMODB; dummy credentials)',
+  );
   if (!plan.adminPort) return;
   const prefix = tool('dynamodb-admin');
   const script = path.join(prefix, 'node_modules', 'dynamodb-admin', 'dist', 'dynamodb-admin.js');
   if (!exists(script)) {
     log('Installing dynamodb-admin, the DynamoDB web UI (~20 MB once) ...');
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-    await execAsync(process.execPath, [npmCli, 'install', '--global', '--prefix', prefix, 'dynamodb-admin', '--no-fund', '--no-audit'], { stdio: 'ignore' });
+    await execAsync(
+      process.execPath,
+      [npmCli, 'install', '--global', '--prefix', prefix, 'dynamodb-admin', '--no-fund', '--no-audit'],
+      { stdio: 'ignore' },
+    );
   }
   // The database matters more than its UI: a taken port is reported, not fatal.
-  if (await portOpen(plan.adminPort)) { env.summary.push('dynamodb-admin: NOT started, port ' + plan.adminPort + ' is in use (change databases.dynamodb.adminPort)'); return; }
+  if (await portOpen(plan.adminPort)) {
+    env.summary.push(
+      'dynamodb-admin: NOT started, port ' + plan.adminPort + ' is in use (change databases.dynamodb.adminPort)',
+    );
+    return;
+  }
   const out = fs.openSync(path.join(logsDir, 'dynamodb-admin.log'), 'a');
-  spawn(process.execPath, [script, '--port', String(plan.adminPort), '--dynamo-endpoint', endpoint, '--skip-default-credentials'], { detached: true, stdio: ['ignore', out, out], windowsHide: true, env: { ...process.env, ...aws } }).unref();
+  spawn(
+    process.execPath,
+    [script, '--port', String(plan.adminPort), '--dynamo-endpoint', endpoint, '--skip-default-credentials'],
+    { detached: true, stdio: ['ignore', out, out], windowsHide: true, env: { ...process.env, ...aws } },
+  ).unref();
   fs.closeSync(out);
-  if (!(await waitForPort(plan.adminPort, 30))) throw new Error('dynamodb-admin did not start; see ' + path.join(logsDir, 'dynamodb-admin.log'));
-  env.summary.push('dynamodb-admin: http://localhost:' + plan.adminPort + ' (browse and edit tables in the sandbox\'s browser)');
+  if (!(await waitForPort(plan.adminPort, 30)))
+    throw new Error('dynamodb-admin did not start; see ' + path.join(logsDir, 'dynamodb-admin.log'));
+  env.summary.push(
+    'dynamodb-admin: http://localhost:' + plan.adminPort + " (browse and edit tables in the sandbox's browser)",
+  );
 };

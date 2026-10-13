@@ -5,18 +5,46 @@ import os from 'node:os';
 import path from 'node:path';
 import { assertTestWritable } from './test-guard.js';
 
-const norm = (p: string): string => path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
-const isAncestorOrSame = (parent: string, child: string): boolean => { const a = norm(parent); const b = norm(child); return a === b || b.startsWith(a + path.sep); };
+const norm = (p: string): string =>
+  path
+    .resolve(p)
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
+const isAncestorOrSame = (parent: string, child: string): boolean => {
+  const a = norm(parent);
+  const b = norm(child);
+  return a === b || b.startsWith(a + path.sep);
+};
 
 /** Folders no delete may ever reach, or contain: profiles, Windows, program folders. */
-const protectedFolders = (): string[] => [
-  os.homedir(), process.env.USERPROFILE, process.env.APPDATA, process.env.LOCALAPPDATA, path.join(os.homedir(), 'Documents'), path.join(os.homedir(), 'Desktop'),
-  process.env.SystemRoot, process.env.WINDIR, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramData, 'C:\\Users', 'C:\\Windows',
-].filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+const protectedFolders = (): string[] =>
+  [
+    os.homedir(),
+    process.env.USERPROFILE,
+    process.env.APPDATA,
+    process.env.LOCALAPPDATA,
+    path.join(os.homedir(), 'Documents'),
+    path.join(os.homedir(), 'Desktop'),
+    process.env.SystemRoot,
+    process.env.WINDIR,
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramData,
+    'C:\\Users',
+    'C:\\Windows',
+  ].filter((p): p is string => typeof p === 'string' && p.trim() !== '');
 
 /** Folders nothing of ours lives in, so nothing below them may be deleted either. */
-const systemFolders = (): string[] => [process.env.SystemRoot, process.env.WINDIR, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)']
-  .filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+const systemFolders = (): string[] =>
+  [
+    process.env.SystemRoot,
+    process.env.WINDIR,
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    'C:\\Windows',
+    'C:\\Program Files',
+    'C:\\Program Files (x86)',
+  ].filter((p): p is string => typeof p === 'string' && p.trim() !== '');
 
 /**
  * Why `target` may not be deleted, or null when it may. Refused: a relative path, a drive root, a protected folder or
@@ -45,7 +73,18 @@ export const safeRemove = (target: string, root: string): void => {
   if (refusal) throw new Error('Refusing to delete ' + target + ': ' + refusal);
   assertTestWritable(target);
   let stat: fs.Stats;
-  try { stat = fs.lstatSync(target); } catch { return; }
-  if (stat.isSymbolicLink()) { try { fs.unlinkSync(target); } catch { fs.rmdirSync(target); } return; }
+  try {
+    stat = fs.lstatSync(target);
+  } catch {
+    return;
+  }
+  if (stat.isSymbolicLink()) {
+    try {
+      fs.unlinkSync(target);
+    } catch {
+      fs.rmdirSync(target);
+    }
+    return;
+  }
   fs.rmSync(target, { recursive: true, force: true, maxRetries: 2 });
 };

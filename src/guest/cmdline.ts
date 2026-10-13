@@ -13,14 +13,20 @@ export const quoteArg = (arg: string): string => (arg !== '' && !/[\s"]/.test(ar
  * of these are quoted as usual.
  */
 export const cmdArgs = (args: string[]): string => {
-  const pieces = args.map((arg) => (/[&|<>^%]/.test(arg) ? arg.split('%').map(quoted).join('%') : quoteArg(arg))).join(' ');
+  const pieces = args
+    .map((arg) => (/[&|<>^%]/.test(arg) ? arg.split('%').map(quoted).join('%') : quoteArg(arg)))
+    .join(' ');
   let inQuotes = false;
-  return [...pieces].map((c) => {
-    if (c === '"') inQuotes = !inQuotes;
-    return !inQuotes && /[&|<>^]/.test(c) ? '^^^' + c : c;
-  }).join('');
+  return [...pieces]
+    .map((c) => {
+      if (c === '"') inQuotes = !inQuotes;
+      return !inQuotes && /[&|<>^]/.test(c) ? '^^^' + c : c;
+    })
+    .join('');
 };
 
 /** The command line ptyhost starts; when the program is cmd.exe its arguments are quoted for cmd (cmdArgs). */
 export const commandLine = (file: string, args: string[]): string =>
-  path.win32.basename(file).toLowerCase() === 'cmd.exe' ? [quoteArg(file), cmdArgs(args)].filter(Boolean).join(' ') : [file, ...args].map(quoteArg).join(' ');
+  path.win32.basename(file).toLowerCase() === 'cmd.exe'
+    ? [quoteArg(file), cmdArgs(args)].filter(Boolean).join(' ')
+    : [file, ...args].map(quoteArg).join(' ');

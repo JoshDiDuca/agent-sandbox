@@ -12,7 +12,9 @@ const readRules = (file: string): string => {
   try {
     const stat = fs.lstatSync(file);
     return stat.isFile() && stat.size <= MAX_RULES_BYTES ? fs.readFileSync(file, 'utf8') : '';
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 };
 
 export class IgnoreRules {
@@ -22,21 +24,32 @@ export class IgnoreRules {
   private readonly forced: Ignore;
 
   /** `root`: the project folder on this PC (its .gitignore files are the rules); `exclude` / `include`: your patterns. */
-  constructor(private readonly root: string, exclude: string[] = [], private readonly include: string[] = []) {
+  constructor(
+    private readonly root: string,
+    exclude: string[] = [],
+    private readonly include: string[] = [],
+  ) {
     this.extra = ignore().add(exclude);
     this.forced = ignore().add(include);
   }
 
   /** One of your include patterns lets this path in, whatever .gitignore says (even inside an ignored folder). */
-  isForced(rel: string): boolean { return this.include.length > 0 && this.forced.ignores(rel); }
+  isForced(rel: string): boolean {
+    return this.include.length > 0 && this.forced.ignores(rel);
+  }
 
   /** Could one of your include patterns match something inside this ignored folder (so a walk must look inside)? */
   mayIncludeInside(dir: string): boolean {
-    return this.include.some((p) => { const clean = p.replace(/^\//, ''); return clean.startsWith('**') || clean.startsWith(dir + '/'); });
+    return this.include.some((p) => {
+      const clean = p.replace(/^\//, '');
+      return clean.startsWith('**') || clean.startsWith(dir + '/');
+    });
   }
 
   /** Forget the .gitignore files read so far (one of them changed). */
-  reset(): void { this.perFolder.clear(); }
+  reset(): void {
+    this.perFolder.clear();
+  }
 
   private matcher(folder: string): Ignore | null {
     if (this.perFolder.has(folder)) return this.perFolder.get(folder)!;

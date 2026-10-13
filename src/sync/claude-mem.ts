@@ -13,7 +13,8 @@ import { assertTestWritable } from '../host/test-guard.js';
 import type { SyncState } from './history.js';
 
 // Never in: its settings (provider API keys), .env files and backups; nor run-time files that mean nothing elsewhere.
-const SKIP_IN = /(^logs$|^backups?$|^settings\.json$|^\.env|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
+const SKIP_IN =
+  /(^logs$|^backups?$|^settings\.json$|^\.env|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
 /** The only files that may come back from the sandbox. */
 const DATABASE = /^claude-mem\.db(-wal|-shm)?$/i;
 const MAX_DB_BYTES = 2 * 1024 * 1024 * 1024;
@@ -24,16 +25,22 @@ export const hostClaudeMemDir = (): string => process.env.CLAUDE_MEM_DATA_DIR ??
 
 /** Plain database files at the top of a claude-mem folder (links and anything else are ignored). */
 const databaseFiles = (dir: string): string[] =>
-  dirExists(dir) && !isLink(dir) ? fs.readdirSync(dir).filter((f) => DATABASE.test(f) && fs.lstatSync(path.join(dir, f)).isFile()) : [];
+  dirExists(dir) && !isLink(dir)
+    ? fs.readdirSync(dir).filter((f) => DATABASE.test(f) && fs.lstatSync(path.join(dir, f)).isFile())
+    : [];
 
 /** Newest database file time: the only thing that matters for deciding the direction. */
-const stampOf = (dir: string): number => _.max(databaseFiles(dir).map((f) => fs.statSync(path.join(dir, f)).mtimeMs)) ?? 0;
+const stampOf = (dir: string): number =>
+  _.max(databaseFiles(dir).map((f) => fs.statSync(path.join(dir, f)).mtimeMs)) ?? 0;
 
 /** Host -> sandbox: replace the sandbox store with a copy of this PC's folder (staging folder, then swap). */
 const mirrorIn = (hostDir: string, store: string): void => {
   const incoming = store + '.incoming';
   safeRemove(incoming, path.dirname(store));
-  fs.cpSync(hostDir, incoming, { recursive: true, filter: (src: string) => src === hostDir || (!SKIP_IN.test(path.basename(src)) && !isLink(src)) });
+  fs.cpSync(hostDir, incoming, {
+    recursive: true,
+    filter: (src: string) => src === hostDir || (!SKIP_IN.test(path.basename(src)) && !isLink(src)),
+  });
   safeRemove(store, path.dirname(store));
   fs.renameSync(incoming, store);
 };
@@ -43,7 +50,8 @@ const copyDatabaseOut = (store: string, hostDir: string): void => {
   fs.mkdirSync(hostDir, { recursive: true });
   for (const name of databaseFiles(store)) {
     const source = path.join(store, name);
-    if (fs.statSync(source).size > MAX_DB_BYTES) throw new Error('claude-mem database in the sandbox is suspiciously large; not copied back: ' + source);
+    if (fs.statSync(source).size > MAX_DB_BYTES)
+      throw new Error('claude-mem database in the sandbox is suspiciously large; not copied back: ' + source);
     const temp = path.join(hostDir, name + '.from-sandbox');
     fs.copyFileSync(source, temp);
     fs.renameSync(temp, path.join(hostDir, name));

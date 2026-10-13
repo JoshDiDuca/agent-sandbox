@@ -23,7 +23,9 @@ import { assertTestWritable } from './test-guard.js';
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
 
 /** Which toolchains the project needs ("auto" settings follow the project's files and what this PC has). */
-export const decideProjectToolchains = (o: Pick<GenerateOptions, 'run' | 'pcLanguages'>): ReturnType<typeof decideToolchains> => {
+export const decideProjectToolchains = (
+  o: Pick<GenerateOptions, 'run' | 'pcLanguages'>,
+): ReturnType<typeof decideToolchains> => {
   const { config, workspaceHost } = o.run;
   const msvcScript = config.toolchains.msvc.enabled === 'auto' ? msvcHint(workspaceHost) : undefined;
   const pwshScript = config.toolchains.pwsh.enabled === 'auto' ? usesPwsh(readPwshScripts(workspaceHost)) : null;
@@ -47,12 +49,18 @@ const hostToolsOf = (probe: HostProbe): GuestSession['hostTools'] => ({
  * folder of new tabs) from its own environment, and the runtime only sets the variable machine-wide after Terminal
  * started. `%` is doubled for cmd; a Windows path holds no quotes.
  */
-export const logonEnv = (workspace: string): string => '@set "AGENT_WORKSPACE=' + workspace.replace(/[\r\n"]/g, '').replace(/%/g, '%%') + '"\r\n';
+export const logonEnv = (workspace: string): string =>
+  '@set "AGENT_WORKSPACE=' + workspace.replace(/[\r\n"]/g, '').replace(/%/g, '%%') + '"\r\n';
 
-export const generateSandbox =(o: GenerateOptions): Generated & { personalization: string } => {
+export const generateSandbox = (o: GenerateOptions): Generated & { personalization: string } => {
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
-  const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
-  if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
+  const harness =
+    harnessName === 'none'
+      ? null
+      : (config.harnesses[harnessName] ??
+        fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', ')));
+  if (!dirExists(workspaceHost))
+    fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
   assertTestWritable(storageRoot);
   assertTestWritable(dataPath);
 
@@ -62,10 +70,18 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
-  const boot = planBootProjects({ run: o.run, packageRoot: o.packageRoot, extraProjects: o.extraProjects, knownProjects: o.knownProjects });
+  const boot = planBootProjects({
+    run: o.run,
+    packageRoot: o.packageRoot,
+    extraProjects: o.extraProjects,
+    knownProjects: o.knownProjects,
+  });
   const mappings = collectMappings(o, launchPath, boot);
 
-  const profile = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : NO_PROFILE;
+  const profile =
+    harnessName === 'claude'
+      ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets)
+      : NO_PROFILE;
   stageGitIdentity(launchPath);
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
@@ -97,7 +113,13 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
     hooks: config.hooks,
     downloads: config.downloads,
     hostTools: hostToolsOf(o.probe),
-    claudeProfile: { overwrite: config.claudeProfile.overwrite, items: profile.staged, credentials: profile.credentials, hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile), syncClaudeMem: config.claudeProfile.syncClaudeMem },
+    claudeProfile: {
+      overwrite: config.claudeProfile.overwrite,
+      items: profile.staged,
+      credentials: profile.credentials,
+      hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile),
+      syncClaudeMem: config.claudeProfile.syncClaudeMem,
+    },
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
     substDrives: substDrives(mappings.map((m) => m.guest)),
     cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
@@ -113,5 +135,17 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: boot };
+  return {
+    wsbPath,
+    launchPath,
+    launchId,
+    sessionPath,
+    memoryMb,
+    mappings,
+    profile,
+    personalization,
+    databases,
+    toolchains: toolchainDecisions,
+    projects: boot,
+  };
 };

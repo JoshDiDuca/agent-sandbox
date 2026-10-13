@@ -15,13 +15,17 @@ const GUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
 const MAX_OUTPUT = 1024 * 1024;
 
 /** Where wsb.exe can be: the Store app's alias, then System32 (never by bare name; cwd is often the workspace). */
-export const wsbCandidates = (env: NodeJS.ProcessEnv = process.env): string[] => [
-  env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'wsb.exe') : '',
-  path.join(env.SystemRoot ?? env.WINDIR ?? 'C:\\Windows', 'System32', 'wsb.exe'),
-].filter(Boolean);
+export const wsbCandidates = (env: NodeJS.ProcessEnv = process.env): string[] =>
+  [
+    env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'wsb.exe') : '',
+    path.join(env.SystemRoot ?? env.WINDIR ?? 'C:\\Windows', 'System32', 'wsb.exe'),
+  ].filter(Boolean);
 
-export const findWsb = (env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = fs.existsSync): string | null =>
-  process.platform === 'win32' || exists !== fs.existsSync ? wsbCandidates(env).find((p) => exists(p)) ?? null : null;
+export const findWsb = (
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (p: string) => boolean = fs.existsSync,
+): string | null =>
+  process.platform === 'win32' || exists !== fs.existsSync ? (wsbCandidates(env).find((p) => exists(p)) ?? null) : null;
 
 // ---- parsing (pure; the tests feed it recorded output) ---------------------------------------------------------
 
@@ -42,22 +46,28 @@ export const parseCommands = (help: string): string[] => {
   return names;
 };
 
-export interface WsbSandbox { id: string; status: string }
+export interface WsbSandbox {
+  id: string;
+  status: string;
+}
 
 /** `wsb list --raw` (JSON: an array, or an object holding one) or the plain table: the sandboxes and their status. */
 export const parseList = (out: string): WsbSandbox[] => {
   const fromObject = (o: unknown): WsbSandbox | null => {
     if (!o || typeof o !== 'object') return null;
     const entries = Object.entries(o as Record<string, unknown>);
-    const id = entries.find(([k, v]) => /^id$/i.test(k) && typeof v === 'string' && GUID.test(v))?.[1] as string | undefined;
+    const id = entries.find(([k, v]) => /^id$/i.test(k) && typeof v === 'string' && GUID.test(v))?.[1] as
+      string | undefined;
     const status = entries.find(([k]) => /^(status|state)$/i.test(k))?.[1];
     return id ? { id: GUID.exec(id)![0], status: typeof status === 'string' ? status : 'unknown' } : null;
   };
   try {
     const parsed: unknown = JSON.parse(out);
-    const list = Array.isArray(parsed) ? parsed : Object.values(parsed as object).find(Array.isArray) ?? [parsed];
+    const list = Array.isArray(parsed) ? parsed : (Object.values(parsed as object).find(Array.isArray) ?? [parsed]);
     return (list as unknown[]).map(fromObject).filter((s): s is WsbSandbox => s !== null);
-  } catch { /* the table */ }
+  } catch {
+    /* the table */
+  }
   return out.split(/\r?\n/).flatMap((line) => {
     const id = GUID.exec(line)?.[0];
     if (!id) return [];
@@ -70,17 +80,34 @@ export const parseIp = (out: string): string | null => /\b(?:\d{1,3}\.){3}\d{1,3
 
 // ---- calls -------------------------------------------------------------------------------------------------------
 
-export interface WsbResult { ok: boolean; stdout: string; stderr: string; error?: string }
+export interface WsbResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}
 
 const call = (exe: string, args: string[], timeoutMs = 60000): WsbResult => {
   const r = spawnSync(exe, args, { encoding: 'utf8', windowsHide: true, timeout: timeoutMs, maxBuffer: MAX_OUTPUT });
   const stdout = String(r.stdout ?? '').slice(0, MAX_OUTPUT);
   const stderr = String(r.stderr ?? '').slice(0, MAX_OUTPUT);
   if (r.error) return { ok: false, stdout, stderr, error: r.error.message };
-  return { ok: r.status === 0, stdout, stderr, ...(r.status === 0 ? {} : { error: (stderr || stdout).trim().split(/\r?\n/).slice(-3).join(' ') || 'exit code ' + r.status }) };
+  return {
+    ok: r.status === 0,
+    stdout,
+    stderr,
+    ...(r.status === 0
+      ? {}
+      : { error: (stderr || stdout).trim().split(/\r?\n/).slice(-3).join(' ') || 'exit code ' + r.status }),
+  };
 };
 
-export interface Wsb { exe: string; version: string | null; commands: string[]; has: (command: string) => boolean }
+export interface Wsb {
+  exe: string;
+  version: string | null;
+  commands: string[];
+  has: (command: string) => boolean;
+}
 
 /** The CLI and what it offers, or null on Windows versions without it. */
 export const detectWsb = (env: NodeJS.ProcessEnv = process.env): Wsb | null => {
@@ -100,14 +127,35 @@ export const runningSandboxId = (wsb: Wsb): { id: string | null; error?: string 
   const all = parseList(listed.ok ? listed.stdout : call(wsb.exe, ['list'], 20000).stdout);
   const running = all.filter((s) => !/stopped/i.test(s.status));
   if (running.length === 1) return { id: running[0].id };
-  return { id: null, error: running.length ? running.length + ' sandboxes are running (wsb list); cannot tell which one is ours' : 'wsb list shows no running sandbox (one started from a .wsb file may not be listed)' };
+  return {
+    id: null,
+    error: running.length
+      ? running.length + ' sandboxes are running (wsb list); cannot tell which one is ours'
+      : 'wsb list shows no running sandbox (one started from a .wsb file may not be listed)',
+  };
 };
 
 /** Shares a folder of this PC into the running sandbox at `sandboxPath` (read/write unless readOnly). */
-export const shareFolder = (wsb: Wsb, id: string, hostPath: string, sandboxPath: string, readOnly = false): WsbResult => {
+export const shareFolder = (
+  wsb: Wsb,
+  id: string,
+  hostPath: string,
+  sandboxPath: string,
+  readOnly = false,
+): WsbResult => {
   refuseInSelfTest('share a folder into Windows Sandbox');
   if (!GUID.test(id)) return { ok: false, stdout: '', stderr: '', error: 'not a sandbox id: ' + id };
-  return call(wsb.exe, ['share', '--id', id, '-f', hostPath, '-s', sandboxPath, ...(readOnly ? [] : ['--allow-write'])]);
+  return call(wsb.exe, [
+    'share',
+    '--id',
+    id,
+    '-f',
+    hostPath,
+    '-s',
+    sandboxPath,
+    ...(readOnly ? [] : ['--allow-write']),
+  ]);
 };
 
-export const sandboxIp = (wsb: Wsb, id: string): string | null => (GUID.test(id) ? parseIp(call(wsb.exe, ['ip', '--id', id], 15000).stdout) : null);
+export const sandboxIp = (wsb: Wsb, id: string): string | null =>
+  GUID.test(id) ? parseIp(call(wsb.exe, ['ip', '--id', id], 15000).stdout) : null;

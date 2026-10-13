@@ -33,7 +33,11 @@ export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js', 
 export const copyRuntime = (packageRoot: string, launchPath: string): void => {
   const runtime = path.join(packageRoot, 'dist', 'runtime');
   const missing = RUNTIME_FILES.filter((f) => !fileExists(path.join(runtime, f)));
-  if (missing.length) fail('The sandbox runtime is missing from ' + runtime + ' (' + missing.join(', ') + ').', 'Rebuild it: npm run build (or reinstall the package).');
+  if (missing.length)
+    fail(
+      'The sandbox runtime is missing from ' + runtime + ' (' + missing.join(', ') + ').',
+      'Rebuild it: npm run build (or reinstall the package).',
+    );
   ensureDir(path.join(launchPath, 'runtime'));
   for (const file of RUNTIME_FILES) fs.copyFileSync(path.join(runtime, file), path.join(launchPath, 'runtime', file));
   fs.writeFileSync(path.join(launchPath, 'package.json'), '{ "type": "module" }\n', 'utf8');
@@ -46,9 +50,13 @@ export const gitIdentity = (gitconfig: string): string => {
   let section = '';
   for (const line of gitconfig.split(/\r?\n/)) {
     const header = /^\s*\[([^\]]+)\]/.exec(line);
-    if (header) { section = header[1].trim().toLowerCase(); continue; }
+    if (header) {
+      section = header[1].trim().toLowerCase();
+      continue;
+    }
     const pair = /^\s*(name|email)\s*=\s*(.*?)\s*$/i.exec(line);
-    if (section === 'user' && pair && !/[\r\n]/.test(pair[2])) values[pair[1].toLowerCase()] = pair[2].replace(/^"(.*)"$/, '$1');
+    if (section === 'user' && pair && !/[\r\n]/.test(pair[2]))
+      values[pair[1].toLowerCase()] = pair[2].replace(/^"(.*)"$/, '$1');
   }
   const lines = Object.entries(values).map(([k, v]) => '\t' + k + ' = ' + v);
   return lines.length ? '[user]\n' + lines.join('\n') + '\n' : '';

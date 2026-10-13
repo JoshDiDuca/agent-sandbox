@@ -9,10 +9,14 @@ export const removeTree = (p: string, root: string): void => {
   const unlinkInside = (dir: string): void => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       const child = path.join(dir, d.name);
-      if (d.isSymbolicLink() || isLink(child)) removeLink(child); else if (d.isDirectory()) unlinkInside(child);
+      if (d.isSymbolicLink() || isLink(child)) removeLink(child);
+      else if (d.isDirectory()) unlinkInside(child);
     }
   };
-  if (isLink(p)) { removeLink(p); return; }
+  if (isLink(p)) {
+    removeLink(p);
+    return;
+  }
   if (!fs.existsSync(p)) return;
   // Refused before anything is touched (safeRemove below checks again).
   const refusal = removeRefusal(p, root);

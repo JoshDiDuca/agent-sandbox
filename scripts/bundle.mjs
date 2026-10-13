@@ -3,7 +3,14 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['src/guest/main.ts', 'src/guest/daemon.ts', 'src/guest/view.ts', 'src/guest/gitguard.ts', 'src/guest/db.ts', 'src/guest/netproxy.ts'],
+  entryPoints: [
+    'src/guest/main.ts',
+    'src/guest/daemon.ts',
+    'src/guest/view.ts',
+    'src/guest/gitguard.ts',
+    'src/guest/db.ts',
+    'src/guest/netproxy.ts',
+  ],
   outdir: 'dist/runtime',
   bundle: true,
   platform: 'node',
@@ -12,7 +19,9 @@ await build({
   // ES module builds first: jsonc-parser's default (UMD) build loads its parts with require() calls esbuild cannot follow.
   mainFields: ['module', 'main'],
   // CommonJS dependencies bundled into ESM may call require() for Node built-ins.
-  banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
+  banner: {
+    js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+  },
   legalComments: 'none',
   logLevel: 'warning',
 });

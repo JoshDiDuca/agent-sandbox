@@ -20,35 +20,67 @@ export const fileValue = (text: string, key: string[]): unknown => _.get(parse(t
  * Applies one change (undefined = remove the line, back to the default) to config text and returns the new text, or
  * the problems that make the result invalid. Pure; ConfigFile writes it.
  */
-export const editConfigText = (text: string, key: string[], value: unknown, target: SettingsTarget = 'user'): { text: string } | { problems: string[] } => {
+export const editConfigText = (
+  text: string,
+  key: string[],
+  value: unknown,
+  target: SettingsTarget = 'user',
+): { text: string } | { problems: string[] } => {
   // Removing a setting the file does not have changes nothing (jsonc-parser throws on it).
-  const edits = value === undefined && fileValue(text || '{}', key) === undefined ? [] : modify(text || '{}', key, value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } });
+  const edits =
+    value === undefined && fileValue(text || '{}', key) === undefined
+      ? []
+      : modify(text || '{}', key, value, { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } });
   const next = applyEdits(text || '{}', edits);
-  const parsed = target === 'project' ? LocalOverrides.safeParse(parse(next) ?? {}) : ConfigSchema.safeParse(mergeConfig(DEFAULTS, parse(next) ?? {}));
-  return parsed.success ? { text: next.endsWith('\n') ? next : next + '\n' } : { problems: describeIssues(parsed.error) };
+  const parsed =
+    target === 'project'
+      ? LocalOverrides.safeParse(parse(next) ?? {})
+      : ConfigSchema.safeParse(mergeConfig(DEFAULTS, parse(next) ?? {}));
+  return parsed.success
+    ? { text: next.endsWith('\n') ? next : next + '\n' }
+    : { problems: describeIssues(parsed.error) };
 };
 
 export class ConfigFile {
   readonly schema: SchemaNode;
 
-  constructor(readonly target: SettingsTarget, readonly file: string) {
+  constructor(
+    readonly target: SettingsTarget,
+    readonly file: string,
+  ) {
     this.schema = new SchemaNode(target === 'project' ? LocalOverrides : ConfigSchema);
   }
 
-  static user(configPath: string | null): ConfigFile { return new ConfigFile('user', configPath ?? userConfigPath()); }
-  static project(dir: string): ConfigFile { return new ConfigFile('project', path.join(dir, LOCAL_CONFIG_NAME)); }
+  static user(configPath: string | null): ConfigFile {
+    return new ConfigFile('user', configPath ?? userConfigPath());
+  }
+  static project(dir: string): ConfigFile {
+    return new ConfigFile('project', path.join(dir, LOCAL_CONFIG_NAME));
+  }
 
-  get isProject(): boolean { return this.target === 'project'; }
-  get exists(): boolean { return fs.existsSync(this.file); }
-  text(): string { return this.exists ? fs.readFileSync(this.file, 'utf8') : ''; }
+  get isProject(): boolean {
+    return this.target === 'project';
+  }
+  get exists(): boolean {
+    return fs.existsSync(this.file);
+  }
+  text(): string {
+    return this.exists ? fs.readFileSync(this.file, 'utf8') : '';
+  }
 
   /** The value written in this file (undefined = not set here). */
-  valueInFile(key: string[]): unknown { return fileValue(this.text(), key); }
+  valueInFile(key: string[]): unknown {
+    return fileValue(this.text(), key);
+  }
 
   /** Your own settings with the built-in defaults filled in (what a sandbox uses without a project file). */
   userConfig(): Config {
     const file = this.isProject ? userConfigPath() : this.file;
-    try { return loadConfig(fs.existsSync(file) ? file : undefined).config; } catch { return loadConfig(undefined).config; }
+    try {
+      return loadConfig(fs.existsSync(file) ? file : undefined).config;
+    } catch {
+      return loadConfig(undefined).config;
+    }
   }
 
   /** What is in effect: for your file the merged config, for a project file only what the file sets. */
@@ -56,7 +88,9 @@ export class ConfigFile {
     return this.isProject ? this.valueInFile(key) : _.get(config, key);
   }
 
-  defaultOf(key: string[]): unknown { return _.get(DEFAULTS, key); }
+  defaultOf(key: string[]): unknown {
+    return _.get(DEFAULTS, key);
+  }
 
   /**
    * Saves one setting. In your own file a value equal to the default is removed instead (no line needed). Returns
@@ -65,7 +99,8 @@ export class ConfigFile {
   set(key: string[], value: unknown): 'unchanged' | 'saved' | { problems: string[] } {
     const text = this.text();
     const next = !this.isProject && value !== undefined && _.isEqual(value, this.defaultOf(key)) ? undefined : value;
-    if (_.isEqual(next, fileValue(text, key)) && (this.isProject || _.isEqual(value, _.get(this.userConfig(), key)))) return 'unchanged';
+    if (_.isEqual(next, fileValue(text, key)) && (this.isProject || _.isEqual(value, _.get(this.userConfig(), key))))
+      return 'unchanged';
     const result = editConfigText(text, key, next, this.target);
     if ('problems' in result) return result;
     fs.mkdirSync(path.dirname(this.file), { recursive: true });

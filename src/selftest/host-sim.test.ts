@@ -9,7 +9,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Suite } from './suite.js';
 
-const SANDBOX_ONLY_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT', 'NVM_HOME', 'NVM_SYMLINK', 'BASH_ENV', 'CLAUDE_CODE_GIT_BASH_PATH', 'AGENT_GIT_ACCESS', 'AGENT_REAL_GIT', 'AGENT_SANDBOX_CONFIG'];
+const SANDBOX_ONLY_VARS = [
+  'CLAUDE_CONFIG_DIR',
+  'CODEX_HOME',
+  'GEMINI_CLI_HOME',
+  'AGENT_WORKSPACE',
+  'AGENT_DATA',
+  'AGENT_TOOLS',
+  'AGENT_PROJECT',
+  'NVM_HOME',
+  'NVM_SYMLINK',
+  'BASH_ENV',
+  'CLAUDE_CODE_GIT_BASH_PATH',
+  'AGENT_GIT_ACCESS',
+  'AGENT_REAL_GIT',
+  'AGENT_SANDBOX_CONFIG',
+];
 const PARALLEL = 2;
 
 interface Command {
@@ -77,7 +92,11 @@ export const hostSimSuite: Suite = {
     const freshPc = (name: string): { home: string; config: string } => {
       const home = t.dir('host-sim', name, 'home');
       const storage = t.dir('host-sim', name, 'storage');
-      const config = t.writeJson(t.at('host-sim', name, 'config.json'), { storage: { root: storage }, personalization: { enabled: false }, provisioning: { terminal: { enabled: false } } });
+      const config = t.writeJson(t.at('host-sim', name, 'config.json'), {
+        storage: { root: storage },
+        personalization: { enabled: false },
+        provisioning: { terminal: { enabled: false } },
+      });
       return { home, config };
     };
 
@@ -85,9 +104,18 @@ export const hostSimSuite: Suite = {
     const runOne = async (command: Command, index: number, pc = freshPc('c' + index)): Promise<void> => {
       const args = command.config ? [...command.args, '--config', pc.config, ...(command.after ?? [])] : command.args;
       const r = await f.runBin(command.bin, args, { cwd: project, env: envFor(pc.home), timeoutMs: 120000 });
-      const crashed = r.status === null || r.status > 1 || /Unexpected error|node:internal|^\s+at .+:\d+:\d+\)?$/m.test(r.out);
+      const crashed =
+        r.status === null || r.status > 1 || /Unexpected error|node:internal|^\s+at .+:\d+:\d+\)?$/m.test(r.out);
       const unexplained = r.status === 1 && !/(^|\n)(Error: |error: )/.test(r.out) && command.bin !== 'claude-host';
-      if (crashed || unexplained) broken.push(command.label + ' (exit ' + r.status + (r.timedOut ? ', timed out' : '') + '): ' + r.out.trim().split('\n').slice(0, 4).join(' | '));
+      if (crashed || unexplained)
+        broken.push(
+          command.label +
+            ' (exit ' +
+            r.status +
+            (r.timedOut ? ', timed out' : '') +
+            '): ' +
+            r.out.trim().split('\n').slice(0, 4).join(' | '),
+        );
     };
 
     // `config init` twice must see the same home (the second run finds the files the first one made).
@@ -102,7 +130,11 @@ export const hostSimSuite: Suite = {
     })();
     await Promise.all([...workers, initRuns]);
 
-    t.equal(broken, [], 'all ' + (COMMANDS.length + 2) + ' commands work or fail with a clear message when run outside a sandbox');
+    t.equal(
+      broken,
+      [],
+      'all ' + (COMMANDS.length + 2) + ' commands work or fail with a clear message when run outside a sandbox',
+    );
     for (const file of ['config.json', 'config.schema.json', 'sandbox-config.schema.json']) {
       t.check(fs.existsSync(path.join(initPc.home, file)), 'on a fresh PC, config init creates ' + file);
     }

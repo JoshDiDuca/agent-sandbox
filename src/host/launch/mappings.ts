@@ -9,7 +9,11 @@ import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
 import { GUEST } from './wsb.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
-export const collectMappings = (o: GenerateOptions, launchPath: string, boot: BootProjects = { roots: [], projects: [], notes: [] }): ResolvedMapping[] => {
+export const collectMappings = (
+  o: GenerateOptions,
+  launchPath: string,
+  boot: BootProjects = { roots: [], projects: [], notes: [] },
+): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
@@ -18,14 +22,22 @@ export const collectMappings = (o: GenerateOptions, launchPath: string, boot: Bo
     { host: launchPath, guest: GUEST.launch, readOnly: true },
     { host: dataPath, guest: GUEST.data, readOnly: false },
     { host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
-    ...(view?.hostGit ? [{ host: view.hostGit, guest: guestGitDir(config.guestWorkspace), readOnly: config.readOnly }] : []),
+    ...(view?.hostGit
+      ? [{ host: view.hostGit, guest: guestGitDir(config.guestWorkspace), readOnly: config.readOnly }]
+      : []),
   ];
   for (const m of config.mappings) {
     const host = m.host;
     assertGuestPath(m.guest, 'mappings[].guest for ' + host);
     if (!dirExists(host)) {
-      if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
-      fail('A mapped folder does not exist: ' + host, 'Create it, fix the path in your config, or mark the mapping "optional": true.');
+      if (m.optional) {
+        console.warn('Skipping optional mapping (folder not found): ' + host);
+        continue;
+      }
+      fail(
+        'A mapped folder does not exist: ' + host,
+        'Create it, fix the path in your config, or mark the mapping "optional": true.',
+      );
     }
     assertSafeMapping(host, o.packageRoot, o.run.storageRoot);
     mappings.push({ host, guest: m.guest, readOnly: m.readOnly });
@@ -37,7 +49,8 @@ export const collectMappings = (o: GenerateOptions, launchPath: string, boot: Bo
   }
   const { probe } = o;
   if (probe.nodeDir) mappings.push({ host: probe.nodeDir, guest: GUEST.hostTools + '\\node', readOnly: true });
-  if (probe.harnessExe && harnessName !== 'none') mappings.push({ host: probe.harnessExe.dir, guest: GUEST.hostTools + '\\agents\\' + harnessName, readOnly: true });
+  if (probe.harnessExe && harnessName !== 'none')
+    mappings.push({ host: probe.harnessExe.dir, guest: GUEST.hostTools + '\\agents\\' + harnessName, readOnly: true });
   if (probe.gitDir) mappings.push({ host: probe.gitDir, guest: GUEST.hostTools + '\\git', readOnly: true });
   if (probe.nvmDir) mappings.push({ host: probe.nvmDir, guest: GUEST.hostTools + '\\nvm', readOnly: true });
   assertNoGuestOverlap(mappings);
@@ -48,5 +61,9 @@ export const collectMappings = (o: GenerateOptions, launchPath: string, boot: Bo
 
 /** The schema checks this already; the host re-checks what goes into the .wsb and the subst list anyway. */
 const assertGuestPath = (guest: string, what: string): void => {
-  if (!isValidGuestPath(guest)) fail(what + ' is not a usable sandbox folder: ' + guest, 'Use a folder under C:\\ (not Windows, Program Files, Users, AgentData, Mirror, ...) or on drive D: to Z:, e.g. C:\\Assets or F:\\SteamLibrary\\steamapps\\common\\Game.');
+  if (!isValidGuestPath(guest))
+    fail(
+      what + ' is not a usable sandbox folder: ' + guest,
+      'Use a folder under C:\\ (not Windows, Program Files, Users, AgentData, Mirror, ...) or on drive D: to Z:, e.g. C:\\Assets or F:\\SteamLibrary\\steamapps\\common\\Game.',
+    );
 };

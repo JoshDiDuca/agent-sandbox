@@ -6,7 +6,10 @@ import { ListScreen, type ListOptions, type ListResult } from './list-screen.js'
 import { Terminal, type Key } from './terminal.js';
 import { Theme } from './theme.js';
 
-export interface Size { width: number; height: number }
+export interface Size {
+  width: number;
+  height: number;
+}
 /** What a screen's key handler returns: `{ done: value }` ends the screen, nothing keeps it open (and redraws it). */
 export type Step<T> = { done: T } | undefined | void;
 
@@ -41,14 +44,35 @@ export class App {
     }
   }
 
-  list<T>(o: ListOptions<T>): Promise<ListResult<T>> { return this.show(new ListScreen(o)); }
-  text(o: TextOptions): Promise<string | undefined> { return this.show(new TextScreen(o)); }
-  confirm(o: ConfirmOptions): Promise<boolean> { return this.show(new ConfirmScreen(o)); }
-  message(o: ConstructorParameters<typeof MessageScreen>[0]): Promise<void> { return this.show(new MessageScreen(o)); }
+  list<T>(o: ListOptions<T>): Promise<ListResult<T>> {
+    return this.show(new ListScreen(o));
+  }
+  text(o: TextOptions): Promise<string | undefined> {
+    return this.show(new TextScreen(o));
+  }
+  confirm(o: ConfirmOptions): Promise<boolean> {
+    return this.show(new ConfirmScreen(o));
+  }
+  message(o: ConstructorParameters<typeof MessageScreen>[0]): Promise<void> {
+    return this.show(new MessageScreen(o));
+  }
 
   /** One of a few values (undefined = back). */
-  async choose<T>(path: string[], intro: string, choices: { value: T; label: string; description?: string; hint?: string }[], current?: T): Promise<T | undefined> {
-    const picked = await this.list({ path, intro, items: choices.map((c) => ({ ...c, icon: c.value === current ? Theme.ok(Theme.glyph.on) : Theme.muted(Theme.glyph.off) })), startAt: current });
+  async choose<T>(
+    path: string[],
+    intro: string,
+    choices: { value: T; label: string; description?: string; hint?: string }[],
+    current?: T,
+  ): Promise<T | undefined> {
+    const picked = await this.list({
+      path,
+      intro,
+      items: choices.map((c) => ({
+        ...c,
+        icon: c.value === current ? Theme.ok(Theme.glyph.on) : Theme.muted(Theme.glyph.off),
+      })),
+      startAt: current,
+    });
     return picked.kind === 'pick' ? picked.value : undefined;
   }
 
@@ -59,5 +83,7 @@ export class App {
   }
 
   /** Leaves the alternate screen for good. */
-  close(): void { this.terminal.stop(); }
+  close(): void {
+    this.terminal.stop();
+  }
 }

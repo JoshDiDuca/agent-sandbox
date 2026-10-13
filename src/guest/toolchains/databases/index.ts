@@ -16,14 +16,30 @@ import { setupRedis } from './redis.js';
 import { portOpen } from '../../ports.js';
 import { duringSession } from '../../project-context.js';
 
-const SETUP = { postgres: setupPostgres, mysql: setupMysql, mongodb: setupMongo, redis: setupRedis, dynamodb: setupDynamo } as const;
+const SETUP = {
+  postgres: setupPostgres,
+  mysql: setupMysql,
+  mongodb: setupMongo,
+  redis: setupRedis,
+  dynamodb: setupDynamo,
+} as const;
 
-export const DATABASE_NAMES: Record<DatabasePlan['database'], string> = { postgres: 'PostgreSQL', mysql: 'MySQL (MariaDB)', mongodb: 'MongoDB', redis: 'Redis', dynamodb: 'DynamoDB Local', sqlserver: 'SQL Server' };
+export const DATABASE_NAMES: Record<DatabasePlan['database'], string> = {
+  postgres: 'PostgreSQL',
+  mysql: 'MySQL (MariaDB)',
+  mongodb: 'MongoDB',
+  redis: 'Redis',
+  dynamodb: 'DynamoDB Local',
+  sqlserver: 'SQL Server',
+};
 
 /** The process listening on a local TCP port (netstat: no PowerShell start-up cost), or null. */
 const listenerPid = (port: number): number | null => {
   const out = spawnSync(SYSTEM.netstat(), ['-ano', '-p', 'TCP'], { encoding: 'utf8', windowsHide: true }).stdout ?? '';
-  const hit = out.split(/\r?\n/).map((l) => /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/.exec(l)).find((m) => m && Number(m[1]) === port);
+  const hit = out
+    .split(/\r?\n/)
+    .map((l) => /^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/.exec(l))
+    .find((m) => m && Number(m[1]) === port);
   return hit ? Number(hit[2]) : null;
 };
 
@@ -34,23 +50,45 @@ export const stopDatabase = async (plan: DatabasePlan): Promise<boolean> => {
     for (const version of fs.readdirSync(tool('postgres'))) {
       const data = postgresData(version);
       const pgCtl = path.join(tool('postgres', version), 'bin', 'pg_ctl.exe');
-      if (exists(path.join(data, 'postmaster.pid')) && exists(pgCtl)) await execAsync(pgCtl, ['stop', '-D', data, '-m', 'fast', '-w'], { stdio: 'ignore' });
+      if (exists(path.join(data, 'postmaster.pid')) && exists(pgCtl))
+        await execAsync(pgCtl, ['stop', '-D', data, '-m', 'fast', '-w'], { stdio: 'ignore' });
     }
   }
   for (const port of [plan.port, plan.adminPort ?? 0]) {
     const pid = port && listenerPid(port);
-    if (pid) try { process.kill(pid); } catch { /* already gone */ }
+    if (pid)
+      try {
+        process.kill(pid);
+      } catch {
+        /* already gone */
+      }
   }
   return true;
 };
 
 export const setupDatabase = async (env: ToolEnv, plan: DatabasePlan): Promise<void> => {
   if (plan.database === 'sqlserver') {
-    env.summary.push('sqlserver: NOT available (SQL Server cannot start inside Windows Sandbox). Switch the project to Postgres or SQLite for local work');
+    env.summary.push(
+      'sqlserver: NOT available (SQL Server cannot start inside Windows Sandbox). Switch the project to Postgres or SQLite for local work',
+    );
     return;
   }
-  if (dryRun) { log('(dry run) would run ' + DATABASE_NAMES[plan.database] + ' on port ' + plan.port + ' (' + plan.reasons.join('; ') + ')'); return; }
+  if (dryRun) {
+    log(
+      '(dry run) would run ' +
+        DATABASE_NAMES[plan.database] +
+        ' on port ' +
+        plan.port +
+        ' (' +
+        plan.reasons.join('; ') +
+        ')',
+    );
+    return;
+  }
   // A project that joined later, while another project's server already listens there: they share it.
-  if (duringSession() && (await portOpen(plan.port))) { env.summary.push(plan.database + ': shared, already running on port ' + plan.port); return; }
+  if (duringSession() && (await portOpen(plan.port))) {
+    env.summary.push(plan.database + ': shared, already running on port ' + plan.port);
+    return;
+  }
   await SETUP[plan.database](env, plan);
 };

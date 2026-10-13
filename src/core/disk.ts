@@ -19,28 +19,56 @@ export const sizeOf = (p: string): number => {
     const stat = fs.lstatSync(p);
     if (stat.isSymbolicLink()) return 0;
     if (!stat.isDirectory()) return stat.size;
-    return _.sumBy(fs.readdirSync(p, { withFileTypes: true }), (d) => (d.isSymbolicLink() ? 0 : sizeOf(path.join(p, d.name))));
-  } catch { return 0; }
+    return _.sumBy(fs.readdirSync(p, { withFileTypes: true }), (d) =>
+      d.isSymbolicLink() ? 0 : sizeOf(path.join(p, d.name)),
+    );
+  } catch {
+    return 0;
+  }
 };
 
 /** Free bytes on the drive that holds `dir` (which may not exist yet: the nearest existing parent is asked); null if unknown. */
 export const freeBytesAt = (dir: string): number | null => {
   let at = path.resolve(dir);
   while (!fs.existsSync(at) && path.dirname(at) !== at) at = path.dirname(at);
-  try { const s = fs.statfsSync(at); return s.bavail * s.bsize; } catch { return null; }
+  try {
+    const s = fs.statfsSync(at);
+    return s.bavail * s.bsize;
+  } catch {
+    return null;
+  }
 };
 
-export interface DiskUsage { drive: string; totalBytes: number; freeBytes: number; usedBytes: number; holdsStorage: boolean }
+export interface DiskUsage {
+  drive: string;
+  totalBytes: number;
+  freeBytes: number;
+  usedBytes: number;
+  holdsStorage: boolean;
+}
 
 /** Every local drive's size and free space, and which one holds the sandbox storage. */
 export const diskUsage = (storageRoot: string): DiskUsage[] => {
   const storageDrive = path.parse(path.resolve(storageRoot)).root.toUpperCase();
-  return 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((letter) => letter + ':\\').flatMap((drive): DiskUsage[] => {
-    try {
-      const s = fs.statfsSync(drive);
-      const totalBytes = s.blocks * s.bsize;
-      if (!totalBytes) return [];
-      return [{ drive, totalBytes, freeBytes: s.bavail * s.bsize, usedBytes: totalBytes - s.bfree * s.bsize, holdsStorage: drive.toUpperCase() === storageDrive }];
-    } catch { return []; }
-  });
+  return 'CDEFGHIJKLMNOPQRSTUVWXYZ'
+    .split('')
+    .map((letter) => letter + ':\\')
+    .flatMap((drive): DiskUsage[] => {
+      try {
+        const s = fs.statfsSync(drive);
+        const totalBytes = s.blocks * s.bsize;
+        if (!totalBytes) return [];
+        return [
+          {
+            drive,
+            totalBytes,
+            freeBytes: s.bavail * s.bsize,
+            usedBytes: totalBytes - s.bfree * s.bsize,
+            holdsStorage: drive.toUpperCase() === storageDrive,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
 };

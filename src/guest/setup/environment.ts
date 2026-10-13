@@ -1,15 +1,48 @@
 // The environment every agent session, hook and terminal tab in the sandbox gets.
 import path from 'node:path';
 import type { ToolEnv } from '../toolchains/index.js';
-import { claudeDir, dataDir, dryRun, errMsg, isWin, testMode, mkdirp, powershell, session, stateDir, toolsDir, warn, workspace } from '../env.js';
+import {
+  claudeDir,
+  dataDir,
+  dryRun,
+  errMsg,
+  isWin,
+  testMode,
+  mkdirp,
+  powershell,
+  session,
+  stateDir,
+  toolsDir,
+  warn,
+  workspace,
+} from '../env.js';
 
 /** Variables agent-sandbox itself sets (besides the toolchains' own). */
-const AGENT_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GEMINI_CLI_HOME', 'npm_config_cache', 'npm_config_update_notifier', 'AGENT_WORKSPACE', 'AGENT_DATA', 'AGENT_TOOLS', 'AGENT_PROJECT', 'AGENT_SANDBOX', 'AGENT_SANDBOX_WORKSPACE'];
+const AGENT_VARS = [
+  'CLAUDE_CONFIG_DIR',
+  'CODEX_HOME',
+  'GEMINI_CLI_HOME',
+  'npm_config_cache',
+  'npm_config_update_notifier',
+  'AGENT_WORKSPACE',
+  'AGENT_DATA',
+  'AGENT_TOOLS',
+  'AGENT_PROJECT',
+  'AGENT_SANDBOX',
+  'AGENT_SANDBOX_WORKSPACE',
+];
 
 /** Whose environment: the launch folder's at boot, or a project registered later (with the boot's base environment). */
-export interface EnvTarget { workspace: string; project: string; base: NodeJS.ProcessEnv }
+export interface EnvTarget {
+  workspace: string;
+  project: string;
+  base: NodeJS.ProcessEnv;
+}
 
-export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>, target: EnvTarget = { workspace, project: session.project, base: process.env }): NodeJS.ProcessEnv => {
+export const agentEnv = (
+  tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>,
+  target: EnvTarget = { workspace, project: session.project, base: process.env },
+): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = {
     ...target.base,
     ...tools.vars,
@@ -26,7 +59,8 @@ export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>, ta
     AGENT_SANDBOX: '1',
     AGENT_SANDBOX_WORKSPACE: target.workspace,
   };
-  for (const dir of [env.CLAUDE_CONFIG_DIR, env.CODEX_HOME, env.GEMINI_CLI_HOME, env.npm_config_cache]) mkdirp(dir as string);
+  for (const dir of [env.CLAUDE_CONFIG_DIR, env.CODEX_HOME, env.GEMINI_CLI_HOME, env.npm_config_cache])
+    mkdirp(dir as string);
   // The runner's own Node (bootstrap.ps1 puts it first on PATH) is not exposed: `node` is whatever nvm selected.
   const runners = [path.join(toolsDir, 'node'), path.dirname(process.execPath)].map((d) => d.toLowerCase());
   const base = (target.base.PATH ?? '').split(path.delimiter).filter((d) => d && !runners.includes(d.toLowerCase()));
@@ -37,13 +71,19 @@ export const agentEnv = (tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>, ta
 /** Makes the agent environment machine-wide, so new terminal tabs and anything the agent starts see the same tools. */
 export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): void => {
   if (!isWin || dryRun || testMode) return;
-  const vars = Object.fromEntries([...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]));
+  const vars = Object.fromEntries(
+    [...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]),
+  );
   const script = [
     "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",
     "foreach ($p in $vars.PSObject.Properties) { [Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
     "[Environment]::SetEnvironmentVariable('Path', '" + (env.PATH ?? '').replace(/'/g, "''") + "', 'Machine')",
   ].join('\n');
-  try { powershell(script); } catch (e) { warn('Could not persist the environment machine-wide: ' + errMsg(e)); }
+  try {
+    powershell(script);
+  } catch (e) {
+    warn('Could not persist the environment machine-wide: ' + errMsg(e));
+  }
 };
 
 /**
@@ -55,10 +95,20 @@ export const addMachineEnvironment = (vars: Record<string, string>, dirs: string
   if (!isWin || dryRun || testMode) return;
   const script = [
     "$vars = '" + JSON.stringify(vars).replace(/'/g, "''") + "' | ConvertFrom-Json",
-    "foreach ($p in $vars.PSObject.Properties) { " + (additive ? "if ([Environment]::GetEnvironmentVariable($p.Name, 'Machine')) { continue }; " : '') + "[Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
+    'foreach ($p in $vars.PSObject.Properties) { ' +
+      (additive ? "if ([Environment]::GetEnvironmentVariable($p.Name, 'Machine')) { continue }; " : '') +
+      "[Environment]::SetEnvironmentVariable($p.Name, [string]$p.Value, 'Machine') }",
     "$path = [Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';'",
-    "$add = '" + JSON.stringify(dirs).replace(/'/g, "''") + "' | ConvertFrom-Json | Where-Object { $path -notcontains $_ }",
-    "if ($add) { [Environment]::SetEnvironmentVariable('Path', (" + (additive ? '($path + @($add))' : '(@($add) + $path)') + " -join ';'), 'Machine') }",
+    "$add = '" +
+      JSON.stringify(dirs).replace(/'/g, "''") +
+      "' | ConvertFrom-Json | Where-Object { $path -notcontains $_ }",
+    "if ($add) { [Environment]::SetEnvironmentVariable('Path', (" +
+      (additive ? '($path + @($add))' : '(@($add) + $path)') +
+      " -join ';'), 'Machine') }",
   ].join('\n');
-  try { powershell(script); } catch (e) { warn('Could not add to the environment: ' + errMsg(e)); }
+  try {
+    powershell(script);
+  } catch (e) {
+    warn('Could not add to the environment: ' + errMsg(e));
+  }
 };

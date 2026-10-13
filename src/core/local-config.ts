@@ -23,7 +23,13 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
   const mappings = overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) }));
   // A repo ships this file, so it must not reach the rest of this PC: its extra folders stay inside the project.
   const outside = mappings?.filter((m) => !insideProject(dir, m.host)) ?? [];
-  if (outside.length) fail(source + ' is not valid:\n  - mappings: a project file may only map folders inside the project, not ' + outside.map((m) => m.host).join(', '), 'Map other folders in your own settings (sandbox config path shows where they are).');
+  if (outside.length)
+    fail(
+      source +
+        ' is not valid:\n  - mappings: a project file may only map folders inside the project, not ' +
+        outside.map((m) => m.host).join(', '),
+      'Map other folders in your own settings (sandbox config path shows where they are).',
+    );
   return { ...overrides, scripts, mappings };
 };
 
@@ -32,7 +38,11 @@ const insideProject = (dir: string, folder: string): boolean => {
   // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created yet.
   const real = (p: string): string => {
     const full = path.resolve(p);
-    try { return fs.realpathSync.native(full); } catch { return path.dirname(full) === full ? full : path.join(real(path.dirname(full)), path.basename(full)); }
+    try {
+      return fs.realpathSync.native(full);
+    } catch {
+      return path.dirname(full) === full ? full : path.join(real(path.dirname(full)), path.basename(full));
+    }
   };
   return isInsideOrEqual(dir, folder) && isInsideOrEqual(real(dir), real(folder));
 };
@@ -41,23 +51,45 @@ const insideProject = (dir: string, folder: string): boolean => {
  * Protections a project file may only make stricter, never looser. A repo can ship the file, so it must not be able to
  * switch off what you turned on (or turn on what you turned off). The strictest of the two values always wins.
  */
-export const ON_IS_SAFER = ['readOnly', 'workspaceFilter.enabled', 'network.blockPrivateRanges', 'sandbox.protectedClient', 'downloads.requireChecksum'];
-export const OFF_IS_SAFER = ['sandbox.networking', 'sandbox.clipboard', 'sandbox.audioInput', 'sandbox.videoInput', 'sandbox.printerRedirection', 'sandbox.vGpu', 'claudeProfile.copyCredentials', 'claudeProfile.enabled', 'claudeProfile.syncHistory', 'claudeProfile.syncClaudeMem'];
+export const ON_IS_SAFER = [
+  'readOnly',
+  'workspaceFilter.enabled',
+  'network.blockPrivateRanges',
+  'sandbox.protectedClient',
+  'downloads.requireChecksum',
+];
+export const OFF_IS_SAFER = [
+  'sandbox.networking',
+  'sandbox.clipboard',
+  'sandbox.audioInput',
+  'sandbox.videoInput',
+  'sandbox.printerRedirection',
+  'sandbox.vGpu',
+  'claudeProfile.copyCredentials',
+  'claudeProfile.enabled',
+  'claudeProfile.syncHistory',
+  'claudeProfile.syncClaudeMem',
+];
 export const GIT_STRICTNESS: Record<string, number> = { full: 0, readonly: 1, none: 2 };
 export const NEVER_LOOSER = [...ON_IS_SAFER, ...OFF_IS_SAFER, 'provisioning.git.access'];
 
 const keepStrictest = (yours: Config, merged: Config): void => {
   ON_IS_SAFER.forEach((p) => _.set(merged, p, Boolean(_.get(yours, p)) || Boolean(_.get(merged, p))));
   OFF_IS_SAFER.forEach((p) => _.set(merged, p, Boolean(_.get(yours, p)) && Boolean(_.get(merged, p))));
-  if (GIT_STRICTNESS[yours.provisioning.git.access] > GIT_STRICTNESS[merged.provisioning.git.access]) merged.provisioning.git.access = yours.provisioning.git.access;
+  if (GIT_STRICTNESS[yours.provisioning.git.access] > GIT_STRICTNESS[merged.provisioning.git.access])
+    merged.provisioning.git.access = yours.provisioning.git.access;
 };
 
 /** What a project file asks for that would loosen one of your protections (so it is not used). */
-export const loosenedRequests = (config: Config, ov: Overrides): { key: string; wanted: unknown; yours: unknown }[] => [
-  ...ON_IS_SAFER.filter((p) => _.has(ov, p) && !_.get(ov, p) && _.get(config, p)),
-  ...OFF_IS_SAFER.filter((p) => _.has(ov, p) && _.get(ov, p) && !_.get(config, p)),
-  ...(_.has(ov, 'provisioning.git.access') && GIT_STRICTNESS[_.get(ov, 'provisioning.git.access') as string] < GIT_STRICTNESS[config.provisioning.git.access] ? ['provisioning.git.access'] : []),
-].map((key) => ({ key, wanted: _.get(ov, key), yours: _.get(config, key) }));
+export const loosenedRequests = (config: Config, ov: Overrides): { key: string; wanted: unknown; yours: unknown }[] =>
+  [
+    ...ON_IS_SAFER.filter((p) => _.has(ov, p) && !_.get(ov, p) && _.get(config, p)),
+    ...OFF_IS_SAFER.filter((p) => _.has(ov, p) && _.get(ov, p) && !_.get(config, p)),
+    ...(_.has(ov, 'provisioning.git.access') &&
+    GIT_STRICTNESS[_.get(ov, 'provisioning.git.access') as string] < GIT_STRICTNESS[config.provisioning.git.access]
+      ? ['provisioning.git.access']
+      : []),
+  ].map((key) => ({ key, wanted: _.get(ov, key), yours: _.get(config, key) }));
 
 /** Applies validated overrides. Mappings with the same guest folder replace the configured ones. */
 export const applyOverrides = (config: Config, ov: Overrides): Config => {
@@ -69,13 +101,20 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   if (rest.apps?.install) next.apps.install = _.union(config.apps.install, rest.apps.install);
   // Its patterns keep more out on top of yours; yours stay.
   if (rest.network?.blockHosts) next.network.blockHosts = _.union(config.network.blockHosts, rest.network.blockHosts);
-  if (rest.workspaceFilter?.exclude) next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
-  if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
+  if (rest.workspaceFilter?.exclude)
+    next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
+  if (mappings)
+    next.mappings = [
+      ..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())),
+      ...mappings,
+    ];
   return next;
 };
 
 const flatten = (value: unknown, prefix = ''): string[] =>
-  _.isPlainObject(value) ? Object.entries(value as object).flatMap(([k, v]) => flatten(v, prefix ? prefix + '.' + k : k)) : [prefix + ' = ' + JSON.stringify(value)];
+  _.isPlainObject(value)
+    ? Object.entries(value as object).flatMap(([k, v]) => flatten(v, prefix ? prefix + '.' + k : k))
+    : [prefix + ' = ' + JSON.stringify(value)];
 
 /** Human-readable list of what a local config changes, with risky items flagged. */
 export const describeOverrides = (ov: Overrides): string[] => {
@@ -90,7 +129,9 @@ export const describeOverrides = (ov: Overrides): string[] => {
     mappings.some((m) => !m.readOnly) && 'a READ/WRITE mapping lets the agent change files outside your workspace',
   ]);
   // These are only used when they are stricter than your own settings, so a project can never loosen them.
-  const limited = NEVER_LOOSER.filter((p) => _.has(sections, p)).map((p) => p + ' is only used if it is stricter than your own setting');
+  const limited = NEVER_LOOSER.filter((p) => _.has(sections, p)).map(
+    (p) => p + ' is only used if it is stricter than your own setting',
+  );
   return [...lines, ...risky.map((r) => '!! ' + r), ...limited.map((r) => '   ' + r)];
 };
 
@@ -98,7 +139,11 @@ export const readLocalConfig = (dir: string): LocalConfigFile | null => {
   const file = path.join(dir, LOCAL_CONFIG_NAME);
   if (!fileExists(file)) return null;
   const raw = fs.readFileSync(file);
-  return { path: file, hash: crypto.createHash('sha256').update(raw).digest('hex'), data: parseJsonc<unknown>(raw.toString('utf8'), file) };
+  return {
+    path: file,
+    hash: crypto.createHash('sha256').update(raw).digest('hex'),
+    data: parseJsonc<unknown>(raw.toString('utf8'), file),
+  };
 };
 
 // ---- approvals (host-only: <storage>\trusted-configs.json) ----------------------------------------------------------
@@ -107,7 +152,8 @@ export const trustStorePath = (storageRoot: string): string => path.join(storage
 const loadTrust = (store: string): Record<string, string> => tryReadJson<Record<string, string>>(store) ?? {};
 const key = (file: string): string => path.resolve(file).toLowerCase();
 export const isTrusted = (store: string, file: string, hash: string): boolean => loadTrust(store)[key(file)] === hash;
-export const saveTrust = (store: string, file: string, hash: string): void => writeJson(store, { ...loadTrust(store), [key(file)]: hash });
+export const saveTrust = (store: string, file: string, hash: string): void =>
+  writeJson(store, { ...loadTrust(store), [key(file)]: hash });
 
 // ---- looser settings you allowed for one project (host-only: <storage>\allowed-requests.json) ----------------------
 // A project file can never loosen a protection by itself. When it asks, you are asked once (interactively); a "yes"
@@ -115,19 +161,28 @@ export const saveTrust = (store: string, file: string, hash: string): void => wr
 
 export const allowStorePath = (storageRoot: string): string => path.join(storageRoot, 'allowed-requests.json');
 const loadAllowed = (store: string): Record<string, string[]> => {
-  const parsed = z.record(z.string(), z.array(z.string().max(300)).max(50)).safeParse(tryReadJson<unknown>(store) ?? {});
+  const parsed = z
+    .record(z.string(), z.array(z.string().max(300)).max(50))
+    .safeParse(tryReadJson<unknown>(store) ?? {});
   return parsed.success ? parsed.data : {};
 };
 const allowKey = (setting: string, value: unknown): string => setting + ' = ' + JSON.stringify(value);
 /** true = you allowed it, false = you said no (not asked again), null = not asked yet. */
 export const allowedAnswer = (store: string, file: string, setting: string, value: unknown): boolean | null => {
   const answers = loadAllowed(store)[key(file)] ?? [];
-  return answers.includes(allowKey(setting, value)) ? true : answers.includes('no: ' + allowKey(setting, value)) ? false : null;
+  return answers.includes(allowKey(setting, value))
+    ? true
+    : answers.includes('no: ' + allowKey(setting, value))
+      ? false
+      : null;
 };
 export const saveAllowed = (store: string, file: string, setting: string, value: unknown, allow: boolean): void => {
   const all = loadAllowed(store);
   const entry = allowKey(setting, value);
-  writeJson(store, { ...all, [key(file)]: _.union(_.without(all[key(file)] ?? [], entry, 'no: ' + entry), [(allow ? '' : 'no: ') + entry]) });
+  writeJson(store, {
+    ...all,
+    [key(file)]: _.union(_.without(all[key(file)] ?? [], entry, 'no: ' + entry), [(allow ? '' : 'no: ') + entry]),
+  });
 };
 
 /** Your config with these requests let through, so applyOverrides' "strictest wins" keeps the project's value. */

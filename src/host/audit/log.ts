@@ -29,12 +29,19 @@ export type AuditEvent = z.output<typeof AuditEvent>;
 const DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl(\.gz)?$/;
 
 export class AuditLog {
-  constructor(readonly dir: string, private readonly limits: { days: number; maxMb: number }) {}
+  constructor(
+    readonly dir: string,
+    private readonly limits: { days: number; maxMb: number },
+  ) {}
 
   /** <storage>\audit\<data set name>. */
-  static dirFor(storageRoot: string, dataPath: string): string { return path.join(storageRoot, 'audit', path.basename(dataPath)); }
+  static dirFor(storageRoot: string, dataPath: string): string {
+    return path.join(storageRoot, 'audit', path.basename(dataPath));
+  }
 
-  private dayFile(day: string, gz = false): string { return path.join(this.dir, day + '.jsonl' + (gz ? '.gz' : '')); }
+  private dayFile(day: string, gz = false): string {
+    return path.join(this.dir, day + '.jsonl' + (gz ? '.gz' : ''));
+  }
 
   append(events: AuditEvent[]): void {
     if (!events.length) return;
@@ -59,9 +66,16 @@ export class AuditLog {
       fs.rmSync(file);
     }
     const oldest = new Date(Date.parse(today) - (this.limits.days - 1) * 86400000).toISOString().slice(0, 10);
-    const files = fs.readdirSync(this.dir).filter((n) => DAY_FILE.test(n)).sort();
-    for (const name of files.filter((n) => DAY_FILE.exec(n)![1] < oldest)) fs.rmSync(path.join(this.dir, name), { force: true });
-    let left = fs.readdirSync(this.dir).filter((n) => DAY_FILE.test(n)).sort();
+    const files = fs
+      .readdirSync(this.dir)
+      .filter((n) => DAY_FILE.test(n))
+      .sort();
+    for (const name of files.filter((n) => DAY_FILE.exec(n)![1] < oldest))
+      fs.rmSync(path.join(this.dir, name), { force: true });
+    let left = fs
+      .readdirSync(this.dir)
+      .filter((n) => DAY_FILE.test(n))
+      .sort();
     const size = (): number => left.reduce((sum, n) => sum + fs.statSync(path.join(this.dir, n)).size, 0);
     while (left.length > 1 && size() > this.limits.maxMb * 1024 * 1024) {
       fs.rmSync(path.join(this.dir, left[0]), { force: true });
@@ -75,13 +89,20 @@ export class AuditLog {
     const since = new Date(Date.now() - ((o.days ?? 1) - 1) * 86400000).toISOString().slice(0, 10);
     const needle = o.grep?.toLowerCase();
     const events: AuditEvent[] = [];
-    for (const name of fs.readdirSync(this.dir).filter((n) => DAY_FILE.test(n) && DAY_FILE.exec(n)![1] >= since).sort()) {
+    for (const name of fs
+      .readdirSync(this.dir)
+      .filter((n) => DAY_FILE.test(n) && DAY_FILE.exec(n)![1] >= since)
+      .sort()) {
       const raw = fs.readFileSync(path.join(this.dir, name));
       const text = name.endsWith('.gz') ? zlib.gunzipSync(raw).toString('utf8') : raw.toString('utf8');
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
         let parsed: unknown;
-        try { parsed = JSON.parse(line); } catch { continue; }
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
         const e = AuditEvent.safeParse(parsed);
         if (!e.success) continue;
         if (o.kinds?.length && !o.kinds.includes(e.data.k)) continue;
@@ -95,7 +116,10 @@ export class AuditLog {
   /** Total size on disk. */
   bytes(): number {
     if (!fs.existsSync(this.dir)) return 0;
-    return fs.readdirSync(this.dir).filter((n) => DAY_FILE.test(n)).reduce((sum, n) => sum + fs.statSync(path.join(this.dir, n)).size, 0);
+    return fs
+      .readdirSync(this.dir)
+      .filter((n) => DAY_FILE.test(n))
+      .reduce((sum, n) => sum + fs.statSync(path.join(this.dir, n)).size, 0);
   }
 }
 
@@ -112,14 +136,21 @@ export const fold = (events: AuditEvent[], cap = 300): AuditEvent[] => {
     const minute = e.t.slice(0, 16);
     const key = [minute, e.k, e.p, e.c, e.a, e.w].join('\0');
     const seen = index.get(key);
-    if (seen) { seen.n = (seen.n ?? 1) + (e.n ?? 1); continue; }
+    if (seen) {
+      seen.n = (seen.n ?? 1) + (e.n ?? 1);
+      continue;
+    }
     const count = (perMinute.get(minute) ?? 0) + 1;
     perMinute.set(minute, count);
-    if (count > cap) { dropped.set(minute, (dropped.get(minute) ?? 0) + (e.n ?? 1)); continue; }
+    if (count > cap) {
+      dropped.set(minute, (dropped.get(minute) ?? 0) + (e.n ?? 1));
+      continue;
+    }
     const copy = { ...e };
     index.set(key, copy);
     out.push(copy);
   }
-  for (const [minute, n] of dropped) out.push({ t: minute + ':59.999Z', k: 'note', p: n + ' more events in this minute were not listed (audit cap)' });
+  for (const [minute, n] of dropped)
+    out.push({ t: minute + ':59.999Z', k: 'note', p: n + ' more events in this minute were not listed (audit cap)' });
   return out;
 };

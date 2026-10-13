@@ -8,7 +8,8 @@ import { tool } from '../../common.js';
 export const ROOT = tool('msvc');
 export const MARKER = path.join(ROOT, '.installed.json');
 
-export const msvcTools = (msvc: string, ...parts: string[]): string => path.join(ROOT, 'VC', 'Tools', 'MSVC', msvc, ...parts);
+export const msvcTools = (msvc: string, ...parts: string[]): string =>
+  path.join(ROOT, 'VC', 'Tools', 'MSVC', msvc, ...parts);
 export const hostBin = (msvc: string, ...parts: string[]): string => msvcTools(msvc, 'bin', 'Hostx64', 'x64', ...parts);
 export const hasCompiler = (msvc: string): boolean => exists(hostBin(msvc, 'cl.exe'));
 
@@ -17,5 +18,9 @@ export type Installed = z.infer<typeof Installed>;
 
 /** What the last finished install recorded; null for a missing, unreadable or half-written marker. */
 export const readInstalled = (): Installed | null => {
-  try { return Installed.safeParse(JSON.parse(fs.readFileSync(MARKER, 'utf8'))).data ?? null; } catch { return null; }
+  try {
+    return Installed.safeParse(JSON.parse(fs.readFileSync(MARKER, 'utf8'))).data ?? null;
+  } catch {
+    return null;
+  }
 };

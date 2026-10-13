@@ -51,7 +51,11 @@ export interface Harness {
    * Polls `read` every `everyMs` until it returns something truthy and returns that, or returns null after `ms`.
    * Use this instead of fixed sleeps: it is fast when the machine is idle and patient when it is busy.
    */
-  waitFor: <T>(read: () => T | null | undefined | false | Promise<T | null | undefined | false>, ms?: number, everyMs?: number) => Promise<T | null>;
+  waitFor: <T>(
+    read: () => T | null | undefined | false | Promise<T | null | undefined | false>,
+    ms?: number,
+    everyMs?: number,
+  ) => Promise<T | null>;
 }
 
 export interface RunningHarness extends Harness {
@@ -62,9 +66,15 @@ export interface RunningHarness extends Harness {
   dispose: () => void;
 }
 
-const show = (value: unknown): string => inspect(value, { depth: 6, breakLength: 110, maxStringLength: 600, maxArrayLength: 40 });
-const indent = (text: string): string => text.split('\n').map((line) => '        ' + line).join('\n');
-const clip = (text: string, max = 800): string => (text.length > max ? text.slice(0, max) + ' ... (' + text.length + ' characters)' : text);
+const show = (value: unknown): string =>
+  inspect(value, { depth: 6, breakLength: 110, maxStringLength: 600, maxArrayLength: 40 });
+const indent = (text: string): string =>
+  text
+    .split('\n')
+    .map((line) => '        ' + line)
+    .join('\n');
+const clip = (text: string, max = 800): string =>
+  text.length > max ? text.slice(0, max) + ' ... (' + text.length + ' characters)' : text;
 
 export const createHarness = (packageRoot: string): RunningHarness => {
   let failed = 0;
@@ -81,14 +91,23 @@ export const createHarness = (packageRoot: string): RunningHarness => {
 
   /** Runs `fn` once; the message includes the `fix` hint of a UserError. */
   const attempt = async (fn: () => unknown): Promise<{ threw: false } | { threw: true; message: string }> => {
-    try { await fn(); return { threw: false }; } catch (e) { return { threw: true, message: (errMsg(e) + ' ' + ((e as { fix?: string }).fix ?? '')).trim() }; }
+    try {
+      await fn();
+      return { threw: false };
+    } catch (e) {
+      return { threw: true, message: (errMsg(e) + ' ' + ((e as { fix?: string }).fix ?? '')).trim() };
+    }
   };
   const thrownMessage: Harness['thrownMessage'] = async (fn) => {
     const outcome = await attempt(fn);
     return outcome.threw ? outcome.message : '';
   };
 
-  const write: Harness['write'] = (file, content) => { ensureDir(path.dirname(file)); fs.writeFileSync(file, content); return file; };
+  const write: Harness['write'] = (file, content) => {
+    ensureDir(path.dirname(file));
+    fs.writeFileSync(file, content);
+    return file;
+  };
 
   return {
     packageRoot,
@@ -96,25 +115,43 @@ export const createHarness = (packageRoot: string): RunningHarness => {
     failures: () => failed,
     checks: () => total,
     check,
-    equal: (actual, expected, name) => check(isDeepStrictEqual(actual, expected), name, 'expected: ' + show(expected) + '\nactual:   ' + show(actual)),
-    includes: (text, needle, name) => check(text.includes(needle), name, 'expected to contain: ' + show(needle) + '\nactual: ' + show(clip(text))),
-    excludes: (text, needle, name) => check(!text.includes(needle), name, 'expected NOT to contain: ' + show(needle) + '\nactual: ' + show(clip(text))),
-    matches: (text, pattern, name) => check(pattern.test(text), name, 'expected to match: ' + String(pattern) + '\nactual: ' + show(clip(text))),
+    equal: (actual, expected, name) =>
+      check(isDeepStrictEqual(actual, expected), name, 'expected: ' + show(expected) + '\nactual:   ' + show(actual)),
+    includes: (text, needle, name) =>
+      check(text.includes(needle), name, 'expected to contain: ' + show(needle) + '\nactual: ' + show(clip(text))),
+    excludes: (text, needle, name) =>
+      check(!text.includes(needle), name, 'expected NOT to contain: ' + show(needle) + '\nactual: ' + show(clip(text))),
+    matches: (text, pattern, name) =>
+      check(pattern.test(text), name, 'expected to match: ' + String(pattern) + '\nactual: ' + show(clip(text))),
     throws: async (fn, expected, name) => {
       const outcome = await attempt(fn);
       const message = outcome.threw ? outcome.message : '';
       const ok = outcome.threw && (typeof expected === 'string' ? message.includes(expected) : expected.test(message));
-      check(ok, name, 'expected an error containing: ' + String(expected) + '\n' + (outcome.threw ? 'actual error: ' + show(clip(message)) : 'but nothing was thrown'));
+      check(
+        ok,
+        name,
+        'expected an error containing: ' +
+          String(expected) +
+          '\n' +
+          (outcome.threw ? 'actual error: ' + show(clip(message)) : 'but nothing was thrown'),
+      );
     },
     thrownMessage,
     section: (title) => console.log('\n\x1b[36m-- ' + title + '\x1b[0m'),
     skip: (what) => console.log('SKIP  ' + what),
     at: (...parts) => path.join(temp, ...parts),
-    dir: (...parts) => { const p = path.join(temp, ...parts); ensureDir(p); return p; },
+    dir: (...parts) => {
+      const p = path.join(temp, ...parts);
+      ensureDir(p);
+      return p;
+    },
     write,
     writeJson: (file, value) => write(file, JSON.stringify(value)),
     readJson: (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
-    touch: (file, secondsFromNow = 10) => { const when = new Date(Date.now() + secondsFromNow * 1000); fs.utimesSync(file, when, when); },
+    touch: (file, secondsFromNow = 10) => {
+      const when = new Date(Date.now() + secondsFromNow * 1000);
+      fs.utimesSync(file, when, when);
+    },
     waitFor: async (read, ms = 30000, everyMs = 100) => {
       const end = Date.now() + ms;
       for (;;) {

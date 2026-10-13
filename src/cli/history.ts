@@ -14,8 +14,19 @@ export const readHistory = (): z.output<typeof History> => readValid(History, hi
 /** Remembers a command (menu or typed) so the menu can offer it again. Never fails the command itself. */
 export const recordHistory = (argv: string[]): void => {
   if (!argv.length || HIDDEN.has(argv[0]) || argv.includes('--help')) return;
-  try { writeJson(historyFile(), [{ argv, at: new Date().toISOString() }, ...readHistory().filter((h) => h.argv.join('\0') !== argv.join('\0'))].slice(0, 10)); } catch { /* history is a convenience */ }
+  try {
+    writeJson(
+      historyFile(),
+      [
+        { argv, at: new Date().toISOString() },
+        ...readHistory().filter((h) => h.argv.join('\0') !== argv.join('\0')),
+      ].slice(0, 10),
+    );
+  } catch {
+    /* history is a convenience */
+  }
 };
 
 /** argv as you would type it (quoted where needed). */
-export const commandLine = (argv: string[]): string => ['sandbox', ...argv].map((a) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)).join(' ');
+export const commandLine = (argv: string[]): string =>
+  ['sandbox', ...argv].map((a) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)).join(' ');

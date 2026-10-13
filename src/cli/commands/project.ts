@@ -16,7 +16,10 @@ import { guestPathFor, sandboxAlive, type Context } from './context.js';
 /** The folder the command is about: --workspace, else the current one. */
 export const hereDir = (ctx: Context): string => path.resolve(ctx.options.workspace ?? process.cwd());
 
-export interface Located { project: RegistryEntry | null; guestDir: string | null }
+export interface Located {
+  project: RegistryEntry | null;
+  guestDir: string | null;
+}
 
 /** Where this folder is in the running sandbox, if it is in it at all (nothing is registered). */
 export const locateHere = (ctx: Context, status: SandboxStatus | null): Located => {
@@ -24,11 +27,18 @@ export const locateHere = (ctx: Context, status: SandboxStatus | null): Located 
   const here = projectHere(ctx.storageRoot, dir);
   if (here) return here;
   // A sandbox started before projects existed: only its launch folder.
-  if (!readRegistry(ctx.storageRoot) && status && isInsideOrEqual(status.workspaceHost, dir)) return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
+  if (!readRegistry(ctx.storageRoot) && status && isInsideOrEqual(status.workspaceHost, dir))
+    return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
   return { project: null, guestDir: null };
 };
 
-export interface Joined { project: RegistryEntry | null; guestDir: string; spec: ProjectSpecT | null; harness: string | null; notes: string[] }
+export interface Joined {
+  project: RegistryEntry | null;
+  guestDir: string;
+  spec: ProjectSpecT | null;
+  harness: string | null;
+  notes: string[];
+}
 
 /**
  * Makes this folder a project of the running sandbox (nothing to do for the launch folder and projects already in
@@ -39,14 +49,36 @@ export const joinHere = async (ctx: Context, status: SandboxStatus): Promise<Joi
   const { options, loaded, packageRoot, storageRoot, dataPath } = ctx;
   const dir = hereDir(ctx);
   // A sandbox started before projects existed: only its launch folder (guestPathFor explains why otherwise).
-  if (!readRegistry(storageRoot)) return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace), spec: null, harness: null, notes: [] };
+  if (!readRegistry(storageRoot))
+    return {
+      project: null,
+      guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace),
+      spec: null,
+      harness: null,
+      notes: [],
+    };
   const joined = await joinRunning({
-    storageRoot, dataPath, packageRoot, hostDir: dir, wsbShare: loaded.config.projects.wsbShare,
-    resolve: (root) => resolveRun({
-      packageRoot, loaded, cwd: root, workspace: root, harness: options.harness, noAgent: options.noAgent,
-      noLocalConfig: options.noLocalConfig, trustConfig: options.trustConfig, scripts: options.scripts, databases: options.databases,
-      nodeVersion: options.node, pythonVersion: options.python, ask: askYesNo,
-    }),
+    storageRoot,
+    dataPath,
+    packageRoot,
+    hostDir: dir,
+    wsbShare: loaded.config.projects.wsbShare,
+    resolve: (root) =>
+      resolveRun({
+        packageRoot,
+        loaded,
+        cwd: root,
+        workspace: root,
+        harness: options.harness,
+        noAgent: options.noAgent,
+        noLocalConfig: options.noLocalConfig,
+        trustConfig: options.trustConfig,
+        scripts: options.scripts,
+        databases: options.databases,
+        nodeVersion: options.node,
+        pythonVersion: options.python,
+        ask: askYesNo,
+      }),
   });
   const harness = joined.run && joined.run.harnessName !== 'none' ? joined.run.harnessName : null;
   return { project: joined.project, guestDir: joined.guestDir, spec: joined.spec, harness, notes: joined.notes };
@@ -57,7 +89,13 @@ export const provisionJoined = async (ctx: Context, joined: Joined): Promise<voi
   if (!joined.spec) return;
   const spec = joined.spec;
   let step = 'starting';
-  await working(() => 'Setting up ' + spec.name + ' in the running sandbox: ' + step, () => prepareProject(ctx.dataPath, spec, sandboxAlive, (m) => { step = m; }));
+  await working(
+    () => 'Setting up ' + spec.name + ' in the running sandbox: ' + step,
+    () =>
+      prepareProject(ctx.dataPath, spec, sandboxAlive, (m) => {
+        step = m;
+      }),
+  );
 };
 
 /** joinHere, then (for another project) waits until the sandbox has set it up. */

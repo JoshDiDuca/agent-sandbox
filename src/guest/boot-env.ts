@@ -13,9 +13,17 @@ export { baseEnvFor, type BootEnvT } from './project-env.js';
 const file = (): string => path.join(localDir, 'boot-env.json');
 
 export const saveBootEnv = (value: BootEnvT): void => {
-  try { writeJsonAtomic(file(), value); } catch { /* projects added later then fall back to the boot environment */ }
+  try {
+    writeJsonAtomic(file(), value);
+  } catch {
+    /* projects added later then fall back to the boot environment */
+  }
 };
 
 export const readBootEnv = (): BootEnvT | null => {
-  try { return BootEnv.safeParse(JSON.parse(fs.readFileSync(file(), 'utf8'))).data ?? null; } catch { return null; }
+  try {
+    return BootEnv.safeParse(JSON.parse(fs.readFileSync(file(), 'utf8'))).data ?? null;
+  } catch {
+    return null;
+  }
 };

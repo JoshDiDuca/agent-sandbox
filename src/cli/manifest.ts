@@ -2,12 +2,19 @@
 // parser from it and menu.ts builds the interactive menu from it, so a command added here works both ways.
 import { z } from 'zod';
 
-const Choices = z.union([z.array(z.string()), z.enum(['harnesses', 'accounts', 'sessions'])])
+const Choices = z
+  .union([z.array(z.string()), z.enum(['harnesses', 'accounts', 'sessions'])])
   .describe('Fixed values, or a list the menu fills in at run time.');
 
 export const OptionSpec = z.strictObject({
-  flag: z.string().regex(/^--[a-z][a-z0-9-]*$/).describe('Long flag, e.g. --terminal.'),
-  short: z.string().regex(/^-[a-zA-Z]$/).optional(),
+  flag: z
+    .string()
+    .regex(/^--[a-z][a-z0-9-]*$/)
+    .describe('Long flag, e.g. --terminal.'),
+  short: z
+    .string()
+    .regex(/^-[a-zA-Z]$/)
+    .optional(),
   type: z.enum(['boolean', 'string', 'number', 'list']).describe('list = repeatable string option.'),
   value: z.string().optional().describe('Placeholder shown in help, e.g. name for --account <name>.'),
   description: z.string(),
@@ -32,7 +39,8 @@ export const ArgSpec = z.strictObject({
 });
 
 /** Is an argument or option with this `when` asked, given the first argument's answer? */
-export const askedWhen = (when: string | string[] | undefined, first: string): boolean => when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
+export const askedWhen = (when: string | string[] | undefined, first: string): boolean =>
+  when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
 
 export const Group = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
 
@@ -54,26 +62,65 @@ export type OptionSpecT = z.output<typeof OptionSpec>;
 export type ArgSpecT = z.output<typeof ArgSpec>;
 export type CommandSpecT = z.output<typeof CommandSpec>;
 
-const bool = (flag: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({ flag, type: 'boolean', description, ...extra });
-const text = (flag: string, value: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({ flag, type: 'string', value, description, ...extra });
+const bool = (flag: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({
+  flag,
+  type: 'boolean',
+  description,
+  ...extra,
+});
+const text = (flag: string, value: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({
+  flag,
+  type: 'string',
+  value,
+  description,
+  ...extra,
+});
 
 const SANDBOX_OPTIONS: OptionSpecT[] = [
-  bool('--terminal', 'attach this terminal (reuses this folder\'s session if nobody is watching it)', { short: '-t' }),
+  bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", { short: '-t' }),
   bool('--headless', 'hide the sandbox window (sbx-show brings it back)'),
   bool('--new', 'always start a new session, even if this folder has an unattached one'),
   text('--workspace', 'dir', 'use this folder instead of the current one'),
-  text('--node', 'version', 'Node version for nvm (default: .sandbox-config.json > .nvmrc > this PC)', { advanced: true }),
-  text('--python', 'version', 'Python 3 version (default: .sandbox-config.json > .python-version > config)', { advanced: true }),
-  { flag: '--database', type: 'list', value: 'name', description: 'also start this database (postgres, mysql, mongodb, redis, dynamodb; repeatable)', choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'], advanced: true },
-  { flag: '--script', type: 'list', value: 'file', description: 'run this .ps1/.mjs/.cmd inside the sandbox first (repeatable)', advanced: true },
+  text('--node', 'version', 'Node version for nvm (default: .sandbox-config.json > .nvmrc > this PC)', {
+    advanced: true,
+  }),
+  text('--python', 'version', 'Python 3 version (default: .sandbox-config.json > .python-version > config)', {
+    advanced: true,
+  }),
+  {
+    flag: '--database',
+    type: 'list',
+    value: 'name',
+    description: 'also start this database (postgres, mysql, mongodb, redis, dynamodb; repeatable)',
+    choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'],
+    advanced: true,
+  },
+  {
+    flag: '--script',
+    type: 'list',
+    value: 'file',
+    description: 'run this .ps1/.mjs/.cmd inside the sandbox first (repeatable)',
+    advanced: true,
+  },
   bool('--window', 'show the sandbox window even if config says headless', { advanced: true }),
-  bool('--trust-config', 'approve the folder\'s .sandbox-config.json without asking', { advanced: true }),
-  bool('--no-local-config', 'ignore the folder\'s .sandbox-config.json', { advanced: true }),
-  bool('--yes', 'when this folder is not in the running sandbox and adding it needs a restart, restart without asking', { noMenu: true }),
+  bool('--trust-config', "approve the folder's .sandbox-config.json without asking", { advanced: true }),
+  bool('--no-local-config', "ignore the folder's .sandbox-config.json", { advanced: true }),
+  bool(
+    '--yes',
+    'when this folder is not in the running sandbox and adding it needs a restart, restart without asking',
+    { noMenu: true },
+  ),
 ];
 const AGENT_OPTIONS: OptionSpecT[] = [
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
-  { flag: '--session', type: 'list', value: 'agent@folder', description: 'start several sessions at once, e.g. --session claude@C:\\code\\api --session "codex@C:\\code\\web|--model o3" (repeatable; after | = that agent\'s own arguments; -t attaches the first)', noMenu: true },
+  {
+    flag: '--session',
+    type: 'list',
+    value: 'agent@folder',
+    description:
+      'start several sessions at once, e.g. --session claude@C:\\code\\api --session "codex@C:\\code\\web|--model o3" (repeatable; after | = that agent\'s own arguments; -t attaches the first)',
+    noMenu: true,
+  },
   text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts' }),
   ...SANDBOX_OPTIONS,
   bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true }),
@@ -81,45 +128,269 @@ const AGENT_OPTIONS: OptionSpecT[] = [
 const json = true;
 
 export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
-  { name: 'launch', summary: 'start the sandbox and an agent (or another session in the running sandbox)', group: 'Agents', args: [], options: AGENT_OPTIONS, passthrough: 'agent', interactive: true },
-  { name: 'start', summary: 'start a sandbox with no agent (tools and databases only)', group: 'Sandbox', args: [], options: SANDBOX_OPTIONS.filter((o) => o.flag !== '--new'), interactive: true },
-  { name: 'generate', summary: 'show what a start would do, without starting anything', group: 'Health', args: [], options: AGENT_OPTIONS, passthrough: 'agent' },
-  { name: 'attach', summary: 'show a running session in this terminal (Ctrl+] detaches)', group: 'Sessions', args: [{ name: 'id', description: 'session (default: the newest)', required: false, choices: 'sessions' }], options: [], interactive: true },
-  { name: 'sessions', summary: 'list agent sessions and who is attached', group: 'Sessions', args: [], options: [], json },
-  { name: 'status', summary: 'show what the sandbox is doing', group: 'Sandbox', args: [], options: [], json },
-  { name: 'db', summary: 'list, start or stop databases in the running sandbox', group: 'Sandbox', args: [{ name: 'action', description: 'list, start or stop', required: false, choices: ['list', 'start', 'stop'] }, { name: 'name', description: 'postgres, mysql, mongodb, redis or dynamodb', required: false, choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'] }], options: [] },
-  { name: 'exec', summary: 'run a command inside the sandbox and print its output', group: 'Sandbox', args: [{ name: 'command', description: 'command and its arguments', required: true, variadic: true }], options: [{ flag: '--timeout', type: 'number', value: 'seconds', description: 'give up after this many seconds', default: 600 }, text('--workspace', 'dir', 'folder (inside the mapped workspace) to run in')], passthrough: 'command', json },
-  { name: 'restart', summary: 'restart this project\'s running agents in place; they resume their conversation', group: 'Sessions', args: [], options: [text('--harness', 'name', 'only this agent', { choices: 'harnesses' }), bool('--all', 'every project\'s sessions, not only this folder\'s')] },
-  { name: 'stop', summary: 'shut the sandbox down (every project\'s sessions end)', group: 'Sandbox', args: [], options: [bool('--yes', 'do not ask when other projects\' sessions would end', { noMenu: true })] },
   {
-    name: 'projects', summary: 'the projects a sandbox can open without a restart: list, choose, roots, all/exclude', group: 'Sandbox', json,
+    name: 'launch',
+    summary: 'start the sandbox and an agent (or another session in the running sandbox)',
+    group: 'Agents',
+    args: [],
+    options: AGENT_OPTIONS,
+    passthrough: 'agent',
+    interactive: true,
+  },
+  {
+    name: 'start',
+    summary: 'start a sandbox with no agent (tools and databases only)',
+    group: 'Sandbox',
+    args: [],
+    options: SANDBOX_OPTIONS.filter((o) => o.flag !== '--new'),
+    interactive: true,
+  },
+  {
+    name: 'generate',
+    summary: 'show what a start would do, without starting anything',
+    group: 'Health',
+    args: [],
+    options: AGENT_OPTIONS,
+    passthrough: 'agent',
+  },
+  {
+    name: 'attach',
+    summary: 'show a running session in this terminal (Ctrl+] detaches)',
+    group: 'Sessions',
+    args: [{ name: 'id', description: 'session (default: the newest)', required: false, choices: 'sessions' }],
+    options: [],
+    interactive: true,
+  },
+  {
+    name: 'sessions',
+    summary: 'list agent sessions and who is attached',
+    group: 'Sessions',
+    args: [],
+    options: [],
+    json,
+  },
+  { name: 'status', summary: 'show what the sandbox is doing', group: 'Sandbox', args: [], options: [], json },
+  {
+    name: 'db',
+    summary: 'list, start or stop databases in the running sandbox',
+    group: 'Sandbox',
     args: [
-      { name: 'action', description: 'list, choose, add, remove, include, exclude, all, roots', required: false, choices: ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'] },
-      { name: 'value', description: 'a folder (add, remove, include, exclude), on/off (all), or list/add/remove (roots)', required: false, when: ['add', 'remove', 'include', 'exclude', 'all', 'roots'] },
+      { name: 'action', description: 'list, start or stop', required: false, choices: ['list', 'start', 'stop'] },
+      {
+        name: 'name',
+        description: 'postgres, mysql, mongodb, redis or dynamodb',
+        required: false,
+        choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'],
+      },
+    ],
+    options: [],
+  },
+  {
+    name: 'exec',
+    summary: 'run a command inside the sandbox and print its output',
+    group: 'Sandbox',
+    args: [{ name: 'command', description: 'command and its arguments', required: true, variadic: true }],
+    options: [
+      {
+        flag: '--timeout',
+        type: 'number',
+        value: 'seconds',
+        description: 'give up after this many seconds',
+        default: 600,
+      },
+      text('--workspace', 'dir', 'folder (inside the mapped workspace) to run in'),
+    ],
+    passthrough: 'command',
+    json,
+  },
+  {
+    name: 'restart',
+    summary: "restart this project's running agents in place; they resume their conversation",
+    group: 'Sessions',
+    args: [],
+    options: [
+      text('--harness', 'name', 'only this agent', { choices: 'harnesses' }),
+      bool('--all', "every project's sessions, not only this folder's"),
+    ],
+  },
+  {
+    name: 'stop',
+    summary: "shut the sandbox down (every project's sessions end)",
+    group: 'Sandbox',
+    args: [],
+    options: [bool('--yes', "do not ask when other projects' sessions would end", { noMenu: true })],
+  },
+  {
+    name: 'projects',
+    summary: 'the projects a sandbox can open without a restart: list, choose, roots, all/exclude',
+    group: 'Sandbox',
+    json,
+    args: [
+      {
+        name: 'action',
+        description: 'list, choose, add, remove, include, exclude, all, roots',
+        required: false,
+        choices: ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'],
+      },
+      {
+        name: 'value',
+        description: 'a folder (add, remove, include, exclude), on/off (all), or list/add/remove (roots)',
+        required: false,
+        when: ['add', 'remove', 'include', 'exclude', 'all', 'roots'],
+      },
       { name: 'folder', description: '(roots add/remove) the folder', required: false, when: 'roots' },
     ],
     options: [],
   },
   { name: 'show', summary: 'show the sandbox window', group: 'Sandbox', args: [], options: [] },
   { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sandbox', args: [], options: [] },
-  { name: 'account', summary: 'Claude logins: list, save, use, set the default, remove', group: 'Accounts', args: [{ name: 'action', description: 'what to do', required: false, choices: ['list', 'save', 'use', 'default', 'remove'] }, { name: 'name', description: 'account name', required: false, choices: 'accounts' }], options: [bool('--from-host', '(save) save this PC\'s login instead of the sandbox\'s', { when: 'save' }), bool('--no-restart', '(use) do not restart running sessions', { when: 'use' })], json },
-  { name: 'data', summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it', group: 'Data', args: [{ name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] }, { name: 'targets', description: 'what to clean, e.g. tools/go databases logs', required: false, variadic: true, when: 'clean' }], options: [bool('--yes', 'do not ask before deleting', { noMenu: true })], json },
-  { name: 'clean', summary: 'delete old launch folders, logs and leftovers', group: 'Data', args: [], options: [{ flag: '--days', type: 'number', value: 'n', description: 'launch folders older than this many days', default: 7 }] },
+  {
+    name: 'account',
+    summary: 'Claude logins: list, save, use, set the default, remove',
+    group: 'Accounts',
+    args: [
+      {
+        name: 'action',
+        description: 'what to do',
+        required: false,
+        choices: ['list', 'save', 'use', 'default', 'remove'],
+      },
+      { name: 'name', description: 'account name', required: false, choices: 'accounts' },
+    ],
+    options: [
+      bool('--from-host', "(save) save this PC's login instead of the sandbox's", { when: 'save' }),
+      bool('--no-restart', '(use) do not restart running sessions', { when: 'use' }),
+    ],
+    json,
+  },
+  {
+    name: 'data',
+    summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it',
+    group: 'Data',
+    args: [
+      { name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] },
+      {
+        name: 'targets',
+        description: 'what to clean, e.g. tools/go databases logs',
+        required: false,
+        variadic: true,
+        when: 'clean',
+      },
+    ],
+    options: [bool('--yes', 'do not ask before deleting', { noMenu: true })],
+    json,
+  },
+  {
+    name: 'clean',
+    summary: 'delete old launch folders, logs and leftovers',
+    group: 'Data',
+    args: [],
+    options: [
+      {
+        flag: '--days',
+        type: 'number',
+        value: 'n',
+        description: 'launch folders older than this many days',
+        default: 7,
+      },
+    ],
+  },
   { name: 'sync', summary: 'copy conversation history back to this PC now', group: 'Data', args: [], options: [] },
   {
-    name: 'audit', summary: 'what happened in your sandboxes: programs started, files changed, sessions, repo guard (audit.enabled)', group: 'Health', json,
+    name: 'audit',
+    summary: 'what happened in your sandboxes: programs started, files changed, sessions, repo guard (audit.enabled)',
+    group: 'Health',
+    json,
     args: [],
-    options: [{ flag: '--days', type: 'number', value: 'n', description: 'the last n days (default: today)', default: 1 }, text('--kind', 'kind', 'only proc, file, session or guard events', { choices: ['proc', 'file', 'session', 'guard'] }), text('--grep', 'text', 'only events containing this text')],
+    options: [
+      { flag: '--days', type: 'number', value: 'n', description: 'the last n days (default: today)', default: 1 },
+      text('--kind', 'kind', 'only proc, file, session or guard events', {
+        choices: ['proc', 'file', 'session', 'guard'],
+      }),
+      text('--grep', 'text', 'only events containing this text'),
+    ],
   },
-  { name: 'logs', summary: 'print the newest sandbox log', group: 'Health', args: [], options: [bool('--follow', 'keep printing new lines', { short: '-f' })] },
-  { name: 'setup', summary: 'check this PC can run Windows Sandbox and offer to turn it on', group: 'Health', args: [], options: [] },
-  { name: 'doctor', summary: 'check this PC and show what will be copied or downloaded', group: 'Health', args: [], options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })] },
-  { name: 'repair', summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)', group: 'Health', args: [], options: [] },
-  { name: 'self-test', summary: 'run the built-in tests', group: 'Health', args: [{ name: 'suite', description: 'run only these test suites, e.g. config live-daemon (default: all)', required: false, variadic: true }], options: [] },
-  { name: 'config', summary: 'show or create your settings file, or check a project\'s .sandbox-config.json', group: 'Config', args: [{ name: 'action', description: 'what to do', required: false, choices: ['show', 'path', 'init', 'schema', 'check'] }], options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')] },
-  { name: 'agent-commands', summary: '(Beta) make claude, codex ... on this PC start in a hidden sandbox and attach', group: 'Agents', args: [{ name: 'action', description: 'on, off or status', required: false, choices: ['status', 'on', 'off'] }], options: [] },
-  { name: 'host-claude', summary: 'run Claude on this PC, NOT sandboxed, with its own profile', group: 'Agents', args: [], options: [bool('--personal', 'use your normal Claude profile')], passthrough: 'agent', interactive: true },
-  { name: 'menu', summary: 'the interactive menu (what `sandbox` opens with no arguments)', group: 'Config', args: [], options: [], hidden: true, interactive: true },
+  {
+    name: 'logs',
+    summary: 'print the newest sandbox log',
+    group: 'Health',
+    args: [],
+    options: [bool('--follow', 'keep printing new lines', { short: '-f' })],
+  },
+  {
+    name: 'setup',
+    summary: 'check this PC can run Windows Sandbox and offer to turn it on',
+    group: 'Health',
+    args: [],
+    options: [],
+  },
+  {
+    name: 'doctor',
+    summary: 'check this PC and show what will be copied or downloaded',
+    group: 'Health',
+    args: [],
+    options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })],
+  },
+  {
+    name: 'repair',
+    summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)',
+    group: 'Health',
+    args: [],
+    options: [],
+  },
+  {
+    name: 'self-test',
+    summary: 'run the built-in tests',
+    group: 'Health',
+    args: [
+      {
+        name: 'suite',
+        description: 'run only these test suites, e.g. config live-daemon (default: all)',
+        required: false,
+        variadic: true,
+      },
+    ],
+    options: [],
+  },
+  {
+    name: 'config',
+    summary: "show or create your settings file, or check a project's .sandbox-config.json",
+    group: 'Config',
+    args: [
+      {
+        name: 'action',
+        description: 'what to do',
+        required: false,
+        choices: ['show', 'path', 'init', 'schema', 'check'],
+      },
+    ],
+    options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')],
+  },
+  {
+    name: 'agent-commands',
+    summary: '(Beta) make claude, codex ... on this PC start in a hidden sandbox and attach',
+    group: 'Agents',
+    args: [{ name: 'action', description: 'on, off or status', required: false, choices: ['status', 'on', 'off'] }],
+    options: [],
+  },
+  {
+    name: 'host-claude',
+    summary: 'run Claude on this PC, NOT sandboxed, with its own profile',
+    group: 'Agents',
+    args: [],
+    options: [bool('--personal', 'use your normal Claude profile')],
+    passthrough: 'agent',
+    interactive: true,
+  },
+  {
+    name: 'menu',
+    summary: 'the interactive menu (what `sandbox` opens with no arguments)',
+    group: 'Config',
+    args: [],
+    options: [],
+    hidden: true,
+    interactive: true,
+  },
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },
 ]);
 

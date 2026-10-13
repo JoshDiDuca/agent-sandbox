@@ -16,7 +16,10 @@ export const safeId = (id: string): string => Id.parse(id);
 
 export const runPaths = (dataDir: string) => {
   const run = path.join(dataDir, 'run');
-  const file = (dir: string) => (id: string): string => path.join(run, dir, safeId(id) + '.json');
+  const file =
+    (dir: string) =>
+    (id: string): string =>
+      path.join(run, dir, safeId(id) + '.json');
   return {
     run,
     sandbox: path.join(run, 'sandbox.json'),
@@ -37,7 +40,9 @@ export const readJsonFile = <T>(file: string): T | null => {
   try {
     if (fs.statSync(file).size > MAX_MESSAGE_BYTES) return null;
     return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')) as T;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 };
 
 /** Reads and validates; a missing, oversized or malformed file is simply absent. */
@@ -46,13 +51,16 @@ export const readValid = <S extends z.ZodType>(schema: S, file: string): z.outpu
   return parsed.success ? parsed.data : null;
 };
 
-const pause = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+const pause = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
 
 /**
  * Write to a uniquely named temp file and rename, so a reader on the other side of the mapped folder never sees half a
  * file. The rename is retried briefly: antivirus or the other side's reader can hold the target for a moment.
  */
-export const writeJsonAtomic = (file: string, value: unknown): void => writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n');
+export const writeJsonAtomic = (file: string, value: unknown): void =>
+  writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n');
 
 /** Same for any text file (two commands at once, or a watcher and a command, never leave a half-written file). */
 export const writeFileAtomic = (file: string, text: string): void => {
@@ -61,9 +69,15 @@ export const writeFileAtomic = (file: string, text: string): void => {
   const temp = file + '.' + process.pid + '-' + Math.random().toString(36).slice(2) + '.tmp';
   fs.writeFileSync(temp, text, { encoding: 'utf8', flag: 'wx' });
   for (let attempt = 1; ; attempt++) {
-    try { fs.renameSync(temp, file); return; } catch (e) {
+    try {
+      fs.renameSync(temp, file);
+      return;
+    } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
-      if (attempt >= 8 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) { fs.rmSync(temp, { force: true }); throw e; }
+      if (attempt >= 8 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) {
+        fs.rmSync(temp, { force: true });
+        throw e;
+      }
       pause(50 * attempt);
     }
   }
@@ -77,16 +91,24 @@ const scan = <S extends z.ZodType>(schema: S, dir: string): { valid: z.output<S>
   for (const name of fs.readdirSync(dir)) {
     if (name.endsWith('.tmp')) continue;
     const message = /^[A-Za-z0-9_-]{1,64}\.json$/.test(name) ? readValid(schema, path.join(dir, name)) : null;
-    if (message) valid.push(message); else invalid.push(path.join(dir, name));
+    if (message) valid.push(message);
+    else invalid.push(path.join(dir, name));
   }
   return { valid, invalid };
 };
 
-export const readSandboxStatus = (dataDir: string): SandboxStatusT | null => readValid(SandboxStatus, runPaths(dataDir).sandbox);
-export const readSession = (dataDir: string, id: string): SessionStatusT | null => readValid(SessionStatus, runPaths(dataDir).session(id));
-export const readResponse = (dataDir: string, id: string): GuestResponseT | null => readValid(GuestResponse, runPaths(dataDir).response(id));
-export const listSessions = (dataDir: string): SessionStatusT[] => scan(SessionStatus, runPaths(dataDir).sessions).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-export const readProjectStatus = (dataDir: string, name: string): ProjectStatusT | null => readValid(ProjectStatus, runPaths(dataDir).project(name));
-export const listProjectStatus = (dataDir: string): ProjectStatusT[] => scan(ProjectStatus, runPaths(dataDir).projects).valid.slice(0, 64);
-export const scanRequests = (dataDir: string): { valid: GuestRequestT[]; invalid: string[] } => scan(GuestRequest, runPaths(dataDir).requests);
+export const readSandboxStatus = (dataDir: string): SandboxStatusT | null =>
+  readValid(SandboxStatus, runPaths(dataDir).sandbox);
+export const readSession = (dataDir: string, id: string): SessionStatusT | null =>
+  readValid(SessionStatus, runPaths(dataDir).session(id));
+export const readResponse = (dataDir: string, id: string): GuestResponseT | null =>
+  readValid(GuestResponse, runPaths(dataDir).response(id));
+export const listSessions = (dataDir: string): SessionStatusT[] =>
+  scan(SessionStatus, runPaths(dataDir).sessions).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+export const readProjectStatus = (dataDir: string, name: string): ProjectStatusT | null =>
+  readValid(ProjectStatus, runPaths(dataDir).project(name));
+export const listProjectStatus = (dataDir: string): ProjectStatusT[] =>
+  scan(ProjectStatus, runPaths(dataDir).projects).valid.slice(0, 64);
+export const scanRequests = (dataDir: string): { valid: GuestRequestT[]; invalid: string[] } =>
+  scan(GuestRequest, runPaths(dataDir).requests);
 export const now = (): string => new Date().toISOString();

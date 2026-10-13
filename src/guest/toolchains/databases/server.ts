@@ -16,7 +16,8 @@ export const startServer = async (name: string, exe: string, args: string[], por
   const out = fs.openSync(logFile, 'a');
   spawn(exe, args, { detached: true, stdio: ['ignore', out, out], windowsHide: true }).unref();
   fs.closeSync(out);
-  if (!(await waitForPort(port, 60))) throw new Error(name + ' did not start listening on port ' + port + '; see ' + logFile);
+  if (!(await waitForPort(port, 60)))
+    throw new Error(name + ' did not start listening on port ' + port + '; see ' + logFile);
 };
 
 /**
@@ -36,8 +37,16 @@ export const createOnce = async (data: string, marker: string, create: () => Pro
   if (exists(path.join(data, marker))) return;
   const existed = exists(data);
   mkdirp(path.dirname(data));
-  try { await create(); } catch (e) {
-    if (!existed) { try { safeRemove(data, dataDir); } catch { /* the original error is the one to report */ } }
+  try {
+    await create();
+  } catch (e) {
+    if (!existed) {
+      try {
+        safeRemove(data, dataDir);
+      } catch {
+        /* the original error is the one to report */
+      }
+    }
     throw e;
   }
 };

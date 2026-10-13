@@ -41,7 +41,9 @@ const stateFile = (storageRoot: string): string => path.join(storageRoot, 'run',
 export const hideSandboxWindow = async (storageRoot: string, waitSeconds = 180): Promise<boolean> => {
   refuseInSelfTest('hide windows');
   if (!isWin) return false;
-  const script = PRELUDE + `
+  const script =
+    PRELUDE +
+    `
 $hidden = New-Object System.Collections.ArrayList
 $deadline = (Get-Date).AddSeconds(${waitSeconds}); $settle = $null
 while ((Get-Date) -lt $deadline) {
@@ -62,8 +64,12 @@ export const showSandboxWindow = (storageRoot: string): boolean => {
   refuseInSelfTest('show windows');
   if (!isWin) return false;
   // Only integers go into the script, whatever the file contains.
-  const recorded = (tryReadJson<{ handles: unknown[] }>(stateFile(storageRoot))?.handles ?? []).filter((h): h is number => Number.isSafeInteger(h));
-  const script = PRELUDE + `
+  const recorded = (tryReadJson<{ handles: unknown[] }>(stateFile(storageRoot))?.handles ?? []).filter(
+    (h): h is number => Number.isSafeInteger(h),
+  );
+  const script =
+    PRELUDE +
+    `
 $handles = @(${recorded.join(',')}) | Where-Object { [AgentSandbox.Win]::IsWindow([IntPtr]$_) }
 if (-not $handles) { $handles = Get-SandboxWindows $false }
 foreach ($h in $handles) { [void][AgentSandbox.Win]::ShowWindow([IntPtr]$h, 5); [void][AgentSandbox.Win]::ShowWindow([IntPtr]$h, 9); [void][AgentSandbox.Win]::SetForegroundWindow([IntPtr]$h) }

@@ -5,22 +5,49 @@ import path from 'node:path';
 import type { GitAccess } from '../../core/types.js';
 import { download, githubAsset, moveIntoPlace, stagingFolder } from '../../shared/download.js';
 import { safeRemove } from '../../shared/safe-remove.js';
-import { dataDir, dryRun, errMsg, execAsync, execOutput, exists, hostToolsDir, launchDir, log, mkdirp, robocopy, toolsDir, warn } from '../env.js';
+import {
+  dataDir,
+  dryRun,
+  errMsg,
+  execAsync,
+  execOutput,
+  exists,
+  hostToolsDir,
+  launchDir,
+  log,
+  mkdirp,
+  robocopy,
+  toolsDir,
+  warn,
+} from '../env.js';
 import { ensureCompiled } from '../helpers.js';
 import { arch, tool, type ToolEnv } from './common.js';
 import { duringSession } from '../project-context.js';
 
-const BLOCKED_HOOKS = ['pre-commit', 'commit-msg', 'pre-merge-commit', 'pre-push', 'pre-rebase', 'pre-applypatch', 'applypatch-msg'];
+const BLOCKED_HOOKS = [
+  'pre-commit',
+  'commit-msg',
+  'pre-merge-commit',
+  'pre-push',
+  'pre-rebase',
+  'pre-applypatch',
+  'applypatch-msg',
+];
 const posix = (p: string): string => p.replace(/\\/g, '/');
 
 const installPortableGit = async (root: string): Promise<void> => {
-  const asset = await githubAsset('git-for-windows/git', arch === 'arm64' ? /^PortableGit-[\d.]+-arm64\.7z\.exe$/ : /^PortableGit-[\d.]+-64-bit\.7z\.exe$/);
+  const asset = await githubAsset(
+    'git-for-windows/git',
+    arch === 'arm64' ? /^PortableGit-[\d.]+-arm64\.7z\.exe$/ : /^PortableGit-[\d.]+-64-bit\.7z\.exe$/,
+  );
   const sfx = tool(asset.name);
   log('Downloading Git for Windows (' + asset.name + ', ~60 MB once) ...');
   try {
     await download(asset.url, sfx, asset.sha256);
     await execAsync(sfx, ['-o' + root, '-y'], { stdio: 'ignore' });
-  } finally { fs.rmSync(sfx, { force: true }); }
+  } finally {
+    fs.rmSync(sfx, { force: true });
+  }
 };
 
 /**
@@ -32,19 +59,40 @@ const installGuard = (env: ToolEnv, access: Exclude<GitAccess, 'full'>, realGit:
   const guard = path.join(launchDir, 'runtime', 'gitguard.js');
   // A real git.exe (programs like Claude Code only look for .exe); a .cmd only if the C# compiler is unavailable.
   // A project added later reuses the boot's: sessions may be running it, and Windows cannot replace a running exe.
-  if (duringSession() && (exists(path.join(dir, 'git.exe')) || exists(path.join(dir, 'git.cmd')))) { /* keep it */ }
-  else try { fs.copyFileSync(ensureCompiled('gitshim'), path.join(dir, 'git.exe')); fs.rmSync(path.join(dir, 'git.cmd'), { force: true }); }
-  catch (e) { warn('git guard: falling back to git.cmd (' + errMsg(e) + ')'); fs.writeFileSync(path.join(dir, 'git.cmd'), '@"' + process.execPath + '" "' + guard + '" %*\r\n'); }
-  fs.writeFileSync(path.join(dir, 'bashenv.sh'), 'git() { "' + posix(process.execPath) + '" "' + posix(guard) + '" "$@"; }\nexport -f git\n');
+  if (duringSession() && (exists(path.join(dir, 'git.exe')) || exists(path.join(dir, 'git.cmd')))) {
+    /* keep it */
+  } else
+    try {
+      fs.copyFileSync(ensureCompiled('gitshim'), path.join(dir, 'git.exe'));
+      fs.rmSync(path.join(dir, 'git.cmd'), { force: true });
+    } catch (e) {
+      warn('git guard: falling back to git.cmd (' + errMsg(e) + ')');
+      fs.writeFileSync(path.join(dir, 'git.cmd'), '@"' + process.execPath + '" "' + guard + '" %*\r\n');
+    }
+  fs.writeFileSync(
+    path.join(dir, 'bashenv.sh'),
+    'git() { "' + posix(process.execPath) + '" "' + posix(guard) + '" "$@"; }\nexport -f git\n',
+  );
   env.prepend.unshift(dir);
   Object.assign(env.vars, {
-    AGENT_GIT_ACCESS: access, AGENT_REAL_GIT: access === 'readonly' ? realGit : '',
-    AGENT_GUARD_NODE: process.execPath, AGENT_GUARD_SCRIPT: guard, BASH_ENV: posix(path.join(dir, 'bashenv.sh')),
+    AGENT_GIT_ACCESS: access,
+    AGENT_REAL_GIT: access === 'readonly' ? realGit : '',
+    AGENT_GUARD_NODE: process.execPath,
+    AGENT_GUARD_SCRIPT: guard,
+    BASH_ENV: posix(path.join(dir, 'bashenv.sh')),
   });
   if (access === 'readonly') {
     const hooks = mkdirp(path.join(dir, 'hooks'));
-    for (const hook of BLOCKED_HOOKS) fs.writeFileSync(path.join(hooks, hook), '#!/bin/sh\necho "git is read-only in this sandbox: ' + hook + ' refused." >&2\nexit 1\n');
-    Object.assign(env.vars, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: posix(hooks) });
+    for (const hook of BLOCKED_HOOKS)
+      fs.writeFileSync(
+        path.join(hooks, hook),
+        '#!/bin/sh\necho "git is read-only in this sandbox: ' + hook + ' refused." >&2\nexit 1\n',
+      );
+    Object.assign(env.vars, {
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'core.hooksPath',
+      GIT_CONFIG_VALUE_0: posix(hooks),
+    });
   } else {
     // Even a git.exe found some other way sees no repository.
     env.vars.GIT_DIR = path.join(dataDir, 'git-disabled');
@@ -70,25 +118,45 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
   const bash = path.join(root, 'bin', 'bash.exe');
   const gitExe = path.join(root, 'cmd', 'git.exe');
   const hostGit = path.join(hostToolsDir, 'git');
-  if (exists(root) && !exists(bash)) { log('Replacing the old MinGit (no bash) with full Git for Windows.'); safeRemove(root, toolsDir); }
+  if (exists(root) && !exists(bash)) {
+    log('Replacing the old MinGit (no bash) with full Git for Windows.');
+    safeRemove(root, toolsDir);
+  }
   if (!exists(bash) || refresh) {
-    if (dryRun) { log('(dry run) would provision Git for Windows' + (hostCopy ? ' from this PC' : '') + ' (access: ' + access + ')'); return; }
+    if (dryRun) {
+      log(
+        '(dry run) would provision Git for Windows' + (hostCopy ? ' from this PC' : '') + ' (access: ' + access + ')',
+      );
+      return;
+    }
     // Into a staging folder, then renamed: an interrupted copy/extraction must not leave a tools\git that has bash.exe
     // (so looks installed) but is missing the rest.
     const work = stagingFolder(root);
     try {
-      if (hostCopy && exists(path.join(hostGit, 'bin', 'bash.exe'))) { log('Copying Git for Windows from this PC ...'); robocopy(hostGit, work); }
-      else await installPortableGit(work);
+      if (hostCopy && exists(path.join(hostGit, 'bin', 'bash.exe'))) {
+        log('Copying Git for Windows from this PC ...');
+        robocopy(hostGit, work);
+      } else await installPortableGit(work);
       if (!exists(path.join(work, 'bin', 'bash.exe'))) throw new Error('bash.exe missing after installing Git');
       moveIntoPlace(work, root);
-    } finally { safeRemove(work, toolsDir); }
+    } finally {
+      safeRemove(work, toolsDir);
+    }
   }
   if (!exists(bash)) throw new Error('bash.exe missing after installing Git');
   pointAtOwnCertificates(root);
   env.vars.CLAUDE_CODE_GIT_BASH_PATH = bash;
   env.append.push(path.join(root, 'usr', 'bin'));
   const version = execOutput(gitExe, ['--version']).replace(/^git version /, '');
-  if (access === 'full') { env.prepend.push(path.join(root, 'cmd')); env.summary.push('git: ' + version); return; }
+  if (access === 'full') {
+    env.prepend.push(path.join(root, 'cmd'));
+    env.summary.push('git: ' + version);
+    return;
+  }
   installGuard(env, access, gitExe);
-  env.summary.push(access === 'readonly' ? 'git: ' + version + ' READ-ONLY (status/log/diff/show/blame; no commit, push, checkout, ...)' : 'git: DISABLED (bash only; the agent cannot use git)');
+  env.summary.push(
+    access === 'readonly'
+      ? 'git: ' + version + ' READ-ONLY (status/log/diff/show/blame; no commit, push, checkout, ...)'
+      : 'git: DISABLED (bash only; the agent cannot use git)',
+  );
 };
