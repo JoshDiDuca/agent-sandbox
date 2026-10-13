@@ -101,6 +101,7 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
     substDrives: substDrives(mappings.map((m) => m.guest)),
     cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
+    apps: config.apps,
   };
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);

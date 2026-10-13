@@ -8,6 +8,7 @@ import { Harness } from './harness.js';
 import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
 import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
+import { Apps } from './apps.js';
 import { Projects } from './projects.js';
 
 export const Config = z.strictObject({
@@ -31,6 +32,7 @@ export const Config = z.strictObject({
   agentCommands: AgentCommands,
   secrets: Secrets,
   personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
+  apps: Apps,
   claudeProfile: ClaudeProfile,
   harnesses: z.record(Name, Harness).describe('Agents that can run in the sandbox.'),
   hooks: z.strictObject({ failFast: z.boolean().describe('Stop when a hook script fails.') }),
@@ -60,6 +62,8 @@ export const LocalOverrides = z.strictObject({
   databases: z.strictObject(_.mapValues(Databases.shape, (shape) => shape.partial())).partial(),
   attach: Attach.partial(),
   personalization: toggle('Copy your desktop look into the sandbox.').partial(),
+  // Catalogue apps only (a vetted list): your own programs (apps.custom) download anything, so a repo cannot add them.
+  apps: Apps.pick({ install: true }).partial(),
   claudeProfile: ClaudeProfile.pick({ enabled: true, overwrite: true, copyCredentials: true, syncHistory: true, syncClaudeMem: true }).partial(),
   hooks: z.strictObject({ failFast: z.boolean() }).partial(),
 }).partial();

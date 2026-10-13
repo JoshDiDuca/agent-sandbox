@@ -125,7 +125,7 @@ export const cliSuite: Suite = {
     const uncategorised = [...userSchema.children(), ...projectSchema.children()].map(([name]) => name).filter((name) => !CATEGORIES.some((c) => c.keys.includes(name)));
     t.equal(uncategorised, [], 'settings screen: every top-level setting belongs to a category');
     const kinds = new Set(userLeaves.map((l) => l.node.editor));
-    t.equal(['boolean', 'choice', 'union', 'number', 'string', 'string-list', 'object-list', 'string-map', 'object-map'].filter((k) => !kinds.has(k as never)), [], 'settings screen: every kind of editor is used');
+    t.equal(['boolean', 'choice', 'union', 'number', 'string', 'string-list', 'choice-list', 'object-list', 'string-map', 'object-map'].filter((k) => !kinds.has(k as never)), [], 'settings screen: every kind of editor is used');
     t.equal(userLeaves.filter((l) => l.node.editor === 'json').map((l) => l.key.join('.')), [], 'settings screen: no setting falls back to typing JSON');
     t.check(userLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum') && projectLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum'), 'settings screen: downloads.requireChecksum is reachable in both files');
     const harness = userSchema.child('harnesses')!.element!;

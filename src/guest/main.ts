@@ -66,7 +66,7 @@ const main = async (): Promise<void> => {
   step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
   const basePath = process.env.PATH ?? '';
   const tools = await setupToolchains(session.toolchains, session.versions, {
-    gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [],
+    gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [], apps: session.apps,
   });
   if (!dryRun) tools.prepend.push(writeDbCommand());
   const env = agentEnv(tools);

@@ -12,6 +12,7 @@ import type { Context } from '../commands/context.js';
 import { commandLine, readHistory } from '../history.js';
 import { COMMANDS, commandSpec, type CommandSpecT } from '../manifest.js';
 import { App, ExitRequested, Frame, Text, Theme, type Category, type ListItem } from '../tui/index.js';
+import { AppsCatalogue, appsSummary } from './apps.js';
 import { CommandForm } from './command-form.js';
 import { ConfigFile, SettingsEditor } from './settings/index.js';
 import { SeveralAgents } from './several.js';
@@ -25,12 +26,13 @@ type Action =
   | { kind: 'form'; command: string; preset?: string[] }
   | { kind: 'several' }
   | { kind: 'settings'; target: 'user' | 'project' }
-  | { kind: 'apps' };
+  | { kind: 'apps'; target: 'user' | 'project' };
 
 const CATEGORIES: Category[] = [
   { id: 'start', label: 'Start', description: 'Start an agent (or several) in a sandbox, or a sandbox with only your tools.' },
   { id: 'sessions', label: 'Sessions', description: 'Agent sessions in the running sandbox: show one in this terminal, list them, restart them.' },
   { id: 'sandbox', label: 'Sandbox', description: 'The running sandbox: its status, window, databases, projects, and stopping it.' },
+  { id: 'apps', label: 'Apps & tools', description: 'Desktop apps and command-line tools for every sandbox: editors, database clients, API clients, game engines, cloud CLIs ... and programs of your own.' },
   { id: 'settings', label: 'Settings', description: 'Every setting, for all projects or just this one, edited in place.' },
   { id: 'accounts', label: 'Claude accounts', description: 'Saved Claude logins: save one, switch, set the default.' },
   { id: 'data', label: 'Data & cleanup', description: 'What is kept between sandboxes (tools, databases, logins, logs), and deleting it.' },
@@ -50,6 +52,8 @@ const CATEGORY_OF_GROUP: Record<string, string> = { Agents: 'start', Sandbox: 's
 export class Menu {
   private readonly app = new App();
   private last: string | undefined;
+  /** The result of the last action (saved apps ...), shown on the home screen once. */
+  private notice: string | undefined;
 
   constructor(private readonly ctx: Context, private readonly runArgv: (argv: string[]) => Promise<number>) {
     this.app.status = () => this.status();
@@ -88,6 +92,9 @@ export class Menu {
         add('sessions', 'Running now', plainText(s.harness) + ' · ' + plainText(path.win32.basename(s.cwd)), { kind: 'run', argv: ['attach', plainText(s.id)] }, 'Shows this session in this terminal (Ctrl+] detaches; the session keeps running).', Theme.muted(plainText(s.id)));
       }
     }
+    const userFile = ConfigFile.user(this.ctx.loaded.configPath);
+    add('apps', 'Apps', 'Browse the apps catalogue…', { kind: 'apps', target: 'user' }, 'Tick the apps every sandbox should have: by category, searchable, with sizes. Each downloads once and is kept.', Theme.muted(appsSummary(userFile)));
+    add('apps', 'Apps', 'Apps for this project only…', { kind: 'apps', target: 'project' }, 'Catalogue apps this project needs (saved in its .sandbox-config.json, added to yours).');
     add('settings', 'Settings', 'Your settings', { kind: 'settings', target: 'user' }, 'Every setting, for all projects: languages, databases, the sandbox machine, agents, security ...');
     add('settings', 'Settings', 'This project\'s settings', { kind: 'settings', target: 'project' }, 'This folder\'s .sandbox-config.json: only what a project may set. A changed file needs your approval at the next launch.');
 
@@ -104,7 +111,8 @@ export class Menu {
     if (!process.stdin.isTTY) { console.log('The menu needs an interactive terminal. Run sandbox --help for the commands.'); return 1; }
     try {
       for (;;) {
-        const picked = await this.app.list<string>({ path: [], items: this.homeItems(), categories: CATEGORIES, startAt: this.last, escapeLabel: 'quit' });
+        const picked = await this.app.list<string>({ path: [], items: this.homeItems(), categories: CATEGORIES, startAt: this.last, escapeLabel: 'quit', notice: this.notice });
+        this.notice = undefined;
         if (picked.kind === 'back') return 0;
         if (picked.kind !== 'pick') continue;
         this.last = picked.value;
@@ -120,14 +128,19 @@ export class Menu {
     }
   }
 
+  private fileFor(target: 'user' | 'project'): ConfigFile { return target === 'user' ? ConfigFile.user(this.ctx.loaded.configPath) : ConfigFile.project(process.cwd()); }
+
   /** Does what a home entry says. A number ends the menu with that exit code. */
   private async perform(action: Action): Promise<number | undefined> {
     if (action.kind === 'settings') {
-      await new SettingsEditor(this.app, action.target === 'user' ? ConfigFile.user(this.ctx.loaded.configPath) : ConfigFile.project(process.cwd())).run();
+      await new SettingsEditor(this.app, this.fileFor(action.target), this.ctx.dataPath).run();
       this.applyAgentCommands();
       return undefined;
     }
-    if (action.kind === 'apps') return undefined;
+    if (action.kind === 'apps') {
+      this.notice = await new AppsCatalogue(this.app, this.fileFor(action.target), this.ctx.dataPath).run();
+      return undefined;
+    }
     const argv = action.kind === 'run' ? action.argv : action.kind === 'several' ? await new SeveralAgents(this.app, this.ctx).run() : await new CommandForm(this.app, this.ctx, commandSpec(action.command) as CommandSpecT, action.preset).run();
     return argv ? this.execute(argv) : undefined;
   }

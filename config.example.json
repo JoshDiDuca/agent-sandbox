@@ -191,6 +191,10 @@
   "personalization": {
     "enabled": true
   },
+  "apps": {
+    "install": [],
+    "custom": {}
+  },
   "claudeProfile": {
     "enabled": true,
     "hostDir": "auto",

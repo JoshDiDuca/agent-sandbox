@@ -1,7 +1,8 @@
 // Which toolchain and database steps this sandbox runs, in the order their PATH entries are listed, and what each
 // step depends on. The scheduler (index.ts) runs them.
 import path from 'node:path';
-import type { DatabasePlan, GitAccess, Toolchains, ToolVersions } from '../../core/types.js';
+import type { Config, DatabasePlan, GitAccess, Toolchains, ToolVersions } from '../../core/types.js';
+import { appsNeedMesa, setupApps } from '../apps/index.js';
 import { dataDir, execAsync, exists, localDir } from '../env.js';
 import { projectWorkspace } from '../project-context.js';
 import { arch, installOnce, tool, wanted, type ToolEnv } from './common.js';
@@ -25,7 +26,8 @@ import { setupRuby } from './scripting/ruby.js';
 import { setupVcRuntime } from './scripting/vcruntime.js';
 import { setupVscode } from './vscode.js';
 
-export interface ToolchainOptions { gitEnabled: boolean; gitAccess: GitAccess; hostGit: boolean; refresh: boolean; databases: DatabasePlan[] }
+/** apps: the boot only (apps are machine-wide; a project that joins later shares them). */
+export interface ToolchainOptions { gitEnabled: boolean; gitAccess: GitAccess; hostGit: boolean; refresh: boolean; databases: DatabasePlan[]; apps?: Config['apps'] }
 
 /**
  * shared: the step's effect is machine-wide and the same for every project (an installer, a registry entry, a
@@ -67,6 +69,7 @@ const rustHost =(config: Toolchains): string => {
 };
 
 export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOptions): Step[] => {
+  const apps = Boolean(o.apps && (o.apps.install.length || Object.keys(o.apps.custom).length));
   const java = wanted(config.java.enabled, 'java');
   const python = wanted(config.python.enabled, 'python');
   return [
@@ -88,7 +91,8 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
     { name: 'Java', on: java, run: (env) => setupJava(env, config.java) },
     { name: 'Ruby', on: wanted(config.ruby.enabled, 'ruby'), run: (env) => setupRuby(env, config.ruby) },
     // PHP installs the Visual C++ runtime itself: one installer at a time.
-    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled, shared: true, run: async (env) => { await setupVcRuntime(env); } },
+    // Many apps (bat, delta, Neovim, most GUIs, your own programs) are built against it too.
+    { name: 'Visual C++ runtime', on: config.vcRuntime.enabled || apps, shared: true, run: async (env) => { await setupVcRuntime(env); } },
     { name: 'PHP', on: wanted(config.php.enabled, 'php'), after: ['Visual C++ runtime'], run: (env) => setupPhp(env, config.php) },
     { name: 'Deno', on: wanted(config.deno.enabled, 'deno'), run: (env) => setupDeno(env) },
     { name: 'Bun', on: config.bun.enabled, run: (env) => setupBun(env) },
@@ -96,8 +100,10 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
     { name: 'PowerShell 7', on: wanted(config.pwsh.enabled, 'pwsh'), run: (env) => setupPwsh(env, o.refresh) },
     // The openssl tool comes from Git's install: after Git.
     { name: 'CLI tools', on: Object.values(config.cli).some((v) => v !== false), after: ['Git'], run: (env) => setupCli(env, config.cli, o.gitAccess, o.refresh) },
-    { name: 'Mesa 3D', on: config.mesa.enabled, shared: true, run: (env) => setupMesa(env, config.mesa) },
+    { name: 'Mesa 3D', on: config.mesa.enabled || appsNeedMesa(o.apps), shared: true, run: (env) => setupMesa(env, config.mesa) },
     { name: 'VS Code', on: config.vscode.enabled, shared: true, run: (env) => setupVscode(env, o.refresh) },
+    // Desktop apps and extra tools (apps.install / apps.custom); games and 3D apps copy Mesa's OpenGL next to them.
+    { name: 'Apps', on: apps, shared: true, after: ['Mesa 3D', 'Visual C++ runtime'], run: (env) => setupApps(env, o.apps!, { gitAccess: o.gitAccess, refresh: o.refresh }) },
     { name: 'Python tools', on: python && config.python.tools.length > 0, after: ['Python', 'uv'], run: (env) => setupPythonTools(env, config.python.tools) },
     // DynamoDB Local runs on Java: the Java step installs the JDK first instead of racing it.
     // One server per database in the sandbox: a project that joins later shares the one the boot started.

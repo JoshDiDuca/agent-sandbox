@@ -57,6 +57,8 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   const next = mergeConfig(config, rest);
   keepStrictest(config, next);
   if (harness) next.defaultHarness = harness;
+  // A project adds catalogue apps to yours; it never removes the ones you chose.
+  if (rest.apps?.install) next.apps.install = _.union(config.apps.install, rest.apps.install);
   if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
   return next;
 };

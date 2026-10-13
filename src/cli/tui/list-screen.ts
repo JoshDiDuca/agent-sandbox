@@ -231,7 +231,8 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (this.searching) {
       if (key.name === 'escape') { this.searching = false; this.query = ''; this.cursor = 0; return; }
       if (key.name === 'backspace') { if (this.query) this.query = this.query.slice(0, -1); else this.searching = false; this.cursor = 0; return; }
-      if (key.name !== 'return' && key.text && !(this.o.multi && key.name === 'space' && !this.query)) { this.query += key.text; this.cursor = 0; return; }
+      // In a tick list, space always ticks (even while searching).
+      if (key.name !== 'return' && key.text && !(this.o.multi && key.name === 'space')) { this.query += key.text; this.cursor = 0; return; }
     }
     if (this.o.categories && !this.query) {
       if (key.name === 'left' && this.focus === 'list') { this.focus = 'side'; return; }

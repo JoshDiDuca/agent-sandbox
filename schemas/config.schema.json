@@ -1009,6 +1009,141 @@
       },
       "additionalProperties": false
     },
+    "apps": {
+      "type": "object",
+      "properties": {
+        "install": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "notepadpp",
+              "sublime",
+              "neovim",
+              "dbeaver",
+              "pgadmin",
+              "heidisql",
+              "sqlitebrowser",
+              "compass",
+              "redisinsight",
+              "dbgate",
+              "beekeeper",
+              "dynamodb-admin",
+              "bruno",
+              "insomnia",
+              "sourcegit",
+              "githubdesktop",
+              "lazygit",
+              "7zip",
+              "winmerge",
+              "everything",
+              "sysinternals",
+              "imhex",
+              "chrome",
+              "firefox",
+              "godot",
+              "blender",
+              "love",
+              "defold",
+              "pixelorama",
+              "tiled",
+              "kubectl",
+              "helm",
+              "k9s",
+              "terraform",
+              "azure-cli",
+              "gcloud",
+              "aws-cli",
+              "drawio",
+              "pandoc",
+              "mitmproxy",
+              "xh",
+              "grpcurl",
+              "k6",
+              "jq",
+              "yq",
+              "ripgrep",
+              "fd",
+              "bat",
+              "fzf",
+              "delta",
+              "just",
+              "hyperfine",
+              "watchexec",
+              "protoc",
+              "ninja",
+              "ffmpeg",
+              "sqlite",
+              "shellcheck",
+              "gitleaks"
+            ]
+          },
+          "description": "Apps from the catalogue to install in every sandbox (the Apps screen in the menu lists them by category). Each is downloaded once and kept."
+        },
+        "custom": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "The name on the desktop shortcut, e.g. \"My Tool\"."
+              },
+              "github": {
+                "description": "GitHub repository (owner/repo): the file comes from its latest release.",
+                "type": "string",
+                "pattern": "^[\\w.-]+\\/[\\w.-]+$"
+              },
+              "asset": {
+                "description": "With github: a pattern (regular expression) matching the release file, e.g. windows.*x64\\.zip$",
+                "type": "string",
+                "maxLength": 200
+              },
+              "url": {
+                "description": "Or a direct https:// download link (zip, 7z, exe or msi).",
+                "type": "string",
+                "format": "starts_with",
+                "pattern": "^https:\\/\\/.*"
+              },
+              "sha256": {
+                "description": "SHA-256 of the download (GitHub releases usually publish one; then this is not needed).",
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              },
+              "unpack": {
+                "description": "archive (zip, 7z, tar: the default), file (a single .exe), nsis (an installer 7-Zip can open) or msi.",
+                "type": "string",
+                "enum": [
+                  "archive",
+                  "file",
+                  "nsis",
+                  "msi"
+                ]
+              },
+              "exe": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "The program to start (found anywhere in the download), e.g. mytool.exe."
+              },
+              "cli": {
+                "description": "A command-line tool: its folder goes on PATH instead of getting a desktop shortcut.",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Programs of your own: a GitHub release or a download link, and the program to start. Installed like the catalogue apps."
+        }
+      },
+      "additionalProperties": false
+    },
     "claudeProfile": {
       "type": "object",
       "properties": {

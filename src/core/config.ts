@@ -50,6 +50,7 @@ export const DEFAULTS: Config = {
   agentCommands: { enabled: false, agents: 'auto' },
   secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
+  apps: { install: [], custom: {} },
   claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },
   harnesses: {
     claude: { hostExecutable: 'claude.exe', hostDir: 'auto', npmPackage: '@anthropic-ai/claude-code@latest', npmBin: 'claude', arguments: [], environment: { DISABLE_AUTOUPDATER: '1' }, resumeArguments: ['--continue'] },

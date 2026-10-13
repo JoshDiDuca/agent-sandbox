@@ -61,6 +61,11 @@ export class ValueEditor {
         const typed = await this.app.text({ path, label: Text.humanize(key[key.length - 1]), about, initial: typeof current === 'string' ? current : '', allowEmpty: node.check('') === true, validate: (v) => node.check(v) });
         return typed === undefined ? undefined : { value: typed };
       }
+      case 'choice-list': {
+        const ticked = Array.isArray(current) ? current : [];
+        const picked = await this.app.list<unknown>({ path, intro: node.description, multi: true, items: node.element!.choices.map((v) => ({ value: v, label: String(v), checked: ticked.includes(v) })) });
+        return picked.kind === 'multi' ? { value: picked.values } : undefined;
+      }
       case 'string-list': return new StringListEditor(this.app, path, node, this).run(Array.isArray(current) ? current as string[] : []);
       case 'string-map': return new MapEditor(this.app, path, node, this).run(_.isPlainObject(current) ? current as Record<string, unknown> : {});
       case 'object-list': return new ObjectListEditor(this.app, path, node, this).run(Array.isArray(current) ? current as Record<string, unknown>[] : []);

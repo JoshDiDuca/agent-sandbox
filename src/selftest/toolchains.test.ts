@@ -5,6 +5,8 @@ import { javaMajorFrom, pickGoRelease, pickNodeVersion, pickPackageVersion, pick
 import { parseReleasePage, parseReleaseTags } from '../shared/download.js';
 import { decidePwsh, pcHasPwsh, PWSH_MAX_BYTES, readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
 import { binstallAsset, CLI_TOOLS, decideCli, pwshAsset, type CliSettings } from '../guest/toolchains/catalogue.js';
+import { APP_CATEGORIES, APPS, appsNeedMesa, appsToInstall, exeMatcher } from '../shared/apps.js';
+import { Config, LocalOverrides } from '../core/schema.js';
 import type { Suite } from './suite.js';
 
 export const toolchainsSuite: Suite = {
@@ -112,5 +114,20 @@ export const toolchainsSuite: Suite = {
     const scanned = readPwshScripts(scanRoot);
     t.equal(scanned.map((s) => s.path), ['moh.ps1', 'scripts/build.ps1'], 'pwsh scan: *.ps1 at the root and one folder down only (node_modules skipped)');
     t.equal(scanned[1].text.length, PWSH_MAX_BYTES, 'pwsh scan: each script is read up to its cap');
+
+    t.section('apps catalogue');
+    const ids = APPS.map((a) => a.id);
+    t.equal(ids.filter((id, i) => ids.indexOf(id) !== i), [], 'apps: every id is unique');
+    t.equal(APPS.filter((a) => !APP_CATEGORIES.some((c) => c.id === a.category)).map((a) => a.id), [], 'apps: every app is in a known category');
+    t.equal(APPS.filter((a) => 'github' in a.source && (() => { try { new RegExp(a.source.asset); return false; } catch { return true; } })()).map((a) => a.id), [], 'apps: every GitHub asset pattern compiles');
+    t.check(exeMatcher('/^Godot_v[\\d.]+-stable_win64\\.exe$/')('Godot_v4.7.2-stable_win64.exe') && !exeMatcher('/^Godot_v[\\d.]+-stable_win64\\.exe$/')('Godot_v4.7.2-stable_win64_console.exe') && exeMatcher('Code.exe')('code.EXE'), 'apps: the program is found by name or by pattern');
+    const chosen = appsToInstall({ install: ['firefox', 'jq', 'githubdesktop'], custom: { mine: { name: 'Mine', url: 'https://example.com/m.zip', exe: 'm.exe' } } }, 'readonly');
+    t.equal(chosen.entries.map((e) => e.id), ['7zip', 'firefox', 'jq', 'custom/mine'], 'apps: 7-Zip comes first when an installer needs it; your own programs follow');
+    t.equal(chosen.skipped.length, 1, 'apps: an app with its own git (GitHub Desktop) is skipped unless git access is "full"');
+    t.check(appsNeedMesa({ install: ['godot'], custom: {} }) && !appsNeedMesa({ install: ['jq'], custom: {} }), 'apps: game engines bring Mesa (OpenGL without a GPU) along');
+    const custom = (app: object): boolean => Config.shape.apps.shape.custom.safeParse({ x: app }).success;
+    t.check(custom({ name: 'A', github: 'o/r', asset: 'win.*\\.zip$', exe: 'a.exe' }) && custom({ name: 'B', url: 'https://x.org/b.zip', exe: 'b.exe' }), 'apps: your own program comes from a GitHub release or an https link');
+    t.check(!custom({ name: 'C', url: 'http://x.org/c.zip', exe: 'c.exe' }) && !custom({ name: 'D', github: 'o/r', asset: '(', exe: 'd.exe' }) && !custom({ name: 'E', github: 'o/r', asset: 'x', url: 'https://x.org', exe: 'e.exe' }), 'apps: plain http, a broken pattern, or both sources are refused');
+    t.check(!LocalOverrides.safeParse({ apps: { custom: {} } }).success && LocalOverrides.safeParse({ apps: { install: ['jq'] } }).success, 'apps: a project file may add catalogue apps but never programs of its own');
   },
 };

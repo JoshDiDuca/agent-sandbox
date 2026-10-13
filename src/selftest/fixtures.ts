@@ -79,7 +79,8 @@ export const createFixtures = (t: Harness) => {
     resolveRun({ packageRoot: install, loaded: { config, configPath: null, base: t.temp }, cwd: workA, noAgent: false, noLocalConfig: false, trustConfig: false, scripts: [], ...over }, HOST_NODE_VERSION);
 
   const generate = (r: ResolvedRun, args: string[] = [], p: HostProbe = probe): ReturnType<typeof generateSandbox> =>
-    generateSandbox({ packageRoot: t.packageRoot, run: r, harnessArgs: args, probe: p });
+    // A fixed "this PC has" list, so "auto" toolchains decide the same on every machine the tests run on.
+    generateSandbox({ packageRoot: t.packageRoot, run: r, harnessArgs: args, probe: p, pcLanguages: ['python', 'rust', 'cpp', 'dotnet'] });
 
   /** Resolves a run and generates its sandbox (.wsb + launch folder + session.json) in one step. */
   const launch = async (over: Partial<RunRequest> = {}, options: { config?: Config; args?: string[]; probe?: HostProbe } = {}): Promise<ReturnType<typeof generateSandbox>> =>

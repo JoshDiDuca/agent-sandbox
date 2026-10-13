@@ -19,4 +19,5 @@ export const SYSTEM = {
   robocopy: (): string => system32('Robocopy.exe'),
   shutdown: (): string => system32('shutdown.exe'),
   dism: (): string => system32('Dism.exe'),
+  msiexec: (): string => system32('msiexec.exe'),
 } as const;

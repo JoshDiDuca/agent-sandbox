@@ -9,7 +9,7 @@ type Def = {
 type ZodLike = z.ZodType & { _zod: { def: Def }; shape?: Record<string, ZodLike>; description?: string; minValue?: number | null; maxValue?: number | null };
 
 /** The editor a setting gets. */
-export type EditorKind = 'boolean' | 'choice' | 'union' | 'number' | 'string' | 'string-list' | 'object-list' | 'string-map' | 'object-map' | 'object' | 'json';
+export type EditorKind = 'boolean' | 'choice' | 'union' | 'number' | 'string' | 'string-list' | 'choice-list' | 'object-list' | 'string-map' | 'object-map' | 'object' | 'json';
 
 /** Settings never shown (the link to the JSON Schema). */
 const HIDDEN = new Set(['$schema']);
@@ -77,7 +77,7 @@ export class SchemaNode {
     if (type === 'union') return this.options.every((o) => ['literal', 'enum', 'boolean'].includes(o.type)) ? 'choice' : 'union';
     if (type === 'number' || type === 'string') return type;
     const element = this.element;
-    if (type === 'array' && element) return element.type === 'string' ? 'string-list' : element.type === 'object' ? 'object-list' : 'json';
+    if (type === 'array' && element) return element.type === 'string' ? 'string-list' : element.type === 'enum' ? 'choice-list' : element.type === 'object' ? 'object-list' : 'json';
     if (type === 'record' && element) return ['string', 'number', 'boolean'].includes(element.type) ? 'string-map' : element.type === 'object' ? 'object-map' : 'json';
     if (type === 'object') return 'object';
     return 'json';

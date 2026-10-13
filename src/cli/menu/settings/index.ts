@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { NEVER_LOOSER } from '../../../core/local-config.js';
 import type { Config } from '../../../core/types.js';
 import { App, Text, Theme, type Category, type ListItem } from '../../tui/index.js';
+import { AppsCatalogue } from '../apps.js';
 import { CATEGORIES, categoryOf, nameOf } from './categories.js';
 import { ConfigFile } from './config-file.js';
 import { formatValue, ValueEditor } from './editors.js';
@@ -19,7 +20,8 @@ interface Setting { key: string[]; node: SchemaNode; category: string; section?:
 export class SettingsEditor {
   private readonly editor: ValueEditor;
 
-  constructor(private readonly app: App, private readonly file: ConfigFile) {
+  /** dataPath: where the apps catalogue looks for what is installed already. */
+  constructor(private readonly app: App, private readonly file: ConfigFile, private readonly dataPath = '') {
     this.editor = new ValueEditor(app, { suggestions: (key) => (['defaultHarness', 'harness'].includes(key.join('.')) ? Object.keys(this.file.userConfig().harnesses) : undefined) });
   }
 
@@ -93,6 +95,8 @@ export class SettingsEditor {
   }
 
   private async edit(s: Setting, config: Config): Promise<string | undefined> {
+    // The apps list is picked from the catalogue (by category, with sizes), not typed.
+    if (s.key.join('.') === 'apps.install') return new AppsCatalogue(this.app, this.file, this.dataPath).run();
     const current = this.file.isProject ? this.file.valueInFile(s.key) ?? _.get(config, s.key) : _.get(config, s.key);
     const path = [this.title, ...s.key.slice(0, -1).map(nameOf), Text.humanize(s.key[s.key.length - 1])];
     const edited = await this.editor.edit(path, s.key, s.node, current);
