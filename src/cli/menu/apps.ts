@@ -7,8 +7,9 @@ import path from 'node:path';
 import _ from 'lodash';
 import { APP_CATEGORIES, APPS, type AppEntry } from '../../shared/apps/index.js';
 import { App, Text, Theme, type ListItem } from '../tui/index.js';
-import type { ConfigFile } from './settings/config-file.js';
-import { ValueEditor } from './settings/editors.js';
+import type { ConfigFile } from './settings/index.js';
+// Direct, not the barrel: settings/settings-editor.ts imports this file.
+import { ValueEditor } from './settings/value-editor.js';
 
 const CUSTOM = '@custom';
 

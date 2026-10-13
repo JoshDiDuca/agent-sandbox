@@ -4,8 +4,9 @@ import { askYesNo } from '../../../core/prompt.js';
 import { fail, isWin } from '../../../core/util/index.js';
 import { refuseInSelfTest } from '../../../host/test-guard.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { c } from '../../colors.js';
-import { table, type Context } from '../context.js';
+import { c } from '../../output/index.js';
+import { table } from '../../output/index.js';
+import { type Context } from '../context.js';
 import { buildChecks, canEnableFeature, type Check, type CheckStatus } from './checks.js';
 import { ENABLE_COMMAND, gatherFacts } from './facts.js';
 

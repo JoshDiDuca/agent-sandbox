@@ -1,46 +1,18 @@
 import path from 'node:path';
-import { CommanderError } from 'commander';
 import { buildProgram, parseCli } from './args.js';
 import { commandSpec } from './manifest.js';
-import { c } from './colors.js';
 import { recordHistory } from './history.js';
 import { menu } from './menu/index.js';
 import { validateOptions } from './validate.js';
 import { loadConfig } from '../core/config/index.js';
 import * as commands from './commands/index.js';
-import { UserError, errMsg, fail, plainText } from '../core/util/index.js';
+import { fail } from '../core/util/index.js';
 import { PACKAGE_ROOT } from '../core/package-info.js';
+import { withConfig, hoistConfig, withoutConfig } from './argv.js';
+import { report } from './report.js';
+import { HANDLERS } from './commands/index.js';
 
 const entry = path.join(PACKAGE_ROOT, 'dist', 'bin', 'agent-sandbox.js');
-
-type Handler = (ctx: commands.Context) => number | Promise<number | void>;
-
-const HANDLERS: Record<string, Handler> = {
-  launch: (ctx) => commands.launch(ctx),
-  generate: (ctx) => commands.launch(ctx, true),
-  attach: commands.attach,
-  sessions: commands.sessions,
-  status: commands.status,
-  exec: commands.exec,
-  'agent-commands': commands.agentCommandsCommand,
-  db: commands.db,
-  restart: commands.restart,
-  stop: commands.stop,
-  show: commands.show,
-  hide: commands.hide,
-  account: commands.account,
-  projects: commands.projects,
-  sync: commands.sync,
-  logs: commands.logs,
-  audit: commands.audit,
-  clean: commands.clean,
-  config: commands.config,
-  doctor: commands.doctor,
-  setup: commands.setup,
-  data: commands.data,
-  'host-claude': commands.claudeHost,
-  _watch: commands.watcher,
-};
 
 export interface Preset {
   harness?: string;
@@ -52,20 +24,6 @@ const runFromMenu =
   (config: string | undefined) =>
   (argv: string[]): Promise<number> =>
     main(withConfig(argv, config)).catch((e: unknown) => report(e));
-
-/** `--config <file>` right after the command name (where every command accepts it); argv unchanged without a config. */
-export const withConfig = (argv: string[], config: string | undefined): string[] =>
-  config && argv.length ? [argv[0], '--config', config, ...argv.slice(1)] : argv;
-
-/** `sandbox --config f.json status` works like `sandbox status --config f.json`: a leading --config moves behind the command. */
-export const hoistConfig = (argv: string[]): string[] => {
-  const eq = argv[0]?.startsWith('--config=');
-  if (argv[0] !== '--config' && !eq) return argv;
-  const value = eq ? argv[0].slice('--config='.length) : argv[1];
-  const rest = argv.slice(eq ? 1 : 2);
-  if (value === undefined || value === '') return argv;
-  return rest.length ? withConfig(rest, value) : ['menu', '--config', value];
-};
 
 /**
  * CLI entry. `preset` lets wrapper binaries fix the command/agent (sandbox claude = launch --harness claude). No arguments
@@ -115,31 +73,6 @@ export const main = async (rawArgv: string[], preset: Preset = {}): Promise<numb
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));
   return (await handler(ctx)) ?? 0;
-};
-
-/** argv without `--config <file>` / `--config=<file>`. */
-export const withoutConfig = (argv: string[]): string[] =>
-  argv.filter((a, i) => a !== '--config' && argv[i - 1] !== '--config' && !a.startsWith('--config='));
-
-/** Prints a problem the way a user can act on it: what happened, how to fix it; stack traces only for real bugs. */
-export const report = (e: unknown): number => {
-  if (e instanceof CommanderError)
-    return ['commander.helpDisplayed', 'commander.help', 'commander.version'].includes(e.code) ? 0 : e.exitCode || 1;
-  if (e instanceof UserError) {
-    // Messages can quote what the sandbox wrote (a session's status, an address): never with its control codes.
-    console.error(c.red('Error: ') + plainText(e.message));
-    if (e.fix) console.error('  Fix:  ' + plainText(e.fix));
-    return 1;
-  }
-  console.error(c.red('Unexpected error: ') + errMsg(e));
-  console.error(
-    c.dim(
-      'This is a bug in windows-development-sandbox. Details: ' +
-        (e instanceof Error && e.stack ? e.stack.split('\n').slice(1, 4).join(' | ').trim() : 'none'),
-    ),
-  );
-  console.error('  Please report it with the output of: sandbox doctor');
-  return 1;
 };
 
 export const run = (argv: string[], preset?: Preset): void => {

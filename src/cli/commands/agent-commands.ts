@@ -8,9 +8,10 @@ import { agentCommands, commandsDir } from '../../host/agent-commands/index.js';
 import { reconcileAgentCommands, type Reconciled } from '../../host/agent-commands/index.js';
 import { insideSandbox } from '../../host/sandbox/index.js';
 import { writeFileAtomic } from '../../shared/io/index.js';
-import { c } from '../colors.js';
-import { editConfigText } from '../menu/settings/config-file.js';
-import { table, type Context } from './context.js';
+import { c } from '../output/index.js';
+import { editConfigText } from '../menu/settings/index.js';
+import { table } from '../output/index.js';
+import { type Context } from './context.js';
 
 const entryOf = (ctx: Context): string => path.join(ctx.packageRoot, 'dist', 'bin', 'sandbox.js');
 

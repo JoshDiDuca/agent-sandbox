@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { fail } from '../core/util/index.js';
-import { c } from './colors.js';
+import { c } from './output/index.js';
 import { COMMANDS, type OptionSpecT } from './manifest.js';
 import { packageVersion } from '../core/package-info.js';
 

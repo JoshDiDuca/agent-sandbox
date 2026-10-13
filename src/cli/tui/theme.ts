@@ -1,5 +1,5 @@
 // The look of every screen: colours (off with NO_COLOR, like the rest of the CLI) and the line-drawing characters.
-import { colorEnabled } from '../colors.js';
+import { colorEnabled } from '../output/index.js';
 
 const sgr =
   (open: string, close = '0') =>

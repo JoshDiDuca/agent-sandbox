@@ -1,7 +1,6 @@
 // What every command receives, plus the small helpers they share.
 import fs from 'node:fs';
 import path from 'node:path';
-import _ from 'lodash';
 import type { CliOptions } from '../args.js';
 import type { LoadedConfig } from '../../core/types.js';
 import { loadConfig, userDir } from '../../core/config/index.js';
@@ -46,28 +45,6 @@ export const createContext = (packageRoot: string, entry: string, options: CliOp
     storageRoot,
     dataPath: insideSandbox() ? GUEST_DATA_DIR : path.join(storageRoot, 'data', loaded.config.storage.dataName),
   };
-};
-
-/** Prints rows as aligned columns (the last column is not padded). */
-export const table = (rows: string[][]): void => {
-  const widths = _.range(_.max(rows.map((r) => r.length)) ?? 0).map(
-    (i) => _.max(rows.map((r) => (r[i] ?? '').length)) ?? 0,
-  );
-  for (const row of rows)
-    console.log(row.map((cell, i) => (i === row.length - 1 ? cell : _.padEnd(cell, widths[i] + 2))).join(''));
-};
-
-/** Prints `value` as JSON when --json was given; returns whether it did. */
-export const printJson = (ctx: Context, value: unknown): boolean => {
-  // JSON.stringify leaves C1 controls (U+0080-U+009F) as they are; text from the sandbox must not reach a terminal raw.
-  if (ctx.options.json)
-    console.log(
-      JSON.stringify(value, null, 2).replace(
-        /[\u0080-\u009f]/g,
-        (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'),
-      ),
-    );
-  return ctx.options.json;
 };
 
 export const sandboxAlive = (): boolean => isSandboxRunning();

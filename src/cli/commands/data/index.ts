@@ -4,8 +4,9 @@
 import _ from 'lodash';
 import { diskUsage, humanBytes } from '../../../core/disk.js';
 import { fail } from '../../../core/util/index.js';
-import { printJson, table, type Context } from '../context.js';
-import { working } from '../../progress.js';
+import { printJson, table } from '../../output/index.js';
+import { type Context } from '../context.js';
+import { working } from '../../output/index.js';
 import { dataClean } from './clean.js';
 import { collectDataEntries, type DataArea } from './collect.js';
 

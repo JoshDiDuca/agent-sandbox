@@ -11,7 +11,8 @@ import { restartSessions, runningSessions } from '../../host/channel/index.js';
 import { hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { fail, safeText } from '../../core/util/index.js';
-import { printJson, sandboxAlive, table, type Context } from './context.js';
+import { printJson, table } from '../output/index.js';
+import { sandboxAlive, type Context } from './context.js';
 
 const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
 

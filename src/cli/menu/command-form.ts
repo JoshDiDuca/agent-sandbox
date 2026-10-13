@@ -1,8 +1,6 @@
 // One command as a form: its arguments and options listed with their current values, each changed in place, and the
 // exact command line it will run shown live (the same line you could type yourself). Built from manifest.ts, so a new
 // command or option appears here on its own.
-import fs from 'node:fs';
-import path from 'node:path';
 import { humanBytes } from '../../core/disk.js';
 import { fail, plainText } from '../../core/util/index.js';
 import { listAccounts } from '../../host/profile/index.js';
@@ -12,29 +10,9 @@ import { splitArgs } from '../args.js';
 import type { Context } from '../commands/context.js';
 import { cleanTargetOf, collectDataEntries } from '../commands/data/collect.js';
 import { commandLine } from '../history.js';
-import { askedWhen, type ArgSpecT, type CommandSpecT, type OptionSpecT } from '../manifest.js';
+import { askedWhen, type CommandSpecT, type OptionSpecT } from '../manifest.js';
 import { App, Text, Theme, type ListItem } from '../tui/index.js';
-import { validNodeSpec, validPythonSpec } from '../validate.js';
-
-/** What an option accepts, checked while typing (undefined = fine). */
-export const optionProblem = (o: OptionSpecT, v: string): string | undefined => {
-  if (v === '') return undefined;
-  if (o.type === 'number' && !(Number(v) > 0)) return 'Enter a number greater than 0.';
-  if (o.flag === '--node' && !validNodeSpec(v)) return 'Use a number like 22 or 22.11.0, or lts, latest.';
-  if (o.flag === '--python' && !validPythonSpec(v)) return 'Use 3, 3.12 or 3.12.4.';
-  if (o.value === 'dir' && !fs.existsSync(path.resolve(v))) return 'That folder does not exist.';
-  if (o.value === 'file') {
-    const missing = splitArgs(v).find((f) => !fs.existsSync(path.resolve(f)));
-    if (missing) return missing + ' does not exist.';
-  }
-  return undefined;
-};
-
-type Field =
-  | { kind: 'arg'; spec: ArgSpecT; index: number }
-  | { kind: 'option'; spec: OptionSpecT }
-  | { kind: 'json' }
-  | { kind: 'extra' };
+import { type Field, optionProblem } from './command-fields.js';
 
 const RUN = '@run';
 

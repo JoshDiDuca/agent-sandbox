@@ -2,16 +2,16 @@
 // these, so they all agree: `locateHere` only looks (attach, sessions, status, restart), `joinHere` also makes the
 // folder a project of the running sandbox when it can without a restart (launch, start, exec, db).
 import path from 'node:path';
-import type { SandboxStatus } from '../../core/types.js';
-import { askYesNo } from '../../core/prompt.js';
-import { isInsideOrEqual } from '../../core/util/index.js';
-import { resolveRun } from '../../core/run/index.js';
-import { prepareProject } from '../../host/channel/index.js';
-import { projectHere, readRegistry, type RegistryEntry } from '../../host/projects/index.js';
-import { joinRunning } from '../../host/projects/index.js';
-import type { ProjectSpecT } from '../../shared/channel/index.js';
-import { working } from '../progress.js';
-import { guestPathFor, sandboxAlive, type Context } from './context.js';
+import type { SandboxStatus } from '../../../core/types.js';
+import { askYesNo } from '../../../core/prompt.js';
+import { isInsideOrEqual } from '../../../core/util/index.js';
+import { resolveRun } from '../../../core/run/index.js';
+import { prepareProject } from '../../../host/channel/index.js';
+import { projectHere, readRegistry, type RegistryEntry } from '../../../host/projects/index.js';
+import { joinRunning } from '../../../host/projects/index.js';
+import type { ProjectSpecT } from '../../../shared/channel/index.js';
+import { working } from '../../output/index.js';
+import { guestPathFor, sandboxAlive, type Context } from '../context.js';
 
 /** The folder the command is about: --workspace, else the current one. */
 export const hereDir = (ctx: Context): string => path.resolve(ctx.options.workspace ?? process.cwd());

@@ -5,19 +5,19 @@
 // where the agent supports it) and then starts the new project's session.
 import path from 'node:path';
 import _ from 'lodash';
-import type { SessionStatus } from '../../core/types.js';
-import { askYesNo } from '../../core/prompt.js';
-import { fail, safeText, sleep } from '../../core/util/index.js';
-import { currentSessions, execInSandbox } from '../../host/channel/index.js';
-import { isSandboxRunning } from '../../host/sandbox/index.js';
-import { readRegistry, type ProjectRegistry } from '../../host/projects/index.js';
-import { type NeedsRestart } from '../../host/projects/index.js';
-import { hostDirFor, projectForGuestDir } from '../../shared/paths/index.js';
-import { readSandboxStatus } from '../../shared/channel/index.js';
-import { watcherRunning } from '../../sync/index.js';
-import { c } from '../colors.js';
-import { working } from '../progress.js';
-import { sandboxAlive, type Context } from './context.js';
+import type { SessionStatus } from '../../../core/types.js';
+import { askYesNo } from '../../../core/prompt.js';
+import { fail, safeText, sleep } from '../../../core/util/index.js';
+import { currentSessions, execInSandbox } from '../../../host/channel/index.js';
+import { isSandboxRunning } from '../../../host/sandbox/index.js';
+import { readRegistry, type ProjectRegistry } from '../../../host/projects/index.js';
+import { type NeedsRestart } from '../../../host/projects/index.js';
+import { hostDirFor, projectForGuestDir } from '../../../shared/paths/index.js';
+import { readSandboxStatus } from '../../../shared/channel/index.js';
+import { watcherRunning } from '../../../sync/index.js';
+import { c } from '../../output/index.js';
+import { working } from '../../output/index.js';
+import { sandboxAlive, type Context } from '../context.js';
 
 /** "2 sessions (claude in api, codex in web)". */
 export const describeSessions = (sessions: Pick<SessionStatus, 'harness' | 'cwd' | 'project'>[]): string =>
@@ -119,8 +119,8 @@ export const offerRestart = async (
 
   await stopAndWait(ctx);
   // Imported here: launch.ts imports this file.
-  const { launch, openSession, readySandbox } = await import('./launch.js');
-  const { joinHere } = await import('./project.js');
+  const { launch, openSession, readySandbox } = await import('../launch/index.js');
+  const { joinHere } = await import('./here.js');
   const keep = registry.projects.filter((p) => !p.primary && p.mechanism !== 'root').map((p) => p.host);
   const relaunch: Context = {
     ...ctx,

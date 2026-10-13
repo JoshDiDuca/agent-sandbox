@@ -1,22 +1,14 @@
 // The menu as an application: screens are shown one at a time in the frame, each until it is done. Commands that print
 // (or take over the terminal) run with the terminal handed back, and the next screen takes it again.
-import { ConfirmScreen, MessageScreen, TextScreen, type ConfirmOptions, type TextOptions } from './dialogs.js';
-import { Frame, type FrameParts } from './frame.js';
-import { ListScreen, type ListOptions, type ListResult } from './list-screen.js';
-import { Terminal, type Key } from './terminal.js';
+import { ConfirmScreen, type ConfirmOptions } from './dialogs/confirm-screen.js';
+import { MessageScreen } from './dialogs/message-screen.js';
+import { TextScreen, type TextOptions } from './dialogs/text-screen.js';
+import { Frame } from './frame.js';
+import { ListScreen } from './list/list-screen.js';
+import { type ListOptions, type ListResult } from './list/list-types.js';
+import { Terminal } from './terminal.js';
 import { Theme } from './theme.js';
-
-export interface Size {
-  width: number;
-  height: number;
-}
-/** What a screen's key handler returns: `{ done: value }` ends the screen, nothing keeps it open (and redraws it). */
-export type Step<T> = { done: T } | undefined | void;
-
-export interface Screen<T> {
-  render(size: Size): FrameParts;
-  handle(key: Key): Step<T> | Promise<Step<T>>;
-}
+import type { Screen } from './screen.js';
 
 export class App {
   /** The status line for screens that do not set their own (refreshed on every draw). */

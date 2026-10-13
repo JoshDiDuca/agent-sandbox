@@ -6,7 +6,8 @@ import { humanBytes, sizeOf } from '../../../core/disk.js';
 import { askTyped, askYesNo } from '../../../core/prompt.js';
 import { assertNoLinks, fail, isInsideOrEqual, isLink } from '../../../core/util/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { table, type Context } from '../context.js';
+import { table } from '../../output/index.js';
+import { type Context } from '../context.js';
 import { removeTree } from './remove.js';
 
 export interface CleanTarget {

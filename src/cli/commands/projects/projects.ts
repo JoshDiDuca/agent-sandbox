@@ -3,17 +3,18 @@
 // effect at the next start; a project you start while a sandbox runs joins it when it can (projects.ts in host/).
 import path from 'node:path';
 import { checkbox } from '@inquirer/prompts';
-import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js';
-import { dirExists, expandPath, fail, isRootPath } from '../../core/util/index.js';
-import { isSandboxRunning } from '../../host/sandbox/index.js';
-import { forgetProject, readKnown, rememberProject } from '../../host/projects/index.js';
-import { projectMapper } from '../../host/projects/index.js';
-import { readRegistry } from '../../host/projects/index.js';
-import { isWithin } from '../../shared/paths/index.js';
-import { c, pageSizeFor, shortenMiddle, termWidth } from '../colors.js';
-import { printJson, table, type Context } from './context.js';
-import { hereDir } from './project.js';
-import { addToList, removeFromList, setSetting } from './user-config.js';
+import { assertSafeMapping, assertSafeWorkspace } from '../../../core/safe-paths.js';
+import { dirExists, expandPath, fail, isRootPath } from '../../../core/util/index.js';
+import { isSandboxRunning } from '../../../host/sandbox/index.js';
+import { forgetProject, readKnown, rememberProject } from '../../../host/projects/index.js';
+import { projectMapper } from '../../../host/projects/index.js';
+import { readRegistry } from '../../../host/projects/index.js';
+import { isWithin } from '../../../shared/paths/index.js';
+import { c, pageSizeFor, shortenMiddle, termWidth } from '../../output/index.js';
+import { printJson, table } from '../../output/index.js';
+import { type Context } from '../context.js';
+import { hereDir } from './here.js';
+import { addToList, removeFromList, setSetting } from '../user-config.js';
 
 interface Row {
   folder: string;

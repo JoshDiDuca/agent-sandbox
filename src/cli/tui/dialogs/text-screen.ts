@@ -1,13 +1,10 @@
 // The small screens: typing a value (with checking as you type), yes/no, and a message to read.
-import type { FrameParts } from './frame.js';
-import type { Screen, Size, Step } from './app.js';
-import type { Key } from './terminal.js';
-import { Text } from './text.js';
-import { Theme } from './theme.js';
-
-/** Plain lines are wrapped to the width; coloured ones are kept as they are (the frame cuts them). */
-const paragraphs = (lines: string[], width: number): string[] =>
-  lines.flatMap((l) => (Text.strip(l) === l ? Text.wrap(l, width - 4) : [l]).map((x) => '  ' + x));
+import type { FrameParts } from '../frame.js';
+import type { Screen, Size, Step } from '../screen.js';
+import type { Key } from '../terminal.js';
+import { Text } from '../text.js';
+import { Theme } from '../theme.js';
+import { paragraphs } from './paragraphs.js';
 
 export interface TextOptions {
   path: string[];
@@ -124,119 +121,5 @@ export class TextScreen implements Screen<string | undefined> {
   private check(): void {
     const verdict = this.value === '' ? true : (this.o.validate?.(this.value) ?? true);
     this.problem = verdict === true ? undefined : verdict;
-  }
-}
-
-export interface ConfirmOptions {
-  path: string[];
-  question: string;
-  about?: string[];
-  yes?: string;
-  no?: string;
-  initial?: boolean;
-  danger?: boolean;
-}
-
-/** Yes or no. Esc answers no. */
-export class ConfirmScreen implements Screen<boolean> {
-  private yes: boolean;
-  constructor(private readonly o: ConfirmOptions) {
-    this.yes = o.initial ?? true;
-  }
-
-  render(size: Size): FrameParts {
-    const button = (label: string, on: boolean, danger = false): string =>
-      on
-        ? danger
-          ? Theme.colour
-            ? '\x1b[48;5;160m\x1b[97m ' + label + ' \x1b[0m'
-            : '[' + label + ']'
-          : Theme.selected(' ' + label + ' ')
-        : Theme.muted(' ' + label + ' ');
-    const body = [
-      '',
-      '  ' + Theme.bold(this.o.question),
-      ...(this.o.about?.length ? ['', ...paragraphs(this.o.about, size.width)] : []),
-      '',
-      '  ' + button(this.o.yes ?? 'Yes', this.yes, this.o.danger) + '   ' + button(this.o.no ?? 'No', !this.yes),
-    ];
-    return {
-      path: this.o.path,
-      body,
-      keys: [
-        ['←→', 'choose'],
-        ['↵', 'confirm'],
-        ['y/n', 'answer'],
-        ['esc', 'no'],
-      ],
-    };
-  }
-
-  handle(key: Key): Step<boolean> {
-    if (key.name === 'left' || key.name === 'right' || key.name === 'tab') {
-      this.yes = !this.yes;
-      return;
-    }
-    if (key.text?.toLowerCase() === 'y') return { done: true };
-    if (key.text?.toLowerCase() === 'n' || key.name === 'escape') return { done: false };
-    if (key.name === 'return') return { done: this.yes };
-    return;
-  }
-}
-
-/** Text to read (scrolls); any key but the arrows closes it. */
-export class MessageScreen implements Screen<void> {
-  private offset = 0;
-  private height = 10;
-  constructor(
-    private readonly o: { path: string[]; title?: string; lines: string[]; tone?: 'ok' | 'warn' | 'error' },
-  ) {}
-
-  render(size: Size): FrameParts {
-    const paint =
-      this.o.tone === 'ok'
-        ? Theme.ok
-        : this.o.tone === 'warn'
-          ? Theme.warn
-          : this.o.tone === 'error'
-            ? Theme.error
-            : Theme.bold;
-    const head = this.o.title ? ['', '  ' + paint(this.o.title), ''] : [''];
-    const lines = this.o.lines
-      .flatMap((l) => (Text.width(l) > size.width - 4 && Text.strip(l) === l ? Text.wrap(l, size.width - 4) : [l]))
-      .map((l) => '  ' + l);
-    this.height = size.height - head.length;
-    this.offset = Math.max(0, Math.min(this.offset, lines.length - this.height));
-    return {
-      path: this.o.path,
-      body: [...head, ...lines.slice(this.offset, this.offset + this.height)],
-      keys:
-        lines.length > this.height
-          ? [
-              ['↑↓', 'scroll'],
-              ['↵', 'close'],
-            ]
-          : [['any key', 'close']],
-    };
-  }
-
-  handle(key: Key): Step<void> {
-    if (key.name === 'up') {
-      this.offset--;
-      return;
-    }
-    if (key.name === 'down') {
-      this.offset++;
-      return;
-    }
-    if (key.name === 'pageup') {
-      this.offset -= this.height;
-      return;
-    }
-    if (key.name === 'pagedown') {
-      this.offset += this.height;
-      return;
-    }
-    return { done: undefined };
   }
 }
