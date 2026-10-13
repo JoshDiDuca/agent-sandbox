@@ -148,10 +148,10 @@
       "openssl": "auto"
     },
     "bun": {
-      "enabled": true
+      "enabled": "auto"
     },
     "uv": {
-      "enabled": true
+      "enabled": "auto"
     },
     "vcRuntime": {
       "enabled": false
@@ -161,7 +161,7 @@
       "vulkan": false
     },
     "vscode": {
-      "enabled": true,
+      "enabled": "auto",
       "setup": true,
       "recommended": true,
       "extensions": []

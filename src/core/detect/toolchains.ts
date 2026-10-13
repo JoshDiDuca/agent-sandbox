@@ -50,6 +50,10 @@ export const MARKERS = {
   ruby: ['Gemfile', '*.gemspec', '.ruby-version', '*.rb'],
   php: ['composer.json', 'artisan', '.php-version', '*.php'],
   deno: ['deno.json', 'deno.jsonc', 'deno.lock'],
+  bun: ['bun.lock', 'bun.lockb', 'bunfig.toml'],
+  uv: ['uv.lock'],
+  // VS Code is decided from this PC (hints are not needed): see decideToolchains.
+  vscode: [],
   // Windows PowerShell 5.1 runs any .ps1: PowerShell 7 is decided from script contents (hints.pwsh) or this PC.
   pwsh: [],
 } as const;
@@ -68,8 +72,8 @@ export interface ToolchainDecision {
 /**
  * The decision per toolchain. true/false are kept; "auto" is on when the project has one of its marker files, or, in
  * a folder that is no project yet, when this PC has the language installed. Rust needs a linker (MSVC or C/C++).
- * hints: reasons found by reading files (a script that calls vcvars/vswhere) or about this PC ("builds Rust with MSVC"),
- * which turn an "auto" toolchain on like a marker file does.
+ * hints: reasons found by reading files (a script that calls vcvars/vswhere) or about this PC
+ * ("builds Rust with MSVC"), which turn an "auto" toolchain on like a marker file does.
  */
 export const decideToolchains = (
   settings: Toolchains,
@@ -102,6 +106,11 @@ export const decideToolchains = (
     };
   if (result.rust.on && !result.msvc.on && !result.cpp.on && settings.cpp.enabled !== false)
     result.cpp = { on: true, reason: 'the linker for Rust' };
+  // uv installs the Python tools (`uv tool install`), so Python tools turn an "auto" uv on.
+  if (result.python.on && settings.uv.enabled === 'auto' && settings.python.tools.length > 0 && !result.uv.on)
+    result.uv = { on: true, reason: 'needed for toolchains.python.tools' };
+  if (settings.vscode.enabled === 'auto' && pcHas.includes('vscode'))
+    result.vscode = { on: true, reason: 'installed on this PC' };
   return result;
 };
 

@@ -166,5 +166,25 @@ export const detectSuite: Suite = {
       { go: true, python: false },
       'the sandbox gets plain decisions instead of "auto"',
     );
+
+    t.section('optional tools: Bun, uv, VS Code');
+    t.equal(decideToolchains(tc, ['bun.lock', 'package.json'], []).bun.on, true, 'bun: auto on with bun.lock');
+    t.equal(decideToolchains(tc, ['package.json'], []).bun.on, false, 'bun: auto off without a bun file');
+    t.equal(decideToolchains(tc, ['uv.lock'], []).uv.on, true, 'uv: auto on with uv.lock');
+    const uvTools = decideToolchains({ ...tc, python: { ...tc.python, tools: ['ruff'] } }, ['main.py'], []);
+    t.equal(
+      { uv: uvTools.uv.on, reason: uvTools.uv.reason },
+      { uv: true, reason: 'needed for toolchains.python.tools' },
+      'uv: auto on for Python tools (and says why)',
+    );
+    t.equal(decideToolchains(tc, ['README.md'], []).uv.on, false, 'uv: auto off otherwise');
+    t.equal(decideToolchains(tc, ['README.md'], ['vscode']).vscode.on, true, 'VS Code: auto on when this PC has it');
+    t.equal(decideToolchains(tc, ['README.md'], []).vscode.on, false, 'VS Code: auto off without it');
+    const memHints = decideToolchains(tc, ['README.md'], [], { bun: 'claude-mem needs it', uv: 'claude-mem needs it' });
+    t.equal(
+      { bun: memHints.bun, uv: memHints.uv },
+      { bun: { on: true, reason: 'claude-mem needs it' }, uv: { on: true, reason: 'claude-mem needs it' } },
+      'Bun and uv: auto on for claude-mem, and say why',
+    );
   },
 };

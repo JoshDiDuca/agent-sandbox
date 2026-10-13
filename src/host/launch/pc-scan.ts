@@ -9,7 +9,7 @@ import {
   type AutoToolchain,
   type Database,
 } from '../../core/detect/index.js';
-import { captureOutput, isWin } from '../../core/util/index.js';
+import { captureOutput, fileExists, findOnPath, isWin } from '../../core/util/index.js';
 import { system32 } from '../../shared/system.js';
 
 /** This PC builds Rust with MSVC: rustup's default host is *-msvc (read from rustup's settings; nothing is run). */
@@ -22,11 +22,19 @@ function msvcRust(): boolean {
   }
 }
 
+/** VS Code is on this PC: `code` on PATH or the per-user install (its Code.exe). */
+function pcHasVscode(): boolean {
+  const userInstall = path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Microsoft VS Code', 'Code.exe');
+  return findOnPath(['code.cmd', 'code.exe']) !== null || fileExists(userInstall);
+}
+
 /** Languages this PC has (their commands on PATH; Windows' Store stubs for python do not count). */
 export function pcLanguages(): AutoToolchain[] {
   const dirs = (process.env.PATH ?? '').split(path.delimiter).filter((d) => d && !/WindowsApps/i.test(d));
   const has = (...names: string[]): boolean => dirs.some((d) => names.some((n) => fs.existsSync(path.join(d, n))));
-  const found: Record<AutoToolchain, boolean> = {
+  // bun and uv are not PC-decided: a new folder gets them only when its files use them.
+  const found: Partial<Record<AutoToolchain, boolean>> = {
+    vscode: pcHasVscode(),
     python: has('python.exe', 'py.exe'),
     rust: has('cargo.exe', 'rustc.exe'),
     cpp: has('gcc.exe', 'g++.exe', 'cl.exe', 'clang.exe'),

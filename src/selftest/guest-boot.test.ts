@@ -9,7 +9,14 @@ export const guestBootSuite: Suite = {
   name: 'guest-boot',
   title: 'guest boot in dry-run mode (provisioning, Claude state, git policy)',
   run: async (t, f) => {
-    const gen = await f.launch({}, { args: ['--version'], probe: { ...f.probe, gitDir: f.shared, nvmDir: f.workB } });
+    // Bun and uv are "auto" by default; pinned on here so their steps are exercised.
+    const pinned = f.makeConfig();
+    pinned.toolchains.bun.enabled = true;
+    pinned.toolchains.uv.enabled = true;
+    const gen = await f.launch(
+      {},
+      { config: pinned, args: ['--version'], probe: { ...f.probe, gitDir: f.shared, nvmDir: f.workB } },
+    );
 
     t.section('first boot');
     const data1 = t.at('data1');

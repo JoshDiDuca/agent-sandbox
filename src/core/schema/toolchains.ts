@@ -167,8 +167,18 @@ export const ToolchainsSchema = z.strictObject({
       ),
     })
     .describe('Small portable command-line tools from their GitHub releases, installed once into tools\\cli.'),
-  bun: toggle('Bun runtime (claude-mem needs it).'),
-  uv: toggle('uv, the Python package manager (claude-mem needs it).'),
+  bun: z.strictObject({
+    enabled: enabled(
+      'Bun (JavaScript runtime and package manager; claude-mem needs it).',
+      'bun.lock, bun.lockb or bunfig.toml',
+    ),
+  }),
+  uv: z.strictObject({
+    enabled: enabled(
+      'uv (fast Python package and tool manager; claude-mem needs it for its search index).',
+      'uv.lock, a [tool.uv] pyproject.toml, toolchains.python.tools, or an agent installed with uv',
+    ),
+  }),
   vcRuntime: toggle(
     'Microsoft Visual C++ runtime for tools that need it (a real installer, so it runs on every boot, ~15 s). PHP installs it regardless.',
   ),
@@ -185,11 +195,9 @@ export const ToolchainsSchema = z.strictObject({
       ),
   }),
   vscode: z.strictObject({
-    enabled: z
-      .boolean()
-      .describe(
-        'Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.',
-      ),
+    enabled: EnabledSchema.describe(
+      'Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist. true, false, or "auto" = when VS Code is installed on this PC.',
+    ),
     setup: z
       .boolean()
       .describe(

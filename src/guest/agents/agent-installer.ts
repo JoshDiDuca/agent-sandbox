@@ -1,9 +1,11 @@
-// Getting the agent (claude, codex, gemini, opencode, aider, ...) into persistent storage and working out how to start it.
+// Getting the agent (claude, codex, gemini, opencode, aider, ...) into persistent storage and working out how to
+// start it.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Harness } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
-import { uvVars } from '../toolchains/runtimes.js';
+import { setupUv, uvVars } from '../toolchains/runtimes.js';
+import { emptyEnv } from '../toolchains/tool-env.js';
 import { dryRun, hostToolsDir, isWin, toolsDir } from '../runtime/paths.js';
 import { execAsync } from '../runtime/process.js';
 import { exists, mkdirp } from '../runtime/fs.js';
@@ -44,7 +46,11 @@ const installViaUv = async (name: string, harness: Harness, dir: string, env: No
     log('(dry run) uv tool install ' + harness.uvPackage);
     return;
   }
-  if (!exists(uv)) throw new Error(name + ' is installed with uv; enable toolchains.uv');
+  // The uv step runs only for projects that use uv, so an agent that needs it installs uv here.
+  if (!exists(uv)) {
+    log('Installing uv for ' + name + ' ...');
+    await setupUv(emptyEnv());
+  }
   await execAsync(uv, ['tool', 'install', '--force', '--python', '3.12', harness.uvPackage!], {
     env: { ...env, ...uvVars(), UV_TOOL_BIN_DIR: dir },
   });

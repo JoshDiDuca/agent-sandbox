@@ -23,10 +23,12 @@ config always win.
 | Java | Temurin JDK, Maven, Gradle | `.java-version`, `.sdkmanrc` |
 | Ruby | RubyInstaller, gems | `.ruby-version` |
 | PHP | PHP with common extensions, Composer | `.php-version` |
-| Deno, Bun | single binaries | |
+| Deno | single binary | |
+| Bun | single binary; `bun` on PATH (claude-mem needs it) | auto: when the project has `bun.lock`, `bun.lockb` or `bunfig.toml`, or claude-mem sync is on for the claude agent |
+| uv | uv, the Python package manager (`uv tool install`; claude-mem's search index needs it) | auto: when the project has `uv.lock`, a `[tool.uv]` pyproject.toml, `toolchains.python.tools`, or an agent installed with uv, or claude-mem sync is on for the claude agent |
 | PowerShell 7 | portable `pwsh` (`powershell` stays 5.1), a Windows Terminal profile | `#Requires -Version 7` or `pwsh ...` in a `.ps1` |
 | CLI tools (`toolchains.cli`) | `gh` (only with git access `full`; `auto` = a `.github` folder), `zstd` (off unless `true`), `openssl` (on: a small `openssl.exe` launcher for Git for Windows' own, so programs that start it without a shell, like Rust's `Command::new("openssl")`, find it) | |
-| VS Code | portable, `code .`; settings and extensions are kept | |
+| VS Code | portable, `code .`; settings and extensions are kept | auto: when VS Code is installed on this PC |
 | Mesa 3D (opt-in) | software OpenGL 4.5, and with `mesa.vulkan` software Vulkan 1.4 (lavapipe) | |
 
 Global packages per ecosystem can be listed in the config (`npm`, `uv tool`, `go install`, `gem`, `cargo install`,
@@ -115,7 +117,7 @@ sizes and what is installed already) or in `apps.install`:
 
 | Category | Apps |
 | --- | --- |
-| Editors | Notepad++, Sublime Text, Neovim (VS Code is on by default) |
+| Editors | Notepad++, Sublime Text, Neovim (VS Code: see [VS Code](#vs-code) above) |
 | Database clients | DBeaver, pgAdmin 4, HeidiSQL, DB Browser for SQLite, MongoDB Compass, Redis Insight, DbGate, Beekeeper Studio, dynamodb-admin |
 | API clients | Bruno, Insomnia |
 | Git | SourceGit, GitHub Desktop (needs git access `full`), lazygit |
@@ -144,7 +146,7 @@ file, or an https link, plus the program to start (and whether it is a command-l
 
 ### VS Code
 
-VS Code (on by default) is set up for the sandbox: it points at the sandbox's own JDK (with the right Java version),
+VS Code (on when VS Code is installed on this PC, `toolchains.vscode.enabled` `"auto"`) is set up for the sandbox: it points at the sandbox's own JDK (with the right Java version),
 Python, Go, C/C++ compiler (MSVC or MinGW), CMake, .NET, PHP, Ruby, Deno, Git, and has PowerShell 7 and Git Bash
 terminals. It installs the extensions for the languages and databases the project uses (Java pack, Python, Go,
 rust-analyzer, C/C++, C#, ESLint, Prettier, SQLTools ...), the ones the project recommends in
