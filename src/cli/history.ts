@@ -2,21 +2,20 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { userDir } from '../core/config/index.js';
-import { writeJson } from '../core/util/index.js';
-import { readValid } from '../shared/io/index.js';
+import { JsonFile } from '../shared/io/index.js';
 
 const History = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
-const historyFile = (): string => path.join(userDir(), 'history.json');
+type History = z.output<typeof History>;
+const historyFile = (): JsonFile<History> => new JsonFile(History, path.join(userDir(), 'history.json'));
 const HIDDEN = new Set(['menu', '_watch', 'self-test']);
 
-export const readHistory = (): z.output<typeof History> => readValid(History, historyFile()) ?? [];
+export const readHistory = (): History => historyFile().read() ?? [];
 
 /** Remembers a command (menu or typed) so the menu can offer it again. Never fails the command itself. */
 export const recordHistory = (argv: string[]): void => {
   if (!argv.length || HIDDEN.has(argv[0]) || argv.includes('--help')) return;
   try {
-    writeJson(
-      historyFile(),
+    historyFile().write(
       [
         { argv, at: new Date().toISOString() },
         ...readHistory().filter((h) => h.argv.join('\0') !== argv.join('\0')),

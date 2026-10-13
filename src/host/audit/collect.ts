@@ -8,7 +8,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { assertNoLinks } from '../../core/util/index.js';
 import { listSessions, runPaths } from '../../shared/channel/index.js';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
+import { JsonFile } from '../../shared/io/index.js';
 import { AuditEvent, AuditLog, fold } from './log.js';
 
 const MAX_FILES_PER_PASS = 200;
@@ -26,14 +26,14 @@ const AuditSettings = z.object({
   projects: z.array(z.string().max(1024)).max(64),
 });
 export type AuditSettings = z.output<typeof AuditSettings>;
-const settingsFile = (storageRoot: string, dataPath: string): string =>
-  path.join(storageRoot, 'sync', path.basename(dataPath) + '-audit.json');
+const settingsFile = (storageRoot: string, dataPath: string): JsonFile<AuditSettings> =>
+  new JsonFile(AuditSettings, path.join(storageRoot, 'sync', path.basename(dataPath) + '-audit.json'));
 
 /** Host-only: the audit settings of the running sandbox (written at launch, read by the watcher). */
 export const saveAuditSettings = (storageRoot: string, dataPath: string, settings: AuditSettings): void =>
-  writeJsonAtomic(settingsFile(storageRoot, dataPath), settings);
+  settingsFile(storageRoot, dataPath).write(settings);
 export const readAuditSettings = (storageRoot: string, dataPath: string): AuditSettings | null =>
-  readValid(AuditSettings, settingsFile(storageRoot, dataPath));
+  settingsFile(storageRoot, dataPath).read();
 
 export class AuditCollector {
   private readonly log: AuditLog;

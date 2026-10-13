@@ -7,20 +7,20 @@ import path from 'node:path';
 import { z } from 'zod';
 import { relayPort, type PortForward } from '../../shared/network/index.js';
 import { readSandboxStatus } from '../../shared/channel/index.js';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
+import { JsonFile } from '../../shared/io/index.js';
 import { isSandboxAddress } from '../channel/index.js';
 
 const Forwards = z
   .array(z.object({ pc: z.number().int().min(1).max(65535), sandbox: z.number().int().min(1).max(65535) }))
   .max(64);
-const forwardsFile = (storageRoot: string, dataPath: string): string =>
-  path.join(storageRoot, 'sync', path.basename(dataPath) + '-forwards.json');
+const forwardsFile = (storageRoot: string, dataPath: string): JsonFile<PortForward[]> =>
+  new JsonFile(Forwards, path.join(storageRoot, 'sync', path.basename(dataPath) + '-forwards.json'));
 
 /** Host-only: the forwards of the running sandbox (written at launch, read by the watcher). */
 export const saveForwards = (storageRoot: string, dataPath: string, forwards: PortForward[]): void =>
-  writeJsonAtomic(forwardsFile(storageRoot, dataPath), forwards);
+  forwardsFile(storageRoot, dataPath).write(forwards);
 export const readForwards = (storageRoot: string, dataPath: string): PortForward[] =>
-  readValid(Forwards, forwardsFile(storageRoot, dataPath)) ?? [];
+  forwardsFile(storageRoot, dataPath).read() ?? [];
 
 /** The sandbox's address on this PC's Hyper-V network, from its status (null until it has one). */
 export const sandboxAddress = (dataPath: string): string | null =>

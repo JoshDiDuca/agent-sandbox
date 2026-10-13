@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { readValid, writeJsonAtomic } from '../shared/io/index.js';
+import { JsonFile } from '../shared/io/index.js';
 
 /** Host-only record of the last launch: which folders map to each other and what syncs (from the effective config). */
 const AbsolutePath = z
@@ -34,6 +34,6 @@ export const syncStatePath = (dataPath: string): string =>
   path.join(path.dirname(path.dirname(dataPath)), 'sync', path.basename(dataPath) + '.json');
 /** A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next launch). */
 export const readSyncState = (dataPath: string): SyncState | null =>
-  readValid(SyncStateSchema, syncStatePath(dataPath));
+  new JsonFile(SyncStateSchema, syncStatePath(dataPath)).read();
 export const writeSyncState = (dataPath: string, state: SyncState): void =>
-  writeJsonAtomic(syncStatePath(dataPath), state);
+  new JsonFile(SyncStateSchema, syncStatePath(dataPath)).write(state);

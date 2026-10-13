@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
+import { JsonFile } from '../../shared/io/index.js';
 import { IgnoreRules } from './rules.js';
 import { type Seen, Manifest, MAX_ENTRIES, safeRel, stamp, sameContent } from './view-state.js';
 
@@ -43,10 +43,12 @@ export interface SyncStats {
 export class WorkspaceView {
   readonly rules: IgnoreRules;
   private seen: Record<string, Seen>;
+  private readonly stateFile: JsonFile<Record<string, Seen>>;
 
   constructor(private readonly o: ViewOptions) {
     this.rules = new IgnoreRules(o.host, o.exclude, o.include);
-    this.seen = readValid(Manifest, o.state) ?? {};
+    this.stateFile = new JsonFile(Manifest, o.state);
+    this.seen = this.stateFile.read() ?? {};
   }
 
   /** Where a project's view and its sync state live: <storage>\views\<id> and <storage>\views\<id>.json. */
@@ -153,7 +155,7 @@ export class WorkspaceView {
         this.o.note?.('could not sync ' + rel + ': ' + (e instanceof Error ? e.message : String(e)));
       }
     }
-    writeJsonAtomic(this.o.state, this.seen);
+    this.stateFile.write(this.seen);
     return stats;
   }
 

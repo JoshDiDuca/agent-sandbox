@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
+import { JsonFile } from '../../shared/io/index.js';
 
 /** What Windows runs when you open it (not source files such as .js or .py: those need a program you choose). */
 export const RISKY =
@@ -77,19 +77,21 @@ export const watchAndMark = (projects: string[], note: (message: string) => void
 
 // ---- what the watcher marks, and the size of the persisted data (host-only files next to the sync state) ----------
 
-const marksFile = (storageRoot: string, dataPath: string): string =>
-  path.join(storageRoot, 'sync', path.basename(dataPath) + '-mark.json');
-const sizeFile = (storageRoot: string, dataPath: string): string =>
-  path.join(storageRoot, 'sync', path.basename(dataPath) + '-size.json');
+const MarkedSchema = z.array(z.string().max(1024)).max(64);
+const DataSizeSchema = z.object({ bytes: z.number().min(0), at: z.string().max(40) });
+const marksFile = (storageRoot: string, dataPath: string): JsonFile<string[]> =>
+  new JsonFile(MarkedSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-mark.json'));
+const sizeFile = (storageRoot: string, dataPath: string): JsonFile<z.output<typeof DataSizeSchema>> =>
+  new JsonFile(DataSizeSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-size.json'));
 
 /** The projects to watch and mark (empty: storage.markSandboxFiles is off). */
 export const saveMarkedProjects = (storageRoot: string, dataPath: string, projects: string[]): void =>
-  writeJsonAtomic(marksFile(storageRoot, dataPath), projects);
+  marksFile(storageRoot, dataPath).write(projects);
 export const readMarkedProjects = (storageRoot: string, dataPath: string): string[] =>
-  readValid(z.array(z.string().max(1024)).max(64), marksFile(storageRoot, dataPath)) ?? [];
+  marksFile(storageRoot, dataPath).read() ?? [];
 
 /** The data folder's size, measured by the watcher when a sandbox closes (measuring at launch would be slow). */
 export const saveDataSize = (storageRoot: string, dataPath: string, bytes: number): void =>
-  writeJsonAtomic(sizeFile(storageRoot, dataPath), { bytes, at: new Date().toISOString() });
+  sizeFile(storageRoot, dataPath).write({ bytes, at: new Date().toISOString() });
 export const readDataSize = (storageRoot: string, dataPath: string): { bytes: number; at: string } | null =>
-  readValid(z.object({ bytes: z.number().min(0), at: z.string().max(40) }), sizeFile(storageRoot, dataPath));
+  sizeFile(storageRoot, dataPath).read();
