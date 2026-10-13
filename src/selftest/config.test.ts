@@ -3,7 +3,7 @@ import path from 'node:path';
 import _ from 'lodash';
 import { DEFAULTS, loadConfig } from '../core/config/index.js';
 import { readJsonc } from '../core/util/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const configSuite: Suite = {
   name: 'config',

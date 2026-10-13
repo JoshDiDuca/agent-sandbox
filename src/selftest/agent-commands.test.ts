@@ -6,7 +6,7 @@ import { DEFAULTS } from '../core/config/index.js';
 import { agentCommands, commandsDir, realAgent } from '../host/agent-commands/index.js';
 import { forwardingCmd, forwardingSh } from '../host/agent-commands/index.js';
 import { reconcileAgentCommands } from '../host/agent-commands/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const agentCommandsSuite: Suite = {
   name: 'agent-commands',

@@ -8,7 +8,7 @@ import { syncHistoryIn, syncHistoryOut, translatePaths } from '../sync/index.js'
 import { beatLife, endLife, startLife } from '../host/life/index.js';
 import { explainStop, type StopEvent } from '../host/life/index.js';
 import { lastStopWarning } from '../host/life/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const syncSuite: Suite = {
   name: 'sync',

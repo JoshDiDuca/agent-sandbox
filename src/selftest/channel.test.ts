@@ -11,7 +11,7 @@ import {
   MAX_FRAME_BYTES,
   OutputFilter,
 } from '../shared/pty/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const channelSuite: Suite = {
   name: 'channel',

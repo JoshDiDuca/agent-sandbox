@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { sandboxGlobalState } from '../host/profile/index.js';
 import { findSecretFiles, stripMcpServers, stripSettings } from '../host/profile/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 const REMOVED = '[removed by agent-sandbox]';
 

@@ -4,8 +4,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isWin } from '../core/util/index.js';
-import { runNode } from './fixtures.js';
-import type { Suite } from './suite.js';
+import { runNode } from './support/fixtures.js';
+import type { Suite } from './support/suite.js';
 
 // Odd quote counts flip cmd's quote state for every later argument: those come after them on purpose.
 const TRICKY_ARGUMENTS = [

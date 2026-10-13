@@ -37,7 +37,7 @@ import type { Context } from '../cli/commands/context.js';
 import { generateSandbox } from '../host/launch/index.js';
 import { askedWhen } from '../cli/manifest.js';
 import { describeSessions } from '../cli/commands/projects/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 /** The error `fn` throws, or null. */
 const caught = (fn: () => unknown): unknown => {

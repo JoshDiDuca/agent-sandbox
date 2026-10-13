@@ -7,7 +7,7 @@ import {
   globalPackages,
   resolvedVersionsValid,
 } from '../cli/commands/repair/finders.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const repairSuite: Suite = {
   name: 'repair',

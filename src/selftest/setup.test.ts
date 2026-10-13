@@ -7,7 +7,7 @@ import {
   parseRegQuery,
   type MachineFacts,
 } from '../cli/commands/setup/facts.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 const GB = 1024 ** 3;
 

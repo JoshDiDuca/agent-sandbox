@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { guardRepo, snapshotRepo } from '../host/guard/index.js';
 import { isMarked, markFromSandbox, watchAndMark } from '../host/guard/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const repoGuardSuite: Suite = {
   name: 'repo-guard',

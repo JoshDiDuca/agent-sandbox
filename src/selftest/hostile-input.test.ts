@@ -9,7 +9,7 @@ import { safeText } from '../core/util/index.js';
 import { isSafeFileName } from '../shared/paths/index.js';
 import { removeRefusal, safeRemove } from '../shared/io/index.js';
 import { writeJsonAtomic } from '../shared/io/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const hostileInputSuite: Suite = {
   name: 'hostile-input',

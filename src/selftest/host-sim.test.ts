@@ -7,7 +7,7 @@
 // (every one is a fresh Node process, which is what makes this the slowest suite when run one by one).
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 const SANDBOX_ONLY_VARS = [
   'CLAUDE_CONFIG_DIR',

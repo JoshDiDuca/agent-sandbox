@@ -14,7 +14,7 @@ import {
 } from '../shared/paths/index.js';
 import { guestWorkspaceAliases, projectFolderName } from '../shared/paths/index.js';
 import { syncHistoryIn, syncHistoryOut } from '../sync/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const mirrorSuite: Suite = {
   name: 'mirror',

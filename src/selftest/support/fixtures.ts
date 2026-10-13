@@ -2,10 +2,10 @@
 // run, generate the sandbox for it, run the guest against it and start the CLI. Shared by all suites.
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import type { Config, HostProbe, ResolvedRun, RunRequest } from '../core/types.js';
-import { DEFAULTS } from '../core/config/index.js';
-import { generateSandbox } from '../host/launch/index.js';
-import { resolveRun } from '../core/run/index.js';
+import type { Config, HostProbe, ResolvedRun, RunRequest } from '../../core/types.js';
+import { DEFAULTS } from '../../core/config/index.js';
+import { generateSandbox } from '../../host/launch/index.js';
+import { resolveRun } from '../../core/run/index.js';
 import type { Harness } from './harness.js';
 
 export const HOST_NODE_VERSION = 'v22.3.0';

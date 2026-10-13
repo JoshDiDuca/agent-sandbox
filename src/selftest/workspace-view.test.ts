@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { IgnoreRules } from '../host/workspace-view/index.js';
 import { WorkspaceView } from '../host/workspace-view/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const workspaceViewSuite: Suite = {
   name: 'workspace-view',

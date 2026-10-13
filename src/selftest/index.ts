@@ -7,10 +7,10 @@
 import os from 'node:os';
 import path from 'node:path';
 import { errMsg } from '../core/util/index.js';
-import { createFixtures } from './fixtures.js';
-import { createHarness, type RunningHarness } from './harness.js';
-import { liveTestsAvailable } from './live.js';
-import type { Suite } from './suite.js';
+import { createFixtures } from './support/fixtures.js';
+import { createHarness, type RunningHarness } from './support/harness.js';
+import { liveTestsAvailable } from './support/live.js';
+import type { Suite } from './support/suite.js';
 import { accountsSuite } from './accounts.test.js';
 import { agentCommandsSuite } from './agent-commands.test.js';
 import { channelSuite } from './channel.test.js';
@@ -44,6 +44,7 @@ import { workspaceSuite } from './workspace.test.js';
 import { workspaceViewSuite } from './workspace-view.test.js';
 import { liveNetworkSuite } from './live-network.test.js';
 import { auditSuite } from './audit.test.js';
+import { layoutSuite } from './layout.test.js';
 
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
@@ -70,6 +71,7 @@ export const SUITES: Suite[] = [
   hostileInputSuite,
   testGuardSuite,
   // pure helpers and the command line
+  layoutSuite,
   toolchainsSuite,
   detectSuite,
   networkSuite,

@@ -7,8 +7,8 @@ import path from 'node:path';
 import { projectSpec } from '../host/projects/index.js';
 import { resizeFrame, type Endpoint } from '../shared/pty/index.js';
 import { readJsonFile } from '../shared/io/index.js';
-import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, type Viewer } from './live.js';
-import type { Suite } from './suite.js';
+import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, type Viewer } from './support/live.js';
+import type { Suite } from './support/suite.js';
 
 export const liveProjectsSuite: Suite = {
   name: 'live-projects',

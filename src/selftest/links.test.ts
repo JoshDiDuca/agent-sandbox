@@ -7,7 +7,7 @@ import { resetRunDir, sendRequest } from '../host/channel/index.js';
 import { pruneStorage } from '../host/storage/index.js';
 import { assertNoLinks } from '../core/util/index.js';
 import { syncHistoryIn } from '../sync/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const linksSuite: Suite = {
   name: 'links',

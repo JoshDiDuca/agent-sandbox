@@ -3,7 +3,7 @@ import { databasesFromServices, detectDatabases, type ProjectFile } from '../cor
 import { DEFAULTS } from '../core/config/index.js';
 import { databaseCatalog, planDatabases } from '../host/launch/index.js';
 import { decideToolchains, resolveToolchains } from '../core/detect/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 const found = (files: ProjectFile[], host: Parameters<typeof detectDatabases>[1] = []): string[] =>
   detectDatabases(files, host).map((d) => d.database);

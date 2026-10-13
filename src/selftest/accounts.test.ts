@@ -11,7 +11,7 @@ import {
   saveAccount,
   setDefaultAccount,
 } from '../host/profile/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const accountsSuite: Suite = {
   name: 'accounts',

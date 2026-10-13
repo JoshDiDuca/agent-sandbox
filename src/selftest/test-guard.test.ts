@@ -15,7 +15,7 @@ import { writeJsonAtomic } from '../shared/io/index.js';
 import { syncClaudeMem } from '../sync/index.js';
 import { syncHistoryIn, syncHistoryOut } from '../sync/index.js';
 import { watch } from '../sync/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const testGuardSuite: Suite = {
   name: 'test-guard',

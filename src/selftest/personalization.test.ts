@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { toRegFile } from '../host/profile/index.js';
 import { PWSH_PROFILE_GUID, syncPwshProfile, withPwshProfile } from '../host/tools/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 interface TerminalSettings {
   theme: string;

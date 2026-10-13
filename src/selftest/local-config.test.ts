@@ -6,7 +6,7 @@ import path from 'node:path';
 import { download, setChecksumRequired } from '../shared/download/index.js';
 import type { Config } from '../core/types.js';
 import { allowedAnswer, allowStorePath, saveAllowed } from '../core/local-config/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const localConfigSuite: Suite = {
   name: 'local-config',

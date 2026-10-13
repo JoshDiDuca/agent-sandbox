@@ -16,7 +16,7 @@ import { binstallAsset, CLI_TOOLS, decideCli, pwshAsset, type CliSettings } from
 import { missingExtensions, vscodeExtensions, vscodeSettings } from '../guest/toolchains/tools/vscode-profile.js';
 import { APP_CATEGORIES, APPS, appsNeedMesa, appsToInstall, exeMatcher } from '../shared/apps/index.js';
 import { Config, LocalOverrides } from '../core/schema/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const toolchainsSuite: Suite = {
   name: 'toolchains',

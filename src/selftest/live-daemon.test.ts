@@ -3,8 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { queryViewers } from '../shared/pty/index.js';
-import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, WAIT } from './live.js';
-import type { Suite } from './suite.js';
+import { copyCmdAsFakeAgent, openViewer, sees, startDaemon, tail, viewersWhen, WAIT } from './support/live.js';
+import type { Suite } from './support/suite.js';
 
 export const liveDaemonSuite: Suite = {
   name: 'live-daemon',

@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type net from 'node:net';
-import type { GuestResponse, SessionStatus } from '../core/types.js';
-import { ensureDir, sleep } from '../core/util/index.js';
+import type { GuestResponse, SessionStatus } from '../../core/types.js';
+import { ensureDir, sleep } from '../../core/util/index.js';
 import {
   connect,
   encodeFrame,
@@ -18,8 +18,8 @@ import {
   queryViewers,
   type Endpoint,
   type Viewers,
-} from '../shared/pty/index.js';
-import { readJsonFile, writeJsonAtomic } from '../shared/io/index.js';
+} from '../../shared/pty/index.js';
+import { readJsonFile, writeJsonAtomic } from '../../shared/io/index.js';
 import type { Fixtures } from './fixtures.js';
 import type { Harness } from './harness.js';
 

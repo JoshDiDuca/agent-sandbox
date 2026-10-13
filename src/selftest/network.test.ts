@@ -11,7 +11,7 @@ import {
   subtractIps,
 } from '../shared/network/index.js';
 import { expandAllowList, hostAllowed, withBlockedHosts } from '../shared/network/index.js';
-import type { Suite } from './suite.js';
+import type { Suite } from './support/suite.js';
 
 export const networkSuite: Suite = {
   name: 'network',

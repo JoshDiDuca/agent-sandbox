@@ -5,8 +5,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { startPortForwards } from '../host/network/index.js';
 import { PROXY_PORT, relayPort } from '../shared/network/index.js';
-import { CSC } from './live.js';
-import type { Suite } from './suite.js';
+import { CSC } from './support/live.js';
+import type { Suite } from './support/suite.js';
 
 /** A TCP server that answers every line with "echo:<line>". */
 const echoServer = (port = 0): Promise<net.Server> =>
