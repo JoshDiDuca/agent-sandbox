@@ -24,6 +24,8 @@ export const Config = z.strictObject({
     root: z.string().min(1).describe('Where everything is kept on this PC (tools, databases, logins, launches).'),
     persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),
     dataName: Name.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
+    markSandboxFiles: z.boolean().describe('Programs and scripts (.exe, .ps1, .bat, .cmd, .msi, .lnk ...) that appear or change in your project while a sandbox runs get Windows\' "downloaded from the internet" mark, so SmartScreen and PowerShell ask before they run on this PC.'),
+    warnDataGb: z.number().min(0).describe('Say at launch when the persisted data (tools, databases, logins) is bigger than this many GB; 0 = never. sandbox data shows what takes the space.'),
   }),
   network: Network,
   provisioning: Provisioning,

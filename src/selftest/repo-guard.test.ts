@@ -3,12 +3,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { guardRepo, snapshotRepo } from '../host/repo-guard.js';
+import { isMarked, markFromSandbox, watchAndMark } from '../host/motw.js';
 import type { Suite } from './suite.js';
 
 export const repoGuardSuite: Suite = {
   name: 'repo-guard',
   title: 'repository guard (hooks, git config, planted commands, replaced .git)',
-  run: (t) => {
+  run: async (t) => {
     const readConfig = (repo: string): string => fs.readFileSync(path.join(repo, '.git', 'config'), 'utf8');
     const disabled = (keyPattern: string): RegExp => new RegExp('# \\[agent-sandbox\\] disabled.*' + keyPattern);
 
@@ -111,5 +112,18 @@ export const repoGuardSuite: Suite = {
     const findings7 = guardRepo(repo7, before7);
     t.equal(findings7.filter((f) => f.kind === 'agent').length, 4, 'Claude hooks, MCP servers, folder-open tasks and program paths in VS Code settings are quarantined');
     t.check(!fs.existsSync(path.join(repo7, '.mcp.json')) && fs.existsSync(path.join(repo7, '.claude', 'settings.local.json')), '... and nothing else is moved');
+
+    t.section('programs from the sandbox are marked');
+    const marked = t.at('marked');
+    t.write(path.join(marked, 'setup.ps1'), 'calc');
+    t.write(path.join(marked, 'src', 'app.ts'), 'code');
+    t.check(markFromSandbox(path.join(marked, 'setup.ps1')) && isMarked(path.join(marked, 'setup.ps1')), 'a script gets the "from the internet" mark (SmartScreen / PowerShell ask before it runs)');
+    t.check(!markFromSandbox(path.join(marked, 'src', 'app.ts')) && !isMarked(path.join(marked, 'src', 'app.ts')), 'source files are left alone');
+    t.equal(fs.readFileSync(path.join(marked, 'setup.ps1'), 'utf8'), 'calc', 'only the mark is written, never the file');
+    const stop = watchAndMark([marked]);
+    t.write(path.join(marked, 'bin', 'tool.exe'), 'MZ');
+    const live = await t.waitFor(() => isMarked(path.join(marked, 'bin', 'tool.exe')), 5000);
+    stop();
+    t.check(Boolean(live), 'while it watches, a program that appears is marked within a second or two');
   },
 };

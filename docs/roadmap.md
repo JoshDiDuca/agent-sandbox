@@ -36,8 +36,8 @@ design decision first).
 | Item | Status |
 | --- | --- |
 | Audit log (optional): programs started in the sandbox (Windows process auditing, every agent), files changed, sessions, repo-guard findings; kept *n* days, size-capped, compressed daily; `sandbox audit` | done |
-| Contained storage (optional): persisted data in one VHDX disk image, mounted only while a sandbox runs (nothing it wrote is reachable on the PC at rest), with a size cap; needs one admin prompt per launch | idea: test mounting in a sandbox first |
-| Smaller containment options without admin: "downloaded from the internet" mark on everything the sandbox wrote, a size cap on persisted data, read-only mappings by default | planned |
+| Contained storage (optional): persisted data in one VHDX disk image, mounted only while a sandbox runs (nothing it wrote is reachable on the PC at rest), with a size cap; needs one admin prompt per launch | idea: cannot be tested inside Windows Sandbox (its Virtual Disk Service does not start); needs testing on a PC before it is built |
+| Containment without admin: programs and scripts the sandbox writes into a project get the "downloaded from the internet" mark (`storage.markSandboxFiles`); a warning when the persisted data passes `storage.warnDataGb` | done |
 
 ## 1.5 — VPN
 

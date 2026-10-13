@@ -13,6 +13,8 @@ import { isSandboxRunning } from '../host/platform.js';
 import { readActiveViews, WorkspaceView } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/port-forward.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
+import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/motw.js';
+import { sizeOf } from '../core/disk.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
 
@@ -110,6 +112,8 @@ export const watch = async (dataPath: string): Promise<void> => {
   const audit = auditSettings?.enabled ? new AuditCollector(dataPath, storageOf(dataPath), auditSettings) : null;
   audit?.start();
   const auditTimer = audit ? setInterval(() => { try { audit.flush(); } catch (e) { note('audit: ' + errMsg(e)); } }, 10000) : null;
+  // storage.markSandboxFiles: programs and scripts that appear in the projects get the "from the internet" mark.
+  const stopMarking = watchAndMark(readMarkedProjects(storageOf(dataPath), dataPath), (m) => note(m));
   // network.forwardPorts: localhost on this PC reaches servers in the sandbox while it runs.
   const stopForwards = startPortForwards(readForwards(storageOf(dataPath), dataPath), () => sandboxAddress(dataPath), (m) => note('port forward: ' + m));
   const views = readActiveViews(storageOf(dataPath), dataPath);
@@ -124,11 +128,14 @@ export const watch = async (dataPath: string): Promise<void> => {
   } finally {
     stops.forEach((stop) => stop());
     stopForwards();
+    stopMarking();
     if (auditTimer) clearInterval(auditTimer);
     try { audit?.stop(); } catch (e) { note('audit: ' + errMsg(e)); }
     for (const v of views) {
       try { const s = new WorkspaceView(v).syncAll(); note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in'); } catch (e) { note('workspace ' + v.host + ': final sync failed: ' + errMsg(e)); }
     }
+    // For the next launch's storage.warnDataGb (measuring then would be slow).
+    try { saveDataSize(storageOf(dataPath), dataPath, sizeOf(dataPath)); } catch { /* best effort */ }
     fs.rmSync(watcherPidFile(dataPath), { force: true });
   }
 };

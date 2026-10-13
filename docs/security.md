@@ -38,6 +38,10 @@ can read because the whole folder is mapped.
 - Text from the sandbox loses its escape sequences before it reaches your terminal. When you attach, the session's
   output passes a filter that drops clipboard writes (OSC 52, however they are split or disguised), terminal macros
   and other control strings; colours, titles, links and progress pass.
+- Programs and scripts (`.exe`, `.ps1`, `.bat`, `.cmd`, `.msi`, `.lnk` ...) that appear or change in your project while
+  a sandbox runs get Windows' "downloaded from the internet" mark (`storage.markSandboxFiles`, on by default): SmartScreen
+  asks before one runs, and PowerShell's RemoteSigned policy refuses an unsigned marked script. Programs you build
+  yourself on your PC while a sandbox runs get it too; `Unblock-File` or the file's Properties removes it.
 - What the sandbox adds to a project that tools on your PC would run by themselves is moved to
   `agent-sandbox-quarantine`: git hooks and program-running git config (also in submodules and nested repositories),
   commands planted in the project root, Claude Code hooks, helper commands and MCP servers (`.claude/settings*.json`,

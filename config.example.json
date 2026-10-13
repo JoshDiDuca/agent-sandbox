@@ -34,7 +34,9 @@
   "storage": {
     "root": "%LOCALAPPDATA%\\AgentSandbox",
     "persistAgentState": true,
-    "dataName": "default"
+    "dataName": "default",
+    "markSandboxFiles": true,
+    "warnDataGb": 50
   },
   "network": {
     "blockPrivateRanges": true,
