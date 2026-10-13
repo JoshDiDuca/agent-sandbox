@@ -22,10 +22,15 @@ export function projectOf(projects: RegistryEntry[], s: SessionStatus): string {
   return s.project ?? projectForGuestDir(projects, s.cwd)?.name ?? '-';
 }
 
-type Listed = SessionStatus & { viewers?: Viewers | null; here?: boolean; projectName?: string };
+/** A session with who is watching it and whether it is in the project of the current folder. */
+export type ListedSession = SessionStatus & {
+  readonly viewers?: Viewers | null;
+  readonly here?: boolean;
+  readonly projectName?: string;
+};
 
 /** Sessions with who is watching them; `here` marks the ones in the project of the current folder. */
-export async function listedSessions(ctx: Context): Promise<Listed[]> {
+export async function listedSessions(ctx: Context): Promise<ListedSession[]> {
   // Who is attached comes from each session itself, so a terminal that was closed is never counted.
   const live = isSandboxRunning();
   // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
