@@ -9,11 +9,11 @@ import { isValidGuestPath, sandboxFolder } from '../../shared/paths/index.js';
 import { GUEST } from './wsb-file.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
-export const collectMappings = (
+export function collectMappings(
   o: GenerateOptions,
   launchPath: string,
   boot: BootProjects = { roots: [], projects: [], notes: [] },
-): ResolvedMapping[] => {
+): ResolvedMapping[] {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
@@ -57,13 +57,13 @@ export const collectMappings = (
   // Same check on where the folders really are (F:\x and C:\Mirror\F\x are one place).
   assertNoGuestOverlap(mappings.map((m) => ({ guest: sandboxFolder(m.guest) })));
   return mappings;
-};
+}
 
 /** The schema checks this already; the host re-checks what goes into the .wsb and the subst list anyway. */
-const assertGuestPath = (guest: string, what: string): void => {
+function assertGuestPath(guest: string, what: string): void {
   if (!isValidGuestPath(guest))
     fail(
       what + ' is not a usable sandbox folder: ' + guest,
       'Use a folder under C:\\ (not Windows, Program Files, Users, AgentData, Mirror, ...) or on drive D: to Z:, e.g. C:\\Assets or F:\\SteamLibrary\\steamapps\\common\\Game.',
     );
-};
+}

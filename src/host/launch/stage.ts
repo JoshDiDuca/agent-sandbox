@@ -1,13 +1,14 @@
-// What is copied into the launch folder (C:\AgentLaunch inside the sandbox): hooks, the bundled runtime, the git identity.
+// What is copied into the launch folder (C:\AgentLaunch inside the sandbox): hooks, the bundled runtime, the git
+// identity.
 import fs from 'node:fs';
 import path from 'node:path';
 import { userDir } from '../../core/config/index.js';
 import { dirExists, ensureDir, fail, fileExists, homeDir } from '../../core/util/index.js';
 
-const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'];
+const HOOK_STAGES = ['pre-provision', 'pre-agent', 'post-agent'] as const;
 
 /** Package hooks first, then ~/.agent-sandbox/hooks (same file name = user's wins), then --script / "scripts". */
-export const stageHooks = (packageRoot: string, launchPath: string, scripts: string[]): void => {
+export function stageHooks(packageRoot: string, launchPath: string, scripts: readonly string[]): void {
   for (const stage of HOOK_STAGES) {
     const target = path.join(launchPath, 'hooks', stage);
     ensureDir(target);
@@ -16,21 +17,21 @@ export const stageHooks = (packageRoot: string, launchPath: string, scripts: str
     }
   }
   stageScripts(path.join(launchPath, 'hooks', 'pre-agent'), scripts);
-};
+}
 
 /** --script / "scripts" files, run before the agent in this order. */
-export const stageScripts = (target: string, scripts: string[]): void => {
+export function stageScripts(target: string, scripts: readonly string[]): void {
   ensureDir(target);
   scripts.forEach((script: string, index: number) => {
     if (!fileExists(script)) fail('Script file not found: ' + script, 'Check the --script path.');
     fs.copyFileSync(script, path.join(target, '90-extra-' + index + '-' + path.basename(script)));
   });
-};
+}
 
 export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js', 'db.js', 'netproxy.js'];
 
 /** The bundled sandbox runtime (dist/runtime: one self-contained file per entry point) and the sandbox/ scripts. */
-export const copyRuntime = (packageRoot: string, launchPath: string): void => {
+export function copyRuntime(packageRoot: string, launchPath: string): void {
   const runtime = path.join(packageRoot, 'dist', 'runtime');
   const missing = RUNTIME_FILES.filter((f) => !fileExists(path.join(runtime, f)));
   if (missing.length)
@@ -42,10 +43,10 @@ export const copyRuntime = (packageRoot: string, launchPath: string): void => {
   for (const file of RUNTIME_FILES) fs.copyFileSync(path.join(runtime, file), path.join(launchPath, 'runtime', file));
   fs.writeFileSync(path.join(launchPath, 'package.json'), '{ "type": "module" }\n', 'utf8');
   fs.cpSync(path.join(packageRoot, 'sandbox'), path.join(launchPath, 'sandbox'), { recursive: true });
-};
+}
 
 /** Only the identity from ~/.gitconfig: the rest can hold credentials (helpers, tokens in insteadOf URLs). */
-export const gitIdentity = (gitconfig: string): string => {
+export function gitIdentity(gitconfig: string): string {
   const values: Record<string, string> = {};
   let section = '';
   for (const line of gitconfig.split(/\r?\n/)) {
@@ -60,13 +61,13 @@ export const gitIdentity = (gitconfig: string): string => {
   }
   const lines = Object.entries(values).map(([k, v]) => '\t' + k + ' = ' + v);
   return lines.length ? '[user]\n' + lines.join('\n') + '\n' : '';
-};
+}
 
 /** Writes this PC's git name and email to home\.gitconfig in the launch folder (nothing when there are none). */
-export const stageGitIdentity = (launchPath: string): void => {
+export function stageGitIdentity(launchPath: string): void {
   const gitconfig = path.join(homeDir(), '.gitconfig');
   const identity = fileExists(gitconfig) ? gitIdentity(fs.readFileSync(gitconfig, 'utf8')) : '';
   if (!identity) return;
   ensureDir(path.join(launchPath, 'home'));
   fs.writeFileSync(path.join(launchPath, 'home', '.gitconfig'), identity, 'utf8');
-};
+}

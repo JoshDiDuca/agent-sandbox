@@ -13,17 +13,17 @@ import { allProjectsToMap, KnownProjects } from '../projects/known.js';
 export const MAX_BOOT_PROJECTS = 48;
 
 export interface BootProjects {
-  roots: RootMapping[];
-  projects: RootMapping[];
-  notes: string[];
+  readonly roots: RootMapping[];
+  readonly projects: RootMapping[];
+  readonly notes: string[];
 }
 
-export const planBootProjects = (o: {
-  run: ResolvedRun;
-  packageRoot: string;
-  extraProjects?: string[];
-  knownProjects?: string[];
-}): BootProjects => {
+export function planBootProjects(o: {
+  readonly run: ResolvedRun;
+  readonly packageRoot: string;
+  readonly extraProjects?: readonly string[];
+  readonly knownProjects?: readonly string[];
+}): BootProjects {
   const { config, workspaceHost, storageRoot } = o.run;
   const notes: string[] = [];
   const safe = (folder: string): string | null => {
@@ -79,4 +79,4 @@ export const planBootProjects = (o: {
     projects.push(folder);
   }
   return { ...planProjectMappings(roots, projects, Boolean(o.run.mirror)), notes };
-};
+}

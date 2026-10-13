@@ -3,9 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LocalOverridesSchema } from '../core/schema/index.js';
-import { logonEnv } from '../host/launch/index.js';
-import { gitIdentity } from '../host/launch/index.js';
-import { buildWsb, resolveMemoryMb } from '../host/launch/index.js';
+import { buildWsb, gitIdentity, logonEnv, resolveMemoryMb } from '../host/launch/index.js';
 import type { Suite } from './support/suite.js';
 
 export const generateSuite: Suite = {
