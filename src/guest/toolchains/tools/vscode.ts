@@ -68,10 +68,10 @@ const recommendedBy = (workspace: string): string[] => {
  * terminals (user settings; only the keys this tool manages are changed, your own stay), and installs the extensions
  * for the languages in use in the background (they persist, so only new ones are downloaded).
  */
-export const configureVscode = (
+export function configureVscode(
   tools: { vars: Record<string, string>; prepend: string[]; append: string[]; summary: string[] },
   o: { toolchains: string[]; databases: string[]; config: Toolchains['vscode']; workspace: string },
-): void => {
+): void {
   const root = tool('vscode');
   const code = path.join(root, 'bin', 'code.cmd');
   if (dryRun) {
@@ -131,7 +131,7 @@ export const configureVscode = (
     windowsHide: true,
   }).unref();
   fs.closeSync(logFile);
-};
+}
 
 /**
  * Sets `values` in a settings file, keeping everything else (comments too), and removes keys this tool set last time
@@ -156,7 +156,7 @@ const writeManagedSettings = (file: string, managedFile: string, values: Record<
   fs.writeFileSync(managedFile, JSON.stringify(Object.keys(values)));
 };
 
-export const setupVscode = async (env: ToolEnv, refresh: boolean): Promise<void> => {
+export async function setupVscode(env: ToolEnv, refresh: boolean): Promise<void> {
   const root = tool('vscode');
   const exe = path.join(root, 'Code.exe');
   if (dryRun) {
@@ -200,4 +200,4 @@ export const setupVscode = async (env: ToolEnv, refresh: boolean): Promise<void>
     ? fs.readFileSync(path.join(root, VERSION_MARKER), 'utf8').trim()
     : 'installed';
   env.summary.push('vscode: ' + version + ' (portable; run code . or use the desktop shortcut)');
-};
+}

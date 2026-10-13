@@ -22,7 +22,7 @@ const BLOCKED_HOOKS = [
   'pre-rebase',
   'pre-applypatch',
   'applypatch-msg',
-];
+] as const;
 const posix = (p: string): string => p.replace(/\\/g, '/');
 
 const installPortableGit = async (root: string): Promise<void> => {
@@ -103,7 +103,7 @@ const pointAtOwnCertificates = (root: string): void => {
   if (fixed !== text) fs.writeFileSync(config, fixed);
 };
 
-export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean, access: GitAccess): Promise<void> => {
+export async function setupGit(env: ToolEnv, hostCopy: boolean, refresh: boolean, access: GitAccess): Promise<void> {
   const root = tool('git');
   const bash = path.join(root, 'bin', 'bash.exe');
   const gitExe = path.join(root, 'cmd', 'git.exe');
@@ -149,4 +149,4 @@ export const setupGit = async (env: ToolEnv, hostCopy: boolean, refresh: boolean
       ? 'git: ' + version + ' READ-ONLY (status/log/diff/show/blame; no commit, push, checkout, ...)'
       : 'git: DISABLED (bash only; the agent cannot use git)',
   );
-};
+}

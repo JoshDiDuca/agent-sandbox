@@ -71,7 +71,7 @@ const setupJdk = async (env: ToolEnv, config: Toolchains['java']): Promise<void>
  * A JDK for tools that run on Java (DynamoDB Local): the newest one already installed, else the newest LTS. Returns its
  * folder; the agent's Java on PATH stays whatever toolchains.java says.
  */
-export const ensureJdk = async (): Promise<string> => {
+export async function ensureJdk(): Promise<string> {
   const root = tool('java');
   const installed = exists(root)
     ? fs
@@ -83,7 +83,7 @@ export const ensureJdk = async (): Promise<string> => {
   const scratch = emptyEnv();
   await setupJdk(scratch, { enabled: true, version: 'lts', maven: false, gradle: false });
   return scratch.vars.JAVA_HOME;
-};
+}
 
 const setupMaven = async (env: ToolEnv): Promise<void> => {
   const version = await resolveCached('maven:3', async () => {
@@ -138,7 +138,7 @@ const setupGradle = async (env: ToolEnv): Promise<void> => {
   env.summary.push('gradle: ' + version);
 };
 
-export const setupJava = async (env: ToolEnv, config: Toolchains['java']): Promise<void> => {
+export async function setupJava(env: ToolEnv, config: Toolchains['java']): Promise<void> {
   if (dryRun) {
     log(
       '(dry run) would provision Java ' +
@@ -160,4 +160,4 @@ export const setupJava = async (env: ToolEnv, config: Toolchains['java']): Promi
         warn(name + ' setup failed (continuing without it): ' + errMsg(e));
       });
   }
-};
+}

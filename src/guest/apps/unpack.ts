@@ -11,7 +11,7 @@ import { findExe } from './find-exe.js';
 
 const sevenZip = (): string => tool('apps', '7zip', '7z.exe');
 
-export const unpack = async (entry: AppEntry, file: string, out: string, d: Download): Promise<void> => {
+export async function unpack(entry: AppEntry, file: string, out: string, d: Download): Promise<void> {
   if (entry.id === '7zip') {
     // 7zr.exe (the small standalone 7-Zip) opens the full 7-Zip's installer.
     const sevenZr = path.join(path.dirname(file), '7zr.exe');
@@ -46,4 +46,4 @@ export const unpack = async (entry: AppEntry, file: string, out: string, d: Down
     default:
       await extractArchive(file, out, d.members);
   }
-};
+}

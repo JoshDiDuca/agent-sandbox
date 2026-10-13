@@ -24,7 +24,7 @@ const DotnetMarkerSchema = z.record(z.string(), z.boolean());
 /**
  * .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker.
  */
-export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], refresh: boolean): Promise<void> => {
+export async function setupDotnet(env: ToolEnv, config: Toolchains['dotnet'], refresh: boolean): Promise<void> {
   const root = tool('dotnet');
   const marker = path.join(root, '.agent-sandbox-installed.json');
   const script = tool('dotnet-install.ps1');
@@ -98,7 +98,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
   );
   await setupFrameworkReferences(env, config.frameworkTargets);
   if (config.netfx35) await setupNetFx35(env);
-};
+}
 
 /**
  * .NET Framework reference assemblies (the "targeting packs" Visual Studio would install) from NuGet, so net4x

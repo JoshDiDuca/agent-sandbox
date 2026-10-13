@@ -19,7 +19,7 @@ export interface SingleExeOptions {
 }
 
 /** A tool from one GitHub release archive, into `dir` (atomically), on PATH. */
-export const setupSingleExe = async (
+export async function setupSingleExe(
   env: ToolEnv,
   name: string,
   repo: string,
@@ -27,7 +27,7 @@ export const setupSingleExe = async (
   exeName: string,
   dir: string,
   options: SingleExeOptions = {},
-): Promise<void> => {
+): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision ' + name);
     return;
@@ -45,9 +45,9 @@ export const setupSingleExe = async (
   if (!exists(exe)) throw new Error(exeName + ' missing after installing ' + name);
   env.prepend.push(bin);
   env.summary.push(name + ': ' + versionOf(exe, options.versionArgs) + (options.note ?? ''));
-};
+}
 
-export const setupBun = async (env: ToolEnv): Promise<void> => {
+export async function setupBun(env: ToolEnv): Promise<void> {
   await setupSingleExe(
     env,
     'bun',
@@ -63,9 +63,9 @@ export const setupBun = async (env: ToolEnv): Promise<void> => {
     BUN_INSTALL_CACHE_DIR: path.join(localDir, 'bun-cache'),
     BUN_TMPDIR: path.join(localDir, 'bun-tmp'),
   });
-};
+}
 
-export const setupDeno = async (env: ToolEnv): Promise<void> => {
+export async function setupDeno(env: ToolEnv): Promise<void> {
   await setupSingleExe(
     env,
     'deno',
@@ -77,17 +77,19 @@ export const setupDeno = async (env: ToolEnv): Promise<void> => {
   );
   // `deno install` puts commands in DENO_INSTALL_ROOT/bin: the folder deno.exe is in, already on PATH.
   Object.assign(env.vars, { DENO_DIR: tool('deno-cache'), DENO_INSTALL_ROOT: tool('deno'), DENO_NO_UPDATE_CHECK: '1' });
-};
+}
 
 /** Where uv keeps its cache, Pythons and tools (persistent). */
-export const uvVars = (): Record<string, string> => ({
-  UV_CACHE_DIR: tool('uv-cache'),
-  UV_PYTHON_INSTALL_DIR: tool('uv-python'),
-  UV_TOOL_DIR: tool('uv-tools'),
-  UV_TOOL_BIN_DIR: tool('uv-bin'),
-});
+export function uvVars(): Record<string, string> {
+  return {
+    UV_CACHE_DIR: tool('uv-cache'),
+    UV_PYTHON_INSTALL_DIR: tool('uv-python'),
+    UV_TOOL_DIR: tool('uv-tools'),
+    UV_TOOL_BIN_DIR: tool('uv-bin'),
+  };
+}
 
-export const setupUv = async (env: ToolEnv): Promise<void> => {
+export async function setupUv(env: ToolEnv): Promise<void> {
   await setupSingleExe(
     env,
     'uv',
@@ -99,4 +101,4 @@ export const setupUv = async (env: ToolEnv): Promise<void> => {
   );
   Object.assign(env.vars, uvVars());
   env.prepend.push(tool('uv-bin'));
-};
+}

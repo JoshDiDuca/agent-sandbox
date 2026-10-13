@@ -31,7 +31,7 @@ const PHP_EXTENSIONS = [
   'sodium',
   'sqlite3',
   'zip',
-];
+] as const;
 const COMPOSER = 'https://getcomposer.org/download/latest-stable/composer.phar';
 
 /** The non-thread-safe x64 zip of the newest release matching `spec` ("8" -> newest 8.x, "8.3" -> newest 8.3.x). */
@@ -87,7 +87,7 @@ const setupComposer = async (env: ToolEnv, php: string): Promise<void> => {
   );
 };
 
-export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise<void> => {
+export async function setupPhp(env: ToolEnv, config: Toolchains['php']): Promise<void> {
   const wantedSpec = versionFromFiles(['.php-version']) ?? { spec: config.version, source: 'config' };
   if (dryRun) {
     log('(dry run) would provision PHP ' + wantedSpec.spec + (config.composer ? ' + Composer' : ''));
@@ -110,4 +110,4 @@ export const setupPhp = async (env: ToolEnv, config: Toolchains['php']): Promise
   env.prepend.push(home);
   env.summary.push('php: ' + version + ' (from ' + wantedSpec.source + ')');
   if (config.composer) await setupComposer(env, path.join(home, 'php.exe'));
-};
+}

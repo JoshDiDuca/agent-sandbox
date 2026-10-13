@@ -3,7 +3,7 @@ import path from 'node:path';
 import { exeMatcher } from '../../shared/apps/index.js';
 
 /** The program in an installed folder (breadth first, bounded: big apps have tens of thousands of files). */
-export const findExe = (root: string, exe: string): string | null => {
+export function findExe(root: string, exe: string): string | null {
   const match = exeMatcher(exe);
   let queue = [root];
   let seen = 0;
@@ -24,4 +24,4 @@ export const findExe = (root: string, exe: string): string | null => {
     queue = next;
   }
   return null;
-};
+}

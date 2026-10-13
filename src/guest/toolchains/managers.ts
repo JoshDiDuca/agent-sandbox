@@ -16,7 +16,7 @@ import { installFromGithub } from './install.js';
 import { resolveCached } from './version-cache.js';
 
 /** The "volta" block of the workspace's package.json ({ node, npm, yarn, pnpm }), if any. */
-export const voltaPins = (): Record<string, string> => {
+export function voltaPins(): Record<string, string> {
   try {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(projectWorkspace(), 'package.json'), 'utf8').replace(/^\uFEFF/, ''),
@@ -29,18 +29,20 @@ export const voltaPins = (): Record<string, string> => {
   } catch {
     return {};
   }
-};
+}
 
-export const wantsVolta = (setting: Toolchains['node']['volta']): boolean =>
-  setting === 'auto' ? Object.keys(voltaPins()).length > 0 || Boolean(session.hostTools.volta) : setting;
-export const wantsPyenv = (setting: Toolchains['python']['pyenv']): boolean =>
-  setting === 'auto' ? Boolean(session.hostTools.pyenv) : setting;
+export function wantsVolta(setting: Toolchains['node']['volta']): boolean {
+  return setting === 'auto' ? Object.keys(voltaPins()).length > 0 || Boolean(session.hostTools.volta) : setting;
+}
+export function wantsPyenv(setting: Toolchains['python']['pyenv']): boolean {
+  return setting === 'auto' ? Boolean(session.hostTools.pyenv) : setting;
+}
 
 /**
  * Volta from its portable zip. With pins, its shims go first on PATH (the project gets exactly what package.json says,
  * fetched ahead of time); without, Volta is just available and nvm's Node stays the default.
  */
-export const setupVolta = async (env: ToolEnv): Promise<void> => {
+export async function setupVolta(env: ToolEnv): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision Volta');
     return;
@@ -84,13 +86,13 @@ export const setupVolta = async (env: ToolEnv): Promise<void> => {
     ? ' (pins from package.json: ' + pinned.join(', ') + ')'
     : " (no pins in this project; nvm's node is the default)";
   env.summary.push('volta: ' + versionOf(volta) + note);
-};
+}
 
 /**
  * pyenv-win from its source archive (it ships no release assets). Its versions persist in tools\pyenv. It comes after
  * the Python step on PATH, so `python` is the sandbox's own until you `pyenv install` / `pyenv local`.
  */
-export const setupPyenv = async (env: ToolEnv): Promise<void> => {
+export async function setupPyenv(env: ToolEnv): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision pyenv-win');
     return;
@@ -110,4 +112,4 @@ export const setupPyenv = async (env: ToolEnv): Promise<void> => {
   Object.assign(env.vars, { PYENV: home, PYENV_ROOT: home, PYENV_HOME: home });
   env.append.push(path.join(root, 'bin'), path.join(root, 'shims'));
   env.summary.push('pyenv-win: pyenv install <version> / pyenv local <version> (versions persist)');
-};
+}

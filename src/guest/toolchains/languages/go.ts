@@ -17,7 +17,7 @@ const findRelease = async (spec: string): Promise<GoRelease> =>
   pickGoRelease(await fetchJson<GoRelease[]>('https://go.dev/dl/?mode=json&include=all'), spec) ??
   Promise.reject(new Error('No Go release matches "' + spec + '"'));
 
-export const setupGo = async (env: ToolEnv, config: Toolchains['go']): Promise<void> => {
+export async function setupGo(env: ToolEnv, config: Toolchains['go']): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision Go ' + config.version);
     return;
@@ -55,4 +55,4 @@ export const setupGo = async (env: ToolEnv, config: Toolchains['go']): Promise<v
   await installOnce(env, 'go', config.tools, (pkg) =>
     execAsync(go, ['install', pkg.includes('@') ? pkg : pkg + '@latest'], { env: { ...process.env, ...vars } }),
   );
-};
+}

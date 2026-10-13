@@ -1,3 +1,4 @@
+// Which toolchains a project needs, from the files in its folder.
 import fs from 'node:fs';
 import path from 'node:path';
 import { exists } from '../runtime/fs.js';
@@ -5,13 +6,11 @@ import { projectWorkspace } from '../runtime/project-context.js';
 import { MARKERS } from '../../core/detect/toolchains.js';
 import { projectUses, specFromVersionFile } from '../../core/detect/versions.js';
 
-// ---- which toolchains a project needs ------------------------------------------------------------------------------
-
 const SKIP_DIRS = new Set(['node_modules', '.git', 'target', 'bin', 'obj', 'dist', 'build', 'vendor', '.venv', 'venv']);
 const entries = new Map<string, string[]>();
 
 /** File names in the project's folder and its direct sub-folders ("api/go.mod"); read once per project. */
-export const workspaceEntries = (): string[] => {
+export function workspaceEntries(): string[] {
   const workspace = projectWorkspace();
   const known = entries.get(workspace.toLowerCase());
   if (known) return known;
@@ -33,22 +32,23 @@ export const workspaceEntries = (): string[] => {
   const found = [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
   entries.set(workspace.toLowerCase(), found);
   return found;
-};
+}
 
 /**
  * true / false as configured. The host already turns "auto" into a decision at launch (core/detect-toolchains.ts);
  * this only applies when a session file still says "auto": the workspace has one of the marker files.
  */
-export const wanted = (setting: boolean | 'auto', toolchain: string): boolean =>
-  setting === 'auto'
+export function wanted(setting: boolean | 'auto', toolchain: string): boolean {
+  return setting === 'auto'
     ? projectUses(workspaceEntries(), (MARKERS as Record<string, readonly string[]>)[toolchain] ?? [])
     : setting;
+}
 
 /** The first of these version files in the workspace root, parsed (e.g. .ruby-version "3.3.1"). */
-export const versionFromFiles = (
+export function versionFromFiles(
   files: string[],
   parse: (text: string, name: string) => string | null = (t) => specFromVersionFile(t),
-): { spec: string; source: string } | null => {
+): { spec: string; source: string } | null {
   for (const name of files) {
     const file = path.join(projectWorkspace(), name);
     if (!exists(file)) continue;
@@ -56,4 +56,4 @@ export const versionFromFiles = (
     if (spec) return { spec, source: name };
   }
   return null;
-};
+}

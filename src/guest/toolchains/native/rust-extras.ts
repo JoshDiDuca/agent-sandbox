@@ -20,21 +20,21 @@ const cargoTarget = (targetDir: Toolchains['rust']['targetDir']): string | null 
 };
 
 /** "separate": tools\shims\cargo\cargo.exe in front of the real cargo, which it runs with the checkout's target dir. */
-export const cargoShim = (env: ToolEnv, rust: Toolchains['rust']): void => {
+export function cargoShim(env: ToolEnv, rust: Toolchains['rust']): void {
   const real = path.join(tool('rust', 'cargo', 'bin'), 'cargo.exe');
   if (rust.targetDir !== 'separate' || !exists(real)) return;
   const dir = mkdirp(tool('shims', 'cargo'));
   fs.copyFileSync(ensureCompiled('cargoshim'), path.join(dir, 'cargo.exe'));
   env.prepend.unshift(dir);
   env.vars.AGENT_REAL_CARGO = real;
-};
+}
 
 /**
  * Cargo defaults that fit Windows, written only when there is no $CARGO_HOME\config.toml yet: fewer parallel jobs
  * (parallel rustc ran out of paging file) and, for the GNU host, only line tables as debug info (full debug info made
  * test executables bigger than the 2 GB Windows allows).
  */
-export const cargoDefaults = (host: string): void => {
+export function cargoDefaults(host: string): void {
   const file = tool('rust', 'cargo', 'config.toml');
   if (exists(file) || !exists(path.dirname(file))) return;
   // Several agents often build at once: up to 4 jobs each (8 each crashed Windows inside the sandbox on 13 Oct 2026).
@@ -52,24 +52,24 @@ export const cargoDefaults = (host: string): void => {
         : []),
     ].join('\n'),
   );
-};
+}
 
 /**
  * Where cargo builds and where sccache keeps its cache. Cargo fingerprints hold absolute paths and the host toolchain,
  * so a target\\ shared with builds on the PC rebuilds every time the side changes: "separate" (the default) keeps a
  * sandbox one next to it. sccache's cache persists unless the project sets SCCACHE_DIR itself.
  */
-export const rustCaches = (rust: Toolchains['rust']): Record<string, string> => {
+export function rustCaches(rust: Toolchains['rust']): Record<string, string> {
   const target = cargoTarget(rust.targetDir);
   return {
     ...(target ? { CARGO_TARGET_DIR: target } : {}),
     ...(process.env.SCCACHE_DIR ? {} : { SCCACHE_DIR: path.join(dataDir, 'cache', 'sccache') }),
   };
-};
+}
 
 /** "auto": the msvc host when the MSVC step runs (as on most PCs), else GNU with MinGW. */
-export const rustHost = (config: Toolchains): string => {
+export function rustHost(config: Toolchains): string {
   if (config.rust.host !== 'auto') return config.rust.host;
   const cpu = arch === 'arm64' ? 'aarch64' : 'x86_64';
   return cpu + (wanted(config.msvc.enabled, 'msvc') ? '-pc-windows-msvc' : '-pc-windows-gnu');
-};
+}

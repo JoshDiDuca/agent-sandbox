@@ -41,7 +41,7 @@ const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
  * `cargo install --locked`. cargo-binstall is fetched on first use, so boots with every crate installed download
  * nothing.
  */
-export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((crate: string) => Promise<void>) => {
+export function crateInstaller(cargoHome: string, cargoEnv: SpawnOptions): (crate: string) => Promise<void> {
   const cargo = path.join(cargoHome, 'bin', 'cargo.exe');
   let binstall: Promise<boolean> | null = null;
   // quick-install's install statistics are opt-out; the sandbox opts out.
@@ -65,4 +65,4 @@ export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((cra
     }
     await execAsync(cargo, ['install', '--locked', crate], cargoEnv);
   };
-};
+}

@@ -11,11 +11,16 @@ export interface ToolEnv {
   append: string[];
   summary: string[];
 }
-export const emptyEnv = (): ToolEnv => ({ vars: {}, prepend: [], append: [], summary: [] });
+export function emptyEnv(): ToolEnv {
+  return { vars: {}, prepend: [], append: [], summary: [] };
+}
 
 export const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-export const tool = (...parts: string[]): string => path.join(toolsDir, ...parts);
+export function tool(...parts: string[]): string {
+  return path.join(toolsDir, ...parts);
+}
 
 /** First x.y.z in a tool's `--version` output. */
-export const versionOf = (exe: string, args: string[] = ['--version'], options = {}): string =>
-  /\d+\.\d+\.\d+\S*/.exec(execOutput(exe, args, options))?.[0] ?? 'installed';
+export function versionOf(exe: string, args: string[] = ['--version'], options = {}): string {
+  return /\d+\.\d+\.\d+\S*/.exec(execOutput(exe, args, options))?.[0] ?? 'installed';
+}

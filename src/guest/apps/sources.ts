@@ -3,7 +3,7 @@ import { githubAsset } from '../../shared/download/index.js';
 import { RESOLVERS, type Download } from './resolvers.js';
 
 /** Where to download an entry from. */
-export const resolve = async (entry: AppEntry): Promise<Download> => {
+export async function resolve(entry: AppEntry): Promise<Download> {
   const s = entry.source;
   if ('github' in s) {
     const a = await githubAsset(s.github, new RegExp(s.asset), true);
@@ -15,4 +15,4 @@ export const resolve = async (entry: AppEntry): Promise<Download> => {
   }
   if ('resolve' in s && RESOLVERS[s.resolve]) return RESOLVERS[s.resolve]();
   throw new Error('no download source for ' + entry.name);
-};
+}

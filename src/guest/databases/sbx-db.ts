@@ -69,11 +69,11 @@ const stop = async (name: string | undefined): Promise<number> => {
   return 0;
 };
 
-export const runSbxDb = (args: string[]): Promise<number> => {
+export function runSbxDb(args: string[]): Promise<number> {
   const [action = 'list', name] = args;
   if (action === 'list') return list();
   if (action === 'start') return start(name);
   if (action === 'stop') return stop(name);
   console.error(USAGE);
   return Promise.resolve(2);
-};
+}

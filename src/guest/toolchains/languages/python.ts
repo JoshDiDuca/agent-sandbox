@@ -83,11 +83,7 @@ const pyLauncher = (folder: string, py3: string, py2: string | null): void => {
   shim(folder, 'py', '"' + path.join(py3, 'python.exe') + '" "' + script + '"');
 };
 
-export const setupPython = async (
-  env: ToolEnv,
-  config: Toolchains['python'],
-  versions: ToolVersions,
-): Promise<void> => {
+export async function setupPython(env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision Python ' + versions.python.spec + (config.python2 ? ' and Python 2.7' : ''));
     return;
@@ -108,4 +104,4 @@ export const setupPython = async (
   shimPair(shims, '2', py2);
   pyLauncher(shims, py3, py2);
   env.summary.push('python2: ' + path.basename(py2).replace('python2-', ''));
-};
+}

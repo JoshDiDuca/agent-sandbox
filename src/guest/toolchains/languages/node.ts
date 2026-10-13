@@ -110,7 +110,7 @@ const activate = async (version: string): Promise<void> => {
   fs.symlinkSync(path.join(NVM_HOME, 'v' + version), NVM_SYMLINK, 'junction');
 };
 
-export const setupNode = async (env: ToolEnv, versions: ToolVersions, config: Toolchains['node']): Promise<void> => {
+export async function setupNode(env: ToolEnv, versions: ToolVersions, config: Toolchains['node']): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision nvm and Node ' + versions.node.spec + ' (from ' + versions.node.source + ')');
     return;
@@ -154,7 +154,7 @@ export const setupNode = async (env: ToolEnv, versions: ToolVersions, config: To
   }
   env.summary.push('node: ' + main + ' (from ' + versions.node.source + ', switch with nvm use)');
   await packageManagers(env, config, main);
-};
+}
 
 /** Global npm packages (per Node version, like nvm keeps them) and pnpm/yarn through corepack. */
 const packageManagers = async (env: ToolEnv, config: Toolchains['node'], version: string): Promise<void> => {

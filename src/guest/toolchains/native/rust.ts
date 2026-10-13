@@ -11,7 +11,7 @@ import { installOnce } from '../package-ledger.js';
 import { crateInstaller } from './binstall.js';
 import { installedMsvcEnv } from './msvc/index.js';
 
-export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refresh: boolean): Promise<void> => {
+export async function setupRust(env: ToolEnv, config: Toolchains['rust'], refresh: boolean): Promise<void> {
   const RUSTUP_HOME = tool('rust', 'rustup');
   const CARGO_HOME = tool('rust', 'cargo');
   const rustEnv = { env: { ...process.env, RUSTUP_HOME, CARGO_HOME } };
@@ -84,6 +84,6 @@ export const setupRust = async (env: ToolEnv, config: Toolchains['rust'], refres
           PATH: [path.join(CARGO_HOME, 'bin'), mingw, process.env.PATH ?? ''].join(path.delimiter),
         },
       };
-  // Prebuilt through cargo-binstall where the crate publishes a Windows build, else compiled (same "cargo" keys as before).
+  // Prebuilt through cargo-binstall where the crate publishes a Windows build, else compiled (same "cargo" keys).
   await installOnce(env, 'cargo', config.crates, crateInstaller(CARGO_HOME, cargoEnv));
-};
+}

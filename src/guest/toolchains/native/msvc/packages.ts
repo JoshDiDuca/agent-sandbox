@@ -43,9 +43,9 @@ const MSVC_PARTS = [
   'crt.source.base',
   'asan.headers.base',
   'pgo.headers.base',
-];
+] as const;
 /** Without these the compiler is unusable; the other parts are taken when the manifest has them. */
-const REQUIRED_PARTS = ['tools', 'crt.headers', 'crt.x64.desktop'];
+const REQUIRED_PARTS = ['tools', 'crt.headers', 'crt.x64.desktop'] as const;
 /** The SDK's .msi files (Desktop + UCRT + Store headers/libs/tools for x64), as in portable-msvc.py. */
 const SDK_MSIS = [
   'Windows SDK for Windows Store Apps Tools-x86_en-us.msi',
@@ -57,7 +57,7 @@ const SDK_MSIS = [
   'Windows SDK Desktop Headers x64-x86_en-us.msi',
   'Windows SDK Desktop Libs x64-x86_en-us.msi',
   'Windows SDK Desktop Tools x64-x86_en-us.msi',
-];
+] as const;
 
 /** The VS manifest (~18 MB), cached for a day. */
 const manifest = async (): Promise<Manifest> => {
@@ -165,7 +165,7 @@ const unpackedToolset = (): string | undefined => {
 };
 
 /** Downloads and unpacks MSVC and the Windows SDK into tools\msvc; resolves with the toolset and SDK folder names. */
-export const installPackages = async (config: Toolchains['msvc']): Promise<{ msvc: string; sdk: string }> => {
+export async function installPackages(config: Toolchains['msvc']): Promise<{ msvc: string; sdk: string }> {
   const { ids, pick } = catalogue(await manifest());
   const version = pickMsvcVersion(ids, config.msvcVersion);
   if (!version) throw new Error('no MSVC ' + config.msvcVersion + ' in the Visual Studio manifest');
@@ -216,4 +216,4 @@ export const installPackages = async (config: Toolchains['msvc']): Promise<{ msv
   const toolset = unpackedToolset();
   if (!toolset) throw new Error('MSVC ' + version + ' did not unpack (no cl.exe under VC\\Tools\\MSVC)');
   return { msvc: toolset, sdk: sdkVersion };
-};
+}

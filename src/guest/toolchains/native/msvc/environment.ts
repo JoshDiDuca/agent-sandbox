@@ -20,7 +20,7 @@ export interface VcEnv {
 }
 
 /** Variables vcvars64.bat would set for this tree (host x64, target x64). */
-export const vcvars = (root: string, msvc: string, sdk: string): VcEnv => {
+export function vcvars(root: string, msvc: string, sdk: string): VcEnv {
   const vc = path.join(root, 'VC', 'Tools', 'MSVC', msvc);
   const kits = path.join(root, 'Windows Kits', '10');
   const inc = (...p: string[]): string => path.join(kits, 'Include', sdk, ...p);
@@ -48,10 +48,10 @@ export const vcvars = (root: string, msvc: string, sdk: string): VcEnv => {
     },
     path: [path.join(vc, 'bin', 'Hostx64', 'x64'), path.join(kits, 'bin', sdk, 'x64')],
   };
-};
+}
 
 /** vcvars64.bat / vcvarsall.bat in the usual place, for scripts that `call` them. */
-export const writeVcvars = (env: VcEnv): void => {
+export function writeVcvars(env: VcEnv): void {
   const dir = mkdirp(path.join(ROOT, 'VC', 'Auxiliary', 'Build'));
   const lines = [
     '@echo off',
@@ -67,10 +67,10 @@ export const writeVcvars = (env: VcEnv): void => {
       '\r\n',
     ) + '\r\n',
   );
-};
+}
 
 /** vswhere.exe where Visual Studio's installer would put it, answering with this tree. */
-export const installVswhere = (msvc: string): void => {
+export function installVswhere(msvc: string): void {
   mkdirp(VSWHERE_DIR);
   fs.copyFileSync(ensureCompiled('vswhere'), path.join(VSWHERE_DIR, 'vswhere.exe'));
   const [major, minor] = msvc.split('.').slice(2);
@@ -78,17 +78,17 @@ export const installVswhere = (msvc: string): void => {
     path.join(VSWHERE_DIR, 'vswhere.json'),
     JSON.stringify({ installationPath: ROOT, installationVersion: '17.' + (minor ?? '0') + '.0.' + (major ?? '0') }),
   );
-};
+}
 
 /**
  * cl.exe and link.exe start vctip.exe (Visual Studio's telemetry uploader), which lingers after the build and keeps the
  * folder locked, so `sandbox repair` / `data clean` could not delete tools\msvc. Neither VSCMD_SKIP_SENDTELEMETRY nor
  * the TurnOffSwitch registry value stops it; without the file the compiler simply skips it. Nothing else needs it.
  */
-export const removeTelemetry = (msvc: string): void => {
+export function removeTelemetry(msvc: string): void {
   try {
     fs.rmSync(hostBin(msvc, 'vctip.exe'), { force: true });
   } catch (e) {
     warn("Could not remove MSVC's telemetry helper (vctip.exe); it may keep tools\\msvc locked: " + errMsg(e));
   }
-};
+}

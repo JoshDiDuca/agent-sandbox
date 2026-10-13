@@ -45,7 +45,7 @@ const rubyBuilds = async (): Promise<Map<string, Asset>> => {
 
 const sha256Of = (asset: Asset): string | null => (asset.digest?.startsWith('sha256:') ? asset.digest.slice(7) : null);
 
-export const setupRuby = async (env: ToolEnv, config: Toolchains['ruby']): Promise<void> => {
+export async function setupRuby(env: ToolEnv, config: Toolchains['ruby']): Promise<void> {
   const wantedSpec = versionFromFiles(['.ruby-version']) ?? { spec: config.version, source: 'config' };
   if (dryRun) {
     log('(dry run) would provision Ruby ' + wantedSpec.spec);
@@ -85,4 +85,4 @@ export const setupRuby = async (env: ToolEnv, config: Toolchains['ruby']): Promi
       env: { ...process.env, GEM_HOME: gems },
     }),
   );
-};
+}

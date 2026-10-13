@@ -14,7 +14,7 @@ import { installFromGithub } from '../install.js';
  * Mesa 3D for Windows (llvmpipe): OpenGL 4.5 on the CPU when the sandbox has no GPU. Windows only offers OpenGL 1.1 in
  * software, and opengl32.dll cannot be replaced system-wide, so programs pick Mesa up from their own folder.
  */
-export const setupMesa = async (env: ToolEnv, config: Toolchains['mesa']): Promise<void> => {
+export async function setupMesa(env: ToolEnv, config: Toolchains['mesa']): Promise<void> {
   if (dryRun) {
     log('(dry run) would provision Mesa 3D');
     return;
@@ -34,7 +34,7 @@ export const setupMesa = async (env: ToolEnv, config: Toolchains['mesa']): Promi
     "mesa (software OpenGL 4.5): copy opengl32.dll + libgallium_wgl.dll from %MESA_DIR% next to a game's .exe",
   );
   if (config.vulkan) await setupLavapipe(env, dir);
-};
+}
 
 const VULKAN_RUNTIME = 'https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime-components.zip';
 

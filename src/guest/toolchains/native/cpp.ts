@@ -9,7 +9,7 @@ import { installFromGithub } from '../install.js';
 import { CMAKE_FLOOR, cmakeTooOld } from '../../../core/detect/versions.js';
 
 /** MinGW-w64 GCC from WinLibs: gcc/g++/mingw32-make for the agent, and the linker for Rust's GNU host. */
-export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise<void> => {
+export async function setupCpp(env: ToolEnv, config: Toolchains['cpp']): Promise<void> {
   const bin = tool('mingw', 'mingw64', 'bin');
   const gcc = path.join(bin, 'gcc.exe');
   if (dryRun) {
@@ -39,7 +39,7 @@ export const setupCpp = async (env: ToolEnv, config: Toolchains['cpp']): Promise
     );
   env.summary.push('gcc: ' + versionOf(gcc) + ' (MinGW-w64, with cmake ' + cmake + ', ninja, premake5)');
   if (config.flexBison) await setupFlexBison(env);
-};
+}
 
 /** win_flex / win_bison (CMake's FindFLEX/FindBISON look for these names). Kept with the C/C++ tools on PATH. */
 const setupFlexBison = async (env: ToolEnv): Promise<void> => {

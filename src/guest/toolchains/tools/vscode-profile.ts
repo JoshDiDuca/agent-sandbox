@@ -24,8 +24,8 @@ export interface ToolPaths {
 const javaMajor = (home: string): string | undefined =>
   /(?:jdk|jre)?-?(\d{1,2})(?:[.+_-]|$)/i.exec(home.split(/[\\/]/).pop() ?? '')?.[1];
 
-/** User settings for the sandbox's VS Code. Only keys with a value are set; the caller removes the ones it set before. */
-export const vscodeSettings = (p: ToolPaths): Record<string, unknown> => {
+/** User settings for the sandbox's VS Code. Only keys with a value are set; the caller removes those it set before. */
+export function vscodeSettings(p: ToolPaths): Record<string, unknown> {
   const profiles: Record<string, unknown> = {};
   if (p.pwsh) profiles['PowerShell 7'] = { path: p.pwsh, args: ['-NoLogo'] };
   if (p.bash) profiles['Git Bash'] = { path: p.bash, args: ['--login', '-i'] };
@@ -58,10 +58,10 @@ export const vscodeSettings = (p: ToolPaths): Record<string, unknown> => {
     'npm.packageManager': 'auto',
   };
   return Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined));
-};
+}
 
 /** Extensions per toolchain (Marketplace ids). */
-const BY_TOOLCHAIN: Record<string, string[]> = {
+const BY_TOOLCHAIN: Readonly<Record<string, readonly string[]>> = {
   node: ['dbaeumer.vscode-eslint', 'esbenp.prettier-vscode'],
   python: ['ms-python.python', 'ms-python.debugpy'],
   java: [
@@ -81,7 +81,7 @@ const BY_TOOLCHAIN: Record<string, string[]> = {
   deno: ['denoland.vscode-deno'],
   pwsh: ['ms-vscode.powershell'],
 };
-const BY_DATABASE: Record<string, string[]> = {
+const BY_DATABASE: Readonly<Record<string, readonly string[]>> = {
   postgres: ['mtxr.sqltools', 'mtxr.sqltools-driver-pg'],
   mysql: ['mtxr.sqltools', 'mtxr.sqltools-driver-mysql'],
   mongodb: ['mongodb.mongodb-vscode'],
@@ -90,12 +90,12 @@ const BY_DATABASE: Record<string, string[]> = {
 export const EXTENSION_ID = /^[\w-]+\.[\w-]+$/;
 
 /** The extensions to have: always EditorConfig, then per toolchain and database in use, the project's, and yours. */
-export const vscodeExtensions = (o: {
+export function vscodeExtensions(o: {
   toolchains: string[];
   databases: string[];
   recommended: string[];
   extra: string[];
-}): string[] => {
+}): string[] {
   const all = [
     'editorconfig.editorconfig',
     ...o.toolchains.flatMap((t) => BY_TOOLCHAIN[t] ?? []),
@@ -104,10 +104,10 @@ export const vscodeExtensions = (o: {
     ...o.extra,
   ];
   return [...new Set(all.map((e) => e.toLowerCase()))].filter((e) => EXTENSION_ID.test(e));
-};
+}
 
-/** Extensions not installed yet, from the names of the folders in VS Code's extensions folder (publisher.name-1.2.3). */
-export const missingExtensions = (wanted: string[], folders: string[]): string[] => {
+/** Extensions not installed yet, from the folder names in VS Code's extensions folder (publisher.name-1.2.3). */
+export function missingExtensions(wanted: string[], folders: string[]): string[] {
   const have = folders.map((f) => f.toLowerCase());
   return wanted.filter((id) => !have.some((f) => f.startsWith(id + '-')));
-};
+}

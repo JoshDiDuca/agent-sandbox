@@ -14,8 +14,10 @@ import { arch, tool, type ToolEnv } from '../tool-env.js';
 import { setupSingleExe } from '../runtimes.js';
 import { ensureCompiled } from '../../runtime/csc.js';
 
-/** gh keeps `gh auth login` here, under the agent state (persists like Claude's own login; never copied from the PC). */
-export const ghConfigDir = (): string => path.join(stateDir, 'gh');
+/** gh keeps `gh auth login` here, under the agent state (persists like Claude's login; never copied from the PC). */
+export function ghConfigDir(): string {
+  return path.join(stateDir, 'gh');
+}
 
 const toolVars: Partial<Record<CliName, () => Record<string, string>>> = {
   gh: () => ({
@@ -47,12 +49,12 @@ const shimOpenssl = (env: ToolEnv): void => {
  * Installs the tools toolchains.cli asks for. Settings still "auto" here (normally the host decides) use the same
  * rules on the workspace as the host would. The gh rule is enforced here again, whatever the host sent.
  */
-export const setupCli = async (
+export async function setupCli(
   env: ToolEnv,
   settings: CliSettings,
   gitAccess: GitAccess,
   refresh = false,
-): Promise<void> => {
+): Promise<void> {
   const decisions = decideCli(settings, { gitAccess, hasGithubDir: exists(path.join(projectWorkspace(), '.github')) });
   if (settings.gh && !decisions.gh.on) {
     env.summary.push('gh: off (' + decisions.gh.reason + ')');
@@ -98,4 +100,4 @@ export const setupCli = async (
       env.summary.push('openssl: FAILED');
     }
   }
-};
+}

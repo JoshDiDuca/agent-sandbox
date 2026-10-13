@@ -13,7 +13,7 @@ import { tool, type ToolEnv } from '../tool-env.js';
 const VC_REDIST = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
 const MICROSOFT_SIGNER = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US';
 /** 1638: a newer version is already installed; 3010: installed, a restart would finish it (not needed for the DLLs). */
-const OK_EXIT_CODES = [0, 1638, 3010];
+const OK_EXIT_CODES: readonly number[] = [0, 1638, 3010];
 
 /** The subject of a valid Authenticode signature, or '' when the file is unsigned or tampered with. */
 const signerOf = (file: string): string =>
@@ -31,7 +31,7 @@ const signerOf = (file: string): string =>
  * storage and only run when Microsoft's signature on it checks out. Resolves true when this call ran the installer.
  * Only the "Visual C++ runtime" step reports it (`summary`); PHP calls it again just to be sure.
  */
-export const setupVcRuntime = async (env: ToolEnv, summary = true): Promise<boolean> => {
+export async function setupVcRuntime(env: ToolEnv, summary = true): Promise<boolean> {
   if (dryRun) {
     log('(dry run) would install the Visual C++ runtime');
     return false;
@@ -55,4 +55,4 @@ export const setupVcRuntime = async (env: ToolEnv, summary = true): Promise<bool
   }
   if (summary) env.summary.push('vc++ runtime: installed');
   return missing;
-};
+}

@@ -5,12 +5,16 @@ import type { GitAccess } from '../../core/types.js';
 export type Arch = 'x64' | 'arm64';
 
 /** PowerShell/PowerShell: the portable zip (PowerShell-7.6.6-win-x64.zip), never the MSI or the fxdependent builds. */
-export const pwshAsset = (arch: Arch): RegExp =>
-  arch === 'arm64' ? /^PowerShell-\d+\.\d+\.\d+-win-arm64\.zip$/ : /^PowerShell-\d+\.\d+\.\d+-win-x64\.zip$/;
+export function pwshAsset(arch: Arch): RegExp {
+  return arch === 'arm64' ? /^PowerShell-\d+\.\d+\.\d+-win-arm64\.zip$/ : /^PowerShell-\d+\.\d+\.\d+-win-x64\.zip$/;
+}
 
 /** cargo-bins/cargo-binstall: the plain zip (the .full build adds nothing we use; .sig files are signatures). */
-export const binstallAsset = (arch: Arch): RegExp =>
-  arch === 'arm64' ? /^cargo-binstall-aarch64-pc-windows-msvc\.zip$/ : /^cargo-binstall-x86_64-pc-windows-msvc\.zip$/;
+export function binstallAsset(arch: Arch): RegExp {
+  return arch === 'arm64'
+    ? /^cargo-binstall-aarch64-pc-windows-msvc\.zip$/
+    : /^cargo-binstall-x86_64-pc-windows-msvc\.zip$/;
+}
 
 /**
  * One portable command-line tool from a GitHub release. The archive is unpacked into tools\cli\<name>; without
@@ -54,7 +58,7 @@ export const CLI_TOOLS = [
 export type CliName = (typeof CLI_TOOLS)[number]['name'] | 'openssl';
 export const CLI_NAMES: readonly CliName[] = [...CLI_TOOLS.map((t) => t.name), 'openssl'];
 
-/** toolchains.cli: each tool true, false or "auto" (gh: when the project has a .github folder; zstd: never by itself). */
+/** toolchains.cli: each tool true, false or "auto" (gh: when the project has .github; zstd: never by itself). */
 export type CliSettings = Partial<Record<CliName, boolean | 'auto'>>;
 
 export interface CliContext {
@@ -72,7 +76,7 @@ export interface CliDecision {
  * Which catalogue tools a sandbox gets. gh is never installed unless git access is "full": gh pushes, merges and edits
  * branches through the GitHub API, so it would walk straight past a "readonly" (or "none") git guard.
  */
-export const decideCli = (settings: CliSettings, ctx: CliContext): Record<CliName, CliDecision> => {
+export function decideCli(settings: CliSettings, ctx: CliContext): Record<CliName, CliDecision> {
   const decide = (name: CliName): CliDecision => {
     const setting = settings[name] ?? false;
     if (name === 'gh' && setting !== false && ctx.gitAccess !== 'full')
@@ -87,4 +91,4 @@ export const decideCli = (settings: CliSettings, ctx: CliContext): Record<CliNam
     return { on: false, reason: 'not listed in toolchains.cli' };
   };
   return Object.fromEntries(CLI_NAMES.map((name) => [name, decide(name)])) as Record<CliName, CliDecision>;
-};
+}
