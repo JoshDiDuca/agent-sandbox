@@ -1,3 +1,4 @@
+import type { CommandName } from '../manifest.js';
 import type { Context } from './context.js';
 import { launch } from './launch/index.js';
 import { setup } from './setup/index.js';
@@ -10,7 +11,7 @@ import { agentCommandsCommand } from './agent-commands.js';
 
 export type Handler = (ctx: Context) => number | Promise<number | void>;
 
-export const HANDLERS: Record<string, Handler> = {
+export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   launch: (ctx) => launch(ctx),
   generate: (ctx) => launch(ctx, true),
   attach: attach,
@@ -35,4 +36,4 @@ export const HANDLERS: Record<string, Handler> = {
   data: data,
   'host-claude': claudeHost,
   _watch: watcher,
-};
+} satisfies Partial<Record<CommandName, Handler>>;

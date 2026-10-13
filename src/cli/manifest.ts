@@ -127,7 +127,14 @@ const AGENT_OPTIONS: OptionSpec[] = [
 ];
 const json = true;
 
-export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse([
+/** A spec as written below (`as const` makes every array readonly). */
+type Frozen<T> = T extends readonly (infer U)[]
+  ? readonly Frozen<U>[]
+  : T extends object
+    ? { readonly [K in keyof T]: Frozen<T[K]> }
+    : T;
+
+const COMMAND_LIST = [
   {
     name: 'launch',
     summary: 'start the sandbox and an agent (or another session in the running sandbox)',
@@ -392,6 +399,10 @@ export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse([
     interactive: true,
   },
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },
-]);
+] as const satisfies readonly Frozen<CommandSpec>[];
+
+export type CommandName = (typeof COMMAND_LIST)[number]['name'];
+
+export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse(COMMAND_LIST);
 
 export const commandSpec = (name: string): CommandSpec | undefined => COMMANDS.find((c) => c.name === name);
