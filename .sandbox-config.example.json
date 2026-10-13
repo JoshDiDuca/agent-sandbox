@@ -8,7 +8,8 @@
     "rust": { "enabled": false }
   },
   "mappings": [
-    { "host": "D:\\Assets\\textures", "guest": "C:\\Assets", "readOnly": true, "optional": true }
+    { "host": "./data", "guest": "C:\\Data", "readOnly": true, "optional": true },
+    { "host": "D:\\Assets\\textures", "readOnly": true, "optional": true }
   ],
   "scripts": []
 }

@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
-import { planMirrorWorkspace } from '../shared/guest-paths.js';
-import { autoGuestFolder, rootGuestDir, usableRoots } from '../shared/projects.js';
+import type { Config, Mapping, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
+import { deriveGuest, placeGuest, planMirrorWorkspace } from '../shared/guest-paths.js';
+import { autoGuestFolder, PROJECTS_GUEST, rootGuestDir, usableRoots } from '../shared/projects.js';
 import { DATABASES, type Database } from './detect-databases.js';
-import { allowedAnswer, allowRequests, allowStorePath, applyOverrides, describeOverrides, isTrusted, loosenedRequests, saveAllowed, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
+import { allowedAnswer, allowRequests, allowStorePath, applyOverrides, describeOverrides, isTrusted, LOCAL_CONFIG_NAME, loosenedRequests, normalizeOverrides, OUTSIDE_FOLDER, outsideKey, outsideMappings, readLocalConfig, saveAllowed, saveTrust, trustStorePath } from './local-config.js';
 import { assertSafeWorkspace } from './safe-paths.js';
-import { dirExists, expandPath, fail, fileExists, plainText } from './util.js';
+import { dirExists, expandPath, fail, fileExists, isInsideOrEqual, plainText } from './util.js';
 
 /** 'auto' guest workspace: C:\Workspace\<folder name> (shared/projects.ts, where every project's place is decided). */
 export const autoGuestWorkspace = autoGuestFolder;
@@ -84,11 +84,12 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
   let localConfigPath: string | null = null;
   let overrides: Overrides = {};
   const local = req.noLocalConfig ? null : readLocalConfig(workspaceHost);
+  let outsideAllowed: string[] = [];
   if (local) {
     overrides = normalizeOverrides(local.data, workspaceHost, local.path);
     const store = trustStorePath(storageRoot);
     if (!isTrusted(store, local.path, local.hash)) {
-      const summary = describeOverrides(overrides);
+      const summary = describeOverrides(overrides, workspaceHost);
       let trusted = req.trustConfig;
       if (!trusted && req.ask) {
         console.log('\nFound ' + local.path + ' which is not trusted yet. It would apply:');
@@ -99,16 +100,47 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
       saveTrust(store, local.path, local.hash);
       notes.push('Trusted ' + local.path + ' (you will only be asked again if the file changes).');
     }
-    // A project may only tighten. What it asks for beyond that is used only if you allowed it for this project (asked
-    // once, interactively, never by --trust-config); otherwise it is named here instead of dropped silently.
+    // A project may only tighten. What it asks for beyond that (a looser setting, a folder outside the project) is used
+    // only if you allowed it for this project: asked once, in one question, at an interactive launch, never by
+    // --trust-config. Folders outside the project follow projects.allowOutsideMappings (your settings only). A looser
+    // setting you did not allow is named in the notes instead of dropped silently.
     const allowStore = allowStorePath(storageRoot);
+    const policy = config.projects.allowOutsideMappings;
+    // An optional folder that is not on this PC is skipped at launch, so it needs no answer (yet).
+    const outside = outsideMappings(workspaceHost, overrides.mappings).filter((m) => !m.optional || dirExists(m.host));
+    const name = path.basename(workspaceHost) + '\'s ' + LOCAL_CONFIG_NAME;
+    const preview = guestWorkspaceOf(applyOverrides(config, overrides), workspaceHost).guest;
+    const describe = (m: Mapping): string => (m.readOnly ? 'read-only  ' : 'READ/WRITE ') + m.host + '  ->  ' + previewGuest(m, workspaceHost, preview).guest;
+    if (outside.length && policy === false) {
+      fail(name + ' maps ' + outside.length + ' folder' + (outside.length === 1 ? '' : 's') + ' outside the project, and your settings do not allow that:\n  ' + outside.map(describe).join('\n  '),
+        'Allow it: set projects.allowOutsideMappings to "ask" or true in your settings (sandbox > Settings, or the file sandbox config path shows). Or remove those mappings from the file.');
+    }
+    const looser = loosenedRequests(config, overrides);
+    const interactive = Boolean(req.ask) && (req.interactive ?? Boolean(process.stdin.isTTY));
+    const openOutside = policy === 'ask' ? outside.filter((m) => allowedAnswer(allowStore, local.path, OUTSIDE_FOLDER, outsideKey(m)) !== true) : [];
+    const openLooser = looser.filter((a) => allowedAnswer(allowStore, local.path, a.key, a.wanted) === null);
+    let declinedOutside = false;
+    if (interactive && req.ask && (openOutside.length || openLooser.length)) {
+      console.log('\n' + name + ' asks for more than your settings allow:');
+      if (openOutside.length) console.log('  Folders outside the project:\n' + openOutside.map((m) => '    ' + plainText(describe(m))).join('\n'));
+      for (const a of openLooser) console.log('  ' + a.key + ' = ' + JSON.stringify(a.wanted) + '  (your settings: ' + JSON.stringify(a.yours) + ')');
+      const ok = await req.ask('Allow ' + (openOutside.length + openLooser.length === 1 ? 'it' : 'these') + ' for this project?');
+      for (const a of openLooser) saveAllowed(allowStore, local.path, a.key, a.wanted, ok);
+      // A "no" to folders is not kept: the next interactive launch asks again.
+      if (ok) for (const m of openOutside) saveAllowed(allowStore, local.path, OUTSIDE_FOLDER, outsideKey(m), true);
+      declinedOutside = !ok && openOutside.length > 0;
+    }
+    const notAllowed = policy === 'ask' ? outside.filter((m) => allowedAnswer(allowStore, local.path, OUTSIDE_FOLDER, outsideKey(m)) !== true) : [];
+    if (notAllowed.length) {
+      const what = name + ' maps ' + notAllowed.length + ' folder' + (notAllowed.length === 1 ? '' : 's') + ' outside the project:\n  ' + notAllowed.map(describe).join('\n  ');
+      fail(what + (declinedOutside ? '\nYou did not allow ' + (notAllowed.length === 1 ? 'it' : 'them') + ', so the sandbox was not started.' : '\nThat needs your OK once (a repo ships this file), and this launch cannot ask (no interactive terminal).'),
+        'Allow ' + (notAllowed.length === 1 ? 'it' : 'them') + ': start it from an interactive terminal and answer y, or set projects.allowOutsideMappings to true in your settings (sandbox > Settings, or the file sandbox config path shows).');
+    }
+    outsideAllowed = [...new Set(outside.map((m) => m.host))];
+    if (outside.length) notes.push('Folders outside the project allowed for ' + name + ' (' + (policy === true ? 'projects.allowOutsideMappings is true' : 'your answer is kept in ' + allowStore) + '): ' + outsideAllowed.join(', '));
     const allowed: { key: string; wanted: unknown }[] = [];
-    for (const ask of loosenedRequests(config, overrides)) {
-      let ok = allowedAnswer(allowStore, local.path, ask.key, ask.wanted);
-      if (ok === null && req.ask && process.stdin.isTTY) {
-        ok = await req.ask('This project asks for ' + ask.key + ' = ' + JSON.stringify(ask.wanted) + ', which is looser than your settings (' + JSON.stringify(ask.yours) + '). Allow it for this project only?');
-        saveAllowed(allowStore, local.path, ask.key, ask.wanted, ok);
-      }
+    for (const ask of looser) {
+      const ok = allowedAnswer(allowStore, local.path, ask.key, ask.wanted);
       if (ok) { allowed.push(ask); notes.push('Allowed for this project: ' + ask.key + ' = ' + JSON.stringify(ask.wanted) + ' (your answer is kept in ' + allowStore + ').'); }
       else notes.push('The project asks for ' + ask.key + ' = ' + JSON.stringify(ask.wanted) + ', but your settings say ' + JSON.stringify(ask.yours) + ', so it is not used. ' + (ok === false ? 'You said no (kept in ' + allowStore + ').' : 'Start it from an interactive terminal to allow it for this project.') + ' Or set ' + ask.key + ' in your own settings (sandbox, then Settings > All projects).');
     }
@@ -123,13 +155,11 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
     if (!DATABASES.includes(db)) fail('Unknown database "' + name + '".', 'Choose from: ' + DATABASES.join(', '));
     config = { ...config, databases: { ...config.databases, [db]: { ...config.databases[db], enabled: true } } };
   }
-  if (config.guestWorkspace === 'auto') config = placeInRoot({ ...config, guestWorkspace: autoGuestWorkspace(workspaceHost) }, workspaceHost, mirror, notes);
-  else if (config.guestWorkspace === 'mirror') {
-    const plan = planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));
-    const placed = placeInRoot({ ...config, guestWorkspace: plan.guest }, workspaceHost, mirror, notes);
-    if (plan.note && placed.guestWorkspace === plan.guest) notes.push(plan.note);
-    config = placed;
-  }
+  // auto / mirror: a project inside a root is where the root shows it, whichever project starts the sandbox.
+  const guest = guestWorkspaceOf(config, workspaceHost);
+  const placed = config.guestWorkspace === 'auto' || mirror ? placeInRoot({ ...config, guestWorkspace: guest.guest }, workspaceHost, mirror, notes) : { ...config, guestWorkspace: guest.guest };
+  if (guest.note && placed.guestWorkspace === guest.guest) notes.push(guest.note);
+  config = placed;
 
   scripts.push(...req.scripts.map((s: string) => path.resolve(s)));
   const harnessName = req.noAgent ? 'none' : (req.harness ?? config.defaultHarness);
@@ -137,5 +167,22 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
   const versions = resolveVersions(config, workspaceHost, overrides, req, hostNodeVersion);
   const dataPath = path.join(storageRoot, 'data', config.storage.dataName);
   // A project file may ask for "mirror" too (it decides only its own path); project roots follow the user's choice.
-  return { config, storageRoot, dataPath, workspaceHost, harnessName, scripts, localConfigPath, notes, versions, mirror };
+  return { config, storageRoot, dataPath, workspaceHost, harnessName, scripts, localConfigPath, notes, versions, mirror, outsideMappings: outsideAllowed };
 };
+
+/** Where the workspace appears: guestWorkspace "auto", "mirror" (with a note when it falls back) or a path. */
+export const guestWorkspaceOf = (config: Pick<Config, 'guestWorkspace'>, workspaceHost: string): { guest: string; note: string | null } => {
+  if (config.guestWorkspace === 'auto') return { guest: autoGuestWorkspace(workspaceHost), note: null };
+  if (config.guestWorkspace === 'mirror') return planMirrorWorkspace(workspaceHost, autoGuestWorkspace(workspaceHost));
+  return { guest: config.guestWorkspace, note: null };
+};
+
+/**
+ * Where a mapping will most likely appear, before the launch knows every other folder (the prompt and config check
+ * show it; the launch places it for real in host/launch/mappings.ts with the same rules).
+ */
+export const previewGuest = (m: Pick<Mapping, 'host' | 'guest'>, workspaceHost: string, workspaceGuest: string): { guest: string; note: string | null } =>
+  placeGuest(m.host, m.guest ?? deriveGuest(m.host, workspaceHost, workspaceGuest), [
+    ...(m.guest || !isInsideOrEqual(workspaceHost, m.host) ? [{ guest: workspaceGuest, what: 'the project' }] : []),
+    { guest: PROJECTS_GUEST, what: 'other projects' },
+  ]);

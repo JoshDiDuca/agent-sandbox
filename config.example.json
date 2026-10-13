@@ -377,6 +377,7 @@
     "roots": [],
     "askToAddRoot": true,
     "declinedRoots": [],
+    "allowOutsideMappings": "ask",
     "wsbShare": true
   }
 }

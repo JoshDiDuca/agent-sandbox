@@ -316,7 +316,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   // What the sandbox boots with (the launch folder's settings plus what the other projects at boot want).
   const booted = generated.bootConfig;
 
-  for (const note of [...run.notes, ...bootWants.notes, ...generated.projects.notes]) console.log(note);
+  for (const note of [...run.notes, ...bootWants.notes, ...generated.projects.notes, ...generated.mappingNotes]) console.log(note);
   const secretFiles = config.secrets.warnFiles ? findSecretFiles(run.workspaceHost) : [];
   if (secretFiles.length) {
     const shown = secretFiles.slice(0, 12).join(', ') + (secretFiles.length > 12 ? ', ...' : '');
@@ -337,7 +337,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
     ['Secrets', !config.secrets.strip ? 'NOT stripped (secrets.strip is off)' : generated.profile.secretsRemoved.length ? 'kept on this PC: ' + generated.profile.secretsRemoved.join(', ') + '  (secrets.allow lets one through)' : 'none found in what is copied'],
     ...roots.map((r, i) => [i ? '' : 'Project roots', r.host + '  ->  ' + r.guest + '  (every project in it opens without a restart)']),
     ...projects.map((p, i) => [i ? '' : 'Projects', p.host + '  ->  ' + p.guest]),
-    ...generated.mappings.slice(2).filter((m) => m.guest !== config.guestWorkspace && ![...roots, ...projects].some((p) => p.guest === m.guest)).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
+    ...generated.mappings.slice(2).filter((m) => m.guest !== config.guestWorkspace && ![...roots, ...projects].some((p) => p.guest === m.guest)).map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest + (m.label ? '  (' + m.label + ')' : '')]),
     ['Generated', generated.wsbPath],
   ]);
   if (generateOnly) return 0;

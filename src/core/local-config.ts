@@ -21,14 +21,17 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
   const missing = scripts?.filter((s) => !fileExists(s)) ?? [];
   if (missing.length) fail(source + ' is not valid:\n  - scripts: file not found: ' + missing.join(', '));
   const mappings = overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) }));
-  // A repo ships this file, so it must not reach the rest of this PC: its extra folders stay inside the project.
-  const outside = mappings?.filter((m) => !insideProject(dir, m.host)) ?? [];
-  if (outside.length) fail(source + ' is not valid:\n  - mappings: a project file may only map folders inside the project, not ' + outside.map((m) => m.host).join(', '), 'Map other folders in your own settings (sandbox config path shows where they are).');
   return { ...overrides, scripts, mappings };
 };
 
+/**
+ * The project file's mappings of folders outside the project (%VAR% expanded, links and short names followed). A repo
+ * ships this file, so these reach the rest of this PC: projects.allowOutsideMappings in YOUR settings decides.
+ */
+export const outsideMappings = <M extends { host: string }>(dir: string, mappings: M[] = []): M[] => mappings.filter((m) => !insideProject(dir, m.host));
+
 /** `folder` (also where it really is, through links) is inside the project folder `dir`. */
-const insideProject = (dir: string, folder: string): boolean => {
+export const insideProject = (dir: string, folder: string): boolean => {
   // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created yet.
   const real = (p: string): string => {
     const full = path.resolve(p);
@@ -70,7 +73,8 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   // Its patterns keep more out on top of yours; yours stay.
   if (rest.network?.blockHosts) next.network.blockHosts = _.union(config.network.blockHosts, rest.network.blockHosts);
   if (rest.workspaceFilter?.exclude) next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
-  if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
+  const sameGuest = (a?: string, b?: string): boolean => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+  if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => sameGuest(o.guest, m.guest))), ...mappings];
   return next;
 };
 
@@ -78,11 +82,12 @@ const flatten = (value: unknown, prefix = ''): string[] =>
   _.isPlainObject(value) ? Object.entries(value as object).flatMap(([k, v]) => flatten(v, prefix ? prefix + '.' + k : k)) : [prefix + ' = ' + JSON.stringify(value)];
 
 /** Human-readable list of what a local config changes, with risky items flagged. */
-export const describeOverrides = (ov: Overrides): string[] => {
+export const describeOverrides = (ov: Overrides, dir?: string): string[] => {
   const { harness, mappings = [], scripts = [], $schema: _schema, ...sections } = ov;
+  const outside = dir ? outsideMappings(dir, mappings) : [];
   const lines = [
     ...(harness ? ['agent = ' + harness] : []),
-    ...mappings.map((m) => (m.readOnly ? 'read-only' : 'READ/WRITE') + ' folder ' + m.host + '  ->  ' + m.guest),
+    ...mappings.map((m) => (m.readOnly ? 'read-only' : 'READ/WRITE') + ' folder ' + m.host + '  ->  ' + (m.guest ?? 'the same path') + (outside.includes(m) ? '  (outside the project)' : '')),
     ...scripts.map((s) => 'runs inside the sandbox: ' + s),
     ...flatten(sections),
   ];
@@ -115,7 +120,7 @@ export const saveTrust = (store: string, file: string, hash: string): void => wr
 
 export const allowStorePath = (storageRoot: string): string => path.join(storageRoot, 'allowed-requests.json');
 const loadAllowed = (store: string): Record<string, string[]> => {
-  const parsed = z.record(z.string(), z.array(z.string().max(300)).max(50)).safeParse(tryReadJson<unknown>(store) ?? {});
+  const parsed = z.record(z.string(), z.array(z.string().max(2000)).max(500)).safeParse(tryReadJson<unknown>(store) ?? {});
   return parsed.success ? parsed.data : {};
 };
 const allowKey = (setting: string, value: unknown): string => setting + ' = ' + JSON.stringify(value);
@@ -129,6 +134,10 @@ export const saveAllowed = (store: string, file: string, setting: string, value:
   const entry = allowKey(setting, value);
   writeJson(store, { ...all, [key(file)]: _.union(_.without(all[key(file)] ?? [], entry, 'no: ' + entry), [(allow ? '' : 'no: ') + entry]) });
 };
+
+/** Answers for folders outside the project are kept with the others, one per folder (and read-only or not). */
+export const OUTSIDE_FOLDER = 'folder outside the project';
+export const outsideKey = (m: { host: string; readOnly: boolean }): string => (m.readOnly ? 'read-only ' : 'read/write ') + path.resolve(m.host).toLowerCase();
 
 /** Your config with these requests let through, so applyOverrides' "strictest wins" keeps the project's value. */
 export const allowRequests = (config: Config, allowed: { key: string; wanted: unknown }[]): Config => {

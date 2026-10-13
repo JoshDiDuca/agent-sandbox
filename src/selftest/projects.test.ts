@@ -312,7 +312,7 @@ export const projectsSuite: Suite = {
     const unionWsb = fs.readFileSync(unionGen.wsbPath, 'utf8');
     t.includes(unionWsb, '<vGPU>Enable</vGPU>', 'the restart plan: vGPU on because the added project asks for it (and you allowed it)');
     t.includes(unionWsb, '<HostFolder>' + path.join(games, 'assets') + '</HostFolder><SandboxFolder>C:\\Mirror\\F\\GameAssets</SandboxFolder><ReadOnly>true</ReadOnly>', 'the restart plan: the added project\'s mapping is mapped');
-    t.includes(unionWsb, '<HostFolder>' + games + '</HostFolder><SandboxFolder>C:\\Projects\\proj-games</SandboxFolder>', 'the restart plan: the added project itself is mapped');
+    t.includes(unionWsb, '<HostFolder>' + games + '</HostFolder><SandboxFolder>C:\\Workspace\\proj-games</SandboxFolder>', 'the restart plan: the added project itself is mapped (where it is as the launch folder)');
     t.equal(unionGen.widened, { 'sandbox.vGpu': 'proj-games' }, 'the registry learns which boot setting was turned on for which project');
     t.check(unionGen.projects.notes.some((n) => n.startsWith('vGPU is on in this sandbox')), 'the launch says vGPU is on for every project and why', JSON.stringify(unionGen.projects.notes));
     t.check(nothingMissing(missingAtBoot(protectionsOf(unionGen.bootConfig), { memoryMb: unionGen.memoryMb, mappings: unionGen.mappings }, gamesRun.config, fs.existsSync)), 'after that restart the project joins with nothing missing');

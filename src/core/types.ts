@@ -12,7 +12,8 @@ export type Mapping = z.output<typeof MappingSchema>;
 export type Toolchains = Config['toolchains'];
 export type ClaudeProfileConfig = Config['claudeProfile'];
 
-export interface ResolvedMapping { host: string; guest: string; readOnly: boolean }
+/** label: shown in the launch table, e.g. "outside the project, allowed". */
+export interface ResolvedMapping { host: string; guest: string; readOnly: boolean; label?: string }
 export interface LocalConfigFile { path: string; hash: string; data: unknown }
 export interface LoadedConfig { config: Config; configPath: string | null; base: string }
 
@@ -23,12 +24,16 @@ export interface RunRequest {
   databases?: string[];
   nodeVersion?: string; pythonVersion?: string;
   ask?: (question: string) => Promise<boolean>;
+  /** `ask` can reach you (default: stdin is a terminal). Tests set it. */
+  interactive?: boolean;
 }
 export interface ResolvedRun {
   config: Config; storageRoot: string; dataPath: string; workspaceHost: string; harnessName: string; scripts: string[];
   localConfigPath: string | null; notes: string[]; versions: ToolVersions;
   /** Your config asks for guestWorkspace "mirror" (project roots then appear at their PC paths too). */
   mirror?: boolean;
+  /** The project file's folders outside the project that you allowed (host paths; the launch table marks them). */
+  outsideMappings?: string[];
 }
 
 /** A requested version plus where the request came from (shown to the user). */
@@ -67,6 +72,8 @@ export interface Generated {
   /** Project roots and other projects mapped with the launch folder. */
   projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };
   toolchains: Record<import('./detect-toolchains.js').AutoToolchain, import('./detect-toolchains.js').ToolchainDecision>;
+  /** Where extra folders went when their own path could not be used, and the optional ones skipped. */
+  mappingNotes: string[];
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult { hostDir: string | null; staged: string[]; skipped: string[]; credentials: boolean; secretsRemoved: string[] }

@@ -10,7 +10,6 @@
 import _ from 'lodash';
 import type { Config, ResolvedMapping } from './types.js';
 import { GIT_STRICTNESS, NEVER_LOOSER, OFF_IS_SAFER, ON_IS_SAFER } from './local-config.js';
-import { sandboxFolder } from '../shared/guest-paths.js';
 
 /** The protections of a running sandbox, by setting path (`sandbox.networking`, `provisioning.git.access`, ...). */
 export type Protections = Record<string, boolean | string>;
@@ -68,10 +67,9 @@ export interface BootRecord { memoryMb: number | null; mappings: ResolvedMapping
 /** What a project wants that the running sandbox started without. */
 export interface Missing { settings: string[]; memoryMb: number | null; mappings: ResolvedMapping[] }
 
-const sameFolder = (a: string, b: string): boolean => sandboxFolder(a).toLowerCase().replace(/\\+$/, '') === sandboxFolder(b).toLowerCase().replace(/\\+$/, '');
 const sameHost = (a: string, b: string): boolean => a.toLowerCase().replace(/\\+$/, '') === b.toLowerCase().replace(/\\+$/, '');
-/** `m` is in `mapped` (same folders; read-only is enough for a read-only wish). */
-const isMapped = (mapped: ResolvedMapping[], m: ResolvedMapping): boolean => mapped.some((x) => sameHost(x.host, m.host) && sameFolder(x.guest, m.guest) && (m.readOnly || !x.readOnly));
+/** `m`'s folder is mapped, wherever the launch placed it (read-only is enough for a read-only wish). */
+const isMapped = (mapped: ResolvedMapping[], m: { host: string; readOnly: boolean }): boolean => mapped.some((x) => sameHost(x.host, m.host) && (m.readOnly || !x.readOnly));
 
 /**
  * The boot-only things `config` (a project's effective config: your settings, its approved file, your answers) asks
@@ -80,7 +78,7 @@ const isMapped = (mapped: ResolvedMapping[], m: ResolvedMapping): boolean => map
 export const missingAtBoot = (running: Protections, boot: BootRecord, config: Config, exists: (folder: string) => boolean = () => true): Missing => ({
   settings: BOOT_SETTINGS.filter((s) => _.get(config, s) === true && running[s] === false),
   memoryMb: typeof config.sandbox.memoryMb === 'number' && boot.memoryMb !== null && config.sandbox.memoryMb > boot.memoryMb ? config.sandbox.memoryMb : null,
-  mappings: config.mappings.filter((m) => (!m.optional || exists(m.host)) && !isMapped(boot.mappings, m)).map((m) => ({ host: m.host, guest: m.guest, readOnly: m.readOnly })),
+  mappings: config.mappings.filter((m) => (!m.optional || exists(m.host)) && !isMapped(boot.mappings, m)).map((m) => ({ host: m.host, guest: m.guest ?? m.host, readOnly: m.readOnly })),
 });
 
 export const nothingMissing = (m: Missing): boolean => m.settings.length === 0 && m.memoryMb === null && m.mappings.length === 0;
@@ -107,8 +105,6 @@ export const missingTip = (m: Missing): string => {
 /** A project mapped at boot besides the launch folder, with its effective config. */
 export interface BootWant { name: string; config: Config }
 
-const RESERVED_GUEST = ['C:\\AgentLaunch', 'C:\\AgentData', 'C:\\HostTools', 'C:\\Projects'];
-
 export interface Widened {
   config: Config;
   /** Setting -> the project it was turned on for. */
@@ -118,13 +114,12 @@ export interface Widened {
 
 /**
  * The launch folder's config plus what the other projects mapped at boot want: their allowed .wsb devices, a fixed
- * memory size larger than the launch's, and their mappings (skipping ones whose sandbox folder is taken).
+ * memory size larger than the launch's, and their mappings (placed with every other mapping at launch).
  * `keepOff`: devices the launch folder's own .sandbox-config.json switched off; they stay off.
  */
-export const widenForProjects = (launch: Config, others: BootWant[], opts: { keepOff?: string[]; reserved?: string[]; exists?: (folder: string) => boolean } = {}): Widened => {
+export const widenForProjects = (launch: Config, others: BootWant[], opts: { keepOff?: string[]; exists?: (folder: string) => boolean } = {}): Widened => {
   const keepOff = opts.keepOff ?? [];
   const exists = opts.exists ?? ((): boolean => true);
-  const reserved = [...RESERVED_GUEST, ...(opts.reserved ?? [])];
   const config = _.cloneDeep(launch);
   const widened: Record<string, string> = {};
   const notes: string[] = [];
@@ -140,14 +135,10 @@ export const widenForProjects = (launch: Config, others: BootWant[], opts: { kee
     const mem = o.config.sandbox.memoryMb;
     if (typeof mem === 'number' && typeof config.sandbox.memoryMb === 'number' && mem > config.sandbox.memoryMb) config.sandbox.memoryMb = mem;
     for (const m of o.config.mappings) {
-      if (config.mappings.some((x) => sameHost(x.host, m.host) && sameFolder(x.guest, m.guest))) continue;
+      if (config.mappings.some((x) => sameHost(x.host, m.host))) continue;
       if (m.optional && !exists(m.host)) continue;
       if (!exists(m.host)) { notes.push(o.name + ': mapped folder not found, skipped: ' + m.host); continue; }
-      const g = sandboxFolder(m.guest).toLowerCase();
-      // Also the folders every sandbox has (the launch folder's workspace, C:\AgentLaunch, C:\Projects ...).
-      const used = [...config.mappings.map((x) => x.guest), config.guestWorkspace, ...reserved];
-      const taken = used.some((u) => { const xg = sandboxFolder(u).toLowerCase(); return xg === g || xg.startsWith(g + '\\') || g.startsWith(xg + '\\'); });
-      if (taken) { notes.push(o.name + ': ' + m.guest + ' is already used by another mapping, so ' + m.host + ' is not mapped.'); continue; }
+      // Where it appears (and moving it when that place is taken) is decided with every other mapping at launch.
       config.mappings.push({ ...m, optional: true });
     }
   }

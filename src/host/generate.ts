@@ -54,7 +54,7 @@ export const generateSandbox = (given: GenerateOptions): Generated & { personali
   // Several projects at boot: the sandbox also gets what the others want and you allowed (core/project-policy.ts).
   const others = given.bootWants?.projects ?? [];
   const boot = planBootProjects({ run: given.run, packageRoot: given.packageRoot, extraProjects: given.extraProjects, knownProjects: given.knownProjects });
-  const wide = widenForProjects(given.run.config, others, { keepOff: given.bootWants?.keepOff, reserved: [...boot.roots, ...boot.projects].map((p) => p.guest), exists: dirExists });
+  const wide = widenForProjects(given.run.config, others, { keepOff: given.bootWants?.keepOff, exists: dirExists });
   const o: GenerateOptions = { ...given, run: { ...given.run, config: wide.config } };
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
@@ -68,7 +68,8 @@ export const generateSandbox = (given: GenerateOptions): Generated & { personali
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
-  const mappings = collectMappings(o, launchPath, boot);
+  const mappingNotes: string[] = [];
+  const mappings = collectMappings(o, launchPath, boot, mappingNotes);
 
   const profile = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : NO_PROFILE;
   stageGitIdentity(launchPath);
@@ -119,5 +120,5 @@ export const generateSandbox = (given: GenerateOptions): Generated & { personali
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, bootConfig: config, widened: wide.widened, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: { ...boot, notes: [...boot.notes, ...wide.notes] } };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, bootConfig: config, widened: wide.widened, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: { ...boot, notes: [...boot.notes, ...wide.notes] }, mappingNotes };
 };

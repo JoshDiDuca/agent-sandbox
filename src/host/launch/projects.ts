@@ -38,7 +38,7 @@ export const planBootProjects = (o: { run: ResolvedRun; packageRoot: string; ext
     projects.push(folder);
   }
   // Projects mapped on their own sit where they would as the launch folder (C:\Workspace\<name>), never on top of it.
-  const taken = [config.guestWorkspace, ...config.mappings.map((m) => m.guest)];
+  const taken = [config.guestWorkspace, ...config.mappings.flatMap((m) => (m.guest ? [m.guest] : []))];
   return { ...planProjectMappings(roots, projects, Boolean(o.run.mirror), taken), notes };
 };
 
