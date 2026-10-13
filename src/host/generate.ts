@@ -63,7 +63,8 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
   ensureDir(launchPath);
   ensureDir(dataPath);
   const boot = planBootProjects({ run: o.run, packageRoot: o.packageRoot, extraProjects: o.extraProjects, knownProjects: o.knownProjects });
-  const mappings = collectMappings(o, launchPath, boot);
+  const mappingNotes: string[] = [];
+  const mappings = collectMappings(o, launchPath, boot, mappingNotes);
 
   const profile = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : NO_PROFILE;
   stageGitIdentity(launchPath);
@@ -113,5 +114,5 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: boot };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: boot, mappingNotes };
 };

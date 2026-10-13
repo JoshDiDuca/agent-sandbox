@@ -54,7 +54,7 @@ export const LocalOverrides = z.strictObject({
   readOnly: z.boolean().describe('Map this project read-only.'),
   // A project may turn the filter on and keep more out, never let ignored files in.
   workspaceFilter: WorkspaceFilter.pick({ enabled: true, exclude: true }).partial(),
-  mappings: z.array(Mapping).describe('Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.'),
+  mappings: z.array(Mapping).describe('Extra folders (relative paths are relative to this file), e.g. a read-only data folder at another place in the sandbox. Folders outside the project are used only as your projects.allowOutsideMappings setting allows (by default you are asked once).'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
   // This PC's resources are yours to share: CPU and paging file (this PC's disk) are not a project's to set.
   sandbox: Sandbox.omit({ cpuLimit: true, pageFileMb: true }).partial(),

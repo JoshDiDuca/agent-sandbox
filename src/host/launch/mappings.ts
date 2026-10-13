@@ -1,15 +1,22 @@
 // Which folders are mapped into the sandbox: the launch folder, the data folder, the workspace, your extra folders and
 // the tools copied from this PC. Everything is checked before it can reach the .wsb.
+import path from 'node:path';
 import type { GenerateOptions, ResolvedMapping } from '../../core/types.js';
 import { assertNoGuestOverlap } from '../../core/config.js';
 import { assertSafeMapping } from '../../core/safe-paths.js';
-import { dirExists, fail } from '../../core/util.js';
+import { dirExists, errMsg, fail, isInsideOrEqual, UserError } from '../../core/util.js';
 import type { BootProjects } from './projects.js';
-import { isValidGuestPath, sandboxFolder } from '../../shared/guest-paths.js';
+import { deriveGuest, isValidGuestPath, placeGuest, sandboxFolder, tidyGuestPath } from '../../shared/guest-paths.js';
+import { PROJECTS_GUEST } from '../../shared/projects.js';
 import { GUEST } from './wsb.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
-export const collectMappings = (o: GenerateOptions, launchPath: string, boot: BootProjects = { roots: [], projects: [], notes: [] }): ResolvedMapping[] => {
+/**
+ * Every mapping, placed. Your extra folders never stop a launch because of their guest path: one the sandbox cannot
+ * use (reserved, invalid, or already in use) goes to C:\Mapped\<drive>\<path>, and `notes` says where and why. What
+ * does stop it (a folder that is not there, a whole drive, this tool's own folders) is listed in one message.
+ */
+export const collectMappings = (o: GenerateOptions, launchPath: string, boot: BootProjects = { roots: [], projects: [], notes: [] }, notes: string[] = []): ResolvedMapping[] => {
   const { config, dataPath, workspaceHost, harnessName } = o.run;
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
@@ -20,28 +27,50 @@ export const collectMappings = (o: GenerateOptions, launchPath: string, boot: Bo
     { host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly },
     ...(view?.hostGit ? [{ host: view.hostGit, guest: guestGitDir(config.guestWorkspace), readOnly: config.readOnly }] : []),
   ];
-  for (const m of config.mappings) {
-    const host = m.host;
-    assertGuestPath(m.guest, 'mappings[].guest for ' + host);
-    if (!dirExists(host)) {
-      if (m.optional) { console.warn('Skipping optional mapping (folder not found): ' + host); continue; }
-      fail('A mapped folder does not exist: ' + host, 'Create it, fix the path in your config, or mark the mapping "optional": true.');
-    }
-    assertSafeMapping(host, o.packageRoot, o.run.storageRoot);
-    mappings.push({ host, guest: m.guest, readOnly: m.readOnly });
-  }
   // Project roots and other projects, so they can join the running sandbox without a restart (launch/projects.ts).
+  const projects: ResolvedMapping[] = [];
   for (const m of [...boot.roots, ...boot.projects]) {
     assertGuestPath(m.guest, 'project folder for ' + m.host);
-    mappings.push({ host: m.host, guest: m.guest, readOnly: false });
+    projects.push({ host: m.host, guest: m.guest, readOnly: false });
   }
+  const taken = [
+    { guest: config.guestWorkspace, what: 'the project' },
+    ...(view?.hostGit ? [{ guest: guestGitDir(config.guestWorkspace), what: 'the project\'s .git' }] : []),
+    { guest: PROJECTS_GUEST, what: 'the other projects' },
+    ...projects.map((p) => ({ guest: p.guest, what: p.host })),
+  ];
+  const outside = new Set((o.run.outsideMappings ?? []).map((h) => path.resolve(h).toLowerCase()));
+  const problems: string[] = [];
+  const missing: string[] = [];
+  const extra: ResolvedMapping[] = [];
+  for (const m of config.mappings) {
+    const host = m.host;
+    if (!dirExists(host)) {
+      if (m.optional) missing.push(host);
+      else problems.push(host + ': the folder does not exist. Fix: create it, correct the path, or mark the mapping "optional": true.');
+      continue;
+    }
+    try { assertSafeMapping(host, o.packageRoot, o.run.storageRoot); } catch (e) { problems.push(errMsg(e) + (e instanceof UserError && e.fix ? ' Fix: ' + e.fix : '')); continue; }
+    // A folder inside the project with no guest path of its own is already there (unless the filtered view hides it).
+    if (!m.guest && !view && isInsideOrEqual(workspaceHost, host)) { notes.push(host + ' is inside the project, so it is already in the sandbox at ' + deriveGuest(host, workspaceHost, config.guestWorkspace) + '.'); continue; }
+    const wanted = tidyGuestPath(m.guest ?? deriveGuest(host, workspaceHost, config.guestWorkspace));
+    // The same folder at the same place twice (your settings and the project file): once is enough.
+    if (extra.some((x) => x.host.toLowerCase() === host.toLowerCase() && x.guest.toLowerCase() === wanted.toLowerCase())) continue;
+    const placed = placeGuest(host, wanted, [...taken, ...extra.map((x) => ({ guest: x.guest, what: x.host }))]);
+    if (placed.note) notes.push(placed.note);
+    const label = outside.has(path.resolve(host).toLowerCase()) ? 'outside the project, allowed' : undefined;
+    extra.push({ host, guest: placed.guest, readOnly: m.readOnly, ...(label ? { label } : {}) });
+  }
+  if (problems.length) fail((problems.length === 1 ? 'A mapped folder cannot be used:\n  ' : problems.length + ' mapped folders cannot be used:\n  ') + problems.join('\n  '));
+  if (missing.length) notes.push('Skipped ' + (missing.length === 1 ? 'an optional folder' : missing.length + ' optional folders') + ' not on this PC: ' + missing.join(', '));
+  mappings.push(...extra, ...projects);
   const { probe } = o;
   if (probe.nodeDir) mappings.push({ host: probe.nodeDir, guest: GUEST.hostTools + '\\node', readOnly: true });
   if (probe.harnessExe && harnessName !== 'none') mappings.push({ host: probe.harnessExe.dir, guest: GUEST.hostTools + '\\agents\\' + harnessName, readOnly: true });
   if (probe.gitDir) mappings.push({ host: probe.gitDir, guest: GUEST.hostTools + '\\git', readOnly: true });
   if (probe.nvmDir) mappings.push({ host: probe.nvmDir, guest: GUEST.hostTools + '\\nvm', readOnly: true });
+  // Placement keeps extra folders apart; this guards the rest (and where the folders really are: F:\x is C:\Mirror\F\x).
   assertNoGuestOverlap(mappings);
-  // Same check on where the folders really are (F:\x and C:\Mirror\F\x are one place).
   assertNoGuestOverlap(mappings.map((m) => ({ guest: sandboxFolder(m.guest) })));
   return mappings;
 };

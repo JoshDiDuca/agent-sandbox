@@ -4,8 +4,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import _ from 'lodash';
 import { DEFAULTS, userConfigPath, userDir } from '../../core/config.js';
-import { describeOverrides, isTrusted, LOCAL_CONFIG_NAME, normalizeOverrides, readLocalConfig, trustStorePath } from '../../core/local-config.js';
-import { assertNoLinks, expandPath, fail, plainText, safeText, sleep, writeJson } from '../../core/util.js';
+import { allowedAnswer, allowStorePath, applyOverrides, describeOverrides, isTrusted, LOCAL_CONFIG_NAME, loosenedRequests, normalizeOverrides, OUTSIDE_FOLDER, outsideKey, outsideMappings, readLocalConfig, trustStorePath } from '../../core/local-config.js';
+import { guestWorkspaceOf, previewGuest } from '../../core/workspace.js';
+import { assertNoLinks, dirExists, expandPath, fail, plainText, safeText, sleep, writeJson } from '../../core/util.js';
 import { humanBytes } from '../../core/disk.js';
 import { AuditLog } from '../../host/audit/log.js';
 import { readKnown, readRegistry } from '../../host/projects.js';
@@ -104,7 +105,31 @@ const checkLocalConfig = (ctx: Context): number => {
   const overrides = normalizeOverrides(file.data, dir, file.path);
   const approved = isTrusted(trustStorePath(ctx.storageRoot), file.path, file.hash);
   console.log(file.path + ': valid. ' + (approved ? 'Approved (this exact version).' : 'Not approved yet: the next launch asks you.') + '\n');
-  for (const line of describeOverrides(overrides)) console.log('  ' + safeText(line));
+  for (const line of describeOverrides(overrides, dir)) console.log('  ' + safeText(line));
+  // What a launch from here would do with each folder and each looser setting, without launching.
+  const config = ctx.loaded.config;
+  const store = allowStorePath(ctx.storageRoot);
+  const workspaceGuest = guestWorkspaceOf(applyOverrides(config, overrides), dir).guest;
+  const outside = outsideMappings(dir, overrides.mappings);
+  const policy = config.projects.allowOutsideMappings;
+  const rows = (overrides.mappings ?? []).map((m) => {
+    const where = previewGuest(m, dir, workspaceGuest);
+    const status = !dirExists(m.host) ? (m.optional ? 'not on this PC: skipped' : c.red('the folder does not exist: create it, fix the path, or add "optional": true'))
+      : !outside.includes(m) ? (m.guest ? 'inside the project' : 'inside the project (already in the sandbox there)')
+      : policy === true ? 'outside the project, allowed (projects.allowOutsideMappings is true)'
+      : policy === false ? c.red('outside the project: refused (projects.allowOutsideMappings is false)')
+      : allowedAnswer(store, file.path, OUTSIDE_FOLDER, outsideKey(m)) === true ? 'outside the project, allowed (you said yes)'
+      : c.yellow('outside the project: the next interactive launch asks you');
+    return [(m.readOnly ? 'ro ' : 'rw ') + safeText(m.host), '->  ' + safeText(where.guest), status];
+  });
+  if (rows.length) { console.log('\nFolders (where they appear in the sandbox):'); table(rows); }
+  for (const m of overrides.mappings ?? []) { const note = dirExists(m.host) ? previewGuest(m, dir, workspaceGuest).note : null; if (note) console.log('  ' + safeText(note)); }
+  const looser = loosenedRequests(config, overrides);
+  if (looser.length) console.log('\nLooser than your settings (used only if you allow it for this project):');
+  for (const a of looser) {
+    const answer = allowedAnswer(store, file.path, a.key, a.wanted);
+    console.log('  ' + a.key + ' = ' + JSON.stringify(a.wanted) + ': ' + (answer === true ? 'allowed (you said yes)' : answer === false ? 'not used (you said no)' : 'the next interactive launch asks you'));
+  }
   return 0;
 };
 
