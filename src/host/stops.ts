@@ -5,6 +5,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { SYSTEM } from '../shared/system.js';
 import { readValid, writeJsonAtomic } from '../shared/rundir.js';
@@ -93,10 +94,13 @@ const ADVICE: Record<StopKind, string> = {
 export const readStopEvents = (since: Date): StopEvent[] => {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');
-  const script = "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" + since.toISOString() + "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='System'; Id=1001; ProviderName='Microsoft-Windows-WER-SystemErrorReporting'; StartTime=$t}, @{LogName='Microsoft-Windows-Hyper-V-Worker-Admin'; Id=18590,40001; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -eq 1074) { [string]$_.Properties[0].Value } elseif ($_.Id -in 18590,40001,1001) { ([string]$_.Message).Substring(0, [math]::Min(390, ([string]$_.Message).Length)) } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
-  const result = spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const result = spawnSync(SYSTEM.powershell(), nativeScript('stop-events.ps1', ['-Since', since.toISOString()]), { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   try { return StopEvents.parse(JSON.parse(result.stdout || '[]')); } catch { return []; }
 };
+
+/** Arguments that run one of this package's native\*.ps1 scripts (shipped next to dist) with `args`. */
+const nativeScript = (name: string, args: readonly string[]): string[] =>
+  ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('../../native/' + name, import.meta.url)), ...args];
 
 /** Looking back from the last time the sandbox was seen running (a minute between checks, plus margin). */
 export const causeSince = (lastSeen: string): StopCause | null => explainStop(readStopEvents(new Date(Date.parse(lastSeen) - 2 * 60 * 1000)));
@@ -183,14 +187,12 @@ export const UPDATE_RESTART_WARNING = 'Windows is waiting to restart for updates
 
 /**
  * sandbox.keepAwake: asks Windows not to sleep while the sandbox runs (as a video player does; the screen may still turn
- * off). A small PowerShell holds the request until `ownerPid` exits, so it never outlives the watcher.
+ * off). native\keep-awake.ps1 holds the request until `ownerPid` exits, so it never outlives the watcher.
  */
 export const keepAwake = (ownerPid: number): ChildProcess | null => {
   if (!isWin) return null;
   refuseInSelfTest('keep this PC awake');
-  const script = "Add-Type -Name Power -Namespace AgentSandbox -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; "
-    + '[void][AgentSandbox.Power]::SetThreadExecutionState([uint32]2147483649); Wait-Process -Id ' + Math.trunc(ownerPid) + ' -ErrorAction SilentlyContinue';
-  const child = spawn(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { stdio: 'ignore', windowsHide: true });
+  const child = spawn(SYSTEM.powershell(), nativeScript('keep-awake.ps1', ['-OwnerId', String(Math.trunc(ownerPid))]), { stdio: 'ignore', windowsHide: true });
   child.on('error', () => undefined);
   return child;
 };
