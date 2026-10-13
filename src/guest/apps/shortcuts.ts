@@ -2,8 +2,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { powershell } from '../runtime/process.js';
 
+export interface Shortcut {
+  readonly name: string;
+  readonly exe: string;
+}
+
 /** Desktop and Start menu shortcuts, all in one PowerShell call. */
-export const shortcuts = (apps: { name: string; exe: string }[]): void => {
+export function shortcuts(apps: readonly Shortcut[]): void {
   if (!apps.length) return;
   const q = (s: string): string => "'" + s.replace(/'/g, "''") + "'";
   const desktop = path.join(os.homedir(), 'Desktop');
@@ -34,4 +39,4 @@ export const shortcuts = (apps: { name: string; exe: string }[]): void => {
     }
   }
   powershell(lines.join('\n'));
-};
+}
