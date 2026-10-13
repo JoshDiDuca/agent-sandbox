@@ -2,9 +2,9 @@
 // the sandbox started, when it was last seen running, how it ended) and keeps this PC awake while it runs
 // (sandbox.keepAwake). When the PC restarts, sleeps or crashes, the watcher stops too and the record has no end: the
 // next launch reads Windows' System log from that moment on and says what happened, and what keeps it from happening.
-import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile } from '../storage/index.js';
 import { causeSince, Iso, type StopCause } from './stop-events.js';
 import { stopWarning } from './stop-warning.js';
 
@@ -33,7 +33,7 @@ export class LifeRecord {
   private readonly file: JsonFile<Life>;
 
   constructor(storageRoot: string, dataPath: string) {
-    this.file = new JsonFile(LifeSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-life.json'));
+    this.file = new JsonFile(LifeSchema, hostStateFile(storageRoot, dataPath, '-life.json'));
   }
 
   read(): Life | null {

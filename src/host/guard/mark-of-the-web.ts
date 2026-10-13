@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile } from '../storage/index.js';
 
 /** What Windows runs when you open it (not source files such as .js or .py: those need a program you choose). */
 export const RISKY =
@@ -80,9 +81,9 @@ export const watchAndMark = (projects: string[], note: (message: string) => void
 const MarkedSchema = z.array(z.string().max(1024)).max(64);
 const DataSizeSchema = z.object({ bytes: z.number().min(0), at: z.string().max(40) });
 const marksFile = (storageRoot: string, dataPath: string): JsonFile<string[]> =>
-  new JsonFile(MarkedSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-mark.json'));
+  new JsonFile(MarkedSchema, hostStateFile(storageRoot, dataPath, '-mark.json'));
 const sizeFile = (storageRoot: string, dataPath: string): JsonFile<z.output<typeof DataSizeSchema>> =>
-  new JsonFile(DataSizeSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-size.json'));
+  new JsonFile(DataSizeSchema, hostStateFile(storageRoot, dataPath, '-size.json'));
 
 /** The projects to watch and mark (empty: storage.markSandboxFiles is off). */
 export const saveMarkedProjects = (storageRoot: string, dataPath: string, projects: string[]): void =>

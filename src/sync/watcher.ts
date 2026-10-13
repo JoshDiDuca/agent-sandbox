@@ -15,11 +15,10 @@ import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
 import { sizeOf } from '../core/disk.js';
 import { causeSince, KeepAwake, LifeRecord } from '../host/life/index.js';
+import { storageOf } from '../host/storage/index.js';
 import { syncBack } from './sync-cycle.js';
 
 const WATCH_INTERVAL_MS = 60 * 1000;
-
-const storageOf = (dataPath: string): string => path.dirname(path.dirname(dataPath));
 
 const hostRunDir = (dataPath: string): string => path.join(storageOf(dataPath), 'run');
 const watcherPidFile = (dataPath: string): string =>

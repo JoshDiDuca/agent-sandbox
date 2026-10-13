@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { isSafeFileName } from '../../shared/paths/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { JsonFile } from '../../shared/io/index.js';
+import { storageOf } from '../storage/index.js';
 import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../../core/util/index.js';
 
 export interface Account {
@@ -49,7 +50,6 @@ const MAX_STATE_BYTES = 256 * 1024 * 1024;
 
 export const accountsDir = (storageRoot: string): string => path.join(storageRoot, 'accounts');
 export const sandboxClaudeDir = (dataPath: string): string => path.join(dataPath, 'state', 'claude');
-const storageOf = (dataPath: string): string => path.dirname(path.dirname(dataPath));
 const dataName = (dataPath: string): string => path.basename(dataPath);
 const indexFile = (storageRoot: string): JsonFile<Index> =>
   new JsonFile(IndexSchema, path.join(accountsDir(storageRoot), 'index.json'));

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { assertNoLinks } from '../../core/util/index.js';
 import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile } from '../storage/index.js';
 import { AuditEvent, AuditLog, fold } from './log.js';
 
 const MAX_FILES_PER_PASS = 200;
@@ -27,7 +28,7 @@ const AuditSettings = z.object({
 });
 export type AuditSettings = z.output<typeof AuditSettings>;
 const settingsFile = (storageRoot: string, dataPath: string): JsonFile<AuditSettings> =>
-  new JsonFile(AuditSettings, path.join(storageRoot, 'sync', path.basename(dataPath) + '-audit.json'));
+  new JsonFile(AuditSettings, hostStateFile(storageRoot, dataPath, '-audit.json'));
 
 /** Host-only: the audit settings of the running sandbox (written at launch, read by the watcher). */
 export const saveAuditSettings = (storageRoot: string, dataPath: string, settings: AuditSettings): void =>

@@ -3,18 +3,18 @@
 // only to an address the sandbox published that is on this PC's Hyper-V network (isSandboxAddress). Bytes are passed
 // through, never looked at. No admin rights needed (no netsh portproxy).
 import net from 'node:net';
-import path from 'node:path';
 import { z } from 'zod';
 import { relayPort, type PortForward } from '../../shared/network/index.js';
 import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile } from '../storage/index.js';
 import { isSandboxAddress } from '../channel/index.js';
 
 const Forwards = z
   .array(z.object({ pc: z.number().int().min(1).max(65535), sandbox: z.number().int().min(1).max(65535) }))
   .max(64);
 const forwardsFile = (storageRoot: string, dataPath: string): JsonFile<PortForward[]> =>
-  new JsonFile(Forwards, path.join(storageRoot, 'sync', path.basename(dataPath) + '-forwards.json'));
+  new JsonFile(Forwards, hostStateFile(storageRoot, dataPath, '-forwards.json'));
 
 /** Host-only: the forwards of the running sandbox (written at launch, read by the watcher). */
 export const saveForwards = (storageRoot: string, dataPath: string, forwards: PortForward[]): void =>

@@ -1,6 +1,6 @@
-import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile } from '../storage/index.js';
 import { type ViewOptions } from './view.js';
 
 // ---- the views the watcher keeps in step (host-only, next to the sync state) ------------------------------------------
@@ -14,7 +14,7 @@ const ActiveView = z.object({
   guestGitDir: z.string().max(1024).nullable(),
 });
 const activeFile = (storageRoot: string, dataPath: string): JsonFile<z.output<typeof ActiveView>[]> =>
-  new JsonFile(z.array(ActiveView).max(64), path.join(storageRoot, 'sync', path.basename(dataPath) + '-views.json'));
+  new JsonFile(z.array(ActiveView).max(64), hostStateFile(storageRoot, dataPath, '-views.json'));
 
 export const saveActiveViews = (storageRoot: string, dataPath: string, views: ViewOptions[]): void =>
   activeFile(storageRoot, dataPath).write(

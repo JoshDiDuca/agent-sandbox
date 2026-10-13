@@ -3,15 +3,12 @@ import path from 'node:path';
 import _ from 'lodash';
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
+import { hostStateFile, storageOf } from '../storage/index.js';
 import { dirExists, isLink } from '../../core/util/index.js';
 import { RepoGuard, type RepoFinding, type RepoSnapshot } from './repo-guard.js';
 
-// ---- snapshot storage (host-only, next to the sync state) ---------------------------------------------------------
-
-const syncDir = (dataPath: string): string => path.join(path.dirname(path.dirname(dataPath)), 'sync');
-const snapshotFile = (dataPath: string): string => path.join(syncDir(dataPath), path.basename(dataPath) + '-repo.json');
-const findingsFile = (dataPath: string): string =>
-  path.join(syncDir(dataPath), path.basename(dataPath) + '-repo-findings.json');
+const snapshotFile = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '-repo.json');
+const findingsFile = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '-repo-findings.json');
 
 const FindingSchema = z.object({
   kind: z.enum(['hook', 'config', 'git', 'command', 'agent']),

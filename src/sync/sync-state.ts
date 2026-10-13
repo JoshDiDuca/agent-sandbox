@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile } from '../shared/io/index.js';
+import { hostStateFile, storageOf } from '../host/storage/index.js';
 
 /** Host-only record of the last launch: which folders map to each other and what syncs (from the effective config). */
 const AbsolutePath = z
@@ -30,8 +31,7 @@ export type SyncState = z.output<typeof SyncStateSchema>;
  * Host-only: <storage>\sync\<dataName>.json. It records which folder on this PC history flows back into, so it must
  * never live in the data folder the sandbox can write (a forged copy could redirect writes anywhere on this PC).
  */
-export const syncStatePath = (dataPath: string): string =>
-  path.join(path.dirname(path.dirname(dataPath)), 'sync', path.basename(dataPath) + '.json');
+export const syncStatePath = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '.json');
 /** A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next launch). */
 export const readSyncState = (dataPath: string): SyncState | null =>
   new JsonFile(SyncStateSchema, syncStatePath(dataPath)).read();
