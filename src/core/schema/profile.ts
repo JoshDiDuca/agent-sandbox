@@ -1,17 +1,17 @@
 // What is copied from this PC, and how the terminal attaches.
 import { z } from 'zod';
-import { Name, Strings } from './common.js';
+import { NameSchema, StringsSchema } from './common.js';
 
-export const Secrets = z.strictObject({
+export const SecretsSchema = z.strictObject({
   strip: z
     .boolean()
     .describe(
       'Remove credentials from everything copied into the sandbox (your Claude settings.json "env" and credential helpers, MCP servers\' env, headers and arguments): AWS, Azure, Google Cloud, Cloudflare, hosting, CI, registries, payment, AI API keys, database URLs, anything named *_TOKEN / *_SECRET / *PASSWORD* / *_KEY or *PROD*, and values that look like keys.',
     ),
-  allow: Strings.describe(
+  allow: StringsSchema.describe(
     'Variable names that may go in anyway; * matches anything, e.g. ["AWS_REGION", "AWS_PROFILE", "MY_APP_*"].',
   ),
-  patterns: Strings.describe(
+  patterns: StringsSchema.describe(
     'More variable names to treat as secrets; * matches anything, e.g. ["ACME_*", "*_INTERNAL_URL"].',
   ),
   warnFiles: z
@@ -20,7 +20,7 @@ export const Secrets = z.strictObject({
       'Warn at launch about files in the workspace that usually hold secrets (.env, *.pem, credentials.json, ...). The agent CAN read them: Windows Sandbox maps the whole folder.',
     ),
 });
-export const Attach = z.strictObject({
+export const AttachSchema = z.strictObject({
   enabled: z.boolean().describe('Allow sandbox claude --terminal / sandbox attach from this PC.'),
   reuseSession: z
     .boolean()
@@ -38,17 +38,17 @@ export const Attach = z.strictObject({
       'Hide the Windows Sandbox window whenever this terminal attaches; it keeps running (sandbox show brings it back).',
     ),
 });
-export const AgentCommands = z.strictObject({
+export const AgentCommandsSchema = z.strictObject({
   enabled: z
     .boolean()
     .describe(
       "(Beta) Typing an agent's own command on this PC (claude, codex, ...) starts it in a hidden sandbox for the folder you are in and attaches that terminal. Adds one folder to the start of YOUR PATH; off removes it. SANDBOX_AGENT_DIRECT=1 runs the real agent instead.",
     ),
   agents: z
-    .union([z.literal('auto'), z.array(Name)])
+    .union([z.literal('auto'), z.array(NameSchema)])
     .describe('"auto" = every agent installed on this PC, or a list of agent names, e.g. ["claude", "codex"].'),
 });
-export const ClaudeProfile = z.strictObject({
+export const ClaudeProfileSchema = z.strictObject({
   enabled: z.boolean().describe('Copy selected Claude settings from this PC into the sandbox.'),
   hostDir: z.string().describe('Your Claude folder, or "auto" (~/.claude or CLAUDE_CONFIG_DIR).'),
   include: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).describe('Files and folders copied from it.'),

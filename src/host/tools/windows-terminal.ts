@@ -34,7 +34,7 @@ export const PWSH_PROFILE_GUID = '{5f3a6c1e-7d2b-4e8a-9c41-0b6d2a8f7e93}';
 const GUEST_PWSH = 'C:\\AgentData\\tools\\pwsh\\pwsh.exe';
 
 const MAX_SETTINGS_BYTES = 1024 * 1024;
-const TerminalSettings = z.looseObject({
+const TerminalSettingsSchema = z.looseObject({
   profiles: z
     .union([
       z.array(z.looseObject({ guid: z.string().optional() })),
@@ -48,9 +48,9 @@ const TerminalSettings = z.looseObject({
  * survive turning pwsh off and on). Pure: returns null when nothing changes.
  */
 export const withPwshProfile = (
-  settings: z.output<typeof TerminalSettings>,
+  settings: z.output<typeof TerminalSettingsSchema>,
   visible: boolean,
-): z.output<typeof TerminalSettings> | null => {
+): z.output<typeof TerminalSettingsSchema> | null => {
   const profiles = Array.isArray(settings.profiles) ? { list: settings.profiles } : { ...settings.profiles };
   const list = [...(profiles.list ?? [])];
   const at = list.findIndex((p) => p.guid?.toLowerCase() === PWSH_PROFILE_GUID);
@@ -79,9 +79,9 @@ export const syncPwshProfile = (dataPath: string, allowed: boolean): void => {
   assertNoLinks(dataPath, file);
   if (!fileExists(file) || fs.statSync(file).size > MAX_SETTINGS_BYTES) return;
   const visible = allowed && fileExists(path.join(dataPath, 'tools', 'pwsh', 'pwsh.exe'));
-  let parsed: z.output<typeof TerminalSettings>;
+  let parsed: z.output<typeof TerminalSettingsSchema>;
   try {
-    const result = TerminalSettings.safeParse(parseJsonc<unknown>(fs.readFileSync(file, 'utf8'), file));
+    const result = TerminalSettingsSchema.safeParse(parseJsonc<unknown>(fs.readFileSync(file, 'utf8'), file));
     if (!result.success) return;
     parsed = result.data;
   } catch {

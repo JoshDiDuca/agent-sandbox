@@ -2,7 +2,7 @@
 // session.json, the staged Claude profile, and the values read from this PC (git identity, free RAM).
 import fs from 'node:fs';
 import path from 'node:path';
-import { LocalOverrides } from '../core/schema/index.js';
+import { LocalOverridesSchema } from '../core/schema/index.js';
 import { logonEnv } from '../host/launch/index.js';
 import { gitIdentity } from '../host/launch/index.js';
 import { buildWsb, resolveMemoryMb } from '../host/launch/index.js';
@@ -108,7 +108,7 @@ export const generateSuite: Suite = {
     t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for cpucap.ps1 (default 80 %)');
     t.equal(session.pageFileMb, 16384, 'session.json carries the paging file limit for pagefile.ps1 (default 16 GB)');
     t.check(
-      !LocalOverrides.safeParse({ sandbox: { cpuLimit: 'none' } }).success,
+      !LocalOverridesSchema.safeParse({ sandbox: { cpuLimit: 'none' } }).success,
       "a project's .sandbox-config.json cannot lift your CPU cap (sandbox.cpuLimit is yours only)",
     );
 

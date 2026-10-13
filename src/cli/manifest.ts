@@ -2,11 +2,11 @@
 // parser from it and menu.ts builds the interactive menu from it, so a command added here works both ways.
 import { z } from 'zod';
 
-const Choices = z
+const ChoicesSchema = z
   .union([z.array(z.string()), z.enum(['harnesses', 'accounts', 'sessions'])])
   .describe('Fixed values, or a list the menu fills in at run time.');
 
-export const OptionSpec = z.strictObject({
+export const OptionSpecSchema = z.strictObject({
   flag: z
     .string()
     .regex(/^--[a-z][a-z0-9-]*$/)
@@ -19,7 +19,7 @@ export const OptionSpec = z.strictObject({
   value: z.string().optional().describe('Placeholder shown in help, e.g. name for --account <name>.'),
   description: z.string(),
   default: z.union([z.string(), z.number()]).optional(),
-  choices: Choices.optional(),
+  choices: ChoicesSchema.optional(),
   /** Advanced options are only asked in the menu after "Show advanced options". */
   advanced: z.boolean().optional(),
   /** Only asked in the menu when the command's first argument has this value (account save: --from-host). */
@@ -28,12 +28,12 @@ export const OptionSpec = z.strictObject({
   noMenu: z.boolean().optional(),
 });
 
-export const ArgSpec = z.strictObject({
+export const ArgSpecSchema = z.strictObject({
   name: z.string(),
   description: z.string(),
   required: z.boolean(),
   variadic: z.boolean().optional(),
-  choices: Choices.optional(),
+  choices: ChoicesSchema.optional(),
   /** Only asked in the menu when the command's first argument has this value, or one of these (data clean: targets). */
   when: z.union([z.string(), z.array(z.string())]).optional(),
 });
@@ -42,14 +42,14 @@ export const ArgSpec = z.strictObject({
 export const askedWhen = (when: string | string[] | undefined, first: string): boolean =>
   when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
 
-export const Group = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
+export const GroupSchema = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
 
-export const CommandSpec = z.strictObject({
+export const CommandSpecSchema = z.strictObject({
   name: z.string(),
   summary: z.string(),
-  group: Group,
-  args: z.array(ArgSpec),
-  options: z.array(OptionSpec),
+  group: GroupSchema,
+  args: z.array(ArgSpecSchema),
+  options: z.array(OptionSpecSchema),
   /** Unknown options and extra arguments are passed on to the agent (launch) or the program (exec). */
   passthrough: z.enum(['agent', 'command']).optional(),
   json: z.boolean().optional(),
@@ -58,17 +58,17 @@ export const CommandSpec = z.strictObject({
   hidden: z.boolean().optional(),
 });
 
-export type OptionSpecT = z.output<typeof OptionSpec>;
-export type ArgSpecT = z.output<typeof ArgSpec>;
-export type CommandSpecT = z.output<typeof CommandSpec>;
+export type OptionSpec = z.output<typeof OptionSpecSchema>;
+export type ArgSpec = z.output<typeof ArgSpecSchema>;
+export type CommandSpec = z.output<typeof CommandSpecSchema>;
 
-const bool = (flag: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({
+const bool = (flag: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec => ({
   flag,
   type: 'boolean',
   description,
   ...extra,
 });
-const text = (flag: string, value: string, description: string, extra: Partial<OptionSpecT> = {}): OptionSpecT => ({
+const text = (flag: string, value: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec => ({
   flag,
   type: 'string',
   value,
@@ -76,7 +76,7 @@ const text = (flag: string, value: string, description: string, extra: Partial<O
   ...extra,
 });
 
-const SANDBOX_OPTIONS: OptionSpecT[] = [
+const SANDBOX_OPTIONS: OptionSpec[] = [
   bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", { short: '-t' }),
   bool('--headless', 'hide the sandbox window (sbx-show brings it back)'),
   bool('--new', 'always start a new session, even if this folder has an unattached one'),
@@ -111,7 +111,7 @@ const SANDBOX_OPTIONS: OptionSpecT[] = [
     { noMenu: true },
   ),
 ];
-const AGENT_OPTIONS: OptionSpecT[] = [
+const AGENT_OPTIONS: OptionSpec[] = [
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
   {
     flag: '--session',
@@ -127,7 +127,7 @@ const AGENT_OPTIONS: OptionSpecT[] = [
 ];
 const json = true;
 
-export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
+export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse([
   {
     name: 'launch',
     summary: 'start the sandbox and an agent (or another session in the running sandbox)',
@@ -394,4 +394,4 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },
 ]);
 
-export const commandSpec = (name: string): CommandSpecT | undefined => COMMANDS.find((c) => c.name === name);
+export const commandSpec = (name: string): CommandSpec | undefined => COMMANDS.find((c) => c.name === name);

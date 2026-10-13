@@ -6,7 +6,7 @@ import { applyEdits, modify, parse } from 'jsonc-parser';
 import _ from 'lodash';
 import { DEFAULTS, loadConfig, mergeConfig, userConfigPath } from '../../../core/config/index.js';
 import { LOCAL_CONFIG_NAME } from '../../../core/local-config/index.js';
-import { Config as ConfigSchema, describeIssues, LocalOverrides } from '../../../core/schema/index.js';
+import { ConfigSchema, describeIssues, LocalOverridesSchema } from '../../../core/schema/index.js';
 import type { Config } from '../../../core/types.js';
 import { SchemaNode } from './schema-node.js';
 
@@ -34,7 +34,7 @@ export const editConfigText = (
   const next = applyEdits(text || '{}', edits);
   const parsed =
     target === 'project'
-      ? LocalOverrides.safeParse(parse(next) ?? {})
+      ? LocalOverridesSchema.safeParse(parse(next) ?? {})
       : ConfigSchema.safeParse(mergeConfig(DEFAULTS, parse(next) ?? {}));
   return parsed.success
     ? { text: next.endsWith('\n') ? next : next + '\n' }
@@ -48,7 +48,7 @@ export class ConfigFile {
     readonly target: SettingsTarget,
     readonly file: string,
   ) {
-    this.schema = new SchemaNode(target === 'project' ? LocalOverrides : ConfigSchema);
+    this.schema = new SchemaNode(target === 'project' ? LocalOverridesSchema : ConfigSchema);
   }
 
   static user(configPath: string | null): ConfigFile {

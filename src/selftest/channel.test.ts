@@ -1,7 +1,7 @@
 // The host <-> sandbox channel and the terminal protocol: everything arriving from the sandbox is validated, sized and
 // filtered before this PC acts on it.
 import { safeId } from '../shared/channel/index.js';
-import { GuestRequest, SessionStatus } from '../shared/channel/index.js';
+import { GuestRequestSchema, SessionStatusSchema } from '../shared/channel/index.js';
 import {
   encodeFrame,
   FrameReader,
@@ -18,8 +18,8 @@ export const channelSuite: Suite = {
   title: 'request/status validation and the terminal protocol (frames, OSC 52, keys)',
   run: async (t) => {
     t.section('requests and session status');
-    const validRequest = (r: unknown): boolean => GuestRequest.safeParse(r).success;
-    const validSession = (s: unknown): boolean => SessionStatus.safeParse(s).success;
+    const validRequest = (r: unknown): boolean => GuestRequestSchema.safeParse(r).success;
+    const validSession = (s: unknown): boolean => SessionStatusSchema.safeParse(s).success;
     await t.throws(() => safeId('../evil'), 'invalid id', 'a path-like id is rejected');
     t.check(!validRequest({ kind: 'shell', id: 'a' }), 'unknown request kinds are rejected');
     t.check(

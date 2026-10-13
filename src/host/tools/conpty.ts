@@ -11,9 +11,9 @@ import { assertNoLinks, errMsg, fileExists } from '../../core/util/index.js';
 /** Where the sandbox finds conpty.dll + OpenConsole.exe (guest/ptyhost.ts points ptyhost at it). */
 export const conptyDir = (dataPath: string): string => path.join(dataPath, 'tools', 'conpty');
 const NUGET_CONPTY = 'https://api.nuget.org/v3-flatcontainer/microsoft.windows.console.conpty/';
-const NugetVersions = z.object({ versions: z.array(z.string()) });
-const NugetLeaf = z.object({ catalogEntry: z.string().url() });
-const NugetCatalog = z.object({ packageHash: z.string(), packageHashAlgorithm: z.literal('SHA512') });
+const NugetVersionsSchema = z.object({ versions: z.array(z.string()) });
+const NugetLeafSchema = z.object({ catalogEntry: z.string().url() });
+const NugetCatalogSchema = z.object({ packageHash: z.string(), packageHashAlgorithm: z.literal('SHA512') });
 
 /**
  * Microsoft's newer pseudo console (the Microsoft.Windows.Console.ConPTY package: conpty.dll and OpenConsole.exe, the
@@ -29,18 +29,19 @@ export const ensureConpty = async (dataPath: string, refresh: boolean): Promise<
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const work = stagingFolder(dir);
   try {
-    const version = NugetVersions.parse(await fetchJson(NUGET_CONPTY + 'index.json'))
+    const version = NugetVersionsSchema.parse(await fetchJson(NUGET_CONPTY + 'index.json'))
       .versions.filter((v) => !v.includes('-'))
       .pop();
     if (!version) throw new Error('no release found');
-    const leaf = NugetLeaf.parse(
+    const leaf = NugetLeafSchema.parse(
       await fetchJson(
         'https://api.nuget.org/v3/registration5-gz-semver2/microsoft.windows.console.conpty/' + version + '.json',
       ),
     );
-    const sha512 = Buffer.from(NugetCatalog.parse(await fetchJson(leaf.catalogEntry)).packageHash, 'base64').toString(
-      'hex',
-    );
+    const sha512 = Buffer.from(
+      NugetCatalogSchema.parse(await fetchJson(leaf.catalogEntry)).packageHash,
+      'base64',
+    ).toString('hex');
     const pkg = path.join(work, 'conpty.nupkg');
     await downloader.file(NUGET_CONPTY + version + '/microsoft.windows.console.conpty.' + version + '.nupkg', pkg, {
       sha512,

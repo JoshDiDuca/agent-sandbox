@@ -6,7 +6,7 @@
 // Everything about HOW a folder becomes visible is behind ProjectMapper, so the mechanisms can change independently.
 import path from 'node:path';
 import { z } from 'zod';
-import { Id } from '../../shared/channel/index.js';
+import { IdSchema } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import {
   guestDirFor,
@@ -20,13 +20,13 @@ import {
 export { PROJECTS_GUEST };
 export type { ProjectEntry };
 
-export const AbsolutePath = z
+export const AbsolutePathSchema = z
   .string()
   .max(1024)
   .refine((p) => path.isAbsolute(p), 'must be an absolute path');
 const RegistryEntrySchema = z.strictObject({
-  name: Id,
-  host: AbsolutePath,
+  name: IdSchema,
+  host: AbsolutePathSchema,
   guest: z.string().max(1024),
   primary: z.boolean(),
   mechanism: z.enum(['launch', 'root', 'boot', 'wsb']),
@@ -36,7 +36,7 @@ const RegistrySchema = z.strictObject({
   launchId: z.string().max(64),
   /** The running sandbox's protections (core/project-policy.ts), fixed at boot. */
   protections: z.record(z.string(), z.union([z.boolean(), z.string()])),
-  roots: z.array(z.strictObject({ host: AbsolutePath, guest: z.string().max(1024) })).max(64),
+  roots: z.array(z.strictObject({ host: AbsolutePathSchema, guest: z.string().max(1024) })).max(64),
   projects: z.array(RegistryEntrySchema).max(1024),
 });
 export type RegistryEntry = z.output<typeof RegistryEntrySchema>;

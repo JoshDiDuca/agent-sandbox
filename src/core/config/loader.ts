@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import type { Config, LoadedConfig } from '../types.js';
-import { Config as ConfigSchema, describeIssues } from '../schema/index.js';
+import { ConfigSchema, describeIssues } from '../schema/index.js';
 import { fail, homeDir, readJsonc } from '../util/index.js';
 import { DEFAULTS } from './defaults.js';
 

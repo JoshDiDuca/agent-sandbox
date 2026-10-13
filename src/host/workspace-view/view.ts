@@ -13,7 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { JsonFile } from '../../shared/io/index.js';
 import { IgnoreRules } from './rules.js';
-import { type Seen, Manifest, MAX_ENTRIES, safeRel, stamp, sameContent } from './view-state.js';
+import { type Seen, ManifestSchema, MAX_ENTRIES, safeRel, stamp, sameContent } from './view-state.js';
 
 export interface ViewPaths {
   /** The project on this PC. */
@@ -47,7 +47,7 @@ export class WorkspaceView {
 
   constructor(private readonly o: ViewOptions) {
     this.rules = new IgnoreRules(o.host, o.exclude, o.include);
-    this.stateFile = new JsonFile(Manifest, o.state);
+    this.stateFile = new JsonFile(ManifestSchema, o.state);
     this.seen = this.stateFile.read() ?? {};
   }
 

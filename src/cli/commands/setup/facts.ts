@@ -60,7 +60,7 @@ const PROBE = [
   '@{ virtualizationFirmware = $v; hypervisorPresent = $h; installState = $s } | ConvertTo-Json -Compress',
 ].join('; ');
 
-const Probe = z
+const ProbeSchema = z
   .object({
     virtualizationFirmware: z.boolean().nullable(),
     hypervisorPresent: z.boolean().nullable(),
@@ -68,9 +68,9 @@ const Probe = z
   })
   .partial();
 
-export const parseProbe = (text: string): z.infer<typeof Probe> => {
+export const parseProbe = (text: string): z.infer<typeof ProbeSchema> => {
   try {
-    return Probe.parse(JSON.parse(_.last(text.trim().split(/\r?\n/)) ?? ''));
+    return ProbeSchema.parse(JSON.parse(_.last(text.trim().split(/\r?\n/)) ?? ''));
   } catch {
     return {};
   }

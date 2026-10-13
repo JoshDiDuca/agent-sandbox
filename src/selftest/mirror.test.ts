@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GuestSession } from '../core/types.js';
-import { Config, Mapping } from '../core/schema/index.js';
+import { ConfigSchema, MappingSchema } from '../core/schema/index.js';
 import { guestPathFor } from '../cli/commands/context.js';
 import { buildWsb } from '../host/launch/index.js';
 import {
@@ -63,7 +63,7 @@ export const mirrorSuite: Suite = {
       'drive roots, reserved folders, C:\\Mirror, A:/B:, .., streams, odd characters and UNC paths are refused',
     );
     const mappingAccepts = (guest: string): boolean =>
-      Mapping.safeParse({ host: 'E:\\Games', guest, readOnly: true }).success;
+      MappingSchema.safeParse({ host: 'E:\\Games', guest, readOnly: true }).success;
     t.check(
       mappingAccepts('F:\\SteamLibrary\\Game') && mappingAccepts('C:\\F'),
       'schema: mappings[].guest may be on another drive letter',
@@ -73,7 +73,7 @@ export const mirrorSuite: Suite = {
       'schema: mappings[].guest may never be C:\\Mirror or a drive root',
     );
     const workspaceAccepts = (guestWorkspace: string): boolean =>
-      Config.safeParse({ ...f.makeConfig(), guestWorkspace }).success;
+      ConfigSchema.safeParse({ ...f.makeConfig(), guestWorkspace }).success;
     t.check(
       workspaceAccepts('mirror') && workspaceAccepts('F:\\AgentProjects\\x'),
       'schema: guestWorkspace accepts "mirror" and D:-Z: paths',

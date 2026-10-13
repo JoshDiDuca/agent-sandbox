@@ -1,6 +1,6 @@
 // run\projects\<name>.json: how far each project's provisioning is, for `sandbox status` and the host's progress lines.
 import type { DatabasePlan } from '../../core/types.js';
-import type { ProjectStatusT } from '../../shared/channel/schema.js';
+import type { ProjectStatus } from '../../shared/channel/schema.js';
 import { now } from '../../shared/channel/run-dir.js';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { hubName } from '../../shared/paths/projects.js';
@@ -15,7 +15,7 @@ export const primaryProject = (): string => session.projectId ?? hubName(session
 export const saveProjectStatus = (
   name: string,
   workspace: string,
-  phase: ProjectStatusT['phase'],
+  phase: ProjectStatus['phase'],
   message: string,
   databases: DatabasePlan[],
   summary: string[],
@@ -32,7 +32,7 @@ export const saveProjectStatus = (
         .slice(0, 16)
         .map((d) => ({ database: d.database, port: d.port })),
       summary: summary.slice(0, 64).map((s) => s.slice(0, 500)),
-    } satisfies ProjectStatusT);
+    } satisfies ProjectStatus);
   } catch (e) {
     warn('Could not write the status of project ' + name + ': ' + errMsg(e));
   }

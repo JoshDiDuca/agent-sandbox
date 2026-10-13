@@ -15,7 +15,7 @@ import { decidePwsh, pcHasPwsh, PWSH_MAX_BYTES, readPwshScripts, usesPwsh } from
 import { binstallAsset, CLI_TOOLS, decideCli, pwshAsset, type CliSettings } from '../guest/toolchains/catalogue.js';
 import { missingExtensions, vscodeExtensions, vscodeSettings } from '../guest/toolchains/tools/vscode-profile.js';
 import { APP_CATEGORIES, APPS, appsNeedMesa, appsToInstall, exeMatcher } from '../shared/apps/index.js';
-import { Config, LocalOverrides } from '../core/schema/index.js';
+import { ConfigSchema, LocalOverridesSchema } from '../core/schema/index.js';
 import type { Suite } from './support/suite.js';
 
 export const toolchainsSuite: Suite = {
@@ -397,7 +397,7 @@ export const toolchainsSuite: Suite = {
       appsNeedMesa({ install: ['godot'], custom: {} }) && !appsNeedMesa({ install: ['jq'], custom: {} }),
       'apps: game engines bring Mesa (OpenGL without a GPU) along',
     );
-    const custom = (app: object): boolean => Config.shape.apps.shape.custom.safeParse({ x: app }).success;
+    const custom = (app: object): boolean => ConfigSchema.shape.apps.shape.custom.safeParse({ x: app }).success;
     t.check(
       custom({ name: 'A', github: 'o/r', asset: 'win.*\\.zip$', exe: 'a.exe' }) &&
         custom({ name: 'B', url: 'https://x.org/b.zip', exe: 'b.exe' }),
@@ -410,8 +410,8 @@ export const toolchainsSuite: Suite = {
       'apps: plain http, a broken pattern, or both sources are refused',
     );
     t.check(
-      !LocalOverrides.safeParse({ apps: { custom: {} } }).success &&
-        LocalOverrides.safeParse({ apps: { install: ['jq'] } }).success,
+      !LocalOverridesSchema.safeParse({ apps: { custom: {} } }).success &&
+        LocalOverridesSchema.safeParse({ apps: { install: ['jq'] } }).success,
       'apps: a project file may add catalogue apps but never programs of its own',
     );
   },

@@ -10,7 +10,7 @@ import { splitArgs } from '../args.js';
 import type { Context } from '../commands/context.js';
 import { cleanTargetOf, collectDataEntries } from '../commands/data/collect.js';
 import { commandLine } from '../history.js';
-import { askedWhen, type CommandSpecT, type OptionSpecT } from '../manifest.js';
+import { askedWhen, type CommandSpec, type OptionSpec } from '../manifest.js';
 import { App, Text, Theme, type ListItem } from '../tui/index.js';
 import { type Field, optionProblem } from './command-fields.js';
 
@@ -23,7 +23,7 @@ export class CommandForm {
   constructor(
     private readonly app: App,
     private readonly ctx: Context,
-    private readonly spec: CommandSpecT,
+    private readonly spec: CommandSpec,
     preset: string[] = [],
   ) {
     for (let i = 0; i < preset.length; i++) {
@@ -38,7 +38,7 @@ export class CommandForm {
   }
 
   /** Values a choices list names, filled in from config and the running sandbox. */
-  private choices(choices: OptionSpecT['choices']): string[] {
+  private choices(choices: OptionSpec['choices']): string[] {
     if (Array.isArray(choices)) return choices;
     if (choices === 'harnesses') return Object.keys(this.ctx.loaded.config.harnesses);
     if (choices === 'accounts')

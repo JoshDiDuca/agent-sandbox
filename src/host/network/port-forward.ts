@@ -10,11 +10,11 @@ import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile } from '../storage/index.js';
 import { isSandboxAddress } from '../channel/index.js';
 
-const Forwards = z
+const ForwardsSchema = z
   .array(z.object({ pc: z.number().int().min(1).max(65535), sandbox: z.number().int().min(1).max(65535) }))
   .max(64);
 const forwardsFile = (storageRoot: string, dataPath: string): JsonFile<PortForward[]> =>
-  new JsonFile(Forwards, hostStateFile(storageRoot, dataPath, '-forwards.json'));
+  new JsonFile(ForwardsSchema, hostStateFile(storageRoot, dataPath, '-forwards.json'));
 
 /** Host-only: the forwards of the running sandbox (written at launch, read by the watcher). */
 export const saveForwards = (storageRoot: string, dataPath: string, forwards: PortForward[]): void =>

@@ -10,7 +10,7 @@ import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { syncAgentCommands } from '../commands/agent-commands.js';
 import type { Context } from '../commands/context.js';
 import { commandLine, readHistory } from '../history.js';
-import { COMMANDS, commandSpec, type CommandSpecT } from '../manifest.js';
+import { COMMANDS, commandSpec, type CommandSpec } from '../manifest.js';
 import { App, ExitRequested, Frame, Text, Theme, type ListItem } from '../tui/index.js';
 import { AppsCatalogue, appsSummary } from './apps.js';
 import { CommandForm } from './command-form.js';
@@ -237,7 +237,7 @@ export class Menu {
         ? action.argv
         : action.kind === 'several'
           ? await new SeveralAgents(this.app, this.ctx).run()
-          : await new CommandForm(this.app, this.ctx, commandSpec(action.command) as CommandSpecT, action.preset).run();
+          : await new CommandForm(this.app, this.ctx, commandSpec(action.command) as CommandSpec, action.preset).run();
     return argv ? this.execute(argv) : undefined;
   }
 

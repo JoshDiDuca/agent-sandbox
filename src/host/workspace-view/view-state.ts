@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 /** [host size, host time, view size, view time] after the last sync; -1 = no such file. */
 export type Seen = [number, number, number, number];
-export const Manifest = z.record(z.string().max(1024), z.tuple([z.number(), z.number(), z.number(), z.number()]));
+export const ManifestSchema = z.record(z.string().max(1024), z.tuple([z.number(), z.number(), z.number(), z.number()]));
 
 /** Most entries one walk looks at: a sandbox can create files faster than they are worth syncing. */
 export const MAX_ENTRIES = 300000;

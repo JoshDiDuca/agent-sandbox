@@ -16,7 +16,7 @@ const firstLine = (file: string): string | null => {
 };
 
 const VOLTA_PIN = 'package.json volta.node';
-const PackageJson = z.object({
+const PackageJsonSchema = z.object({
   volta: z
     .object({
       node: z
@@ -32,7 +32,9 @@ export const voltaNode = (workspace: string): string | null => {
   const file = path.join(workspace, 'package.json');
   if (!fileExists(file)) return null;
   try {
-    return PackageJson.safeParse(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''))).data?.volta?.node ?? null;
+    return (
+      PackageJsonSchema.safeParse(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''))).data?.volta?.node ?? null
+    );
   } catch {
     return null;
   }

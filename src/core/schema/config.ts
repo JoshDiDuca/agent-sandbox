@@ -2,39 +2,39 @@
 // schemas, and the JSON Schema files in schemas/ are generated from them at build time.
 import _ from 'lodash';
 import { z } from 'zod';
-import { Name, SchemaRef, Strings, toggle } from './common.js';
-import { Databases } from './databases.js';
-import { Harness } from './harness.js';
-import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
+import { NameSchema, SchemaRefSchema, StringsSchema, toggle } from './common.js';
+import { DatabasesSchema } from './databases.js';
+import { HarnessSchema } from './harness.js';
+import { AgentCommandsSchema, AttachSchema, ClaudeProfileSchema, SecretsSchema } from './profile.js';
 import {
-  Audit,
-  Downloads,
-  Git,
-  GuestWorkspace,
-  Mapping,
-  Network,
-  Provisioning,
-  Sandbox,
-  WorkspaceFilter,
+  AuditSchema,
+  DownloadsSchema,
+  GitSchema,
+  GuestWorkspaceSchema,
+  MappingSchema,
+  NetworkSchema,
+  ProvisioningSchema,
+  SandboxSchema,
+  WorkspaceFilterSchema,
 } from './sandbox.js';
-import { Toolchains } from './toolchains.js';
-import { Apps } from './apps.js';
-import { Projects } from './projects.js';
+import { ToolchainsSchema } from './toolchains.js';
+import { AppsSchema } from './apps.js';
+import { ProjectsSchema } from './projects.js';
 
-export const Config = z
+export const ConfigSchema = z
   .strictObject({
-    $schema: SchemaRef.optional(),
-    defaultHarness: Name.describe('Agent started by `sandbox launch` (sandbox claude always runs claude).'),
-    guestWorkspace: GuestWorkspace,
+    $schema: SchemaRefSchema.optional(),
+    defaultHarness: NameSchema.describe('Agent started by `sandbox launch` (sandbox claude always runs claude).'),
+    guestWorkspace: GuestWorkspaceSchema,
     readOnly: z.boolean().describe('Map the workspace read-only.'),
-    workspaceFilter: WorkspaceFilter,
-    audit: Audit,
-    mappings: z.array(Mapping).describe('Extra folders from this PC.'),
-    sandbox: Sandbox,
+    workspaceFilter: WorkspaceFilterSchema,
+    audit: AuditSchema,
+    mappings: z.array(MappingSchema).describe('Extra folders from this PC.'),
+    sandbox: SandboxSchema,
     storage: z.strictObject({
       root: z.string().min(1).describe('Where everything is kept on this PC (tools, databases, logins, launches).'),
       persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),
-      dataName: Name.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
+      dataName: NameSchema.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
       markSandboxFiles: z
         .boolean()
         .describe(
@@ -47,22 +47,22 @@ export const Config = z
           'Say at launch when the persisted data (tools, databases, logins) is bigger than this many GB; 0 = never. sandbox data shows what takes the space.',
         ),
     }),
-    network: Network,
-    provisioning: Provisioning,
-    downloads: Downloads,
-    toolchains: Toolchains,
-    databases: Databases.describe(
+    network: NetworkSchema,
+    provisioning: ProvisioningSchema,
+    downloads: DownloadsSchema,
+    toolchains: ToolchainsSchema,
+    databases: DatabasesSchema.describe(
       'Databases running inside the sandbox. Data persists in C:\\AgentData\\databases; each one starts at boot.',
     ),
-    attach: Attach,
-    agentCommands: AgentCommands,
-    secrets: Secrets,
+    attach: AttachSchema,
+    agentCommands: AgentCommandsSchema,
+    secrets: SecretsSchema,
     personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),
-    apps: Apps,
-    claudeProfile: ClaudeProfile,
-    harnesses: z.record(Name, Harness).describe('Agents that can run in the sandbox.'),
+    apps: AppsSchema,
+    claudeProfile: ClaudeProfileSchema,
+    harnesses: z.record(NameSchema, HarnessSchema).describe('Agents that can run in the sandbox.'),
     hooks: z.strictObject({ failFast: z.boolean().describe('Stop when a hook script fails.') }),
-    projects: Projects.describe(
+    projects: ProjectsSchema.describe(
       'Several projects in one sandbox: folders of projects mapped at every start, and adding folders while it runs.',
     ),
   })
@@ -75,43 +75,43 @@ export const Config = z
  * What a project's .sandbox-config.json may change. A repo can ship this file, so it can NOT touch storage, agent
  * executables, host folders for tools or Claude settings, or anything else outside this list.
  */
-export const LocalOverrides = z
+export const LocalOverridesSchema = z
   .strictObject({
-    $schema: SchemaRef,
-    harness: Name.describe('Agent for this project.'),
-    guestWorkspace: GuestWorkspace,
+    $schema: SchemaRefSchema,
+    harness: NameSchema.describe('Agent for this project.'),
+    guestWorkspace: GuestWorkspaceSchema,
     readOnly: z.boolean().describe('Map this project read-only.'),
     // A project may turn the filter on and keep more out, never let ignored files in.
-    workspaceFilter: WorkspaceFilter.pick({ enabled: true, exclude: true }).partial(),
+    workspaceFilter: WorkspaceFilterSchema.pick({ enabled: true, exclude: true }).partial(),
     mappings: z
-      .array(Mapping)
+      .array(MappingSchema)
       .describe(
         'Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.',
       ),
-    scripts: Strings.describe(
+    scripts: StringsSchema.describe(
       'Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.',
     ),
     // This PC's resources are yours to share: CPU and paging file (this PC's disk) are not a project's to set.
-    sandbox: Sandbox.omit({ cpuLimit: true, pageFileMb: true }).partial(),
+    sandbox: SandboxSchema.omit({ cpuLimit: true, pageFileMb: true }).partial(),
     // A project may block more (the LAN, hosts); it never opens hosts, ports, DNS or a proxy.
-    network: Network.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
-    provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true })
-      .extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() })
+    network: NetworkSchema.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
+    provisioning: ProvisioningSchema.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true })
+      .extend({ git: GitSchema.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() })
       .partial(),
-    downloads: Downloads.partial(),
+    downloads: DownloadsSchema.partial(),
     // Every toolchain setting, each one optional (a project usually only switches languages on or pins a version).
     toolchains: z
       .strictObject({
-        ..._.mapValues(_.omit(Toolchains.shape, 'environment'), (shape) => shape.partial()),
-        environment: Toolchains.shape.environment,
+        ..._.mapValues(_.omit(ToolchainsSchema.shape, 'environment'), (shape) => shape.partial()),
+        environment: ToolchainsSchema.shape.environment,
       })
       .partial(),
-    databases: z.strictObject(_.mapValues(Databases.shape, (shape) => shape.partial())).partial(),
-    attach: Attach.partial(),
+    databases: z.strictObject(_.mapValues(DatabasesSchema.shape, (shape) => shape.partial())).partial(),
+    attach: AttachSchema.partial(),
     personalization: toggle('Copy your desktop look into the sandbox.').partial(),
     // Catalogue apps only (a vetted list): your own programs (apps.custom) download anything, so a repo cannot add them.
-    apps: Apps.pick({ install: true }).partial(),
-    claudeProfile: ClaudeProfile.pick({
+    apps: AppsSchema.pick({ install: true }).partial(),
+    claudeProfile: ClaudeProfileSchema.pick({
       enabled: true,
       overwrite: true,
       copyCredentials: true,

@@ -3,12 +3,12 @@ import path from 'node:path';
 import _ from 'lodash';
 import type { Config, Overrides } from '../types.js';
 import { mergeConfig } from '../config/index.js';
-import { describeIssues, LocalOverrides } from '../schema/index.js';
+import { describeIssues, LocalOverridesSchema } from '../schema/index.js';
 import { expandPath, fail, fileExists, isInsideOrEqual } from '../util/index.js';
 
 /** Validates a folder's settings and resolves its relative paths against that folder. */
 export const normalizeOverrides = (data: unknown, dir: string, source: string): Overrides => {
-  const parsed = LocalOverrides.safeParse(data);
+  const parsed = LocalOverridesSchema.safeParse(data);
   if (!parsed.success) fail(source + ' is not valid:\n  - ' + describeIssues(parsed.error).join('\n  - '));
   const overrides = parsed.data;
   const scripts = overrides.scripts?.map((s) => expandPath(s, dir));

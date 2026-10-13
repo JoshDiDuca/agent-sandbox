@@ -4,7 +4,7 @@ import { SYSTEM } from '../../shared/system.js';
 import { isWin } from '../../core/util/index.js';
 import { refuseInSelfTest } from '../test-guard.js';
 
-export const Iso = z.string().max(40);
+export const IsoSchema = z.string().max(40);
 
 // ---- Windows' System log ----------------------------------------------------------------------------------------
 
@@ -14,10 +14,10 @@ export interface StopEvent {
   provider: string;
   process: string;
 }
-const StopEvents = z
+const StopEventsSchema = z
   .array(
     z.object({
-      at: Iso,
+      at: IsoSchema,
       id: z.number().int(),
       provider: z.string().max(200),
       process: z
@@ -106,7 +106,7 @@ export const readStopEvents = (since: Date): StopEvent[] => {
     { encoding: 'utf8', windowsHide: true, timeout: 60000 },
   );
   try {
-    return StopEvents.parse(JSON.parse(result.stdout || '[]'));
+    return StopEventsSchema.parse(JSON.parse(result.stdout || '[]'));
   } catch {
     return [];
   }

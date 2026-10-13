@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { splitArgs } from '../args.js';
-import { type ArgSpecT, type OptionSpecT } from '../manifest.js';
+import { type ArgSpec, type OptionSpec } from '../manifest.js';
 import { validNodeSpec, validPythonSpec } from '../validate.js';
 
 /** What an option accepts, checked while typing (undefined = fine). */
-export const optionProblem = (o: OptionSpecT, v: string): string | undefined => {
+export const optionProblem = (o: OptionSpec, v: string): string | undefined => {
   if (v === '') return undefined;
   if (o.type === 'number' && !(Number(v) > 0)) return 'Enter a number greater than 0.';
   if (o.flag === '--node' && !validNodeSpec(v)) return 'Use a number like 22 or 22.11.0, or lts, latest.';
@@ -19,7 +19,7 @@ export const optionProblem = (o: OptionSpecT, v: string): string | undefined => 
 };
 
 export type Field =
-  | { kind: 'arg'; spec: ArgSpecT; index: number }
-  | { kind: 'option'; spec: OptionSpecT }
+  | { kind: 'arg'; spec: ArgSpec; index: number }
+  | { kind: 'option'; spec: OptionSpec }
   | { kind: 'json' }
   | { kind: 'extra' };

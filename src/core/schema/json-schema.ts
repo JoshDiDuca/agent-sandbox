@@ -1,6 +1,6 @@
 // Readable validation messages and the JSON Schema documents generated from the settings schemas.
 import { z } from 'zod';
-import { Config, LocalOverrides } from './config.js';
+import { ConfigSchema, LocalOverridesSchema } from './config.js';
 
 /** One readable line per problem: "sandbox.memoryMb: Too small: expected number to be >=2048". */
 export const describeIssues = (error: z.ZodError): string[] =>
@@ -28,10 +28,10 @@ export const jsonSchemas = (): Record<string, object> => {
   });
   return {
     'config.schema.json': dropRequired(
-      toSchema(Config, 'windows-development-sandbox user config (~/.agent-sandbox/config.json)'),
+      toSchema(ConfigSchema, 'windows-development-sandbox user config (~/.agent-sandbox/config.json)'),
     ) as object,
     'sandbox-config.schema.json': toSchema(
-      LocalOverrides,
+      LocalOverridesSchema,
       'windows-development-sandbox project config (.sandbox-config.json)',
     ),
   };

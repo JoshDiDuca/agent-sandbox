@@ -9,7 +9,7 @@ import { resolveRun } from '../../../core/run/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { joinRunning } from '../../../host/projects/index.js';
-import type { ProjectSpecT } from '../../../shared/channel/index.js';
+import type { ProjectSpec } from '../../../shared/channel/index.js';
 import { working } from '../../output/index.js';
 import { guestPathFor, type Context } from '../context.js';
 
@@ -35,7 +35,7 @@ export const locateHere = (ctx: Context, status: SandboxStatus | null): Located 
 export interface Joined {
   project: RegistryEntry | null;
   guestDir: string;
-  spec: ProjectSpecT | null;
+  spec: ProjectSpec | null;
   harness: string | null;
   notes: string[];
 }

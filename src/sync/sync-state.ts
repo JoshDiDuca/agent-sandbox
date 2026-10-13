@@ -4,13 +4,13 @@ import { JsonFile } from '../shared/io/index.js';
 import { hostStateFile, storageOf } from '../host/storage/index.js';
 
 /** Host-only record of the last launch: which folders map to each other and what syncs (from the effective config). */
-const AbsolutePath = z
+const AbsolutePathSchema = z
   .string()
   .max(1024)
   .refine((p) => path.isAbsolute(p), 'must be an absolute path');
 const SyncStateSchema = z.object({
-  hostClaudeDir: AbsolutePath,
-  hostWorkspace: AbsolutePath,
+  hostClaudeDir: AbsolutePathSchema,
+  hostWorkspace: AbsolutePathSchema,
   guestWorkspace: z.string().max(1024),
   syncHistory: z.boolean().optional(),
   syncClaudeMem: z.boolean().optional(),
@@ -21,7 +21,7 @@ const SyncStateSchema = z.object({
   memGuestStamp: z.number().optional(),
   /** Projects registered while the sandbox ran (their history goes back to their own folders). */
   projects: z
-    .array(z.object({ hostWorkspace: AbsolutePath, guestWorkspace: z.string().max(1024) }))
+    .array(z.object({ hostWorkspace: AbsolutePathSchema, guestWorkspace: z.string().max(1024) }))
     .max(256)
     .optional(),
 });

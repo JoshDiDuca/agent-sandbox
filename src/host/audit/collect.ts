@@ -10,7 +10,7 @@ import { assertNoLinks } from '../../core/util/index.js';
 import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile } from '../storage/index.js';
-import { AuditEvent, AuditLog, fold } from './log.js';
+import { AuditEventSchema, AuditLog, fold, type AuditEvent } from './log.js';
 
 const MAX_FILES_PER_PASS = 200;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -18,7 +18,7 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const QUIET =
   /(^|[\\/])(\.git[\\/](objects|logs|refs|index\.lock|FETCH_HEAD|ORIG_HEAD)|node_modules[\\/]|target[\\/]|\.venv[\\/]|__pycache__[\\/])/i;
 
-const AuditSettings = z.object({
+const AuditSettingsSchema = z.object({
   enabled: z.boolean(),
   days: z.number().int().min(1).max(365),
   maxMb: z.number().int().min(5).max(5000),
@@ -26,9 +26,9 @@ const AuditSettings = z.object({
   files: z.boolean(),
   projects: z.array(z.string().max(1024)).max(64),
 });
-export type AuditSettings = z.output<typeof AuditSettings>;
+export type AuditSettings = z.output<typeof AuditSettingsSchema>;
 const settingsFile = (storageRoot: string, dataPath: string): JsonFile<AuditSettings> =>
-  new JsonFile(AuditSettings, hostStateFile(storageRoot, dataPath, '-audit.json'));
+  new JsonFile(AuditSettingsSchema, hostStateFile(storageRoot, dataPath, '-audit.json'));
 
 /** Host-only: the audit settings of the running sandbox (written at launch, read by the watcher). */
 export const saveAuditSettings = (storageRoot: string, dataPath: string, settings: AuditSettings): void =>
@@ -111,7 +111,7 @@ export class AuditCollector {
             } catch {
               continue;
             }
-            const e = AuditEvent.safeParse(raw);
+            const e = AuditEventSchema.safeParse(raw);
             if (e.success) this.pending.push({ ...e.data, k: 'proc', w: undefined, a: undefined });
           }
         }

@@ -5,20 +5,20 @@
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile } from '../storage/index.js';
-import { causeSince, Iso, type StopCause } from './stop-events.js';
+import { causeSince, IsoSchema, type StopCause } from './stop-events.js';
 import { stopWarning } from './stop-warning.js';
 
 const LifeSchema = z.object({
-  started: Iso,
-  lastSeen: Iso,
+  started: IsoSchema,
+  lastSeen: IsoSchema,
   keepAwake: z.boolean(),
   ended: z
     .object({
-      at: Iso,
+      at: IsoSchema,
       cause: z
         .object({
           kind: z.enum(['updates', 'restart', 'crash', 'sleep', 'memory', 'sandboxCrash']),
-          at: Iso,
+          at: IsoSchema,
           text: z.string().max(400),
         })
         .nullable(),

@@ -2,7 +2,7 @@
 // so a project's .sandbox-config.json can never set them (LocalOverrides has no `projects`).
 import { z } from 'zod';
 
-export const Projects = z.strictObject({
+export const ProjectsSchema = z.strictObject({
   all: z
     .boolean()
     .describe(

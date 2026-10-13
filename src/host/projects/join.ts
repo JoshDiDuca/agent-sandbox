@@ -9,7 +9,7 @@ import type { ResolvedRun } from '../../core/types.js';
 import { checkJoin, protectionsOf } from '../../core/local-config/index.js';
 import { resolveToolchains } from '../../core/detect/index.js';
 import { assertNoLinks, fail } from '../../core/util/index.js';
-import { Id, type ProjectSpecT } from '../../shared/channel/index.js';
+import { IdSchema, type ProjectSpec } from '../../shared/channel/index.js';
 import { RunDir } from '../../shared/channel/index.js';
 import { syncProjectIn } from '../../sync/index.js';
 import { planDatabases } from '../launch/index.js';
@@ -38,18 +38,18 @@ export const runningLaunchPath = (storageRoot: string, dataPath: string): string
 export interface Joined {
   project: RegistryEntry;
   guestDir: string;
-  spec: ProjectSpecT | null;
+  spec: ProjectSpec | null;
   run: ResolvedRun | null;
   notes: string[];
 }
 
 /** The project spec the guest provisions from (scans the project folder like a launch does). */
-export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boolean): ProjectSpecT => {
+export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boolean): ProjectSpec => {
   const { config } = run;
   const toolchains = resolveToolchains(config.toolchains, decideProjectToolchains({ run }));
   const harness = run.harnessName === 'none' ? null : config.harnesses[run.harnessName];
   return {
-    name: Id.parse(entry.name),
+    name: IdSchema.parse(entry.name),
     workspace: entry.guest,
     workspaceHost: entry.host,
     toolchains,

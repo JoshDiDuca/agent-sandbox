@@ -96,27 +96,27 @@ export const findLinks = (root: string): string[] => {
   return dirExists(root) ? walk(root) : [];
 };
 
-const ResolvedVersions = z.record(z.string(), z.unknown());
+const ResolvedVersionsSchema = z.record(z.string(), z.unknown());
 /** tools\resolved-versions.json is a JSON object (anything else makes the guest stumble). */
 export const resolvedVersionsValid = (text: string): boolean => {
   try {
-    return ResolvedVersions.safeParse(JSON.parse(text.replace(/^﻿/, ''))).success;
+    return ResolvedVersionsSchema.safeParse(JSON.parse(text.replace(/^﻿/, ''))).success;
   } catch {
     return false;
   }
 };
 
-const NpmList = z.object({ dependencies: z.record(z.string(), z.unknown()).optional() });
+const NpmListSchema = z.object({ dependencies: z.record(z.string(), z.unknown()).optional() });
 /** Package names from `npm ls -g --json`; [] when the output is not what npm prints. */
 export const globalPackages = (json: string): string[] => {
   try {
-    return Object.keys(NpmList.parse(JSON.parse(json)).dependencies ?? {});
+    return Object.keys(NpmListSchema.parse(JSON.parse(json)).dependencies ?? {});
   } catch {
     return [];
   }
 };
 
-const Pid = z.coerce.number().int().positive();
+const PidSchema = z.coerce.number().int().positive();
 export const pidAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -132,7 +132,7 @@ export const deadPidFiles = (runDir: string, alive: (pid: number) => boolean = p
     .map((n) => path.join(runDir, n))
     .filter((f) => {
       try {
-        const pid = Pid.safeParse(fs.readFileSync(f, 'utf8').trim());
+        const pid = PidSchema.safeParse(fs.readFileSync(f, 'utf8').trim());
         return !pid.success || !alive(pid.data);
       } catch {
         return false;

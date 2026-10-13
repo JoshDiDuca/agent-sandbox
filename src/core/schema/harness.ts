@@ -1,8 +1,8 @@
 // An agent (claude, codex, ...) the sandbox can run.
 import { z } from 'zod';
-import { Strings } from './common.js';
+import { StringsSchema } from './common.js';
 
-export const Harness = z
+export const HarnessSchema = z
   .strictObject({
     hostExecutable: z
       .string()
@@ -19,9 +19,9 @@ export const Harness = z
       .optional()
       .describe('Python package installed with `uv tool install` inside the sandbox (e.g. aider-chat).'),
     uvBin: z.string().optional().describe('Command the uv package provides.'),
-    arguments: Strings.describe('Arguments always passed to the agent.'),
+    arguments: StringsSchema.describe('Arguments always passed to the agent.'),
     environment: z.record(z.string(), z.string()).describe('Environment variables for the agent.'),
-    resumeArguments: Strings.optional().describe(
+    resumeArguments: StringsSchema.optional().describe(
       'Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.',
     ),
   })

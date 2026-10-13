@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import type { GuestRequest, GuestResponse, Harness, SandboxStatus, SessionStatus } from '../../core/types.js';
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../../core/util/index.js';
 import { isWithin } from '../../shared/paths/index.js';
-import type { ProjectSpecT } from '../../shared/channel/index.js';
+import type { ProjectSpec } from '../../shared/channel/index.js';
 import { now, RunDir } from '../../shared/channel/index.js';
 import { safeRemove, writeJsonAtomic } from '../../shared/io/index.js';
 import { isSandboxRunning } from '../sandbox/index.js';
@@ -117,7 +117,7 @@ export class SandboxChannel {
     harness: string,
     args: string[],
     cwd: string,
-    extra: { project?: ProjectSpecT; harnessSpec?: Harness } = {},
+    extra: { project?: ProjectSpec; harnessSpec?: Harness } = {},
   ): string {
     const requestId = newId();
     this.send({
@@ -138,7 +138,7 @@ export class SandboxChannel {
    * run\projects\<name>.json) as it goes. Throws when it failed.
    */
   async prepareProject(
-    project: ProjectSpecT,
+    project: ProjectSpec,
     progress: Progress = (m) => printLine('  [' + project.name + '] ' + m),
   ): Promise<GuestResponse> {
     const requestId = newId();

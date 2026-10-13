@@ -6,13 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { localDir } from '../runtime/paths.js';
-import { BootEnv, type BootEnvT } from './project-env.js';
+import { BootEnvSchema, type BootEnv } from './project-env.js';
 
-export { baseEnvFor, type BootEnvT } from './project-env.js';
+export { baseEnvFor, type BootEnv } from './project-env.js';
 
 const file = (): string => path.join(localDir, 'boot-env.json');
 
-export const saveBootEnv = (value: BootEnvT): void => {
+export const saveBootEnv = (value: BootEnv): void => {
   try {
     writeJsonAtomic(file(), value);
   } catch {
@@ -20,9 +20,9 @@ export const saveBootEnv = (value: BootEnvT): void => {
   }
 };
 
-export const readBootEnv = (): BootEnvT | null => {
+export const readBootEnv = (): BootEnv | null => {
   try {
-    return BootEnv.safeParse(JSON.parse(fs.readFileSync(file(), 'utf8'))).data ?? null;
+    return BootEnvSchema.safeParse(JSON.parse(fs.readFileSync(file(), 'utf8'))).data ?? null;
   } catch {
     return null;
   }

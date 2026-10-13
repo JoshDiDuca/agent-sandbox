@@ -1,8 +1,8 @@
 // Languages and tools installed inside the sandbox.
 import { z } from 'zod';
-import { enabled, Enabled, Packages, Strings, toggle } from './common.js';
+import { enabled, EnabledSchema, Packages, StringsSchema, toggle } from './common.js';
 
-export const Toolchains = z.strictObject({
+export const ToolchainsSchema = z.strictObject({
   node: z.strictObject({
     version: z
       .string()
@@ -10,13 +10,13 @@ export const Toolchains = z.strictObject({
       .describe(
         'Default Node version for nvm. "host" = the Node on this PC. A project\'s .nvmrc / .node-version wins.',
       ),
-    extraVersions: Strings.describe(
+    extraVersions: StringsSchema.describe(
       "More Node versions to install (switch with nvm use). On top of the up to 3 versions copied from this PC's nvm, not counted towards that limit.",
     ),
     corepack: z
       .boolean()
       .describe('pnpm and yarn through corepack (a project\'s "packageManager" in package.json picks the version).'),
-    volta: Enabled.describe(
+    volta: EnabledSchema.describe(
       'Volta: true, false, or "auto" = when the project\'s package.json has "volta" pins or this PC uses Volta. With pins, Volta\'s node/npm/yarn/pnpm come first on PATH.',
     ),
     globalPackages: Packages(
@@ -34,7 +34,7 @@ export const Toolchains = z.strictObject({
       .min(1)
       .describe('Python 3 version prefix, e.g. "3" or "3.12". A project\'s .python-version wins.'),
     python2: z.boolean().describe('Also install Python 2.7 as python2 / pip2.'),
-    pyenv: Enabled.describe(
+    pyenv: EnabledSchema.describe(
       'pyenv-win (pyenv install / local / global): true, false, or "auto" = when this PC uses pyenv. .python-version is honoured either way, and `uv python install` always works.',
     ),
     tools: Packages(
@@ -90,10 +90,10 @@ export const Toolchains = z.strictObject({
   }),
   dotnet: z.strictObject({
     enabled: enabled('.NET SDK (C#, F#).', 'a .sln, .slnx, .csproj, .fsproj or global.json'),
-    channels: Strings.describe('SDK channels, e.g. ["LTS", "8.0"]. A project\'s global.json is installed too.'),
+    channels: StringsSchema.describe('SDK channels, e.g. ["LTS", "8.0"]. A project\'s global.json is installed too.'),
     tools: Packages('Global .NET tools (`dotnet tool install -g`)', '["dotnet-ef", "csharpier"]'),
     workloads: Packages('SDK workloads (`dotnet workload install`)', '["aspire", "wasm-tools"]'),
-    frameworkTargets: Strings.describe(
+    frameworkTargets: StringsSchema.describe(
       '.NET Framework reference assemblies (targeting packs) from NuGet, so net4x and old-style .csproj projects build without Visual Studio, e.g. ["net48", "net472", "net462"]. The 4.8 runtime itself ships with Windows.',
     ),
     netfx35: z
@@ -142,17 +142,17 @@ export const Toolchains = z.strictObject({
   }),
   deno: z.strictObject({ enabled: enabled('Deno.', 'deno.json, deno.jsonc or deno.lock') }),
   pwsh: z.strictObject({
-    enabled: Enabled.describe(
+    enabled: EnabledSchema.describe(
       'PowerShell 7 (pwsh), portable (~110 MB once); `powershell` stays Windows PowerShell 5.1. true, false, or "auto" = when a .ps1 at the root or one folder down has #Requires -Version 7 / -PSEdition Core or a `pwsh ...` usage line, or, in a folder that is no project yet, when this PC has PowerShell 7.',
     ),
   }),
   cli: z
     .strictObject({
-      gh: Enabled.describe(
+      gh: EnabledSchema.describe(
         'GitHub CLI (gh). Only with provisioning.git.access "full": gh can push and merge through the GitHub API, past a read-only git. Your PC\'s gh login is never copied; `gh auth login` inside persists (GH_CONFIG_DIR). "auto" = when the project has a .github folder.',
       ),
-      zstd: Enabled.describe('Zstandard (zstd). "auto" = off; set true to get it.'),
-      openssl: Enabled.describe(
+      zstd: EnabledSchema.describe('Zstandard (zstd). "auto" = off; set true to get it.'),
+      openssl: EnabledSchema.describe(
         '`openssl` on PATH, from the copy Git for Windows ships (its mingw64\\bin is not put on PATH, so it cannot shadow MinGW\'s gcc). "auto" = on.',
       ),
     })

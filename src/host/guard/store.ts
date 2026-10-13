@@ -52,7 +52,7 @@ const StoreSchema = z.strictObject({
 type Store = z.output<typeof StoreSchema>;
 /** A recorded finding (`at`: when it was found). */
 export type RecordedFinding = RepoFinding & { at?: string };
-const StoreAny = z.union([StoreSchema, SavedSchema.transform((s) => ({ projects: [s], roots: [] as string[] }))]);
+const StoreAnySchema = z.union([StoreSchema, SavedSchema.transform((s) => ({ projects: [s], roots: [] as string[] }))]);
 const EMPTY: RepoSnapshot = { gitDir: false, config: [], hooks: {}, redirects: [], commands: {}, agent: {}, repos: {} };
 const MAX_ROOT_PROJECTS = 2000;
 
@@ -77,7 +77,7 @@ export class RepoGuardStore {
     dataPath: string,
     private readonly guard = new RepoGuard(),
   ) {
-    this.snapshots = new JsonFile(StoreAny, snapshotFile(dataPath));
+    this.snapshots = new JsonFile(StoreAnySchema, snapshotFile(dataPath));
     this.found = new JsonFile(z.array(FindingSchema).max(10000), findingsFile(dataPath));
   }
 

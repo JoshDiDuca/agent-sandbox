@@ -1,23 +1,23 @@
 // The sandbox machine, folders mapped into it, and what is provisioned (Git, terminal).
 import { z } from 'zod';
-import { GitAccess, GuestPath, toggle } from './common.js';
+import { GitAccessSchema, GuestPathSchema, toggle } from './common.js';
 
-export const GuestWorkspace = z
-  .union([z.literal('auto'), z.literal('mirror'), GuestPath])
+export const GuestWorkspaceSchema = z
+  .union([z.literal('auto'), z.literal('mirror'), GuestPathSchema])
   .describe(
     'Where the workspace appears inside the sandbox. "auto" = C:\\Workspace\\<folder name>. "mirror" = the same path as on this PC, so absolute paths in configs and build caches match (another drive letter such as F: is a subst drive onto C:\\Mirror\\F); paths the sandbox reserves (C:\\Users\\..., C:\\Program Files\\...) fall back to "auto".',
   );
 
-export const Mapping = z.strictObject({
+export const MappingSchema = z.strictObject({
   host: z.string().min(1).describe('Folder on this PC (relative paths are relative to the config file).'),
-  guest: GuestPath.describe(
+  guest: GuestPathSchema.describe(
     'Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game: mapped to C:\\Mirror\\F\\... and shown as F: (subst) at boot.',
   ),
   readOnly: z.boolean().describe('true = the agent can only read it.'),
   optional: z.boolean().optional().describe('true = skip it quietly when the host folder does not exist.'),
 });
 
-export const Sandbox = z.strictObject({
+export const SandboxSchema = z.strictObject({
   memoryMb: z
     .union([z.literal('auto'), z.number().int().min(2048)])
     .describe('Sandbox RAM in MB (>= 2048), or "auto": free RAM minus reserveHostMb, capped at maxMemoryMb.'),
@@ -60,8 +60,8 @@ export const Sandbox = z.strictObject({
       'Keep this PC from sleeping while a sandbox runs, so agents left working overnight keep going (the screen may still turn off; closing a laptop lid still sleeps it).',
     ),
 });
-const Port = z.number().int().min(1).max(65535);
-const HostEntry = z
+const PortSchema = z.number().int().min(1).max(65535);
+const HostEntrySchema = z
   .string()
   .max(253)
   .regex(
@@ -69,12 +69,12 @@ const HostEntry = z
     'a host name like example.com, *.example.com, or @developer',
   );
 
-export const Network = z.strictObject({
+export const NetworkSchema = z.strictObject({
   blockPrivateRanges: z
     .boolean()
     .describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.'),
   allowOnly: z
-    .array(HostEntry)
+    .array(HostEntrySchema)
     .describe(
       'Only these hosts can be reached once the sandbox is set up (tools still download first). *.example.com covers its subdomains; @developer adds package registries, GitHub, toolchain downloads and the AI providers. Programs go through a proxy in the sandbox (HTTP_PROXY); anything else is blocked by its firewall. Empty = no limit.',
     ),
@@ -91,8 +91,8 @@ export const Network = z.strictObject({
   forwardPorts: z
     .array(
       z.strictObject({
-        pc: Port.describe('The port on this PC (localhost only).'),
-        sandbox: Port.describe('The port inside the sandbox (a server there may listen on localhost only).'),
+        pc: PortSchema.describe('The port on this PC (localhost only).'),
+        sandbox: PortSchema.describe('The port inside the sandbox (a server there may listen on localhost only).'),
       }),
     )
     .describe(
@@ -109,7 +109,7 @@ export const Network = z.strictObject({
     ),
 });
 
-export const Audit = z.strictObject({
+export const AuditSchema = z.strictObject({
   enabled: z
     .boolean()
     .describe(
@@ -130,7 +130,7 @@ export const Audit = z.strictObject({
   files: z.boolean().describe('Record the files changed in the project while the sandbox runs.'),
 });
 
-export const WorkspaceFilter = z.strictObject({
+export const WorkspaceFilterSchema = z.strictObject({
   enabled: z
     .boolean()
     .describe(
@@ -143,22 +143,22 @@ export const WorkspaceFilter = z.strictObject({
     .array(z.string().max(500))
     .describe('Let these in although .gitignore lists them, e.g. .env.example, data/fixtures/.'),
 });
-export const Git = z.strictObject({
+export const GitSchema = z.strictObject({
   enabled: z.boolean().describe('Provide Git for Windows (and Git Bash, which Claude Code needs).'),
-  access: GitAccess,
+  access: GitAccessSchema,
 });
-export const Provisioning = z.strictObject({
+export const ProvisioningSchema = z.strictObject({
   copyFromHost: z.boolean().describe('Copy Node, Git, nvm and the agent from this PC when they are installed here.'),
   fallbackToInstall: z.boolean().describe('Download anything that cannot be copied from this PC.'),
   refresh: z.boolean().describe('Re-copy / re-download everything on the next launch.'),
-  git: Git,
+  git: GitSchema,
   terminal: toggle('Windows Terminal as the sandbox window (downloaded once).'),
   conpty: toggle(
     "Agent sessions use Microsoft's newer pseudo console (conpty.dll, downloaded once) instead of the one built into Windows: no garbled screen after resizing, real scrollback for the mouse wheel. Off = the one built into Windows.",
   ),
 });
 
-export const Downloads = z.strictObject({
+export const DownloadsSchema = z.strictObject({
   requireChecksum: z
     .boolean()
     .describe(

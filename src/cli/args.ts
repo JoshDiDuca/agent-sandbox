@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { fail } from '../core/util/index.js';
 import { c } from './output/index.js';
-import { COMMANDS, type OptionSpecT } from './manifest.js';
+import { COMMANDS, type OptionSpec } from './manifest.js';
 import { packageVersion } from '../core/package-info.js';
 
 export interface CliOptions {
@@ -84,7 +84,7 @@ const positiveNumber = (value: string): number => {
 const collect = (value: string, previous: string[] = []): string[] => [...previous, value];
 
 /** One commander option from its manifest entry. */
-const toOption = (o: OptionSpecT): Option => {
+const toOption = (o: OptionSpec): Option => {
   const flags =
     (o.short ? o.short + ', ' : '') + o.flag + (o.type === 'boolean' ? '' : ' <' + (o.value ?? 'value') + '>');
   const option = new Option(flags, o.description);

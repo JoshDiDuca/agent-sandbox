@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedRun, SessionStatus } from '../core/types.js';
-import { LocalOverrides } from '../core/schema/index.js';
+import { LocalOverridesSchema } from '../core/schema/index.js';
 import { checkJoin, protectionsOf } from '../core/local-config/index.js';
 import { sessionsFirstIn } from '../host/channel/index.js';
 import { buildWsb } from '../host/launch/index.js';
@@ -27,7 +27,7 @@ import {
   projectForHostDir,
   PROJECTS_GUEST,
 } from '../shared/paths/index.js';
-import { GuestRequest, ProjectSpec } from '../shared/channel/index.js';
+import { GuestRequestSchema, ProjectSpecSchema } from '../shared/channel/index.js';
 import { projectFolderName } from '../shared/paths/index.js';
 import { syncHistoryOut } from '../sync/index.js';
 import { validateOptions, validateProjectsArgs } from '../cli/validate.js';
@@ -164,11 +164,11 @@ export const projectsSuite: Suite = {
       'a read-only project cannot join (other projects are mapped read/write), even when the launch folder was read-only',
     );
     t.check(
-      !LocalOverrides.safeParse({ projects: { roots: ['C:\\'] } }).success,
+      !LocalOverridesSchema.safeParse({ projects: { roots: ['C:\\'] } }).success,
       "a project's .sandbox-config.json can never set projects.roots (they map folders of this PC)",
     );
     t.check(
-      !LocalOverrides.safeParse({ projects: { all: true } }).success,
+      !LocalOverridesSchema.safeParse({ projects: { all: true } }).success,
       "a project's .sandbox-config.json can never set projects.all",
     );
 
@@ -293,7 +293,7 @@ export const projectsSuite: Suite = {
       'joining a project builds a spec with its guest folder...',
     );
     t.check(
-      ProjectSpec.safeParse(joined.spec).success && joined.spec?.harnesses.claude !== undefined,
+      ProjectSpecSchema.safeParse(joined.spec).success && joined.spec?.harnesses.claude !== undefined,
       '... that is valid and carries the agent',
     );
     t.check(
@@ -325,7 +325,7 @@ export const projectsSuite: Suite = {
     t.section('projects: the spec and request the guest gets');
     const spec = projectSpec(webRun, web, false);
     const sessionRequest = (extra: Record<string, unknown>) =>
-      GuestRequest.safeParse({
+      GuestRequestSchema.safeParse({
         kind: 'session',
         id: 'r1',
         harness: 'claude',
@@ -357,20 +357,20 @@ export const projectsSuite: Suite = {
       'at most 8 agent definitions in one spec',
     );
     t.check(
-      GuestRequest.safeParse({ kind: 'project', id: 'p1', project: spec, createdAt: 'x' }).success,
+      GuestRequestSchema.safeParse({ kind: 'project', id: 'p1', project: spec, createdAt: 'x' }).success,
       '"project" requests (set up without an agent) carry a spec',
     );
     t.check(
-      !GuestRequest.safeParse({ kind: 'project', id: 'p1', createdAt: 'x' }).success,
+      !GuestRequestSchema.safeParse({ kind: 'project', id: 'p1', createdAt: 'x' }).success,
       '"project" requests need a spec',
     );
     t.check(
-      GuestRequest.safeParse({ kind: 'restart', id: 'x', harness: null, cwd: 'C:\\Projects\\a', createdAt: 'x' })
+      GuestRequestSchema.safeParse({ kind: 'restart', id: 'x', harness: null, cwd: 'C:\\Projects\\a', createdAt: 'x' })
         .success,
       "restart can be scoped to one project's folder",
     );
     t.check(
-      GuestRequest.safeParse({ kind: 'restart', id: 'x', harness: null, createdAt: 'x' }).success,
+      GuestRequestSchema.safeParse({ kind: 'restart', id: 'x', harness: null, createdAt: 'x' }).success,
       'restart still works without a folder',
     );
 

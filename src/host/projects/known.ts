@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { dirExists } from '../../core/util/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { isWithin } from '../../shared/paths/index.js';
-import { AbsolutePath } from './registry.js';
+import { AbsolutePathSchema } from './registry.js';
 
 const KnownSchema = z.strictObject({
-  projects: z.array(z.strictObject({ host: AbsolutePath, lastUsed: z.string().max(64) })).max(2000),
+  projects: z.array(z.strictObject({ host: AbsolutePathSchema, lastUsed: z.string().max(64) })).max(2000),
 });
 type Known = z.output<typeof KnownSchema>;
 export type KnownProject = Known['projects'][number];

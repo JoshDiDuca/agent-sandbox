@@ -6,7 +6,7 @@
 // variables only added, never replaced). A failure is that project's alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ProjectSpecT } from '../../shared/channel/schema.js';
+import type { ProjectSpec } from '../../shared/channel/schema.js';
 import { isWithin } from '../../shared/paths/projects.js';
 import { insideWorkspace } from './state.js';
 import { baseEnvFor, readBootEnv } from '../boot/boot-env.js';
@@ -23,7 +23,7 @@ import { projectHooks, runHooksAsync } from '../setup/hooks.js';
 import { setupToolchains } from '../toolchains/index.js';
 
 export interface Provisioned {
-  spec: ProjectSpecT;
+  spec: ProjectSpec;
   env: NodeJS.ProcessEnv;
   summary: string[];
 }
@@ -58,7 +58,7 @@ const cmdSet = (env: NodeJS.ProcessEnv, names: string[]): string[] =>
  * A terminal for the project inside the sandbox: `sbx-shell <name>` (from any terminal tab) opens cmd in its folder with
  * its environment. Written to the sandbox's own disk.
  */
-const writeShell = (spec: ProjectSpecT, env: NodeJS.ProcessEnv, names: string[]): void => {
+const writeShell = (spec: ProjectSpec, env: NodeJS.ProcessEnv, names: string[]): void => {
   const dir = mkdirp(path.join(localDir, 'projects', spec.name));
   fs.writeFileSync(path.join(dir, 'env.cmd'), [...cmdSet(env, [...names, 'PATH']), ''].join('\r\n'));
   fs.writeFileSync(
@@ -97,7 +97,7 @@ const refreshGuide = async (): Promise<void> => {
   }
 };
 
-const provision = async (spec: ProjectSpecT, say: (message: string) => void): Promise<Provisioned> => {
+const provision = async (spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> => {
   if (!insideWorkspace(spec.workspace) || !exists(spec.workspace)) {
     throw new Error(
       'Project folder ' +
@@ -168,7 +168,7 @@ const provision = async (spec: ProjectSpecT, say: (message: string) => void): Pr
  * Provisions a project (or joins the run already doing it: two sessions requested at once wait for the same one).
  * `say` gets the progress lines.
  */
-export const provisionProject = (spec: ProjectSpecT, say: (message: string) => void): Promise<Provisioned> => {
+export const provisionProject = (spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> => {
   const id = spec.name.toLowerCase();
   const key = JSON.stringify(spec);
   const known = projects.get(id);

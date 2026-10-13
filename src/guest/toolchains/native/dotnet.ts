@@ -17,7 +17,7 @@ import { downloadFile, installOnce } from '../install.js';
 import { tool, type ToolEnv } from '../tool-env.js';
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
-const DotnetMarker = z.record(z.string(), z.boolean());
+const DotnetMarkerSchema = z.record(z.string(), z.boolean());
 
 /** .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker. */
 export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], refresh: boolean): Promise<void> => {
@@ -29,7 +29,7 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
     return;
   }
   // A corrupt or hand-edited marker just means "nothing recorded yet" (the installs are idempotent).
-  const recorded = DotnetMarker.safeParse(exists(marker) && !refresh ? readJsonFile<unknown>(marker) : {});
+  const recorded = DotnetMarkerSchema.safeParse(exists(marker) && !refresh ? readJsonFile<unknown>(marker) : {});
   const done: Record<string, boolean> = recorded.success ? recorded.data : {};
   const globalJson = path.join(projectWorkspace(), 'global.json');
   const installs: [string, string[]][] = [

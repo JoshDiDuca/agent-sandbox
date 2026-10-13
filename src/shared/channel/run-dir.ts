@@ -4,13 +4,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { GuestRequest, GuestResponse, Id, ProjectStatus, SandboxStatus, SessionStatus } from './schema.js';
-import type { GuestRequestT, GuestResponseT, ProjectStatusT, SandboxStatusT, SessionStatusT } from './schema.js';
+import {
+  GuestRequestSchema,
+  GuestResponseSchema,
+  IdSchema,
+  ProjectStatusSchema,
+  SandboxStatusSchema,
+  SessionStatusSchema,
+} from './schema.js';
+import type { GuestRequest, GuestResponse, ProjectStatus, SandboxStatus, SessionStatus } from './schema.js';
 import { readValid } from '../io/index.js';
 
 /** Ids become file names, so only a strict alphabet is allowed (no separators, no dots). */
 export function safeId(id: string): string {
-  return Id.parse(id);
+  return IdSchema.parse(id);
 }
 
 export function now(): string {
@@ -65,25 +72,25 @@ export class RunDir {
     return path.join(this.projectsDir, safeId(name) + '.json');
   }
 
-  readSandboxStatus(): SandboxStatusT | null {
-    return readValid(SandboxStatus, this.sandboxFile);
+  readSandboxStatus(): SandboxStatus | null {
+    return readValid(SandboxStatusSchema, this.sandboxFile);
   }
-  readSession(id: string): SessionStatusT | null {
-    return readValid(SessionStatus, this.sessionFile(id));
+  readSession(id: string): SessionStatus | null {
+    return readValid(SessionStatusSchema, this.sessionFile(id));
   }
-  readResponse(id: string): GuestResponseT | null {
-    return readValid(GuestResponse, this.responseFile(id));
+  readResponse(id: string): GuestResponse | null {
+    return readValid(GuestResponseSchema, this.responseFile(id));
   }
-  listSessions(): SessionStatusT[] {
-    return scan(SessionStatus, this.sessionsDir).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  listSessions(): SessionStatus[] {
+    return scan(SessionStatusSchema, this.sessionsDir).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   }
-  readProjectStatus(name: string): ProjectStatusT | null {
-    return readValid(ProjectStatus, this.projectFile(name));
+  readProjectStatus(name: string): ProjectStatus | null {
+    return readValid(ProjectStatusSchema, this.projectFile(name));
   }
-  listProjectStatus(): ProjectStatusT[] {
-    return scan(ProjectStatus, this.projectsDir).valid.slice(0, 64);
+  listProjectStatus(): ProjectStatus[] {
+    return scan(ProjectStatusSchema, this.projectsDir).valid.slice(0, 64);
   }
-  scanRequests(): { valid: GuestRequestT[]; invalid: string[] } {
-    return scan(GuestRequest, this.requestsDir);
+  scanRequests(): { valid: GuestRequest[]; invalid: string[] } {
+    return scan(GuestRequestSchema, this.requestsDir);
   }
 }

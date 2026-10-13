@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { ProjectSpec } from '../../shared/channel/schema.js';
+import { ProjectSpecSchema } from '../../shared/channel/schema.js';
 import { portOpen } from '../runtime/ports.js';
 import { DATABASE_NAMES, setupDatabase, stopDatabase } from './index.js';
 import { emptyEnv } from '../toolchains/tool-env.js';
@@ -14,7 +14,7 @@ const projectPlans = (): DatabasePlan[] | null => {
   const file = process.env.AGENT_PROJECT_FILE;
   if (!file) return null;
   try {
-    return ProjectSpec.safeParse(JSON.parse(fs.readFileSync(file, 'utf8'))).data?.databases ?? null;
+    return ProjectSpecSchema.safeParse(JSON.parse(fs.readFileSync(file, 'utf8'))).data?.databases ?? null;
   } catch {
     return null;
   }

@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import { z } from 'zod';
 
 /** One event. k: proc (a program started), file (changed in a project), session, guard (repo guard), note. */
-export const AuditEvent = z.object({
+export const AuditEventSchema = z.object({
   /** ISO time. */
   t: z.string().max(40),
   k: z.enum(['proc', 'file', 'session', 'guard', 'note']),
@@ -24,7 +24,7 @@ export const AuditEvent = z.object({
   /** how many times it happened in this line's minute (repeats are counted, not repeated). */
   n: z.number().int().min(1).max(1e9).optional(),
 });
-export type AuditEvent = z.output<typeof AuditEvent>;
+export type AuditEvent = z.output<typeof AuditEventSchema>;
 
 const DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl(\.gz)?$/;
 
@@ -103,7 +103,7 @@ export class AuditLog {
         } catch {
           continue;
         }
-        const e = AuditEvent.safeParse(parsed);
+        const e = AuditEventSchema.safeParse(parsed);
         if (!e.success) continue;
         if (o.kinds?.length && !o.kinds.includes(e.data.k)) continue;
         if (needle && !line.toLowerCase().includes(needle)) continue;

@@ -1,23 +1,23 @@
 // Shared types. Config and channel types come straight from the zod schemas, so each shape is defined exactly once.
 import type { z } from 'zod';
 import type {
-  Config as ConfigSchema,
-  GitAccess as GitAccessSchema,
-  Harness as HarnessSchema,
-  LocalOverrides,
-  Mapping as MappingSchema,
+  ConfigSchema,
+  GitAccessSchema,
+  HarnessSchema,
+  LocalOverridesSchema,
+  MappingSchema,
 } from './schema/index.js';
 
 export type {
-  AttachEndpointT as AttachEndpoint,
-  GuestRequestT as GuestRequest,
-  GuestResponseT as GuestResponse,
-  SandboxStatusT as SandboxStatus,
-  SessionStatusT as SessionStatus,
+  AttachEndpoint,
+  GuestRequest,
+  GuestResponse,
+  SandboxStatus,
+  SessionStatus,
 } from '../shared/channel/index.js';
 
 export type Config = z.output<typeof ConfigSchema>;
-export type Overrides = z.output<typeof LocalOverrides>;
+export type Overrides = z.output<typeof LocalOverridesSchema>;
 export type GitAccess = z.output<typeof GitAccessSchema>;
 export type Harness = z.output<typeof HarnessSchema>;
 export type Mapping = z.output<typeof MappingSchema>;

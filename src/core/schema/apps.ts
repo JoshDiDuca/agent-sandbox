@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { APPS } from '../../shared/apps/index.js';
 
 const CATALOGUE_IDS = APPS.filter((a) => !a.setting).map((a) => a.id) as [string, ...string[]];
-export const AppId = z.enum(CATALOGUE_IDS);
-export const CustomAppId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, 'lower-case letters, digits and - only');
+export const AppIdSchema = z.enum(CATALOGUE_IDS);
+export const CustomAppIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, 'lower-case letters, digits and - only');
 
 const compiles = (pattern: string): boolean => {
   try {
@@ -15,7 +15,7 @@ const compiles = (pattern: string): boolean => {
   }
 };
 
-export const CustomApp = z
+export const CustomAppSchema = z
   .strictObject({
     name: z.string().min(1).max(80).describe('The name on the desktop shortcut, e.g. "My Tool".'),
     github: z
@@ -56,14 +56,14 @@ export const CustomApp = z
     message: 'give github + asset, or url (not both)',
   });
 
-export const Apps = z.strictObject({
+export const AppsSchema = z.strictObject({
   install: z
-    .array(AppId)
+    .array(AppIdSchema)
     .describe(
       'Apps from the catalogue to install in every sandbox (the Apps screen in the menu lists them by category). Each is downloaded once and kept.',
     ),
   custom: z
-    .record(CustomAppId, CustomApp)
+    .record(CustomAppIdSchema, CustomAppSchema)
     .describe(
       'Programs of your own: a GitHub release or a download link, and the program to start. Installed like the catalogue apps.',
     ),

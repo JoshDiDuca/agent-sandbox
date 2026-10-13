@@ -9,11 +9,14 @@ import { tool } from './tool-env.js';
 import { readState } from './state-file.js';
 
 /** A remembered lookup; plain strings are what older versions wrote (treated as stale, still usable offline). */
-const Resolved = z.record(z.string(), z.union([z.string(), z.strictObject({ value: z.string(), at: z.number() })]));
+const ResolvedSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.strictObject({ value: z.string(), at: z.number() })]),
+);
 const resolvedFile = (): string => tool('resolved-versions.json');
 const remembered = (): Record<string, { value: string; at: number }> =>
   Object.fromEntries(
-    Object.entries(readState(resolvedFile(), Resolved, {})).map(([k, v]) => [
+    Object.entries(readState(resolvedFile(), ResolvedSchema, {})).map(([k, v]) => [
       k,
       typeof v === 'string' ? { value: v, at: 0 } : v,
     ]),

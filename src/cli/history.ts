@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { userDir } from '../core/config/index.js';
 import { JsonFile } from '../shared/io/index.js';
 
-const History = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
-type History = z.output<typeof History>;
-const historyFile = (): JsonFile<History> => new JsonFile(History, path.join(userDir(), 'history.json'));
+const HistorySchema = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
+type History = z.output<typeof HistorySchema>;
+const historyFile = (): JsonFile<History> => new JsonFile(HistorySchema, path.join(userDir(), 'history.json'));
 const HIDDEN = new Set(['menu', '_watch', 'self-test']);
 
 export const readHistory = (): History => historyFile().read() ?? [];

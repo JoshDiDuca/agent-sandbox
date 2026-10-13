@@ -13,7 +13,7 @@ import { hoistConfig, withoutConfig } from '../cli/argv.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
 import { CATEGORIES, editConfigText, nameOf, SchemaNode } from '../cli/menu/settings/index.js';
 import { Frame, ListScreen, Text, TextScreen, type Key } from '../cli/tui/index.js';
-import { Config, LocalOverrides } from '../core/schema/index.js';
+import { ConfigSchema, LocalOverridesSchema } from '../core/schema/index.js';
 import type { Suite } from './support/suite.js';
 
 export const cliSuite: Suite = {
@@ -236,8 +236,8 @@ export const cliSuite: Suite = {
     );
 
     // Every setting must be reachable in the settings screen, in a category, with an editor that fits it.
-    const userSchema = new SchemaNode(Config);
-    const projectSchema = new SchemaNode(LocalOverrides);
+    const userSchema = new SchemaNode(ConfigSchema);
+    const projectSchema = new SchemaNode(LocalOverridesSchema);
     const userLeaves = userSchema.leaves();
     const projectLeaves = projectSchema.leaves();
     t.check(
