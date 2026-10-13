@@ -3,7 +3,9 @@
 // the rest. A step that needs another (Rust links with MinGW's gcc, uv installs the Python tools) waits for it.
 // The boot runs it once for the launch folder; the session daemon runs it again for each project registered later,
 // possibly several at once, so the same kind of step (two Node installs, two Go installs) never runs twice at a time.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Toolchains, ToolVersions } from '../../core/types.js';
+import { watchDownloads } from '../../shared/download.js';
 import { log, mkdirp, setSandboxStatus } from '../env.js';
 import { emptyEnv, step, tool, type ToolEnv } from './common.js';
 import { plan, type Step, type ToolchainOptions } from './plan.js';
@@ -13,6 +15,9 @@ export type { ToolchainOptions } from './plan.js';
 
 /** How many installers run at once: enough to overlap downloads with installs, few enough not to thrash the disk. */
 const PARALLEL = 4;
+
+/** The step a download belongs to (several run at once), for its progress. */
+const currentStep = new AsyncLocalStorage<string>();
 
 /** One lock per kind of step ("Node 20" and "Node 22" share nvm's folders): held while that step runs, in any run. */
 const locks = new Map<string, Promise<void>>();
@@ -45,8 +50,15 @@ const runSteps = async (steps: Step[], o: RunOptions): Promise<Map<string, ToolE
   const running = new Set<string>();
   const waiting: (() => void)[] = [];
   let done = 0;
-  const say = o.report ?? ((message: string) => setSandboxStatus('provisioning', message));
+  // The boot (no `report`) also publishes structured progress: what runs now, how far its download is, how many are done.
+  const percent = new Map<string, number>();
+  const active = () => [...running].map((name) => ({ name, ...(percent.has(name) ? { percent: percent.get(name)! } : {}) }));
+  const say = o.report ?? ((message: string) => setSandboxStatus('provisioning', message, { active: active(), done, total: steps.length }));
   const report = (): void => { if (running.size) say('Installing ' + [...running].join(', ') + ' (' + done + ' of ' + steps.length + ' done)'); };
+  if (!o.report) watchDownloads(() => {
+    const name = currentStep.getStore();
+    return name ? (fraction) => { percent.set(name, Math.round(fraction * 100)); report(); } : null;
+  });
   for (const s of steps) {
     // Dependencies first (they are earlier in the plan, so their promises exist), then a free slot.
     finished.set(s.name, (async () => {
@@ -56,15 +68,17 @@ const runSteps = async (steps: Step[], o: RunOptions): Promise<Map<string, ToolE
       while (running.size >= PARALLEL) await new Promise<void>((r) => waiting.push(r));
       running.add(s.name);
       report();
-      try { await exclusive(s.name, () => step(s.name, envs.get(s.name)!, async () => s.run(envs.get(s.name)!))); } finally {
+      try { await currentStep.run(s.name, () => exclusive(s.name, () => step(s.name, envs.get(s.name)!, async () => s.run(envs.get(s.name)!)))); } finally {
         running.delete(s.name);
+        percent.delete(s.name);
         done++;
         report();
         waiting.shift()?.();
       }
     })());
   }
-  await Promise.all(finished.values());
+  try { await Promise.all(finished.values()); } finally { if (!o.report) watchDownloads(null); }
+  if (!o.report) setSandboxStatus('provisioning', 'Set up ' + steps.length + ' toolchains and databases', { active: [], done, total: steps.length });
   return envs;
 };
 

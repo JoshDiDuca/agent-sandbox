@@ -50,6 +50,11 @@ let checksumRequired = false;
 /** downloads.requireChecksum: from then on download() refuses anything it has no expected hash for. The guest sets it from session.json. */
 export const setChecksumRequired = (on: boolean): void => { checksumRequired = on; };
 
+/** Who wants coarse download progress: called as a download starts (in the caller's async context), returns its reporter. */
+export type DownloadWatcher = () => ((fraction: number) => void) | null;
+let downloadWatcher: DownloadWatcher | null = null;
+export const watchDownloads = (watcher: DownloadWatcher | null): void => { downloadWatcher = watcher; };
+
 /**
  * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
  * event loop stays free so other toolchains keep downloading meanwhile. A mismatch (or any failure) leaves no file behind.
@@ -67,7 +72,21 @@ export const download = async (url: string, destination: string, expected: strin
     const want = sums[kind]?.trim().toLowerCase();
     return want ? [{ want, hash: crypto.createHash(kind) }] : [];
   });
-  const tap = new Transform({ transform(chunk: Buffer, _encoding, done) { for (const c of checks) c.hash.update(chunk); done(null, chunk); } });
+  // Progress for the boot screen: every 10% or 5 s at most, never per chunk; called here so it knows who is downloading.
+  const size = Number(response.headers.get('content-length')) || 0;
+  const report = size > 0 ? downloadWatcher?.() ?? null : null;
+  let received = 0;
+  let tenth = 0;
+  let reportedAt = Date.now();
+  const tap = new Transform({ transform(chunk: Buffer, _encoding, done) {
+    for (const c of checks) c.hash.update(chunk);
+    if (report) {
+      received += chunk.length;
+      const now = Math.floor((received * 10) / size);
+      if (now !== tenth || Date.now() - reportedAt > 5000) { tenth = now; reportedAt = Date.now(); try { report(Math.min(1, received / size)); } catch { /* progress never breaks a download */ } }
+    }
+    done(null, chunk);
+  } });
   // Written to <destination>.part and moved into place only once complete and verified, so an interrupted download never
   // leaves a partial file under the real name.
   const partial = destination + '.part';

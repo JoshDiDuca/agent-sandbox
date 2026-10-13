@@ -49,5 +49,7 @@ installer removes it first (both ship the same commands); your storage, logins a
 ## First start
 
 The first start downloads what the project needs and cannot copy from your PC: a few minutes, once, with installers
-running in parallel. The sandbox window and `sandbox status` show what is being installed. Everything is kept in
-persistent storage, so later starts take seconds.
+running in parallel. The launch says so first, with a rough size. With `-t` (or `sandbox start`) your terminal then
+shows the current step and what is downloading on one line, says when nothing has changed for a few minutes, and ends
+with how long it took. Without `-t`, follow along with `sandbox logs -f`. Everything is kept in persistent storage, so
+later starts take seconds.

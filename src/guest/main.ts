@@ -24,7 +24,11 @@ import { primaryProject, saveProjectStatus } from './project-status.js';
 import { dataDir, dryRun, errMsg, isWin, localDir, log, logPath, logsDir, mkdirp, run, session, setSandboxStatus, toolsDir, warn, workspace } from './env.js';
 
 const STEPS = 8;
-const step = (n: number, title: string): void => { log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m'); setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title); };
+const step = (n: number, title: string): void => {
+  log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m');
+  // The host shows the short title ("Developer tools") with what is being set up in it.
+  setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title, { step: n, steps: STEPS, title: title.replace(/ \(.*\)$/, ''), active: [], done: 0, total: 0 });
+};
 const soft = async (what: string, work: () => unknown): Promise<void> => { try { await work(); } catch (e) { warn(what + ' failed (continuing): ' + errMsg(e)); } };
 
 const startDaemon = (env: NodeJS.ProcessEnv): void => {

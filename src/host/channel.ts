@@ -30,12 +30,13 @@ const until = async <T>(timeoutMs: number, isAlive: () => boolean, poll: () => T
 export type Progress = (line: string) => void;
 const printLine: Progress = (line) => console.log(line);
 
-/** Waits until the sandbox finished provisioning, reporting each boot step. */
-export const waitForReady = (dataPath: string, launchId: string | null, isAlive: () => boolean, progress: Progress = (m) => printLine('  [sandbox] ' + m)): Promise<SandboxStatus> => {
+/** Waits until the sandbox finished provisioning, reporting each boot step (onStatus: every status read, validated). */
+export const waitForReady = (dataPath: string, launchId: string | null, isAlive: () => boolean, progress: Progress = (m) => printLine('  [sandbox] ' + m), onStatus?: (status: SandboxStatus) => void): Promise<SandboxStatus> => {
   let last = '';
   return until(BOOT_TIMEOUT_MS, isAlive, () => {
     const status = readSandboxStatus(dataPath);
     if (!status || (launchId !== null && status.launchId !== launchId)) return null;
+    onStatus?.(status);
     if (status.message !== last) { progress(safeText(status.message).slice(0, 300)); last = status.message; }
     if (status.phase === 'failed') fail('The sandbox failed to start: ' + status.message, 'See sandbox logs for details; the sandbox window shows the error too (sbx-show if headless).');
     return status.phase === 'ready' ? status : null;
