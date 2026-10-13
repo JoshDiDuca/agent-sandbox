@@ -1,54 +1,12 @@
 import _ from 'lodash';
-import type { SessionStatus } from '../../../core/types.js';
-import { SandboxChannel, sessionViewers } from '../../../host/channel/index.js';
-import type { Viewers } from '../../../shared/pty/index.js';
-import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
-import { isWithin, projectForGuestDir } from '../../../shared/paths/index.js';
-import { RunDir } from '../../../shared/channel/index.js';
 import { safeText } from '../../../core/util/index.js';
 import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
+import { SessionsService, viewerText } from '../../services/index.js';
 import { type Context } from '../context.js';
-import { locateHere } from '../projects/index.js';
-
-export function viewerText(v: Viewers | null | undefined): string {
-  return v === undefined
-    ? '-'
-    : v === null
-      ? 'unknown (older session)'
-      : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox';
-}
-export function projectOf(projects: RegistryEntry[], s: SessionStatus): string {
-  return s.project ?? projectForGuestDir(projects, s.cwd)?.name ?? '-';
-}
-
-/** A session with who is watching it and whether it is in the project of the current folder. */
-export type ListedSession = SessionStatus & {
-  readonly viewers?: Viewers | null;
-  readonly here?: boolean;
-  readonly projectName?: string;
-};
-
-/** Sessions with who is watching them; `here` marks the ones in the project of the current folder. */
-export async function listedSessions(ctx: Context): Promise<ListedSession[]> {
-  // Who is attached comes from each session itself, so a terminal that was closed is never counted.
-  const live = isSandboxRunning();
-  // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
-  const ask = new Set(live ? new SandboxChannel(ctx.dataPath).currentSessions().map((s) => s.id) : []);
-  const here = live ? locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus()) : { guestDir: null };
-  const projects = new ProjectRegistry(ctx.storageRoot).read()?.projects ?? [];
-  return Promise.all(
-    new RunDir(ctx.dataPath).listSessions().map(async (s) => ({
-      ...s,
-      projectName: projectOf(projects, s),
-      here: Boolean(here.guestDir && isWithin(here.guestDir, s.cwd)),
-      ...(ask.has(s.id) ? { viewers: await sessionViewers(s) } : {}),
-    })),
-  );
-}
 
 export async function sessions(ctx: Context): Promise<number> {
-  const list = await listedSessions(ctx);
+  const service = new SessionsService(ctx);
+  const list = await service.list();
   if (
     printJson(
       ctx,
@@ -60,30 +18,22 @@ export async function sessions(ctx: Context): Promise<number> {
     console.log('No sessions. Start one with: sandbox claude');
     return 0;
   }
-  // This folder's project first, newest first within each group; harness, cwd and times are written by the sandbox.
-  const ordered = [
-    ..._.sortBy(
-      list.filter((s) => s.here),
-      (s) => s.startedAt,
-    ).reverse(),
-    ..._.sortBy(
-      list.filter((s) => !s.here),
-      (s) => s.startedAt,
-    ).reverse(),
-  ];
+  // Harness, cwd and times are written by the sandbox.
   const folderWidth = Math.max(16, termWidth() - 80);
   table([
     ['', 'ID', 'AGENT', 'PROJECT', 'STATE', 'ATTACHED', 'FOLDER', 'STARTED'],
-    ...ordered.map((s) => [
-      s.here ? '*' : '',
-      s.id,
-      safeText(s.harness),
-      safeText(s.projectName ?? '-'),
-      s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''),
-      viewerText(s.viewers),
-      shortenMiddle(safeText(s.cwd), folderWidth),
-      ago(s.startedAt),
-    ]),
+    ...service
+      .ordered(list)
+      .map((s) => [
+        s.here ? '*' : '',
+        s.id,
+        safeText(s.harness),
+        safeText(s.projectName ?? '-'),
+        s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''),
+        viewerText(s.viewers),
+        shortenMiddle(safeText(s.cwd), folderWidth),
+        ago(s.startedAt),
+      ]),
   ]);
   if (list.some((s) => s.here)) console.log(c.dim('* = the project of this folder'));
   return 0;

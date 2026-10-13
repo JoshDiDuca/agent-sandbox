@@ -1,95 +1,9 @@
 import _ from 'lodash';
-import { AccountStore } from '../../../host/profile/index.js';
-import { SandboxChannel } from '../../../host/channel/index.js';
-import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { ProjectRegistry, type Registry, type RegistryEntry } from '../../../host/projects/index.js';
-import { RepoGuardStore } from '../../../host/guard/index.js';
-import { projectForGuestDir } from '../../../shared/paths/index.js';
-import { RunDir, type ProjectStatus } from '../../../shared/channel/index.js';
-import { watcherRunning } from '../../../sync/index.js';
-import { errMsg, safeText } from '../../../core/util/index.js';
+import { safeText } from '../../../core/util/index.js';
+import type { RegistryEntry } from '../../../host/projects/index.js';
 import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
+import { SandboxService, type ProjectInfo } from '../../services/index.js';
 import type { Context } from '../context.js';
-import { hereDir, locateHere } from '../projects/index.js';
-import { listedSessions, viewerText, type ListedSession } from './list.js';
-
-type Finding = ReturnType<RepoGuardStore['findings']>[number];
-
-/** Running databases by port, from the sandbox's own `sbx-db list` (best effort: unknown when it does not answer). */
-async function runningPorts(channel: SandboxChannel, cwd: string): Promise<Set<number> | null> {
-  try {
-    const r = await channel.exec(['sbx-db', 'list'], cwd, 30);
-    return new Set(
-      (r.stdout ?? '')
-        .split(/\r?\n/)
-        .filter((l) => /\brunning\b/.test(l))
-        .map((l) => Number(/port (\d+)/.exec(l)?.[1]))
-        .filter((n) => n > 0),
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** What `status` knows about one project of the running sandbox. */
-interface ProjectInfo {
-  readonly name: string;
-  readonly host: string;
-  readonly guest: string;
-  readonly mechanism: RegistryEntry['mechanism'];
-  readonly here: boolean;
-  readonly setup: { readonly phase: string; readonly message: string };
-  readonly databases: { readonly database: string; readonly port: number; readonly state: string }[];
-  readonly sessions: {
-    readonly id: string;
-    readonly harness: string;
-    readonly viewers: string;
-    readonly started: string;
-  }[];
-  readonly repoGuard: string[];
-}
-
-/** One project: its setup, databases, running sessions and repo guard findings (sandbox text through safeText). */
-function projectInfo(
-  p: RegistryEntry,
-  all: Registry['projects'],
-  facts: {
-    readonly here: string | null;
-    readonly provisioning: ProjectStatus[];
-    readonly sessions: ListedSession[];
-    readonly ports: Set<number> | null;
-    readonly findings: Finding[];
-  },
-): ProjectInfo {
-  const prov = facts.provisioning.find((s) => s.name.toLowerCase() === p.name.toLowerCase());
-  const own = facts.sessions.filter((s) => s.phase === 'running' && projectForGuestDir(all, s.cwd)?.name === p.name);
-  const { ports } = facts;
-  return {
-    name: p.name,
-    host: p.host,
-    guest: p.guest,
-    mechanism: p.mechanism,
-    here: facts.here === p.name,
-    setup: prov
-      ? { phase: prov.phase, message: safeText(prov.message) }
-      : { phase: 'not set up yet', message: 'set up when you first start a session or command there' },
-    databases: (prov?.databases ?? []).map((d) => ({
-      database: safeText(d.database),
-      port: d.port,
-      state: ports ? (ports.has(d.port) ? 'running' : 'stopped') : 'unknown',
-    })),
-    sessions: own.map((s) => ({
-      id: s.id,
-      harness: safeText(s.harness),
-      viewers: viewerText(s.viewers),
-      started: s.startedAt,
-    })),
-    // With several guarded folders each finding starts with its folder.
-    repoGuard: facts.findings
-      .filter((f) => f.detail.toLowerCase().startsWith(p.host.toLowerCase() + ':'))
-      .map((f) => f.kind + ': ' + safeText(f.detail)),
-  };
-}
 
 const MECHANISM_TEXT = {
   launch: 'started from here',
@@ -124,63 +38,40 @@ function printProject(p: ProjectInfo): void {
 }
 
 export async function status(ctx: Context): Promise<number> {
-  const running = isSandboxRunning();
-  const run = new RunDir(ctx.dataPath);
-  const channel = new SandboxChannel(ctx.dataPath);
-  const guard = new RepoGuardStore(ctx.dataPath);
-  const sandbox = run.readSandboxStatus();
-  const registry = running ? new ProjectRegistry(ctx.storageRoot).read() : null;
-  const ready = running && sandbox?.phase === 'ready';
-  const daemon = ready
-    ? await channel.ping().then(
-        (r) => r.message,
-        (e: unknown) => 'no answer (' + errMsg(e) + ')',
-      )
-    : '-';
-  const here = running ? locateHere(ctx, sandbox) : { project: null, guestDir: null };
-  const sessionList = running ? await listedSessions(ctx) : [];
-  const provisioning = running ? run.listProjectStatus() : [];
-  const ports = ready && sandbox ? await runningPorts(channel, sandbox.guestWorkspace) : null;
-  const findings = guard.findings();
-  const startedAt = Number(/^(\d+)-/.exec(registry?.launchId ?? sandbox?.launchId ?? '')?.[1]) || null;
-  const all = registry?.projects ?? [];
-  const facts = { here: here.project?.name ?? null, provisioning, sessions: sessionList, ports, findings };
-  const projects = all.map((p) => projectInfo(p, all, facts));
+  const report = await new SandboxService(ctx).status();
+  const { startedAt, ...state } = report.sandbox;
   const info = {
+    // Same keys and order as the service's state, with the start time shown as an uptime.
     sandbox: {
-      running,
-      phase: running ? (sandbox?.phase ?? 'unknown') : 'stopped',
-      message: sandbox?.message,
-      headless: sandbox?.headless,
-      uptime: running && startedAt ? ago(startedAt).replace(' ago', '') : null,
-      daemon,
-      account: new AccountStore(ctx.storageRoot).activeFor(ctx.dataPath),
-      syncWatcher: watcherRunning(ctx.dataPath),
+      running: state.running,
+      phase: state.phase,
+      message: state.message,
+      headless: state.headless,
+      uptime: state.running && startedAt ? ago(startedAt).replace(' ago', '') : null,
+      daemon: state.daemon,
+      account: state.account,
+      syncWatcher: state.syncWatcher,
     },
-    here: { folder: hereDir(ctx), project: here.project?.name ?? null, guest: here.guestDir },
-    roots: registry?.roots ?? [],
-    projects,
-    otherSessions: sessionList
-      .filter((s) => s.phase === 'running' && !projects.some((p) => p.sessions.some((x) => x.id === s.id)))
-      .map((s) => ({ id: s.id, harness: safeText(s.harness), cwd: safeText(s.cwd) })),
-    repoGuard: {
-      guarded: guard.guarded().length,
-      findings: findings.map((f) => f.kind + ': ' + f.detail),
-    },
+    here: report.here,
+    roots: report.roots,
+    projects: report.projects,
+    otherSessions: report.otherSessions,
+    repoGuard: report.repoGuard,
   };
   if (printJson(ctx, info)) return 0;
   const yesNo = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v ?? '-'));
   table(Object.entries(info.sandbox).map(([k, v]) => [_.startCase(k), safeText(yesNo(v))]));
-  if (!running) return 0;
+  if (!state.running) return 0;
   console.log(
     '\n' +
       c.bold('Projects') +
       c.dim('  (* = this folder: ' + info.here.folder + (info.here.project ? '' : ', not in this sandbox') + ')'),
   );
-  for (const p of projects) printProject(p);
+  for (const p of info.projects) printProject(p);
   for (const r of info.roots)
     console.log('  root  ' + r.host + '  ->  ' + r.guest + c.dim('  (every project in it opens without a restart)'));
   for (const s of info.otherSessions) console.log('  session ' + s.id + '  ' + s.harness + '  ' + s.cwd);
+  const findings = info.repoGuard.findings;
   console.log(
     '\n' +
       c.bold('Repo guard') +
@@ -191,6 +82,6 @@ export async function status(ctx: Context): Promise<number> {
         ? c.yellow(findings.length + ' change(s) neutralised:')
         : 'nothing from the sandbox needed neutralising'),
   );
-  for (const f of info.repoGuard.findings.slice(-10)) console.log('  ' + c.yellow(safeText(f)));
+  for (const f of findings.slice(-10)) console.log('  ' + c.yellow(safeText(f)));
   return 0;
 }

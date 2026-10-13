@@ -1,20 +1,17 @@
-import { hideSandboxWindow, showSandboxWindow } from '../../../host/sandbox/index.js';
-import { fail } from '../../../core/util/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
+import { SandboxService } from '../../services/index.js';
 
 export function show(ctx: Context): number {
   requireOnPc('show');
   requireRunning();
-  if (!showSandboxWindow(ctx.storageRoot))
-    fail('Could not find the Windows Sandbox window.', 'It may still be starting; try again in a few seconds.');
+  new SandboxService(ctx).showWindow();
   return 0;
 }
 
 export async function hide(ctx: Context): Promise<number> {
   requireOnPc('hide');
   requireRunning();
-  if (!(await hideSandboxWindow(ctx.storageRoot, 5)))
-    fail('Could not find a visible Windows Sandbox window.', 'It may already be hidden (sbx-show brings it back).');
+  await new SandboxService(ctx).hideWindow();
   console.log('Sandbox window hidden. Bring it back with: sbx-show');
   return 0;
 }

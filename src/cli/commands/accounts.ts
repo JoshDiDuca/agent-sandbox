@@ -1,23 +1,16 @@
 // `account list | save | use | default | remove`
-import { AccountStore, type Account, hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
-import { SandboxChannel } from '../../host/channel/index.js';
-import { isSandboxRunning } from '../../host/sandbox/index.js';
+import type { Account } from '../../host/profile/index.js';
 import { fail, safeText } from '../../core/util/index.js';
 import { printJson, table } from '../output/index.js';
+import { AccountsService } from '../services/index.js';
 import { type Context } from './context.js';
 
 function label(a: Account): string {
   return '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
 }
 
-/** This PC's Claude login location (config folder + global state file). */
-function hostLogin(ctx: Context): { claudeDir: string; globalStateFile: string } {
-  const profile = ctx.loaded.config.claudeProfile;
-  return { claudeDir: hostClaudeDir(profile), globalStateFile: hostGlobalStateFile(profile) };
-}
-
-function list(ctx: Context): number {
-  const rows = new AccountStore(ctx.storageRoot).list(ctx.dataPath);
+function list(ctx: Context, accounts: AccountsService): number {
+  const rows = accounts.list();
   if (printJson(ctx, rows)) return 0;
   if (rows.length === 0) {
     console.log(
@@ -38,45 +31,33 @@ function list(ctx: Context): number {
   return 0;
 }
 
-async function use(ctx: Context, name: string): Promise<number> {
-  console.log('Sandbox now uses ' + label(new AccountStore(ctx.storageRoot).activate(ctx.dataPath, name)) + '.');
-  const claudeRunning =
-    isSandboxRunning() && new SandboxChannel(ctx.dataPath).runningSessions().some((s) => s.harness === 'claude');
-  if (claudeRunning && !ctx.options.noRestart)
+async function use(ctx: Context, accounts: AccountsService, name: string): Promise<number> {
+  console.log('Sandbox now uses ' + label(accounts.activate(name)) + '.');
+  if (accounts.hasRunningClaude() && !ctx.options.noRestart)
     console.log(
-      safeText((await new SandboxChannel(ctx.dataPath).restart('claude')).message) +
-        ' with --continue; the conversation carries on under the new account.',
+      safeText(await accounts.restartClaude()) + ' with --continue; the conversation carries on under the new account.',
     );
   return 0;
 }
 
 export async function account(ctx: Context): Promise<number> {
   const [action = 'list', name] = ctx.options.positionals;
+  const accounts = new AccountsService(ctx);
   const needName = (): string => name ?? fail('Missing account name.', 'Usage: sandbox account ' + action + ' <name>');
   switch (action) {
     case 'list':
-      return list(ctx);
+      return list(ctx, accounts);
     case 'save':
-      console.log(
-        'Saved account ' +
-          label(
-            new AccountStore(ctx.storageRoot).save(
-              ctx.dataPath,
-              needName(),
-              ctx.options.fromHost ? hostLogin(ctx) : null,
-            ),
-          ) +
-          '.',
-      );
+      console.log('Saved account ' + label(accounts.save(needName(), Boolean(ctx.options.fromHost))) + '.');
       return 0;
     case 'use':
-      return use(ctx, needName());
+      return use(ctx, accounts, needName());
     case 'default':
-      new AccountStore(ctx.storageRoot).setDefault(needName());
+      accounts.setDefault(needName());
       console.log('Default account: ' + name);
       return 0;
     case 'remove':
-      new AccountStore(ctx.storageRoot).remove(needName());
+      accounts.remove(needName());
       console.log('Removed account ' + name);
       return 0;
     default:
