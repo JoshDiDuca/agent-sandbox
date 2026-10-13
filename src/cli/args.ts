@@ -51,15 +51,16 @@ export interface SessionWant {
 }
 
 /** Splits a command line like a shell: "quoted words" and 'quoted words' stay together. */
-export const splitArgs = (text: string): string[] =>
-  [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+export function splitArgs(text: string): string[] {
+  return [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+}
 
 /**
  * `<agent>@<folder>` (the folder may contain '@': only the first one splits), `<agent>` alone = the current folder,
  * and `|<arguments>` for that session's agent only ('|' cannot be in a Windows path). Folders become absolute against
  * `cwd`. Pure; validate.ts checks that the agent and folder exist.
  */
-export const parseSessionWant = (input: string, cwd: string = process.cwd()): SessionWant => {
+export function parseSessionWant(input: string, cwd: string = process.cwd()): SessionWant {
   const bar = input.indexOf('|');
   const text = bar < 0 ? input : input.slice(0, bar);
   const args = bar < 0 ? [] : splitArgs(input.slice(bar + 1));
@@ -72,20 +73,22 @@ export const parseSessionWant = (input: string, cwd: string = process.cwd()): Se
       'Use --session <agent>@<folder>, e.g. --session claude@C:\\code\\api (the folder defaults to this one).',
     );
   return { harness, folder: path.resolve(cwd, folder || '.'), ...(args.length ? { args } : {}) };
-};
+}
 
 /** Reserved spelling for our launch options that can never clash with an agent's flags: --sbx-terminal, ... */
 const SBX_PREFIX = '--sbx-';
 
-const positiveNumber = (value: string): number => {
+function positiveNumber(value: string): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) throw new InvalidArgumentError('expected a positive number');
   return n;
-};
-const collect = (value: string, previous: string[] = []): string[] => [...previous, value];
+}
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
 
 /** One commander option from its manifest entry. */
-const toOption = (o: OptionSpec): Option => {
+function toOption(o: OptionSpec): Option {
   const flags =
     (o.short ? o.short + ', ' : '') + o.flag + (o.type === 'boolean' ? '' : ' <' + (o.value ?? 'value') + '>');
   const option = new Option(flags, o.description);
@@ -93,10 +96,10 @@ const toOption = (o: OptionSpec): Option => {
   if (o.type === 'list') option.argParser(collect);
   if (o.default !== undefined) option.default(o.default);
   return option;
-};
+}
 
 /** Every command, its options and help text, from manifest.ts. Actions only record what was parsed. */
-export const buildProgram = (record: (name: string, cmd: Command) => void): Command => {
+export function buildProgram(record: (name: string, cmd: Command) => void): Command {
   const program = new Command('sandbox')
     .description(
       'A disposable Windows Sandbox for development, with or without an AI agent, for the folder you are in. Run it with no arguments for the menu.',
@@ -131,10 +134,10 @@ export const buildProgram = (record: (name: string, cmd: Command) => void): Comm
     cmd.action((...args: unknown[]) => record(spec.name, args[args.length - 1] as Command));
   }
   return program;
-};
+}
 
 /** Turns `--sbx-<option>` into `--<option>` (only for options launch knows; anything else is an error). */
-const expandReserved = (argv: string[], known: Set<string>): string[] => {
+function expandReserved(argv: string[], known: Set<string>): string[] {
   const end = argv.indexOf('--');
   return argv.map((token, i) => {
     if ((end !== -1 && i > end) || !token.startsWith(SBX_PREFIX)) return token;
@@ -147,10 +150,10 @@ const expandReserved = (argv: string[], known: Set<string>): string[] => {
       );
     return value === undefined ? option : option + '=' + value;
   });
-};
+}
 
 /** Parses argv into the command name and options. Throws commander errors for unknown commands/options. */
-export const parseCli = (argv: string[], wrapper = false): CliOptions => {
+export function parseCli(argv: string[], wrapper = false): CliOptions {
   let parsed: { name: string; cmd: Command } | null = null;
   const program = buildProgram((name, cmd) => {
     parsed = { name, cmd };
@@ -207,27 +210,29 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     kind: o.kind as string | undefined,
     grep: o.grep as string | undefined,
   };
-};
+}
 
-const defaults = (): CliOptions => ({
-  command: '',
-  positionals: [],
-  passthrough: [],
-  scripts: [],
-  databases: [],
-  terminal: false,
-  newSession: false,
-  noAgent: false,
-  trustConfig: false,
-  noLocalConfig: false,
-  personal: false,
-  fromHost: false,
-  noRestart: false,
-  follow: false,
-  json: false,
-  yes: false,
-  all: false,
-  sessions: [],
-  timeout: 600,
-  days: 7,
-});
+function defaults(): CliOptions {
+  return {
+    command: '',
+    positionals: [],
+    passthrough: [],
+    scripts: [],
+    databases: [],
+    terminal: false,
+    newSession: false,
+    noAgent: false,
+    trustConfig: false,
+    noLocalConfig: false,
+    personal: false,
+    fromHost: false,
+    noRestart: false,
+    follow: false,
+    json: false,
+    yes: false,
+    all: false,
+    sessions: [],
+    timeout: 600,
+    days: 7,
+  };
+}

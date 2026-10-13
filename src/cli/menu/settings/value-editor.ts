@@ -2,8 +2,8 @@
 // typed and checked as you type, lists and maps get an editor of their own (add, change, remove), and objects (a
 // mapped folder, an agent) open as a small form. JSON is only the last resort for shapes none of these fit.
 import _ from 'lodash';
-import { App, Text } from '../../tui/index.js';
-import { SchemaNode } from './schema-node.js';
+import { type App, Text } from '../../tui/index.js';
+import { type SchemaNode } from './schema-node.js';
 import { choiceLabel } from './format.js';
 import { StringListEditor } from './collections/string-list-editor.js';
 import { MapEditor } from './collections/map-editor.js';

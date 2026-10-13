@@ -14,8 +14,7 @@ import { COMMANDS, commandSpec, type CommandSpec } from '../manifest.js';
 import { App, ExitRequested, Frame, Text, Theme, type ListItem } from '../tui/index.js';
 import { AppsCatalogue, appsSummary } from './apps.js';
 import { CommandForm } from './command-form.js';
-import { ConfigFile } from './settings/index.js';
-import { SettingsEditor } from './settings/index.js';
+import { ConfigFile, SettingsEditor } from './settings/index.js';
 import { SeveralAgents } from './several.js';
 import { type Action, CATEGORY_OF_GROUP, TITLES, CATEGORIES } from './home.js';
 
@@ -266,8 +265,8 @@ export class Menu {
 }
 
 /** Waits for one key on the normal screen, so a command's output stays until you have read it. Ctrl+C leaves. */
-const pressAnyKey = (message: string): Promise<void> =>
-  new Promise((resolve, reject) => {
+function pressAnyKey(message: string): Promise<void> {
+  return new Promise((resolve, reject) => {
     process.stdout.write('\n' + message);
     const { stdin } = process;
     stdin.setRawMode(true);
@@ -280,3 +279,4 @@ const pressAnyKey = (message: string): Promise<void> =>
       else resolve();
     });
   });
+}

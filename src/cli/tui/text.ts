@@ -34,7 +34,8 @@ export class Text {
   }
 
   /**
-   * The first `max` columns of `text`, keeping colour codes (and closing them), with an ellipsis when something was cut.
+   * The first `max` columns of `text`, keeping colour codes (and closing them), with an ellipsis when something was
+   * cut.
    */
   static truncate(text: string, max: number, ellipsis = '…'): string {
     if (max <= 0) return '';

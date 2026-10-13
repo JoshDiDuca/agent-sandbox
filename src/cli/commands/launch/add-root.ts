@@ -11,7 +11,7 @@ import { addToList, setSetting } from '../user-config.js';
  * Asked once per parent folder: map it at every start (a project root), so the projects next to this one open in the
  * running sandbox without a restart. The answer is saved to your config.
  */
-export const maybeAddRoot = async (ctx: Context, run: ResolvedRun): Promise<void> => {
+export async function maybeAddRoot(ctx: Context, run: ResolvedRun): Promise<void> {
   const { projects } = run.config;
   const parent = path.dirname(run.workspaceHost);
   if (!projects.askToAddRoot || ctx.options.yes || !process.stdin.isTTY || !process.stdout.isTTY) return;
@@ -45,4 +45,4 @@ export const maybeAddRoot = async (ctx: Context, run: ResolvedRun): Promise<void
   }
   if (answer === 'no') addToList(ctx, ['projects', 'declinedRoots'], parent);
   if (answer === 'never') setSetting(ctx, ['projects', 'askToAddRoot'], false);
-};
+}

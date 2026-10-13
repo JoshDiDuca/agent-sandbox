@@ -1,12 +1,10 @@
 import { expandPath } from '../../../core/util/index.js';
 import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
-import { detectWsb } from '../../../host/sandbox/index.js';
-import { doctorRows } from '../../../host/sandbox/index.js';
-import { insideSandbox, isSandboxRunning } from '../../../host/sandbox/index.js';
+import { detectWsb, doctorRows, insideSandbox, isSandboxRunning } from '../../../host/sandbox/index.js';
 import { table } from '../../output/index.js';
 import { type Context } from '../context.js';
 
-export const doctor = (ctx: Context): number => {
+export function doctor(ctx: Context): number {
   const rows = doctorRows(
     ctx.loaded.config,
     ctx.options.harness ?? ctx.loaded.config.defaultHarness,
@@ -58,4 +56,4 @@ export const doctor = (ctx: Context): number => {
     ],
   ]);
   return 0;
-};
+}

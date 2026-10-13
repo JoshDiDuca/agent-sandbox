@@ -5,10 +5,15 @@ import path from 'node:path';
 import { generateSandbox } from '../../../host/launch/index.js';
 import { findSecretFiles } from '../../../host/profile/index.js';
 import { RepoGuardStore } from '../../../host/guard/index.js';
-import { assertCanLaunch, isSandboxRunning, spawnDetached, startSandbox } from '../../../host/sandbox/index.js';
-import { probeHost } from '../../../host/sandbox/index.js';
+import {
+  assertCanLaunch,
+  isSandboxRunning,
+  spawnDetached,
+  startSandbox,
+  probeHost,
+  hideSandboxWindow,
+} from '../../../host/sandbox/index.js';
 import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
-import { hideSandboxWindow } from '../../../host/sandbox/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { protectionsOf } from '../../../core/local-config/index.js';
@@ -16,9 +21,8 @@ import { errMsg } from '../../../core/util/index.js';
 import { syncAgentCommands } from '../agent-commands.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { resolveRun } from '../../../core/run/index.js';
-import { c } from '../../output/index.js';
+import { c, table } from '../../output/index.js';
 import { requireOnPc, type Context } from '../context.js';
-import { table } from '../../output/index.js';
 import _ from 'lodash';
 import { LifeRecord } from '../../../host/life/index.js';
 import { startIntoRunning, launchIntoRunning, contextFor, waitForBoot, attachHere, waitForStart } from './running.js';
@@ -32,7 +36,7 @@ export interface LaunchExtras {
   waitUntilReady?: boolean;
 }
 
-export const launch = async (ctx: Context, generateOnly = false, extras: LaunchExtras = {}): Promise<number> => {
+export async function launch(ctx: Context, generateOnly = false, extras: LaunchExtras = {}): Promise<number> {
   const { options, loaded, packageRoot, dataPath, storageRoot } = ctx;
   // attach.auto: an agent started from an interactive terminal attaches it, as with -t.
   if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY)
@@ -242,4 +246,4 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
         ' opens in Windows Terminal inside it. Attach here any time: sandbox claude -t',
     );
   return 0;
-};
+}

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { APP_CATEGORIES, APPS, type AppEntry } from '../../shared/apps/index.js';
-import { App, Text, Theme, type ListItem } from '../tui/index.js';
+import { type App, Text, Theme, type ListItem } from '../tui/index.js';
 import type { ConfigFile } from './settings/index.js';
 // Direct, not the barrel: settings/settings-editor.ts imports this file.
 import { ValueEditor } from './settings/value-editor.js';
@@ -145,7 +145,9 @@ export class AppsCatalogue {
     );
   }
 
-  /** Your own programs: the apps.custom map, each entry a form (GitHub release or link, program, command line or not). */
+  /**
+   * Your own programs: the apps.custom map, each entry a form (GitHub release or link, program, command line or not).
+   */
   private async editCustom(): Promise<string | undefined> {
     const node = this.file.schema.child('apps')?.child('custom');
     if (!node) return undefined;
@@ -165,10 +167,12 @@ export class AppsCatalogue {
 }
 
 /** For the home screen: "12 apps chosen". */
-export const appsSummary = (file: ConfigFile): string => {
+export function appsSummary(file: ConfigFile): string {
   const config = file.userConfig();
   const n = config.apps.install.length + Object.keys(config.apps.custom).length;
   return n ? n + ' chosen' : 'none chosen';
-};
+}
 
-export const appLabel = (id: string): string => APPS.find((a) => a.id === id)?.name ?? Text.humanize(id);
+export function appLabel(id: string): string {
+  return APPS.find((a) => a.id === id)?.name ?? Text.humanize(id);
+}

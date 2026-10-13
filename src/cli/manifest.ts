@@ -39,8 +39,9 @@ export const ArgSpecSchema = z.strictObject({
 });
 
 /** Is an argument or option with this `when` asked, given the first argument's answer? */
-export const askedWhen = (when: string | string[] | undefined, first: string): boolean =>
-  when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
+export function askedWhen(when: string | string[] | undefined, first: string): boolean {
+  return when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
+}
 
 export const GroupSchema = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
 
@@ -62,19 +63,23 @@ export type OptionSpec = z.output<typeof OptionSpecSchema>;
 export type ArgSpec = z.output<typeof ArgSpecSchema>;
 export type CommandSpec = z.output<typeof CommandSpecSchema>;
 
-const bool = (flag: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec => ({
-  flag,
-  type: 'boolean',
-  description,
-  ...extra,
-});
-const text = (flag: string, value: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec => ({
-  flag,
-  type: 'string',
-  value,
-  description,
-  ...extra,
-});
+function bool(flag: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec {
+  return {
+    flag,
+    type: 'boolean',
+    description,
+    ...extra,
+  };
+}
+function text(flag: string, value: string, description: string, extra: Partial<OptionSpec> = {}): OptionSpec {
+  return {
+    flag,
+    type: 'string',
+    value,
+    description,
+    ...extra,
+  };
+}
 
 const SANDBOX_OPTIONS: OptionSpec[] = [
   bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", { short: '-t' }),
@@ -405,4 +410,6 @@ export type CommandName = (typeof COMMAND_LIST)[number]['name'];
 
 export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse(COMMAND_LIST);
 
-export const commandSpec = (name: string): CommandSpec | undefined => COMMANDS.find((c) => c.name === name);
+export function commandSpec(name: string): CommandSpec | undefined {
+  return COMMANDS.find((c) => c.name === name);
+}

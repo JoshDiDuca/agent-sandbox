@@ -4,16 +4,16 @@ import _ from 'lodash';
 import { assertNoLinks, fail, safeText, sleep } from '../../../core/util/index.js';
 import { type Context } from '../context.js';
 
-const newestLog = (dir: string): string | null => {
+function newestLog(dir: string): string | null {
   if (!fs.existsSync(dir)) return null;
   const logs = fs
     .readdirSync(dir)
     .filter((f) => /^(guest|daemon|bootstrap)-.*\.log$/.test(f) && fs.lstatSync(path.join(dir, f)).isFile());
   const newest = _.maxBy(logs, (f) => fs.statSync(path.join(dir, f)).mtimeMs);
   return newest ? path.join(dir, newest) : null;
-};
+}
 
-export const logs = async (ctx: Context): Promise<number> => {
+export async function logs(ctx: Context): Promise<number> {
   const dir = path.join(ctx.dataPath, 'logs');
   // The sandbox writes this folder: never read through a link it planted there.
   assertNoLinks(ctx.dataPath, dir);
@@ -42,4 +42,4 @@ export const logs = async (ctx: Context): Promise<number> => {
     print();
   }
   return 0;
-};
+}

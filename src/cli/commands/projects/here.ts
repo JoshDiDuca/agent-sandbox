@@ -7,14 +7,15 @@ import { askYesNo } from '../../../core/prompt.js';
 import { isInsideOrEqual } from '../../../core/util/index.js';
 import { resolveRun } from '../../../core/run/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
-import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
-import { joinRunning } from '../../../host/projects/index.js';
+import { ProjectRegistry, type RegistryEntry, joinRunning } from '../../../host/projects/index.js';
 import type { ProjectSpec } from '../../../shared/channel/index.js';
 import { working } from '../../output/index.js';
 import { guestPathFor, type Context } from '../context.js';
 
 /** The folder the command is about: --workspace, else the current one. */
-export const hereDir = (ctx: Context): string => path.resolve(ctx.options.workspace ?? process.cwd());
+export function hereDir(ctx: Context): string {
+  return path.resolve(ctx.options.workspace ?? process.cwd());
+}
 
 export interface Located {
   project: RegistryEntry | null;
@@ -22,7 +23,7 @@ export interface Located {
 }
 
 /** Where this folder is in the running sandbox, if it is in it at all (nothing is registered). */
-export const locateHere = (ctx: Context, status: SandboxStatus | null): Located => {
+export function locateHere(ctx: Context, status: SandboxStatus | null): Located {
   const dir = hereDir(ctx);
   const here = new ProjectRegistry(ctx.storageRoot).here(dir);
   if (here) return here;
@@ -30,7 +31,7 @@ export const locateHere = (ctx: Context, status: SandboxStatus | null): Located 
   if (!new ProjectRegistry(ctx.storageRoot).read() && status && isInsideOrEqual(status.workspaceHost, dir))
     return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
   return { project: null, guestDir: null };
-};
+}
 
 export interface Joined {
   project: RegistryEntry | null;
@@ -45,7 +46,7 @@ export interface Joined {
  * it): its .sandbox-config.json is approved like at a launch, its protections are checked, and it is made visible.
  * Throws NeedsRestart (host/projects.ts) when that is impossible without a restart.
  */
-export const joinHere = async (ctx: Context, status: SandboxStatus): Promise<Joined> => {
+export async function joinHere(ctx: Context, status: SandboxStatus): Promise<Joined> {
   const { options, loaded, packageRoot, storageRoot, dataPath } = ctx;
   const dir = hereDir(ctx);
   // A sandbox started before projects existed: only its launch folder (guestPathFor explains why otherwise).
@@ -82,10 +83,10 @@ export const joinHere = async (ctx: Context, status: SandboxStatus): Promise<Joi
   });
   const harness = joined.run && joined.run.harnessName !== 'none' ? joined.run.harnessName : null;
   return { project: joined.project, guestDir: joined.guestDir, spec: joined.spec, harness, notes: joined.notes };
-};
+}
 
 /** Waits until the sandbox has set a project up, with its progress on a spinner (plain lines without a terminal). */
-export const provisionJoined = async (ctx: Context, joined: Joined): Promise<void> => {
+export async function provisionJoined(ctx: Context, joined: Joined): Promise<void> {
   if (!joined.spec) return;
   const spec = joined.spec;
   let step = 'starting';
@@ -96,12 +97,12 @@ export const provisionJoined = async (ctx: Context, joined: Joined): Promise<voi
         step = m;
       }),
   );
-};
+}
 
 /** joinHere, then (for another project) waits until the sandbox has set it up. */
-export const readyHere = async (ctx: Context, status: SandboxStatus): Promise<Joined> => {
+export async function readyHere(ctx: Context, status: SandboxStatus): Promise<Joined> {
   const joined = await joinHere(ctx, status);
   for (const note of joined.notes) console.log(note);
   await provisionJoined(ctx, joined);
   return joined;
-};
+}

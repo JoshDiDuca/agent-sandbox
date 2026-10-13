@@ -1,31 +1,31 @@
 import _ from 'lodash';
 import type { SessionStatus } from '../../../core/types.js';
-import { SandboxChannel } from '../../../host/channel/index.js';
-import { sessionViewers } from '../../../host/channel/index.js';
+import { SandboxChannel, sessionViewers } from '../../../host/channel/index.js';
 import type { Viewers } from '../../../shared/pty/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { isWithin, projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import { safeText } from '../../../core/util/index.js';
-import { printJson, table } from '../../output/index.js';
+import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { type Context } from '../context.js';
 import { locateHere } from '../projects/index.js';
-import { ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 
-export const viewerText = (v: Viewers | null | undefined): string =>
-  v === undefined
+export function viewerText(v: Viewers | null | undefined): string {
+  return v === undefined
     ? '-'
     : v === null
       ? 'unknown (older session)'
       : v.remote + ' here, ' + (v.viewers - v.remote) + ' in sandbox';
-export const projectOf = (projects: RegistryEntry[], s: SessionStatus): string =>
-  s.project ?? projectForGuestDir(projects, s.cwd)?.name ?? '-';
+}
+export function projectOf(projects: RegistryEntry[], s: SessionStatus): string {
+  return s.project ?? projectForGuestDir(projects, s.cwd)?.name ?? '-';
+}
 
 type Listed = SessionStatus & { viewers?: Viewers | null; here?: boolean; projectName?: string };
 
 /** Sessions with who is watching them; `here` marks the ones in the project of the current folder. */
-export const listedSessions = async (ctx: Context): Promise<Listed[]> => {
+export async function listedSessions(ctx: Context): Promise<Listed[]> {
   // Who is attached comes from each session itself, so a terminal that was closed is never counted.
   const live = isSandboxRunning();
   // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
@@ -40,9 +40,9 @@ export const listedSessions = async (ctx: Context): Promise<Listed[]> => {
       ...(ask.has(s.id) ? { viewers: await sessionViewers(s) } : {}),
     })),
   );
-};
+}
 
-export const sessions = async (ctx: Context): Promise<number> => {
+export async function sessions(ctx: Context): Promise<number> {
   const list = await listedSessions(ctx);
   if (
     printJson(
@@ -82,4 +82,4 @@ export const sessions = async (ctx: Context): Promise<number> => {
   ]);
   if (list.some((s) => s.here)) console.log(c.dim('* = the project of this folder'));
   return 0;
-};
+}

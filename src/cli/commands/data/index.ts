@@ -4,9 +4,8 @@
 import _ from 'lodash';
 import { diskUsage, humanBytes } from '../../../core/disk.js';
 import { fail } from '../../../core/util/index.js';
-import { printJson, table } from '../../output/index.js';
+import { printJson, table, working } from '../../output/index.js';
 import { type Context } from '../context.js';
-import { working } from '../../output/index.js';
 import { dataClean } from './clean.js';
 import { collectDataEntries, type DataArea } from './collect.js';
 
@@ -19,7 +18,7 @@ const AREA_LABEL: Record<DataArea, string> = {
   host: 'On this PC',
 };
 
-export const dataInfo = async (ctx: Context): Promise<number> => {
+export async function dataInfo(ctx: Context): Promise<number> {
   const entries = await working(
     'Measuring the saved data (big folders take a moment)',
     () => collectDataEntries(ctx.dataPath, ctx.storageRoot),
@@ -55,10 +54,10 @@ export const dataInfo = async (ctx: Context): Promise<number> => {
     '\nFree space with: sandbox data clean <target...>  (e.g. tools/go, databases/postgres-18, logs, launches)',
   );
   return 0;
-};
+}
 
 /** `sandbox data [info|clean] [targets...]`. */
-export const data = (ctx: Context): number | Promise<number> => {
+export function data(ctx: Context): number | Promise<number> {
   const [action = 'info'] = ctx.options.positionals;
   switch (action) {
     case 'info':
@@ -74,4 +73,4 @@ export const data = (ctx: Context): number | Promise<number> => {
         'Use: sandbox data  (what is stored)  or  sandbox data clean <target...>',
       );
   }
-};
+}

@@ -1,5 +1,5 @@
-// Reading the zod settings schemas the way the settings screen needs them: what is a section, what kind of editor fits a
-// setting, what a new entry starts as. Nothing is listed by hand, so a new setting shows up in the screen on its own.
+// Reading the zod settings schemas the way the settings screen needs them: what is a section, what kind of editor fits
+// a setting, what a new entry starts as. Nothing is listed by hand, so a new setting shows up in the screen on its own.
 import type { z } from 'zod';
 
 type Def = {
@@ -157,7 +157,9 @@ export class SchemaNode {
     return this.options.find((o) => !['literal', 'enum', 'boolean'].includes(o.type));
   }
 
-  /** What a new entry (in a list or a map) starts as: the default if there is one, otherwise the simplest valid shape. */
+  /**
+   * What a new entry (in a list or a map) starts as: the default if there is one, otherwise the simplest valid shape.
+   */
   initial(): unknown {
     const def = this.schema._zod.def;
     if (def.type === 'default') return structuredClone(def.defaultValue);

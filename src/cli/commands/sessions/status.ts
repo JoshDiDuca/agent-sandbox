@@ -8,14 +8,13 @@ import { projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { errMsg, safeText } from '../../../core/util/index.js';
-import { printJson, table } from '../../output/index.js';
+import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { type Context } from '../context.js';
 import { hereDir, locateHere } from '../projects/index.js';
-import { ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { listedSessions, viewerText } from './list.js';
 
 /** Running databases by port, from the sandbox's own `sbx-db list` (best effort: unknown when it does not answer). */
-const runningPorts = async (ctx: Context, cwd: string): Promise<Set<number> | null> => {
+async function runningPorts(ctx: Context, cwd: string): Promise<Set<number> | null> {
   try {
     const r = await new SandboxChannel(ctx.dataPath).exec(['sbx-db', 'list'], cwd, 30);
     return new Set(
@@ -28,9 +27,9 @@ const runningPorts = async (ctx: Context, cwd: string): Promise<Set<number> | nu
   } catch {
     return null;
   }
-};
+}
 
-export const status = async (ctx: Context): Promise<number> => {
+export async function status(ctx: Context): Promise<number> {
   const running = isSandboxRunning();
   const sandbox = new RunDir(ctx.dataPath).readSandboxStatus();
   const registry = running ? new ProjectRegistry(ctx.storageRoot).read() : null;
@@ -155,4 +154,4 @@ export const status = async (ctx: Context): Promise<number> => {
   );
   for (const f of info.repoGuard.findings.slice(-10)) console.log('  ' + c.yellow(safeText(f)));
   return 0;
-};
+}

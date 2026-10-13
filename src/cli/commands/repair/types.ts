@@ -21,7 +21,9 @@ export interface RepairCheck {
   run: (env: RepairEnv) => Omit<RepairResult, 'name'>;
 }
 
-export const ok = (detail: string): Omit<RepairResult, 'name'> => ({ status: 'ok', detail });
+export function ok(detail: string): Omit<RepairResult, 'name'> {
+  return { status: 'ok', detail };
+}
 /** For fixes that must not touch folders a running sandbox may be using. */
 export const whileRunning = {
   status: 'skipped' as const,

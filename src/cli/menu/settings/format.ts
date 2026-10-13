@@ -2,7 +2,7 @@ import _ from 'lodash';
 import { Text, Theme } from '../../tui/index.js';
 
 /** A value in one short line, for the right-hand column. */
-export const formatValue = (value: unknown, max = 60): string => {
+export function formatValue(value: unknown, max = 60): string {
   if (value === undefined) return Theme.muted('not set');
   if (value === true) return Theme.ok('On');
   if (value === false) return Theme.muted('Off');
@@ -18,10 +18,10 @@ export const formatValue = (value: unknown, max = 60): string => {
         );
   const keys = Object.keys(value as object);
   return keys.length ? Text.truncate(keys.length + ' · ' + keys.join(', '), max) : Theme.muted('none');
-};
+}
 
 /** A one-line name for an object in a list (a mapping's folders, an agent's package ...). */
-export const summary = (value: unknown): string => {
+export function summary(value: unknown): string {
   if (!_.isPlainObject(value)) return String(value);
   const o = value as Record<string, unknown>;
   const strings = Object.entries(o).filter(([, v]) => typeof v === 'string' && v) as [string, string][];
@@ -33,6 +33,8 @@ export const summary = (value: unknown): string => {
       .map(([, v]) => v)
       .join(' · ') || '{ ' + Object.keys(o).join(', ') + ' }'
   );
-};
+}
 
-export const choiceLabel = (v: unknown): string => (v === true ? 'On' : v === false ? 'Off' : String(v));
+export function choiceLabel(v: unknown): string {
+  return v === true ? 'On' : v === false ? 'Off' : String(v);
+}

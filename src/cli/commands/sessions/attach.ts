@@ -9,7 +9,7 @@ import { locateHere } from '../projects/index.js';
 import { ago } from '../../output/index.js';
 import { projectOf } from './list.js';
 
-export const attach = async (ctx: Context): Promise<number> => {
+export async function attach(ctx: Context): Promise<number> {
   requireOnPc('attach');
   requireRunning('Start one with: sandbox claude --terminal');
   const ready = await readySandbox(ctx.dataPath);
@@ -39,4 +39,4 @@ export const attach = async (ctx: Context): Promise<number> => {
     return attachHere(ctx, new SandboxChannel(ctx.dataPath).pickSession(chosen));
   }
   return attachHere(ctx, new SandboxChannel(ctx.dataPath).pickSession(undefined, here.guestDir));
-};
+}

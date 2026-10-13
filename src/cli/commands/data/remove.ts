@@ -5,7 +5,7 @@ import { dirExists, isLink, removeLink } from '../../../core/util/index.js';
 import { removeRefusal, safeRemove } from '../../../shared/io/index.js';
 
 /** Deletes p (strictly inside root): links inside are removed first and never followed; see shared/safe-remove.ts. */
-export const removeTree = (p: string, root: string): void => {
+export function removeTree(p: string, root: string): void {
   const unlinkInside = (dir: string): void => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       const child = path.join(dir, d.name);
@@ -23,4 +23,4 @@ export const removeTree = (p: string, root: string): void => {
   if (refusal) throw new Error('Refusing to delete ' + p + ': ' + refusal);
   if (dirExists(p)) unlinkInside(p);
   safeRemove(p, root);
-};
+}

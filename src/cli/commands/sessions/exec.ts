@@ -5,21 +5,20 @@ import { SandboxChannel } from '../../../host/channel/index.js';
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
-import { printJson } from '../../output/index.js';
+import { printJson, working } from '../../output/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { readySandbox } from '../launch/index.js';
 import { hereDir, joinHere, provisionJoined } from '../projects/index.js';
-import { working } from '../../output/index.js';
 
 /** What a command run in the sandbox printed (text from the sandbox: through safeText), or why it failed. */
-const printExecResult = (result: GuestResponse): void => {
+function printExecResult(result: GuestResponse): void {
   if (result.stdout) process.stdout.write(safeText(result.stdout));
   if (result.stderr) process.stderr.write(safeText(result.stderr));
   if (!result.ok && !result.stdout && !result.stderr) console.error(safeText(result.message));
-};
+}
 
 /** The guest folder for this folder, joining the running sandbox (and setting the project up) when needed. */
-const guestFolderHere = async (ctx: Context, what: string): Promise<string> => {
+async function guestFolderHere(ctx: Context, what: string): Promise<string> {
   const ready = await readySandbox(ctx.dataPath);
   try {
     const joined = await joinHere(ctx, ready);
@@ -35,9 +34,9 @@ const guestFolderHere = async (ctx: Context, what: string): Promise<string> => {
         '"',
     );
   }
-};
+}
 
-export const exec = async (ctx: Context): Promise<number> => {
+export async function exec(ctx: Context): Promise<number> {
   const command = [...ctx.options.positionals, ...ctx.options.passthrough];
   if (command.length === 0) fail('No command given.', 'Usage: sandbox exec [--timeout <s>] -- <command> [args...]');
   requireOnPc('exec');
@@ -46,12 +45,12 @@ export const exec = async (ctx: Context): Promise<number> => {
   const result = await new SandboxChannel(ctx.dataPath).exec(command, cwd, ctx.options.timeout);
   if (!printJson(ctx, result)) printExecResult(result);
   return result.exitCode ?? 1;
-};
+}
 
 /**
  * `sandbox db`: runs the sandbox's own `sbx-db` in this folder's project, which knows its database versions and ports.
  */
-export const db = async (ctx: Context): Promise<number> => {
+export async function db(ctx: Context): Promise<number> {
   const [action = 'list', name] = ctx.options.positionals;
   if (!['list', 'start', 'stop'].includes(action))
     fail(
@@ -81,4 +80,4 @@ export const db = async (ctx: Context): Promise<number> => {
   );
   printExecResult(result);
   return result.exitCode ?? 1;
-};
+}

@@ -7,11 +7,10 @@ import { RunDir } from '../../../shared/channel/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { hereDir, locateHere } from '../projects/index.js';
-import { working } from '../../output/index.js';
-import { c } from '../../output/index.js';
+import { working, c } from '../../output/index.js';
 
 /** Restarts this folder's project's sessions (--all: every session). */
-export const restart = async (ctx: Context): Promise<number> => {
+export async function restart(ctx: Context): Promise<number> {
   requireOnPc('restart');
   requireRunning();
   const here = locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus());
@@ -28,9 +27,9 @@ export const restart = async (ctx: Context): Promise<number> => {
     ),
   );
   return 0;
-};
+}
 
-export const stop = async (ctx: Context): Promise<number> => {
+export async function stop(ctx: Context): Promise<number> {
   requireOnPc('stop');
   if (!isSandboxRunning()) {
     console.log('No Windows Sandbox is running.');
@@ -75,4 +74,4 @@ export const stop = async (ctx: Context): Promise<number> => {
   );
   console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');
   return 0;
-};
+}

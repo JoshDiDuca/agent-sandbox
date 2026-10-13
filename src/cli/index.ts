@@ -26,10 +26,10 @@ const runFromMenu =
     main(withConfig(argv, config)).catch((e: unknown) => report(e));
 
 /**
- * CLI entry. `preset` lets wrapper binaries fix the command/agent (sandbox claude = launch --harness claude). No arguments
- * opens the menu; `sandbox <agent> [agent args]` starts that agent.
+ * CLI entry. `preset` lets wrapper binaries fix the command/agent (sandbox claude = launch --harness claude). No
+ * arguments opens the menu; `sandbox <agent> [agent args]` starts that agent.
  */
-export const main = async (rawArgv: string[], preset: Preset = {}): Promise<number> => {
+export async function main(rawArgv: string[], preset: Preset = {}): Promise<number> {
   const argv = preset.command || preset.harness ? rawArgv : hoistConfig(rawArgv);
   const isAgent = (name: string | undefined): name is string => {
     if (!name || name.startsWith('-') || commandSpec(name)) return false;
@@ -73,9 +73,9 @@ export const main = async (rawArgv: string[], preset: Preset = {}): Promise<numb
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));
   return (await handler(ctx)) ?? 0;
-};
+}
 
-export const run = (argv: string[], preset?: Preset): void => {
+export function run(argv: string[], preset?: Preset): void {
   main(argv, preset).then(
     (code) => {
       process.exitCode = code;
@@ -84,4 +84,4 @@ export const run = (argv: string[], preset?: Preset): void => {
       process.exitCode = report(e);
     },
   );
-};
+}

@@ -21,8 +21,8 @@ const LABEL: Record<RepairStatus, string> = {
 };
 
 /** Runs every check in order; a check that throws is reported, never stops the rest. */
-export const runChecks = (env: RepairEnv, checks: RepairCheck[] = CHECKS): RepairResult[] =>
-  checks.map((check) => {
+export function runChecks(env: RepairEnv, checks: RepairCheck[] = CHECKS): RepairResult[] {
+  return checks.map((check) => {
     try {
       return { name: check.name, ...check.run(env) };
     } catch (e) {
@@ -30,8 +30,9 @@ export const runChecks = (env: RepairEnv, checks: RepairCheck[] = CHECKS): Repai
       return { name: check.name, status: 'needs-you', detail: 'check failed: ' + errMsg(e) + fix };
     }
   });
+}
 
-export const repair = (ctx: Context, configError: UserError | null = null): number => {
+export function repair(ctx: Context, configError: UserError | null = null): number {
   const env: RepairEnv = {
     ctx,
     running: isSandboxRunning(),
@@ -60,13 +61,13 @@ export const repair = (ctx: Context, configError: UserError | null = null): numb
         : 'All good' + (counts.fixed ? ': fixed ' + counts.fixed + ' problem(s).' : '.')),
   );
   return counts['needs-you'] ? 1 : 0;
-};
+}
 
 /**
  * Entry point that works even when the config file is broken (createContext would throw): falls back to the built-in
  * defaults so the other checks still run, and reports the config problem as the first check.
  */
-export const repairCommand = (packageRoot: string, entry: string, options: CliOptions): number => {
+export function repairCommand(packageRoot: string, entry: string, options: CliOptions): number {
   let ctx: Context;
   try {
     ctx = createContext(packageRoot, entry, options);
@@ -87,4 +88,4 @@ export const repairCommand = (packageRoot: string, entry: string, options: CliOp
     );
   }
   return repair(ctx);
-};
+}

@@ -27,26 +27,28 @@ const FEATURE = 'Containers-DisposableClientVM';
 export const ENABLE_COMMAND = 'Enable-WindowsOptionalFeature -Online -FeatureName ' + FEATURE + ' -All -NoRestart';
 
 /** `reg query <key>` output to { valueName: data }. */
-export const parseRegQuery = (text: string): Record<string, string> =>
-  Object.fromEntries(
+export function parseRegQuery(text: string): Record<string, string> {
+  return Object.fromEntries(
     _.compact(
       text
         .split(/\r?\n/)
         .map((line) => /^\s+(\S+)\s+REG_\w+\s+(.*)$/.exec(line)?.slice(1, 3) as [string, string] | undefined),
     ),
   );
+}
 
 /** The "State : ..." line of `Dism /Get-FeatureInfo` (English output only; anything else is unknown). */
-export const parseDismState = (text: string): FeatureState => {
+export function parseDismState(text: string): FeatureState {
   const state = /^State\s*:\s*(.+?)\s*$/im.exec(text)?.[1].toLowerCase() ?? '';
   if (state === 'enabled') return 'enabled';
   if (state.includes('pending')) return 'pending';
   return state.startsWith('disabled') ? 'disabled' : 'unknown';
-};
+}
 
 /** Win32_OptionalFeature.InstallState: 1 enabled, 2 disabled, 3 absent. */
-export const featureFromInstallState = (state: number | null | undefined): FeatureState =>
-  state === 1 ? 'enabled' : state === 2 || state === 3 ? 'disabled' : 'unknown';
+export function featureFromInstallState(state: number | null | undefined): FeatureState {
+  return state === 1 ? 'enabled' : state === 2 || state === 3 ? 'disabled' : 'unknown';
+}
 
 // Fixed script (no outside data): CPU/hypervisor facts and the feature state, readable without admin rights.
 const PROBE = [
@@ -68,15 +70,15 @@ const ProbeSchema = z
   })
   .partial();
 
-export const parseProbe = (text: string): z.infer<typeof ProbeSchema> => {
+export function parseProbe(text: string): z.infer<typeof ProbeSchema> {
   try {
     return ProbeSchema.parse(JSON.parse(_.last(text.trim().split(/\r?\n/)) ?? ''));
   } catch {
     return {};
   }
-};
+}
 
-export const gatherFacts = (storageRoot: string): MachineFacts => {
+export function gatherFacts(storageRoot: string): MachineFacts {
   const reg = parseRegQuery(
     captureOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion']),
   );
@@ -97,4 +99,4 @@ export const gatherFacts = (storageRoot: string): MachineFacts => {
     storageRoot,
     nodeVersion: process.version,
   };
-};
+}

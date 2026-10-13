@@ -30,7 +30,7 @@ const ALL_WARNING =
  * Turns `sandbox data clean` arguments into folders. Pure (no disk access); throws a UserError for anything that is
  * not a plain relative target inside the data folder: absolute paths, drive letters, `..`, wildcards, unknown areas.
  */
-export const resolveCleanTargets = (inputs: string[], dataPath: string, storageRoot: string): CleanTarget[] => {
+export function resolveCleanTargets(inputs: string[], dataPath: string, storageRoot: string): CleanTarget[] {
   const usage =
     'Targets: all | tools | tools/<name> | tools/agents/<name> | databases | databases/<name> | state | state/<agent> | logs | launches | views. See them with: sandbox data';
   if (!inputs.length) fail('Say what to remove.', usage);
@@ -84,16 +84,17 @@ export const resolveCleanTargets = (inputs: string[], dataPath: string, storageR
   if (all) return [all, { target: 'launches', path: path.join(storageRoot, 'launches'), root: storageRoot }];
   const unique = _.uniqBy(resolved, (t) => t.path.toLowerCase());
   return unique.filter((t) => !unique.some((o) => o !== t && isInsideOrEqual(o.path, t.path)));
-};
+}
 
-export const dataClean = async (ctx: Context): Promise<number> => {
+export async function dataClean(ctx: Context): Promise<number> {
   const targets = resolveCleanTargets(ctx.options.positionals.slice(1), ctx.dataPath, ctx.storageRoot);
   if (isSandboxRunning())
     fail(
       'A Windows Sandbox is running, and it uses these folders.',
       'Close it first (sandbox stop), then run this again.',
     );
-  // Every folder from the root down to the target's parent must be real; a link in place of the target is removed itself.
+  // Every folder from the root down to the target's parent must be real; a link in place of the target is removed
+  // itself.
   for (const t of targets) assertNoLinks(t.root, path.dirname(t.path));
   const present = targets.filter((t) => fs.existsSync(t.path) || isLink(t.path));
   if (!present.length) {
@@ -139,4 +140,4 @@ export const dataClean = async (ctx: Context): Promise<number> => {
       'Close programs using those folders and run the same command again.',
     );
   return 0;
-};
+}

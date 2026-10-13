@@ -3,47 +3,41 @@ import fs from 'node:fs';
 import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { describePrune, pruneStorage } from '../../../host/storage/index.js';
-import { RepoGuardStore } from '../../../host/guard/index.js';
-import { ensureConpty } from '../../../host/tools/index.js';
-import { ensureTerminal } from '../../../host/tools/index.js';
-import { planView, viewSkipped } from '../../../host/workspace-view/index.js';
-import { saveActiveViews } from '../../../host/workspace-view/index.js';
-import { WorkspaceView } from '../../../host/workspace-view/index.js';
+import { RepoGuardStore, readDataSize, saveMarkedProjects } from '../../../host/guard/index.js';
+import { ensureConpty, ensureTerminal } from '../../../host/tools/index.js';
+import { planView, viewSkipped, saveActiveViews, WorkspaceView } from '../../../host/workspace-view/index.js';
 import { saveForwards } from '../../../host/network/index.js';
 import { saveAuditSettings } from '../../../host/audit/collect.js';
-import { readDataSize, saveMarkedProjects } from '../../../host/guard/index.js';
 import { humanBytes } from '../../../core/disk.js';
-import { syncBeforeLaunch } from '../../../sync/index.js';
-import { watcherRunning } from '../../../sync/index.js';
+import { syncBeforeLaunch, watcherRunning } from '../../../sync/index.js';
 import type { Config, ResolvedRun } from '../../../core/types.js';
 import { errMsg } from '../../../core/util/index.js';
-import { c } from '../../output/index.js';
-import { working } from '../../output/index.js';
+import { c, working } from '../../output/index.js';
 import { type Context } from '../context.js';
-import { LifeRecord } from '../../../host/life/index.js';
-import { UPDATE_RESTART_WARNING, updateRestartPending } from '../../../host/life/index.js';
+import { LifeRecord, UPDATE_RESTART_WARNING, updateRestartPending } from '../../../host/life/index.js';
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
-export const firstBoot = (dataPath: string): boolean =>
-  !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
+export function firstBoot(dataPath: string): boolean {
+  return !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
+}
 export const FIRST_BOOT =
   'First start for this storage: the sandbox downloads and installs the toolchains, databases and agent this project needs.\n' +
   'That takes a few minutes, once. Everything is kept, so every later start reuses it and takes seconds.';
 
-const syncSummary = (config: Config, dataPath: string, workspaceHost: string): string => {
+function syncSummary(config: Config, dataPath: string, workspaceHost: string): string {
   try {
     const s = syncBeforeLaunch(config, dataPath, workspaceHost);
     return s.history + ' file(s) of history in, claude-mem ' + s.claudeMem;
   } catch (e) {
     return 'FAILED: ' + errMsg(e);
   }
-};
+}
 
 /**
  * workspaceFilter: brings the project's filtered view in step before the sandbox maps it, and tells the background
  * watcher to keep it in step while the sandbox runs. Returns the line for the launch table.
  */
-const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<string> => {
+async function prepareWorkspaceView(ctx: Context, run: ResolvedRun): Promise<string> {
   const plan = planView(run.config, ctx.storageRoot, run.workspaceHost);
   saveActiveViews(ctx.storageRoot, ctx.dataPath, plan ? [plan.options] : []);
   saveForwards(ctx.storageRoot, ctx.dataPath, run.config.sandbox.networking ? run.config.network.forwardPorts : []);
@@ -83,7 +77,7 @@ const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<str
     '; ' +
     plan.options.view
   );
-};
+}
 
 /** What prepare did, for the launch summary. */
 export interface Prepared {
@@ -95,7 +89,7 @@ export interface Prepared {
 }
 
 /** Everything a real launch does before the sandbox starts (skipped by `generate`, which only writes files). */
-export const prepare = async (ctx: Context, run: ResolvedRun): Promise<Prepared> => {
+export async function prepare(ctx: Context, run: ResolvedRun): Promise<Prepared> {
   const { options, dataPath, storageRoot } = ctx;
   const { config } = run;
   const accounts = new AccountStore(storageRoot);
@@ -128,4 +122,4 @@ export const prepare = async (ctx: Context, run: ResolvedRun): Promise<Prepared>
     pruned: describePrune(pruneStorage(storageRoot)),
     filter,
   };
-};
+}

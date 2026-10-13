@@ -1,27 +1,29 @@
-// Feedback for slow work: a spinner line on stderr (so --json and piped output stay clean). Without a terminal (pipe, CI,
-// TERM=dumb) it prints one plain line instead of animating.
+// Feedback for slow work: a spinner line on stderr (so --json and piped output stay clean). Without a terminal (pipe,
+// CI, TERM=dumb) it prints one plain line instead of animating.
 import { colorEnabled, shorten, termWidth } from './colors.js';
 
 const FRAMES = ['|', '/', '-', '\\'];
 
 /** Can a line be redrawn in place? */
-export const canAnimate = (env: NodeJS.ProcessEnv, isTTY: boolean): boolean => isTTY && !env.CI && env.TERM !== 'dumb';
+export function canAnimate(env: NodeJS.ProcessEnv, isTTY: boolean): boolean {
+  return isTTY && !env.CI && env.TERM !== 'dumb';
+}
 
 /** "12 s", "2 min 5 s". */
-export const elapsed = (ms: number): string => {
+export function elapsed(ms: number): string {
   const s = Math.round(ms / 1000);
   return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
-};
+}
 
 /**
  * Shows `message` while work runs and removes the line afterwards. The spinner only moves while the event loop is free
  * (waiting on the sandbox); for long synchronous work (measuring folders) the static line is what you see.
  */
-export const working = async <T>(
+export async function working<T>(
   message: string | (() => string),
   work: () => Promise<T> | T,
   enabled = true,
-): Promise<T> => {
+): Promise<T> {
   if (!enabled) return work();
   const err = process.stderr;
   const start = Date.now();
@@ -66,4 +68,4 @@ export const working = async <T>(
     clearInterval(timer);
     err.write('\r\x1b[2K');
   }
-};
+}
