@@ -7,7 +7,7 @@ import { dryRun } from '../../runtime/paths.js';
 import { execAsync } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
-import { installOnce } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { resolveCached } from '../version-cache.js';
 import { tool, versionOf, type ToolEnv } from '../tool-env.js';
 import { versionFromFiles } from '../detect.js';

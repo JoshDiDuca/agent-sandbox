@@ -1,7 +1,7 @@
 import { execAsync } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { tool, type ToolEnv } from '../tool-env.js';
-import { installOnce } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { uvVars } from '../runtimes.js';
 
 /** Python command-line tools through uv (each in its own environment, commands in uv's bin folder on PATH). */

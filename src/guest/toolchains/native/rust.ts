@@ -6,7 +6,8 @@ import { execAsync } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
 import { arch, tool, versionOf, type ToolEnv } from '../tool-env.js';
-import { downloadFile, installOnce } from '../install.js';
+import { downloadFile } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { crateInstaller } from './binstall.js';
 import { installedMsvcEnv } from './msvc/index.js';
 

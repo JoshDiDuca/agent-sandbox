@@ -1,11 +1,6 @@
 import fs from 'node:fs';
-import { z } from 'zod';
 import { downloader, githubAsset, type ReleaseAsset } from '../../shared/download/index.js';
-import { writeJsonAtomic } from '../../shared/io/json.js';
-import { log, warn } from '../runtime/log.js';
-import { errMsg } from '../../core/util/errors.js';
-import { type ToolEnv, tool } from './tool-env.js';
-import { readState } from './state-file.js';
+import { log } from '../runtime/log.js';
 
 /**
  * A single file download that lands as `file` only when complete (and checksum-verified): a cut-off one never looks
@@ -44,53 +39,4 @@ export const installFromGithub = async (repo: string, pattern: RegExp, o: Github
     ...(o.locate ? { locate: o.locate } : {}),
     ...(o.up ? { up: o.up } : {}),
   });
-};
-
-/** Runs one installer; a failure is reported and skipped so it never blocks the other toolchains. */
-export const step = async (name: string, env: ToolEnv, work: () => Promise<void>): Promise<void> => {
-  try {
-    await work();
-  } catch (e) {
-    warn(
-      name +
-        ' could not be set up and is skipped; everything else still works, and the next start tries again. Reason: ' +
-        errMsg(e),
-    );
-    env.summary.push(name + ': FAILED');
-  }
-};
-
-// ---- global packages, installed once -------------------------------------------------------------------------------
-
-const installedFile = (): string => tool('installed-packages.json');
-const installed = (): Record<string, string> => readState(installedFile(), z.record(z.string(), z.string()), {});
-
-/**
- * Installs each package that is not installed yet (remembered in tools\installed-packages.json under `group`, e.g.
- * "npm@22.11.0"). One failing package is reported and skipped; it is tried again next boot.
- */
-export const installOnce = async (
-  env: ToolEnv,
-  group: string,
-  packages: string[],
-  install: (pkg: string) => void | Promise<void>,
-): Promise<void> => {
-  const todo = packages.filter((p) => !installed()[group + ':' + p]);
-  for (const pkg of todo) {
-    try {
-      log('Installing ' + pkg + ' (' + group + ') ...');
-      await install(pkg);
-      writeJsonAtomic(installedFile(), { ...installed(), [group + ':' + pkg]: new Date().toISOString() });
-    } catch (e) {
-      warn(
-        pkg +
-          ' (' +
-          group +
-          ') could not be installed and is skipped; the next start tries again. Reason: ' +
-          errMsg(e),
-      );
-    }
-  }
-  const ok = packages.filter((p) => installed()[group + ':' + p]);
-  if (ok.length) env.summary.push(group.split('@')[0] + ' packages: ' + ok.join(', '));
 };

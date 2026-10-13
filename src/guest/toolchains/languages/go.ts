@@ -9,7 +9,7 @@ import { execAsync } from '../../runtime/process.js';
 import { exists } from '../../runtime/fs.js';
 import { log } from '../../runtime/log.js';
 import { arch, tool, versionOf, type ToolEnv } from '../tool-env.js';
-import { installOnce } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { resolveCached } from '../version-cache.js';
 import { pickGoRelease, type GoRelease } from '../../../core/detect/versions.js';
 

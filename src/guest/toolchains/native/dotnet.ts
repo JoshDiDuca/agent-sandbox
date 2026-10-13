@@ -14,7 +14,8 @@ import { exists, mkdirp } from '../../runtime/fs.js';
 import { log, warn } from '../../runtime/log.js';
 import { errMsg } from '../../../core/util/errors.js';
 import { projectWorkspace } from '../../runtime/project-context.js';
-import { downloadFile, installOnce } from '../install.js';
+import { downloadFile } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { tool, type ToolEnv } from '../tool-env.js';
 
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */

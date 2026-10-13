@@ -12,7 +12,7 @@ import { exists, mkdirp } from '../../runtime/fs.js';
 import { log, warn } from '../../runtime/log.js';
 import { errMsg } from '../../../core/util/errors.js';
 import { arch, tool, type ToolEnv } from '../tool-env.js';
-import { installOnce } from '../install.js';
+import { installOnce } from '../package-ledger.js';
 import { resolveCached } from '../version-cache.js';
 import { duringSession } from '../../runtime/project-context.js';
 import { pickNodeVersion, pickSpreadVersions, type NodeRelease } from '../../../core/detect/versions.js';
