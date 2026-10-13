@@ -25,7 +25,7 @@ export const generateSuite: Suite = {
     t.includes(buildWsb(f.baseConfig, 4096, [{ host: 'C:\\a&b', guest: 'C:\\X', readOnly: true }]), 'C:\\a&amp;b', 'wsb values are XML-escaped');
 
     t.section('the launch folder');
-    const expectedFiles = ['package.json', 'runtime/main.js', 'runtime/daemon.js', 'runtime/view.js', 'runtime/gitguard.js', 'sandbox/bootstrap.ps1', 'sandbox/logon.cmd', 'sandbox/trust.cmd', 'sandbox/ptyhost.cs', 'sandbox/gitshim.cs'];
+    const expectedFiles = ['package.json', 'runtime/main.js', 'runtime/daemon.js', 'runtime/view.js', 'runtime/gitguard.js', 'sandbox/bootstrap.ps1', 'sandbox/logon.cmd', 'sandbox/trust.cmd', 'sandbox/ptyhost.cs', 'sandbox/gitshim.cs', 'sandbox/cpucap.ps1', 'sandbox/cpucap.cs', 'sandbox/pagefile.ps1', 'sandbox/pagefile.cs'];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
     t.equal(missing, [], 'the launch folder has the runtime, the C# sources and the boot scripts');
     t.equal(fs.readdirSync(path.join(gen.launchPath, 'runtime')).length, 6, 'the runtime is 6 self-contained files');
