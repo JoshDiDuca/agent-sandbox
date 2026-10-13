@@ -5,23 +5,23 @@ import { hostDatabases } from './pc-scan.js';
 import { readProjectFiles } from './project-scan.js';
 
 /** The version a compose file pins (postgres:16-alpine -> 16, mongo:7.0 -> 7.0), if any. */
-const pinnedVersion = (files: ProjectFile[], image: RegExp): string | null => {
+function pinnedVersion(files: readonly ProjectFile[], image: RegExp): string | null {
   for (const file of files) {
     const match = image.exec(file.text);
     if (match?.[1] && /^\d+(\.\d+)?/.test(match[1])) return /^\d+(\.\d+)?/.exec(match[1])![0];
   }
   return null;
-};
+}
 
 /**
  * What to run in this sandbox: databases set to true, plus "auto" ones the project needs. SQL Server is reported (so
  * the user hears about it) but cannot run inside Windows Sandbox.
  */
-export const planDatabases = (
+export function planDatabases(
   config: Config['databases'],
   workspace: string,
   probe: { files?: ProjectFile[]; host?: Database[] } = {},
-): DatabasePlan[] => {
+): DatabasePlan[] {
   const autos = DATABASES.filter((db) => config[db].enabled === 'auto');
   const files = autos.length ? (probe.files ?? readProjectFiles(workspace)) : [];
   const detected = autos.length ? detectDatabases(files, probe.host ?? hostDatabases) : [];
@@ -36,16 +36,19 @@ export const planDatabases = (
     if (setting === 'auto' && found) return [plan(database, found.reasons)];
     return [];
   });
-};
+}
 
 /** Every database the sandbox can run, so `sbx-db start <name>` works for ones that did not start at boot. */
-export const databaseCatalog = (config: Config['databases']): DatabasePlan[] => {
+export function databaseCatalog(config: Config['databases']): DatabasePlan[] {
   const plan = databasePlanner(config, []);
   return DATABASES.filter((db) => db !== 'sqlserver').map((db) => plan(db, ['started with sbx-db']));
-};
+}
 
 /** Version (a compose file's image tag wins), port and admin UI for one database. */
-const databasePlanner = (config: Config['databases'], compose: ProjectFile[]) => {
+function databasePlanner(
+  config: Config['databases'],
+  compose: readonly ProjectFile[],
+): (database: Database, reasons: string[]) => DatabasePlan {
   const versions: Record<Database, string> = {
     postgres:
       pinnedVersion(compose, /image:\s*["']?(?:[\w.-]+\/)*postgres:([\w.-]+)/i) ??
@@ -71,4 +74,4 @@ const databasePlanner = (config: Config['databases'], compose: ProjectFile[]) =>
     port: ports[database],
     ...(database === 'dynamodb' && config.dynamodb.admin ? { adminPort: config.dynamodb.adminPort } : {}),
   });
-};
+}

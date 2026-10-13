@@ -2,8 +2,7 @@
 // and commands planted in the repository are quarantined before anything on this PC can run them.
 import fs from 'node:fs';
 import path from 'node:path';
-import { RepoGuard } from '../host/guard/index.js';
-import { isMarked, markFromSandbox, watchAndMark } from '../host/guard/index.js';
+import { isMarked, markFromSandbox, RepoGuard, watchAndMark } from '../host/guard/index.js';
 import type { Suite } from './support/suite.js';
 
 const repoGuard = new RepoGuard();

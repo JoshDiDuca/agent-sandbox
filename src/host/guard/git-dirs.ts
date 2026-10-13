@@ -1,94 +1,36 @@
+// A git folder's hooks, config and redirect files, and the rule that guards the project's own .git.
 import fs from 'node:fs';
 import path from 'node:path';
-import { dirExists, fileExists, isLink } from '../../core/util/index.js';
-import { hash } from './file-hash.js';
-import type { GitState, RepoFinding } from './repo-guard.js';
+import { dirExists, isLink } from '../../core/util/index.js';
+import { filesIn } from './file-hash.js';
 import { configLines, disableConfig } from './git-config.js';
 import { quarantine } from './quarantine.js';
+import type { GitState, GuardRule, RepoFinding, RepoSnapshot } from './types.js';
 
 /** Files in .git that make git read config/hooks from somewhere else. */
-const REDIRECTS = ['commondir', 'config.worktree'];
-export const plainGitDir = (workspace: string): string | null => {
-  const dir = path.join(workspace, '.git');
-  return dirExists(dir) && !isLink(dir) ? dir : null;
-};
+const REDIRECTS = ['commondir', 'config.worktree'] as const;
+const isHook = (name: string): boolean => !name.endsWith('.sample');
 
-export const filesIn = (dir: string, accept: (name: string) => boolean): Record<string, string> =>
-  dirExists(dir) && !isLink(dir)
-    ? Object.fromEntries(
-        fs
-          .readdirSync(dir, { withFileTypes: true })
-          .filter((e) => (e.isFile() || e.isSymbolicLink()) && accept(e.name))
-          .map((e) => [e.name, hash(path.join(dir, e.name))]),
-      )
-    : {};
-
-export const gitState = (dir: string | null): GitState => ({
-  config: dir ? configLines(dir) : [],
-  hooks: dir ? filesIn(path.join(dir, 'hooks'), (n) => !n.endsWith('.sample')) : {},
-  redirects: dir ? REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n))) : [],
-});
 export const EMPTY_GIT: GitState = { config: [], hooks: {}, redirects: [] };
 
-const MAX_OTHER_REPOS = 64;
-const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'agent-sandbox-quarantine',
-  'target',
-  'dist',
-  'build',
-  'bin',
-  'obj',
-  '.venv',
-  'venv',
-]);
-const plainDirs = (dir: string, limit: number): string[] => {
-  try {
-    return fs
-      .readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.isSymbolicLink())
-      .slice(0, limit)
-      .map((e) => path.join(dir, e.name));
-  } catch {
-    return [];
-  }
-};
-/**
- * Git folders other than the project's own: submodules (.git/modules/**) and repositories nested up to two levels deep.
- * git runs their hooks and config too (git status in a subfolder, VS Code's repository scan). Bounded: links are never
- * followed and at most MAX_OTHER_REPOS are looked at.
- */
-export const otherGitDirs = (workspace: string): string[] => {
-  const found: string[] = [];
-  const main = plainGitDir(workspace);
-  // Submodules: a folder with a config and a HEAD is a git folder, and may have modules of its own.
-  const walk = (dir: string, depth: number): void => {
-    for (const d of plainDirs(dir, 200)) {
-      if (found.length >= MAX_OTHER_REPOS) return;
-      if (fileExists(path.join(d, 'config')) && fileExists(path.join(d, 'HEAD'))) {
-        found.push(d);
-        if (depth < 3) walk(path.join(d, 'modules'), depth + 1);
-      } else if (depth < 3) walk(d, depth + 1);
-    }
-  };
-  if (main) walk(path.join(main, 'modules'), 0);
-  for (const sub of plainDirs(workspace, 500).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase()))) {
-    for (const candidate of [
-      sub,
-      ...plainDirs(sub, 200).filter((d) => !SKIP_DIRS.has(path.basename(d).toLowerCase())),
-    ]) {
-      if (found.length >= MAX_OTHER_REPOS) return found;
-      const git = plainGitDir(candidate);
-      if (git) found.push(git);
-    }
-  }
-  return found;
-};
+/** <workspace>\.git when it is a real folder (not a link or a "gitdir:" file). */
+export function plainGitDir(workspace: string): string | null {
+  const dir = path.join(workspace, '.git');
+  return dirExists(dir) && !isLink(dir) ? dir : null;
+}
 
-export const guardGitDir = (dir: string, before: GitState): RepoFinding[] => {
+export function gitState(dir: string | null): GitState {
+  return {
+    config: dir ? configLines(dir) : [],
+    hooks: dir ? filesIn(path.join(dir, 'hooks'), isHook) : {},
+    redirects: dir ? REDIRECTS.filter((n) => fs.existsSync(path.join(dir, n))) : [],
+  };
+}
+
+/** New or changed hooks and new redirect files are quarantined; new config that runs programs is commented out. */
+export function guardGitDir(dir: string, before: GitState): RepoFinding[] {
   const hooksDir = path.join(dir, 'hooks');
-  const hooksNow = filesIn(hooksDir, (n) => !n.endsWith('.sample'));
+  const hooksNow = filesIn(hooksDir, isHook);
   return [
     ...quarantine(
       hooksDir,
@@ -104,4 +46,25 @@ export const guardGitDir = (dir: string, before: GitState): RepoFinding[] => {
     ),
     ...disableConfig(dir, before.config),
   ];
-};
+}
+
+/** The project's own .git; a .git replaced by a link or a "gitdir:" file is reported, never followed. */
+export class GitDirRule implements GuardRule {
+  readonly kind = 'git-dir';
+
+  check(workspace: string, before: RepoSnapshot): RepoFinding[] {
+    const dir = plainGitDir(workspace);
+    if (dir) return guardGitDir(dir, before);
+    const replaced = before.gitDir && fs.existsSync(path.join(workspace, '.git'));
+    if (!replaced) return [];
+    return [
+      {
+        kind: 'git',
+        detail:
+          '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' +
+          workspace +
+          ' until you have checked it.',
+      },
+    ];
+  }
+}

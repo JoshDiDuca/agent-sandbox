@@ -1,3 +1,5 @@
+// Where the repo guard keeps its snapshots and findings: host-only files next to the sync state, never in the data
+// folder the sandbox can write.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
@@ -5,13 +7,11 @@ import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile, storageOf } from '../storage/index.js';
 import { dirExists, isLink } from '../../core/util/index.js';
-import { RepoGuard, type RepoFinding, type RepoSnapshot } from './repo-guard.js';
-
-const snapshotFile = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '-repo.json');
-const findingsFile = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '-repo-findings.json');
+import { RepoGuard } from './repo-guard.js';
+import { FINDING_KINDS, type RepoFinding, type RepoSnapshot } from './types.js';
 
 const FindingSchema = z.object({
-  kind: z.enum(['hook', 'config', 'git', 'command', 'agent']),
+  kind: z.enum(FINDING_KINDS),
   detail: z.string().max(4096),
   at: z.string().max(64).optional(),
 });
@@ -32,12 +32,12 @@ const SavedSchema = z.object({
     repos: z.record(z.string(), GitStateSchema).optional(),
   }),
 });
+type Saved = z.output<typeof SavedSchema>;
 
 /**
  * Every project the sandbox can write, and the project roots (whole folders of projects) it has mapped. Older
  * versions saved a single object.
  */
-type Saved = z.output<typeof SavedSchema>;
 const StoreSchema = z.strictObject({
   projects: z.array(SavedSchema).max(4096),
   roots: z
@@ -57,16 +57,17 @@ const EMPTY: RepoSnapshot = { gitDir: false, config: [], hooks: {}, redirects: [
 const MAX_ROOT_PROJECTS = 2000;
 
 /** The folders directly inside a project root (plain folders only; links are never followed). */
-const rootProjects = (root: string): string[] => {
+function rootProjects(root: string): string[] {
   if (!dirExists(root) || isLink(root)) return [];
   return fs
     .readdirSync(root, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !e.isSymbolicLink())
     .slice(0, MAX_ROOT_PROJECTS)
     .map((e) => path.join(root, e.name));
-};
-const has = (projects: Saved[], workspace: string): boolean =>
-  projects.some((s) => s.workspace.toLowerCase() === workspace.toLowerCase());
+}
+function has(projects: readonly Saved[], workspace: string): boolean {
+  return projects.some((s) => s.workspace.toLowerCase() === workspace.toLowerCase());
+}
 
 /** The guarded projects of one data folder and what the guard found (host-only files next to the sync state). */
 export class RepoGuardStore {
@@ -77,8 +78,12 @@ export class RepoGuardStore {
     dataPath: string,
     private readonly guard = new RepoGuard(),
   ) {
-    this.snapshots = new JsonFile(StoreAnySchema, snapshotFile(dataPath));
-    this.found = new JsonFile(z.array(FindingSchema).max(10000), findingsFile(dataPath));
+    const storageRoot = storageOf(dataPath);
+    this.snapshots = new JsonFile(StoreAnySchema, hostStateFile(storageRoot, dataPath, '-repo.json'));
+    this.found = new JsonFile(
+      z.array(FindingSchema).max(10000),
+      hostStateFile(storageRoot, dataPath, '-repo-findings.json'),
+    );
   }
 
   private read(): Store {
@@ -89,13 +94,13 @@ export class RepoGuardStore {
    * At launch: every folder the sandbox will be able to write. The launch folder, projects mapped with it and every
    * project already inside a project root are snapshotted as they are now, before the sandbox can touch them.
    */
-  save(workspace: string, more: string[] = [], roots: string[] = []): void {
+  save(workspace: string, more: readonly string[] = [], roots: readonly string[] = []): void {
     const folders = _.uniqBy([workspace, ...more, ...roots.flatMap((r) => [r, ...rootProjects(r)])], (w) =>
       w.toLowerCase(),
     );
     this.snapshots.write({
       projects: folders.map((w) => ({ workspace: w, snapshot: this.guard.snapshot(w) })),
-      roots,
+      roots: [...roots],
     });
   }
 

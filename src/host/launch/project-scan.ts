@@ -1,4 +1,4 @@
-// Reads a project the way detect-databases.ts and detect-toolchains.ts need it (only manifest/config files, bounded).
+// Reads a project the way core/detect needs it for databases and toolchains (only manifest/config files, bounded).
 import fs from 'node:fs';
 import path from 'node:path';
 import { INTERESTING_FILE, type ProjectFile } from '../../core/detect/index.js';
@@ -10,7 +10,7 @@ const MAX_BYTES = 256 * 1024;
 const MAX_FOLDERS = 2000;
 
 /** Reads a file through one handle, only if that handle is a regular file of at most MAX_BYTES. */
-const readSmallFile = (file: string): string | null => {
+function readSmallFile(file: string): string | null {
   let fd: number | null = null;
   try {
     fd = fs.openSync(file, 'r');
@@ -24,10 +24,10 @@ const readSmallFile = (file: string): string | null => {
   } finally {
     if (fd !== null) fs.closeSync(fd);
   }
-};
+}
 
-/** Manifest-type files in the project, up to 3 folders deep. Links are not followed (the workspace may be guest-written). */
-export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
+/** Manifest-type files in the project, up to 3 folders deep. Links are not followed (the guest may have written it). */
+export function readProjectFiles(root: string, depth = 3): ProjectFile[] {
   const files: ProjectFile[] = [];
   let folders = 0;
   const walk = (dir: string, level: number): void => {
@@ -49,10 +49,10 @@ export const readProjectFiles = (root: string, depth = 3): ProjectFile[] => {
   };
   walk(root, 0);
   return files;
-};
+}
 
 /** File names in the project and its direct sub-folders ("api/go.mod"), for toolchain detection. No links followed. */
-export const projectEntries = (root: string): string[] => {
+export function projectEntries(root: string): string[] {
   const list = (dir: string): fs.Dirent[] => {
     try {
       return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000);
@@ -70,10 +70,10 @@ export const projectEntries = (root: string): string[] => {
         .map((f) => d.name + '/' + f.name),
     );
   return [...top.filter((d) => d.isFile()).map((d) => d.name), ...below];
-};
+}
 
 /** Scripts in the project root or one folder down that set up MSVC (vcvars*.bat, vswhere): read with bounded effort. */
-export const msvcHint = (root: string): string | undefined => {
+export function msvcHint(root: string): string | undefined {
   const scripts = projectEntries(root)
     .filter((e) => /\.(ps1|cmd|bat|psm1)$/i.test(e))
     .slice(0, 60);
@@ -81,11 +81,11 @@ export const msvcHint = (root: string): string | undefined => {
     let text = '';
     try {
       const file = path.join(root, rel);
-      if (fs.statSync(file).size <= 256 * 1024) text = fs.readFileSync(file, 'utf8');
+      if (fs.statSync(file).size <= MAX_BYTES) text = fs.readFileSync(file, 'utf8');
     } catch {
       continue;
     }
     if (/vcvars(all|64|32)?\.bat|vswhere(\.exe)?/i.test(text)) return rel + ' sets up MSVC';
   }
   return undefined;
-};
+}

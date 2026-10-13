@@ -1,27 +1,23 @@
 // Writes a launch folder for one sandbox: session.json (what the guest needs to know), the bundled runtime, hooks, the
-// staged Claude settings and the .wsb file that starts Windows Sandbox. The pieces live in launch/.
+// staged Claude settings and the .wsb file that starts Windows Sandbox. The pieces live in the sibling files.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { GenerateOptions, Generated, GuestSession, ProfileResult } from '../../core/types.js';
-import { resolveToolchains } from '../../core/detect/index.js';
+import type { GenerateOptions, Generated, ProfileResult } from '../../core/types.js';
 import { dirExists, ensureDir, fail, writeJson } from '../../core/util/index.js';
-import { substDrives } from '../../shared/paths/index.js';
-import { PROJECTS_GUEST, hubName } from '../../shared/paths/index.js';
-import { planBootProjects } from './boot-projects.js';
-import { hostClaudeDir, stageClaudeProfile } from '../profile/index.js';
-import { databaseCatalog, planDatabases } from './database-plan.js';
-import { collectMappings } from './mappings.js';
-import { copyRuntime, stageGitIdentity, stageHooks } from './stage.js';
-import { buildWsb, resolveMemoryMb } from './wsb-file.js';
-import { capturePersonalization } from '../profile/index.js';
+import { capturePersonalization, stageClaudeProfile } from '../profile/index.js';
 import { assertTestWritable } from '../test-guard.js';
+import { planBootProjects } from './boot-projects.js';
+import { planDatabases } from './database-plan.js';
+import { collectMappings } from './mappings.js';
+import { guestSession, logonEnv } from './session-file.js';
+import { copyRuntime, stageGitIdentity, stageHooks } from './stage.js';
 import { decideProjectToolchains } from './toolchains.js';
-import { hostToolsOf, logonEnv } from './session-file.js';
+import { buildWsb, resolveMemoryMb } from './wsb-file.js';
 
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
 
-export const generateSandbox = (o: GenerateOptions): Generated & { personalization: string } => {
+export function generateSandbox(o: GenerateOptions): Generated & { personalization: string } {
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness =
     harnessName === 'none'
@@ -54,48 +50,9 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
   stageGitIdentity(launchPath);
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
-  const toolchainDecisions = decideProjectToolchains(o);
+  const toolchains = decideProjectToolchains(o);
 
-  const session: GuestSession = {
-    launchId,
-    project: path.basename(workspaceHost),
-    projectId: hubName(workspaceHost, []),
-    workspace: config.guestWorkspace,
-    workspaceHost,
-    projectsDir: PROJECTS_GUEST,
-    roots: boot.roots.map((r) => r.guest),
-    ...(o.autoSession === false ? { autoSession: false } : {}),
-    harnessName,
-    harness,
-    harnessArguments: o.harnessArgs,
-    persistAgentState: config.storage.persistAgentState,
-    networking: config.sandbox.networking,
-    headless: config.sandbox.headless,
-    network: config.network,
-    provisioning: config.provisioning,
-    // "auto" is decided here, so the guest and the launch table agree.
-    toolchains: resolveToolchains(config.toolchains, toolchainDecisions),
-    databases,
-    databaseCatalog: databaseCatalog(config.databases),
-    versions: o.run.versions,
-    attach: config.attach,
-    hooks: config.hooks,
-    downloads: config.downloads,
-    hostTools: hostToolsOf(o.probe),
-    claudeProfile: {
-      overwrite: config.claudeProfile.overwrite,
-      items: profile.staged,
-      credentials: profile.credentials,
-      hostConfigDir: profile.hostDir ?? hostClaudeDir(config.claudeProfile),
-      syncClaudeMem: config.claudeProfile.syncClaudeMem,
-    },
-    personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
-    substDrives: substDrives(mappings.map((m) => m.guest)),
-    cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
-    pageFileMb: config.sandbox.pageFileMb,
-    apps: config.apps,
-    auditProcesses: config.audit.enabled && config.audit.processes,
-  };
+  const session = guestSession(o, { launchId, launchPath, harness, boot, mappings, profile, databases, toolchains });
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);
   fs.writeFileSync(path.join(launchPath, 'env.cmd'), logonEnv(session.workspace), 'utf8');
@@ -114,7 +71,7 @@ export const generateSandbox = (o: GenerateOptions): Generated & { personalizati
     profile,
     personalization,
     databases,
-    toolchains: toolchainDecisions,
+    toolchains,
     projects: boot,
   };
-};
+}

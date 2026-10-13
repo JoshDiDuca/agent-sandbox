@@ -46,10 +46,15 @@ export class KnownProjects {
  * projects.all: the known projects mapped at boot on their own (existing folders, not excluded, not the launch folder,
  * not inside it or a root, which already show them). Pure apart from checking that the folders exist.
  */
-export const allProjectsToMap = (
-  known: string[],
-  o: { primary: string; roots: string[]; exclude: string[]; exists?: (p: string) => boolean },
-): string[] => {
+export function allProjectsToMap(
+  known: readonly string[],
+  o: {
+    readonly primary: string;
+    readonly roots: readonly string[];
+    readonly exclude: readonly string[];
+    readonly exists?: (p: string) => boolean;
+  },
+): string[] {
   const exists = o.exists ?? dirExists;
   const out: string[] = [];
   for (const host of known.map((k) => path.resolve(k))) {
@@ -59,4 +64,4 @@ export const allProjectsToMap = (
     out.push(host);
   }
   return out;
-};
+}

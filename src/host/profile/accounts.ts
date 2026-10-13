@@ -6,28 +6,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { isSafeFileName } from '../../shared/paths/index.js';
-import { assertTestWritable } from '../test-guard.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { storageOf } from '../storage/index.js';
-import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../../core/util/index.js';
+import { fail, fileExists } from '../../core/util/index.js';
+import {
+  clearAccountCaches,
+  emailOf,
+  MAX_STATE_BYTES,
+  readLogin,
+  readUntrusted,
+  sandboxLogin,
+  writeSandboxJson,
+  type Login,
+  type LoginFiles,
+} from './claude-login.js';
 
 export interface Account {
-  name: string;
-  savedAt: string;
-  email: string | null;
-  credentials: unknown;
-  oauthAccount: unknown;
+  readonly name: string;
+  readonly savedAt: string;
+  readonly email: string | null;
+  readonly credentials: unknown;
+  readonly oauthAccount: unknown;
 }
 export interface AccountRow {
-  name: string;
-  email: string | null;
-  isDefault: boolean;
-  isActive: boolean;
-  savedAt: string;
-}
-interface Login {
-  credentials: unknown;
-  oauthAccount: unknown;
+  readonly name: string;
+  readonly email: string | null;
+  readonly isDefault: boolean;
+  readonly isActive: boolean;
+  readonly savedAt: string;
 }
 
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
@@ -43,72 +49,35 @@ const IndexSchema = z.object({
   active: z.record(z.string().max(200), z.string().regex(NAME)).optional(),
 });
 type Index = z.output<typeof IndexSchema>;
-const ACCOUNT_CACHES = ['remote-settings.json', 'policy-limits.json', 'policy-limits.json.stamp.json'];
-const MAX_LOGIN_BYTES = 1024 * 1024;
-/**
- * .claude.json holds per-project state and can be large; it is still capped so a hostile file cannot exhaust memory.
- */
-const MAX_STATE_BYTES = 256 * 1024 * 1024;
 
-export const accountsDir = (storageRoot: string): string => path.join(storageRoot, 'accounts');
-export const sandboxClaudeDir = (dataPath: string): string => path.join(dataPath, 'state', 'claude');
-const dataName = (dataPath: string): string => path.basename(dataPath);
-const indexFile = (storageRoot: string): JsonFile<Index> =>
-  new JsonFile(IndexSchema, path.join(accountsDir(storageRoot), 'index.json'));
-const readIndex = (storageRoot: string): Index => indexFile(storageRoot).read() ?? {};
-const updateIndex = (storageRoot: string, change: (index: Index) => Index): void => {
+export function accountsDir(storageRoot: string): string {
+  return path.join(storageRoot, 'accounts');
+}
+function dataName(dataPath: string): string {
+  return path.basename(dataPath);
+}
+function indexFile(storageRoot: string): JsonFile<Index> {
+  return new JsonFile(IndexSchema, path.join(accountsDir(storageRoot), 'index.json'));
+}
+function readIndex(storageRoot: string): Index {
+  return indexFile(storageRoot).read() ?? {};
+}
+function updateIndex(storageRoot: string, change: (index: Index) => Index): void {
   indexFile(storageRoot).write(change(readIndex(storageRoot)));
-};
+}
 
-const setActive = (dataPath: string, name: string): void =>
+function setActive(dataPath: string, name: string): void {
   updateIndex(storageOf(dataPath), (i) => ({ ...i, active: { ...i.active, [dataName(dataPath)]: name } }));
+}
 
 /** A file name of its own: not "index" (the index file), not a Windows device name such as con or nul. */
-const validName = (name: string): boolean =>
-  NAME.test(name) && name.toLowerCase() !== 'index' && isSafeFileName(name + '.json');
-const assertName = (name: string): void => {
+function validName(name: string): boolean {
+  return NAME.test(name) && name.toLowerCase() !== 'index' && isSafeFileName(name + '.json');
+}
+function assertName(name: string): void {
   if (!validName(name))
     fail('Invalid account name "' + name + '".', 'Use letters, numbers, - and _ only (max 40), e.g. work or personal.');
-};
-const emailOf = (oauthAccount: unknown): string | null => {
-  const email = (oauthAccount as { emailAddress?: unknown } | null)?.emailAddress;
-  return typeof email === 'string' ? email.slice(0, 200) : null;
-};
-
-/** Reads a JSON file that may be sandbox-written: no links, size-capped. */
-const readUntrusted = (file: string, max: number): unknown =>
-  fileExists(file) && !isLink(file) && fs.statSync(file).size <= max ? tryReadJson<unknown>(file) : null;
-
-/** The login currently in a Claude config folder (+ its global state file). */
-const readLogin = (claudeDir: string, globalStateFile: string): Login => {
-  const credentials = readUntrusted(path.join(claudeDir, '.credentials.json'), MAX_LOGIN_BYTES);
-  if (!credentials || typeof credentials !== 'object')
-    fail(
-      'No Claude login found in ' + claudeDir + '.',
-      'Sign in to Claude first (inside the sandbox, or on this PC with --from-host), then save it again.',
-    );
-  return {
-    credentials,
-    oauthAccount:
-      (readUntrusted(globalStateFile, MAX_STATE_BYTES) as { oauthAccount?: unknown } | null)?.oauthAccount ?? null,
-  };
-};
-
-const sandboxLogin = (dataPath: string): { claudeDir: string; globalStateFile: string } => {
-  assertNoLinks(dataPath, sandboxClaudeDir(dataPath));
-  return {
-    claudeDir: sandboxClaudeDir(dataPath),
-    globalStateFile: path.join(sandboxClaudeDir(dataPath), '.claude.json'),
-  };
-};
-
-/** Replaces a file that may be a sandbox-planted link instead of writing through it. */
-const writeSandboxJson = (file: string, value: unknown): void => {
-  assertTestWritable(file);
-  if (isLink(file)) removeLink(file);
-  writeJson(file, value);
-};
-
+}
 /** The saved Claude logins under <storage>\accounts, and which one each sandbox data folder uses. */
 export class AccountStore {
   constructor(private readonly storageRoot: string) {}
@@ -156,7 +125,7 @@ export class AccountStore {
   }
 
   /** Saves the sandbox's current login (or this PC's, with fromHost) under `name`. */
-  save(dataPath: string, name: string, fromHost: { claudeDir: string; globalStateFile: string } | null): Account {
+  save(dataPath: string, name: string, fromHost: LoginFiles | null): Account {
     assertName(name);
     const source = fromHost ?? sandboxLogin(dataPath);
     const account = this.store(name, readLogin(source.claudeDir, source.globalStateFile));
@@ -189,12 +158,7 @@ export class AccountStore {
       }
     }
     fs.mkdirSync(claudeDir, { recursive: true });
-    // Caches tied to the previous account (Claude deletes these on /logout); otherwise its org policy could linger.
-    for (const cache of ACCOUNT_CACHES) {
-      const file = path.join(claudeDir, cache);
-      if (isLink(file)) removeLink(file);
-      else fs.rmSync(file, { force: true });
-    }
+    clearAccountCaches(claudeDir);
     writeSandboxJson(path.join(claudeDir, '.credentials.json'), account.credentials);
     const state = readUntrusted(globalStateFile, MAX_STATE_BYTES) as Record<string, unknown> | null;
     if (account.oauthAccount && (state || !fileExists(globalStateFile)))
