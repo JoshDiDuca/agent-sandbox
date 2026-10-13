@@ -48,7 +48,9 @@ export const exec = async (ctx: Context): Promise<number> => {
   return result.exitCode ?? 1;
 };
 
-/** `sandbox db`: runs the sandbox's own `sbx-db` in this folder's project, which knows its database versions and ports. */
+/**
+ * `sandbox db`: runs the sandbox's own `sbx-db` in this folder's project, which knows its database versions and ports.
+ */
 export const db = async (ctx: Context): Promise<number> => {
   const [action = 'list', name] = ctx.options.positionals;
   if (!['list', 'start', 'stop'].includes(action))

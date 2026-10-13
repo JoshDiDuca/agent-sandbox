@@ -22,12 +22,17 @@ export const insidePrimary = (cwd: string): boolean => {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
 
-/** Inside any project of this sandbox: the launch folder, a project root, or C:\Projects\<name> (older launch folders: only the first). */
+/**
+ * Inside any project of this sandbox: the launch folder, a project root, or C:\Projects\<name> (older launch folders:
+ * only the first).
+ */
 export const insideWorkspace = (cwd: string): boolean =>
   insidePrimary(cwd) ||
   (session.projectsDir !== undefined && insideProjects(path.resolve(cwd), session.roots ?? [], session.projectsDir));
 
-/** Status/response writes are best-effort: a briefly locked file (antivirus, the host's sync) must not kill the daemon. */
+/**
+ * Status/response writes are best-effort: a briefly locked file (antivirus, the host's sync) must not kill the daemon.
+ */
 const tryWrite = (file: string, value: unknown): void => {
   try {
     writeJsonAtomic(file, value);

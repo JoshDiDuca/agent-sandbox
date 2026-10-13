@@ -112,7 +112,10 @@ export class SandboxChannel {
     );
   }
 
-  /** project: a project registered after boot (provisioned first). harnessSpec: the agent's definition, for an agent the sandbox did not boot with. */
+  /**
+   * project: a project registered after boot (provisioned first). harnessSpec: the agent's definition, for an agent the
+   * sandbox did not boot with.
+   */
   requestSession(
     harness: string,
     args: string[],

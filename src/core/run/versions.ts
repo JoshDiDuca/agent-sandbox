@@ -8,7 +8,7 @@ const firstLine = (file: string): string | null => {
   if (!fileExists(file)) return null;
   const line = fs
     .readFileSync(file, 'utf8')
-    .replace(/^﻿/, '')
+    .replace(/^\uFEFF/, '')
     .split(/\r?\n/)
     .map((l: string) => l.replace(/#.*$/, '').trim())
     .find((l: string) => l !== '');
@@ -27,13 +27,16 @@ const PackageJsonSchema = z.object({
     .optional(),
 });
 
-/** The Node version a Volta project pins ("volta": { "node": "20.11.1" } in package.json), so nvm defaults to it too. */
+/**
+ * The Node version a Volta project pins ("volta": { "node": "20.11.1" } in package.json), so nvm defaults to it too.
+ */
 export const voltaNode = (workspace: string): string | null => {
   const file = path.join(workspace, 'package.json');
   if (!fileExists(file)) return null;
   try {
     return (
-      PackageJsonSchema.safeParse(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''))).data?.volta?.node ?? null
+      PackageJsonSchema.safeParse(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))).data?.volta?.node ??
+      null
     );
   } catch {
     return null;

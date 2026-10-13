@@ -19,7 +19,9 @@ import {
   globalPackages,
   resolvedVersionsValid,
 } from './finders.js';
-import { ok, whileRunning, type RepairCheck, type RepairEnv } from './types.js';
+import { ok, whileRunning, type RepairCheck, type RepairEnv, type RepairResult } from './types.js';
+
+type Outcome = Omit<RepairResult, 'name'>;
 
 const rel = (root: string, p: string): string => path.relative(root, p) || '.';
 
@@ -29,7 +31,7 @@ const guard = (env: RepairEnv, p: string): void => assertNoLinks(path.dirname(en
 export const CHECKS: RepairCheck[] = [
   {
     name: 'Config file',
-    run: (env) =>
+    run: (env: RepairEnv): Outcome =>
       env.configError
         ? {
             status: 'needs-you',
@@ -44,7 +46,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Windows Sandbox feature',
-    run: () =>
+    run: (): Outcome =>
       sandboxFeatureInstalled()
         ? ok('enabled.')
         : {
@@ -56,7 +58,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Links in the data folder',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       if (isLink(env.dataPath))
         return {
           status: 'needs-you',
@@ -86,13 +88,14 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Sandbox run state',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       if (env.running) return ok('a sandbox is running; its state is in use.');
       if (isLink(new RunDir(env.dataPath).root)) {
         new SandboxChannel(env.dataPath).reset();
         return { status: 'fixed', detail: 'the run folder was a link; removed the link itself.' };
       }
-      // The last sandbox's status file is normal after it closes; sessions still marked running or unanswered requests are not.
+      // The last sandbox's status file is normal after it closes; sessions still marked running or unanswered requests
+      // are not.
       const ghosts = new RunDir(env.dataPath)
         .listSessions()
         .filter((s) => s.phase === 'running' || s.phase === 'starting').length;
@@ -114,7 +117,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Hidden-window state',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       const file = path.join(env.storageRoot, 'run', 'hidden-windows.json');
       if (!fs.existsSync(file) && !isLink(file)) return ok('clean.');
       if (env.running) return ok('a sandbox is running; kept.');
@@ -128,7 +131,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Sync watcher',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       const dead = deadPidFiles(path.join(env.storageRoot, 'run'));
       if (!dead.length) return ok('no stale watcher records.');
       for (const f of dead) {
@@ -146,7 +149,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Interrupted downloads',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       if (env.running) return whileRunning;
       guard(env, env.toolsDir);
       const found = findStagingLeftovers(env.toolsDir);
@@ -164,7 +167,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Half-installed toolchains',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       if (env.running) return whileRunning;
       guard(env, env.toolsDir);
       const found = findHalfInstalled(env.toolsDir);
@@ -181,7 +184,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Resolved versions cache',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       const file = path.join(env.toolsDir, 'resolved-versions.json');
       if (!fs.existsSync(file) && !isLink(file)) return ok('not created yet.');
       if (env.running) return whileRunning;
@@ -203,7 +206,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Installed packages',
-    run: () => {
+    run: (): Outcome => {
       const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
       if (!fileExists(npmCli))
         return { status: 'skipped', detail: 'npm not found next to this Node (' + npmCli + ').' };
@@ -232,7 +235,7 @@ export const CHECKS: RepairCheck[] = [
   },
   {
     name: 'Free disk',
-    run: (env) => {
+    run: (env: RepairEnv): Outcome => {
       const free = freeBytesAt(env.storageRoot);
       if (free === null) return { status: 'skipped', detail: 'could not check the drive of ' + env.storageRoot };
       if (free >= 20 * GB) return ok(humanBytes(free) + ' free.');

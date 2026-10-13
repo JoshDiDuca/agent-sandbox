@@ -60,7 +60,10 @@ export const requireRunning = (hint = ''): void => {
   if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with sandbox claude.');
 };
 
-/** Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist there). */
+/**
+ * Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist
+ * there).
+ */
 export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorkspace: string): string => {
   if (!isInsideOrEqual(workspaceHost, hostDir))
     fail(

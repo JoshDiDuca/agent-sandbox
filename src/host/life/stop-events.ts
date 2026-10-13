@@ -92,7 +92,10 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
   return causes.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))[0] ?? null;
 };
 
-/** System log and Hyper-V events since `since` that can end a sandbox (Windows only; empty when the logs cannot be read). */
+/**
+ * System log and Hyper-V events since `since` that can end a sandbox (Windows only; empty when the logs cannot be
+ * read).
+ */
 export const readStopEvents = (since: Date): StopEvent[] => {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');

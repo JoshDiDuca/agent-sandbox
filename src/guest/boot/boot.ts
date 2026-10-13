@@ -52,7 +52,10 @@ const startDaemon = (env: NodeJS.ProcessEnv): void => {
   }).unref();
 };
 
-/** `sbx-db` for terminals and `sandbox db`: this boot's Node running runtime\db.js (on the sandbox's disk, rewritten each boot). */
+/**
+ * `sbx-db` for terminals and `sandbox db`: this boot's Node running runtime\db.js (on the sandbox's disk, rewritten
+ * each boot).
+ */
 const writeDbCommand = (): string => {
   const dir = mkdirp(path.join(localDir, 'bin'));
   const db = path.join(path.dirname(process.argv[1]), 'db.js');

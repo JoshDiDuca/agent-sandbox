@@ -59,7 +59,8 @@ export const syncSuite: Suite = {
       'history in (scope "all"): everything comes in',
     );
 
-    // The sandbox adds to the transcript (with a half-written last line), a new transcript, a prompt, and things that must not come back.
+    // The sandbox adds to the transcript (with a half-written last line), a new transcript, a prompt, and things that
+    // must not come back.
     const guestTranscript = path.join(guestProject, 's1.jsonl');
     fs.appendFileSync(guestTranscript, '{"cwd":"C:\\\\Workspace\\\\my-app","t":2}\n{"partial":');
     t.touch(guestTranscript);
@@ -162,7 +163,8 @@ export const syncSuite: Suite = {
       'claude-mem in: the whole folder arrives, vector store included',
     );
 
-    // The sandbox changes its database and plants other files. (Changes are detected by modified time, so make them clearly newer.)
+    // The sandbox changes its database and plants other files. (Changes are detected by modified time, so make them
+    // clearly newer.)
     const guestDb = t.write(path.join(memGuest, 'claude-mem.db'), 'guest-v2');
     t.touch(guestDb, 10);
     t.write(path.join(memGuest, 'settings.json'), '{"evil":true}');

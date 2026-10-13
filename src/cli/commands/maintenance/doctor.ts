@@ -13,7 +13,8 @@ export const doctor = (ctx: Context): number => {
     ctx.storageRoot,
     ctx.loaded.configPath,
   );
-  // Inside a sandbox the feature and "running" rows describe the sandbox itself, and the host rows describe nothing useful.
+  // Inside a sandbox the feature and "running" rows describe the sandbox itself, and the host rows describe nothing
+  // useful.
   if (insideSandbox()) {
     table([
       ['Where', 'inside a Windows Sandbox started by this tool (run doctor on your PC to check the PC)'],

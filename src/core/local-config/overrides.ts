@@ -29,7 +29,8 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
 
 /** `folder` (also where it really is, through links) is inside the project folder `dir`. */
 const insideProject = (dir: string, folder: string): boolean => {
-  // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created yet.
+  // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created
+  // yet.
   const real = (p: string): string => {
     const full = path.resolve(p);
     try {

@@ -135,7 +135,10 @@ export class RepoGuardStore {
     return this.read().projects.map((s) => s.workspace);
   }
 
-  /** Re-checks every project of the current/last launch; findings are kept in a host-only file for `status`. Returns the new ones. */
+  /**
+   * Re-checks every project of the current/last launch; findings are kept in a host-only file for `status`. Returns the
+   * new ones.
+   */
   check(): RepoFinding[] {
     const saved = this.discoverRootProjects();
     if (!saved.length) return [];

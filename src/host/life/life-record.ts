@@ -51,7 +51,9 @@ export class LifeRecord {
     if (life && !life.ended) this.file.write({ ...life, lastSeen: now.toISOString() });
   }
 
-  /** The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory. */
+  /**
+   * The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory.
+   */
   end(cause: StopCause | null, now = new Date()): void {
     const life = this.read();
     if (life && !life.ended) this.file.write({ ...life, ended: { at: now.toISOString(), cause } });

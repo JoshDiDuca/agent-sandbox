@@ -3,7 +3,7 @@ import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile } from '../storage/index.js';
 import { type ViewOptions } from './view.js';
 
-// ---- the views the watcher keeps in step (host-only, next to the sync state) ------------------------------------------
+// ---- the views the watcher keeps in step (host-only, next to the sync state) ----------------------------------------
 
 const ActiveViewSchema = z.object({
   host: z.string().max(1024),

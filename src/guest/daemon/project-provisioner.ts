@@ -35,7 +35,9 @@ interface Entry {
   done?: Provisioned;
 }
 
-/** By project name (lower case). The same spec again is free; a changed one (its config was edited) provisions again. */
+/**
+ * By project name (lower case). The same spec again is free; a changed one (its config was edited) provisions again.
+ */
 const projects = new Map<string, Entry>();
 /** The last finished provisioning of each project (kept while a changed spec provisions again). */
 const ready = new Map<string, Provisioned>();
@@ -55,8 +57,8 @@ const cmdSet = (env: NodeJS.ProcessEnv, names: string[]): string[] =>
     .map((n) => '@set "' + n + '=' + String(env[n]).replace(/%/g, '%%') + '"');
 
 /**
- * A terminal for the project inside the sandbox: `sbx-shell <name>` (from any terminal tab) opens cmd in its folder with
- * its environment. Written to the sandbox's own disk.
+ * A terminal for the project inside the sandbox: `sbx-shell <name>` (from any terminal tab) opens cmd in its folder
+ * with its environment. Written to the sandbox's own disk.
  */
 const writeShell = (spec: ProjectSpec, env: NodeJS.ProcessEnv, names: string[]): void => {
   const dir = mkdirp(path.join(localDir, 'projects', spec.name));

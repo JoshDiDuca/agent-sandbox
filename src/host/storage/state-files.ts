@@ -1,4 +1,5 @@
-// Host-only state of one data folder: <storage>\sync\<data name><suffix>, never in the data folder the sandbox can write.
+// Host-only state of one data folder: <storage>\sync\<data name><suffix>, never in the data folder the sandbox can
+// write.
 import path from 'node:path';
 
 export type StateFileSuffix =

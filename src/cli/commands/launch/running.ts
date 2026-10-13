@@ -14,7 +14,10 @@ import _ from 'lodash';
 import { hereDir, joinHere, readyHere, type Joined } from '../projects/index.js';
 import { offerRestart } from '../projects/index.js';
 
-/** Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the attach). */
+/**
+ * Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the
+ * attach).
+ */
 export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
   if (ctx.loaded.config.attach.autoHide && !insideSandbox())
     void hideSandboxWindow(ctx.storageRoot, 120).catch(() => false);
@@ -140,7 +143,9 @@ export const contextFor = (ctx: Context, want: { harness?: string; folder: strin
   },
 });
 
-/** Several sessions at once: all requested together (projects set up in parallel), then listed; -t attaches the first. */
+/**
+ * Several sessions at once: all requested together (projects set up in parallel), then listed; -t attaches the first.
+ */
 const openSessions = async (
   ctx: Context,
   ready: SandboxStatus,

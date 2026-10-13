@@ -7,7 +7,10 @@ import { errMsg } from '../../core/util/errors.js';
 import { type ToolEnv, tool } from './tool-env.js';
 import { readState } from './state-file.js';
 
-/** A single file download that lands as `file` only when complete (and checksum-verified): a cut-off one never looks finished. */
+/**
+ * A single file download that lands as `file` only when complete (and checksum-verified): a cut-off one never looks
+ * finished.
+ */
 export const downloadFile = async (url: string, file: string, sha256: string | null = null): Promise<void> => {
   const part = file + '.part';
   try {

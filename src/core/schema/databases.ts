@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { EnabledSchema } from './common.js';
 
 export const PortSchema = z.number().int().min(1024).max(65535);
-export const dbEnabled = (name: string) =>
+export const dbEnabled = (name: string): typeof EnabledSchema =>
   EnabledSchema.describe(
     name +
       ': true, false, or "auto" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings).',

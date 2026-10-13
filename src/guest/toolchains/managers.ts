@@ -19,7 +19,7 @@ import { resolveCached } from './version-cache.js';
 export const voltaPins = (): Record<string, string> => {
   try {
     const pkg = JSON.parse(
-      fs.readFileSync(path.join(projectWorkspace(), 'package.json'), 'utf8').replace(/^﻿/, ''),
+      fs.readFileSync(path.join(projectWorkspace(), 'package.json'), 'utf8').replace(/^\uFEFF/, ''),
     ) as { volta?: Record<string, unknown> };
     return Object.fromEntries(
       Object.entries(pkg.volta ?? {}).filter(

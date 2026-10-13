@@ -38,7 +38,8 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   if (loaded.config.attach.auto && !options.noAgent && process.stdin.isTTY && process.stdout.isTTY)
     options.terminal = true;
   if (!generateOnly) requireOnPc('launch');
-  // agentCommands (Beta) follows the config: a setting changed in the file takes effect here too. Never blocks a launch.
+  // agentCommands (Beta) follows the config: a setting changed in the file takes effect here too. Never blocks a
+  // launch.
   if (!generateOnly) {
     try {
       syncAgentCommands(ctx, loaded.config);

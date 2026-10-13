@@ -9,7 +9,9 @@ import type { DatabasePlan } from '../../core/types.js';
 
 const USAGE = 'Usage: sbx-db [list] | sbx-db start <name> | sbx-db stop <name>';
 
-/** In a project registered after boot (its terminals and exec have AGENT_PROJECT_FILE): that project's database plan. */
+/**
+ * In a project registered after boot (its terminals and exec have AGENT_PROJECT_FILE): that project's database plan.
+ */
 const projectPlans = (): DatabasePlan[] | null => {
   const file = process.env.AGENT_PROJECT_FILE;
   if (!file) return null;

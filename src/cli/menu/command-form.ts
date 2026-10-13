@@ -11,7 +11,7 @@ import type { Context } from '../commands/context.js';
 import { cleanTargetOf, collectDataEntries } from '../commands/data/collect.js';
 import { commandLine } from '../history.js';
 import { askedWhen, type CommandSpec, type OptionSpec } from '../manifest.js';
-import { App, Text, Theme, type ListItem } from '../tui/index.js';
+import { Text, Theme, type App, type ListItem } from '../tui/index.js';
 import { type Field, optionProblem } from './command-fields.js';
 
 const RUN = '@run';

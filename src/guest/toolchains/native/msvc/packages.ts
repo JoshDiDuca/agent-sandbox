@@ -104,7 +104,9 @@ const unpackVsix = async (vsix: string, work: string): Promise<void> => {
   safeRemove(out, work);
 };
 
-/** An administrative install only unpacks files; its verbose log explains a failure (e.g. a path over 260 characters). */
+/**
+ * An administrative install only unpacks files; its verbose log explains a failure (e.g. a path over 260 characters).
+ */
 const unpackMsi = async (msi: string): Promise<void> => {
   const logFile = msi + '.log';
   try {
@@ -149,7 +151,10 @@ const payloadFetcher =
     return file;
   };
 
-/** Newest folder under VC\Tools\MSVC that holds a compiler (named after the toolset, 14.44.35207, not the package version). */
+/**
+ * Newest folder under VC\Tools\MSVC that holds a compiler (named after the toolset, 14.44.35207, not the package
+ * version).
+ */
 const unpackedToolset = (): string | undefined => {
   const toolsRoot = path.join(ROOT, 'VC', 'Tools', 'MSVC');
   return fs

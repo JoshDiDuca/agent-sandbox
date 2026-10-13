@@ -4,7 +4,10 @@ import path from 'node:path';
 import { z } from 'zod';
 import { dirExists, fileExists, isLink } from '../../../core/util/index.js';
 
-/** Interrupted downloads and copies: `<name>.staging-<hex>` and `node-staging`, in tools\ and one folder down (tools\go\1.23.staging-ab12). */
+/**
+ * Interrupted downloads and copies: `<name>.staging-<hex>` and `node-staging`, in tools\ and one folder down
+ * (tools\go\1.23.staging-ab12).
+ */
 export const findStagingLeftovers = (toolsDir: string): string[] => {
   const isStaging = (name: string): boolean =>
     /\.staging-[0-9a-f]+$/i.test(name) || name.toLowerCase() === 'node-staging';
@@ -16,8 +19,8 @@ export const findStagingLeftovers = (toolsDir: string): string[] => {
 };
 
 /**
- * A toolchain folder and the program it must contain. `versions` means one folder per installed version (tools\go\1.23.2);
- * `match` limits which version folders count (tools\nvm also holds settings and nvm.exe).
+ * A toolchain folder and the program it must contain. `versions` means one folder per installed version
+ * (tools\go\1.23.2); `match` limits which version folders count (tools\nvm also holds settings and nvm.exe).
  */
 export interface ToolRule {
   folder: string;
@@ -100,7 +103,7 @@ const ResolvedVersionsSchema = z.record(z.string(), z.unknown());
 /** tools\resolved-versions.json is a JSON object (anything else makes the guest stumble). */
 export const resolvedVersionsValid = (text: string): boolean => {
   try {
-    return ResolvedVersionsSchema.safeParse(JSON.parse(text.replace(/^﻿/, ''))).success;
+    return ResolvedVersionsSchema.safeParse(JSON.parse(text.replace(/^\uFEFF/, ''))).success;
   } catch {
     return false;
   }

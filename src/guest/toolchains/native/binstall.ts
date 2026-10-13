@@ -38,7 +38,8 @@ const ensureBinstall = async (cargoBin: string): Promise<boolean> => {
 /**
  * Returns the installer for one crate: `cargo binstall` (prebuilt only: its own compile fallback is off, so a crate
  * without a Windows build is compiled by our `cargo install` with the linker settings in `cargoEnv`), then
- * `cargo install --locked`. cargo-binstall is fetched on first use, so boots with every crate installed download nothing.
+ * `cargo install --locked`. cargo-binstall is fetched on first use, so boots with every crate installed download
+ * nothing.
  */
 export const crateInstaller = (cargoHome: string, cargoEnv: SpawnOptions): ((crate: string) => Promise<void>) => {
   const cargo = path.join(cargoHome, 'bin', 'cargo.exe');

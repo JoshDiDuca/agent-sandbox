@@ -6,7 +6,7 @@ import { assertTestWritable } from '../test-guard.js';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists } from '../../core/util/index.js';
 
-// ---- conpty.dll ------------------------------------------------------------------------------------------------------
+// ---- conpty.dll -----------------------------------------------------------------------------------------------------
 
 /** Where the sandbox finds conpty.dll + OpenConsole.exe (guest/ptyhost.ts points ptyhost at it). */
 export const conptyDir = (dataPath: string): string => path.join(dataPath, 'tools', 'conpty');

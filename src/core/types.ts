@@ -1,5 +1,6 @@
 // Shared types. Config and channel types come straight from the zod schemas, so each shape is defined exactly once.
 import type { z } from 'zod';
+import type { AutoToolchain, ToolchainDecision } from './detect/index.js';
 import type {
   ConfigSchema,
   GitAccessSchema,
@@ -112,8 +113,11 @@ export interface GenerateOptions {
   probe: HostProbe;
   freeMemoryBytes?: number;
   databases?: DatabasePlan[];
-  pcLanguages?: import('./detect/index.js').AutoToolchain[];
-  /** More projects to map (a restart that adds one keeps the ones in use); knownProjects: instead of known-projects.json (tests). */
+  pcLanguages?: AutoToolchain[];
+  /**
+   * More projects to map (a restart that adds one keeps the ones in use); knownProjects: instead of known-projects.json
+   * (tests).
+   */
   extraProjects?: string[];
   knownProjects?: string[];
   /** false: no agent session at boot. */
@@ -130,7 +134,7 @@ export interface Generated {
   databases: DatabasePlan[];
   /** Project roots and other projects mapped with the launch folder. */
   projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };
-  toolchains: Record<import('./detect/index.js').AutoToolchain, import('./detect/index.js').ToolchainDecision>;
+  toolchains: Record<AutoToolchain, ToolchainDecision>;
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult {
@@ -147,9 +151,13 @@ export interface GuestSession {
   project: string;
   workspace: string;
   workspaceHost: string;
-  /** The launch folder's project id (file-name safe; status files and sessions use it). Older launch folders lack it. */
+  /**
+   * The launch folder's project id (file-name safe; status files and sessions use it). Older launch folders lack it.
+   */
   projectId?: string;
-  /** Where other projects appear (C:\Projects), and the project roots' guest folders. Older launch folders lack them. */
+  /**
+   * Where other projects appear (C:\Projects), and the project roots' guest folders. Older launch folders lack them.
+   */
   projectsDir?: string;
   roots?: string[];
   /** false: start no agent session at boot (a restart that adds a project opens its sessions itself). */
@@ -189,7 +197,10 @@ export interface GuestSession {
     syncClaudeMem: boolean;
   };
   personalization: boolean;
-  /** Drives other than C: that bootstrap.ps1 makes with subst before anything uses them: letter D-Z onto C:\Mirror\<letter>. */
+  /**
+   * Drives other than C: that bootstrap.ps1 makes with subst before anything uses them: letter D-Z onto
+   * C:\Mirror\<letter>.
+   */
   substDrives?: { letter: string; target: string }[];
   /** sandbox.cpuLimit as a number (null = no cap); sandbox\cpucap.ps1 applies it before anything starts. */
   cpuLimitPercent?: number | null;

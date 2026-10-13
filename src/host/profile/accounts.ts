@@ -45,7 +45,9 @@ const IndexSchema = z.object({
 type Index = z.output<typeof IndexSchema>;
 const ACCOUNT_CACHES = ['remote-settings.json', 'policy-limits.json', 'policy-limits.json.stamp.json'];
 const MAX_LOGIN_BYTES = 1024 * 1024;
-/** .claude.json holds per-project state and can be large; it is still capped so a hostile file cannot exhaust memory. */
+/**
+ * .claude.json holds per-project state and can be large; it is still capped so a hostile file cannot exhaust memory.
+ */
 const MAX_STATE_BYTES = 256 * 1024 * 1024;
 
 export const accountsDir = (storageRoot: string): string => path.join(storageRoot, 'accounts');

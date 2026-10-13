@@ -1,5 +1,6 @@
 // Command-line parsing with commander. parseCli() only parses (no side effects), so it is easy to test; cli/index.ts
-// dispatches the result. sandbox claude & co parse as `launch`: every option launch does not own goes to the agent, in order.
+// dispatches the result. sandbox claude & co parse as `launch`: every option launch does not own goes to the agent, in
+// order.
 import path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { fail } from '../core/util/index.js';
@@ -166,7 +167,8 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
   const { name, cmd } = parsed as { name: string; cmd: Command };
   const o = { ...program.opts(), ...cmd.opts() } as Record<string, unknown>;
   const forAgent = ['launch', 'start', 'generate', 'host-claude'].includes(name);
-  // Commander keeps our `--` separator among the operands when unknown options are allowed; it is ours, not the agent's.
+  // Commander keeps our `--` separator among the operands when unknown options are allowed; it is ours, not the
+  // agent's.
   const separator = forAgent ? cmd.args.indexOf('--') : -1;
   const operands = separator === -1 ? cmd.args : [...cmd.args.slice(0, separator), ...cmd.args.slice(separator + 1)];
   return {

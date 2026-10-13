@@ -1,5 +1,6 @@
-// One config file being edited: your own settings, or a project's .sandbox-config.json. One setting is changed at a time
-// through jsonc-parser, so comments and formatting stay, and nothing is written unless the whole file is still valid.
+// One config file being edited: your own settings, or a project's .sandbox-config.json. One setting is changed at a
+// time through jsonc-parser, so comments and formatting stay, and nothing is written unless the whole file is still
+// valid.
 import fs from 'node:fs';
 import path from 'node:path';
 import { applyEdits, modify, parse } from 'jsonc-parser';

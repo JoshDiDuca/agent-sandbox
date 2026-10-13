@@ -2,7 +2,10 @@ import { connect, runTerminalClient } from '../../shared/pty/index.js';
 import type { SessionStatus } from '../../shared/channel/schema.js';
 import { run } from '../runtime/paths.js';
 
-/** A session that is still being set up (its project provisioning, its agent installing): show the progress until it runs. */
+/**
+ * A session that is still being set up (its project provisioning, its agent installing): show the progress until it
+ * runs.
+ */
 const waitUntilStarted = async (id: string): Promise<SessionStatus | null> => {
   let last = '';
   for (let i = 0; i < 3600; i++) {

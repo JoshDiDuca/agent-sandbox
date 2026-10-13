@@ -116,8 +116,8 @@ const installTerminal = async (
   const dir = terminalDir(dataPath);
   assertTestWritable(dir);
   const settings = path.join(dir, 'settings');
-  // downloader.archive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also when
-  // the download fails). One still parked from an interrupted earlier run is the one to keep.
+  // downloader.archive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also
+  // when the download fails). One still parked from an interrupted earlier run is the one to keep.
   const parked = path.join(dataPath, 'tools', 'terminal-settings.parked');
   assertNoLinks(dataPath, settings);
   assertNoLinks(dataPath, parked);

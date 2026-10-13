@@ -114,7 +114,9 @@ export const SessionStatusSchema = z.object({
   attach: AttachEndpointSchema.optional(),
 });
 
-/** C:\AgentData\run\projects\<name>.json: how far a project's provisioning is (guest-written, so validated and capped). */
+/**
+ * C:\AgentData\run\projects\<name>.json: how far a project's provisioning is (guest-written, so validated and capped).
+ */
 export const ProjectStatusSchema = z.object({
   name: IdSchema,
   workspace: Text(1024),

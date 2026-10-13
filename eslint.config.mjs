@@ -5,11 +5,18 @@ const forbid = (...a) => [
   'error',
   { patterns: [{ regex: `(^|/)(${a.join('|')})/`, message: 'Crosses an architecture boundary (CLAUDE.md).' }] },
 ];
+/** The Node globals the build and release scripts use (TypeScript files get theirs from @types/node). */
+const NODE_GLOBALS = Object.fromEntries(
+  ['console', 'process', 'Buffer', 'URL', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'fetch'].map(
+    (name) => [name, 'readonly'],
+  ),
+);
 
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**', 'schemas/**', 'hooks/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  { files: ['scripts/**/*.mjs', '*.mjs'], languageOptions: { globals: NODE_GLOBALS } },
   {
     files: ['src/**/*.ts'],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },

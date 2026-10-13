@@ -1,5 +1,5 @@
-// Programmatic API: `import { sandbox } from 'windows-development-sandbox'`. Same safety model as the CLI: the host only sends the
-// request kinds the guest daemon accepts, and everything coming back is validated data.
+// Programmatic API: `import { sandbox } from 'windows-development-sandbox'`. Same safety model as the CLI: the host
+// only sends the request kinds the guest daemon accepts, and everything coming back is validated data.
 import path from 'node:path';
 import type { GuestResponse, SandboxStatus, SessionStatus } from './core/types.js';
 import { attachTerminal, SandboxChannel } from './host/channel/index.js';

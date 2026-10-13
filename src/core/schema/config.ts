@@ -109,7 +109,8 @@ export const LocalOverridesSchema = z
     databases: z.strictObject(_.mapValues(DatabasesSchema.shape, (shape) => shape.partial())).partial(),
     attach: AttachSchema.partial(),
     personalization: toggle('Copy your desktop look into the sandbox.').partial(),
-    // Catalogue apps only (a vetted list): your own programs (apps.custom) download anything, so a repo cannot add them.
+    // Catalogue apps only (a vetted list): your own programs (apps.custom) download anything, so a repo cannot add
+    // them.
     apps: AppsSchema.pick({ install: true }).partial(),
     claudeProfile: ClaudeProfileSchema.pick({
       enabled: true,

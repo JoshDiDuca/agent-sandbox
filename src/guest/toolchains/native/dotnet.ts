@@ -1,4 +1,5 @@
-// .NET: the SDK (dotnet-install.ps1), .NET Framework reference assemblies for old-style projects, and .NET Framework 3.5.
+// .NET: the SDK (dotnet-install.ps1), .NET Framework reference assemblies for old-style projects, and .NET Framework
+// 3.5.
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -19,7 +20,9 @@ import { tool, type ToolEnv } from '../tool-env.js';
 /** tools\dotnet\.agent-sandbox-installed.json: which install keys (channel:8.0, global.json:...) already ran. */
 const DotnetMarkerSchema = z.record(z.string(), z.boolean());
 
-/** .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker. */
+/**
+ * .NET SDK channels from config plus whatever the workspace's global.json pins. Installs are remembered in a marker.
+ */
 export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], refresh: boolean): Promise<void> => {
   const root = tool('dotnet');
   const marker = path.join(root, '.agent-sandbox-installed.json');
@@ -97,9 +100,9 @@ export const setupDotnet = async (env: ToolEnv, config: Toolchains['dotnet'], re
 };
 
 /**
- * .NET Framework reference assemblies (the "targeting packs" Visual Studio would install) from NuGet, so net4x projects,
- * old-style .csproj included, build with the SDK's MSBuild. MSBuild reads TargetFrameworkRootPath from the environment.
- * Running .NET Framework 4.8 apps needs nothing: Windows ships it.
+ * .NET Framework reference assemblies (the "targeting packs" Visual Studio would install) from NuGet, so net4x
+ * projects, old-style .csproj included, build with the SDK's MSBuild. MSBuild reads TargetFrameworkRootPath from the
+ * environment. Running .NET Framework 4.8 apps needs nothing: Windows ships it.
  */
 const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promise<void> => {
   if (!targets.length) return;
@@ -139,7 +142,9 @@ const setupFrameworkReferences = async (env: ToolEnv, targets: string[]): Promis
   env.summary.push('.NET Framework targeting: ' + fs.readdirSync(path.join(root, '.NETFramework')).join(', '));
 };
 
-/** .NET Framework 3.5 is a Windows feature the sandbox image lacks; DISM fetches it from Windows Update on every boot. */
+/**
+ * .NET Framework 3.5 is a Windows feature the sandbox image lacks; DISM fetches it from Windows Update on every boot.
+ */
 const setupNetFx35 = async (env: ToolEnv): Promise<void> => {
   if (
     execOutput(SYSTEM.reg(), [

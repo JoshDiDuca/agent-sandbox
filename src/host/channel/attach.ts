@@ -109,7 +109,7 @@ export const attachTerminal = async (session: SessionStatus): Promise<number> =>
       console.log(safeText(session.harness) + ' exited with code ' + result.exitCode + '.');
       return result.exitCode;
     case 'error':
-      fail(
+      return fail(
         'The sandbox refused the connection: ' + result.message,
         'Try sandbox attach again; the session may have restarted.',
       );

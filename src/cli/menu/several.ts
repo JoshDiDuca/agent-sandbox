@@ -8,7 +8,7 @@ import { KnownProjects } from '../../host/projects/index.js';
 import { isWithin } from '../../shared/paths/index.js';
 import type { Context } from '../commands/context.js';
 import { commandLine } from '../history.js';
-import { App, Text, Theme } from '../tui/index.js';
+import { Text, Theme, type App } from '../tui/index.js';
 
 /** Folders worth offering: this one, the projects started before, and the folders inside your roots. */
 export const candidateFolders = (ctx: Context, cwd: string = process.cwd()): string[] => {

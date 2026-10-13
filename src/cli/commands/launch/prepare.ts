@@ -85,8 +85,17 @@ const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<str
   );
 };
 
+/** What prepare did, for the launch summary. */
+export interface Prepared {
+  readonly account: string | null;
+  readonly terminal: string;
+  readonly history: string;
+  readonly pruned: string;
+  readonly filter: string;
+}
+
 /** Everything a real launch does before the sandbox starts (skipped by `generate`, which only writes files). */
-export const prepare = async (ctx: Context, run: ResolvedRun) => {
+export const prepare = async (ctx: Context, run: ResolvedRun): Promise<Prepared> => {
   const { options, dataPath, storageRoot } = ctx;
   const { config } = run;
   const accounts = new AccountStore(storageRoot);

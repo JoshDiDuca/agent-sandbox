@@ -54,7 +54,9 @@ const newestRecord = (): number => {
   return parseProcessEvents(r.stdout ?? '').last;
 };
 
-/** Reads new process events every 15 s for the daemon's life (from the moment it started: older ones are boot noise). */
+/**
+ * Reads new process events every 15 s for the daemon's life (from the moment it started: older ones are boot noise).
+ */
 export const startProcessCollector = (): void => {
   if (!auditOn()) return;
   let last = newestRecord();

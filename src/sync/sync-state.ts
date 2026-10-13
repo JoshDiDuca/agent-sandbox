@@ -32,7 +32,10 @@ export type SyncState = z.output<typeof SyncStateSchema>;
  * never live in the data folder the sandbox can write (a forged copy could redirect writes anywhere on this PC).
  */
 export const syncStatePath = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '.json');
-/** A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next launch). */
+/**
+ * A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next
+ * launch).
+ */
 export const readSyncState = (dataPath: string): SyncState | null =>
   new JsonFile(SyncStateSchema, syncStatePath(dataPath)).read();
 export const writeSyncState = (dataPath: string, state: SyncState): void =>

@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { safeRemove } from '../io/index.js';
 import { fetchRetry } from './http.js';
 import { extractArchive, findFile, moveIntoPlace, stagingFolder } from './archive.js';
@@ -28,7 +29,8 @@ export class Downloader {
 
   /**
    * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
-   * event loop stays free so other toolchains keep downloading meanwhile. A mismatch (or any failure) leaves no file behind.
+   * event loop stays free so other toolchains keep downloading meanwhile. A mismatch (or any failure) leaves no file
+   * behind.
    */
   async file(url: string, destination: string, expected: string | null | Checksums = null): Promise<void> {
     const sums: Checksums = typeof expected === 'string' || expected === null ? { sha256: expected } : expected;
@@ -59,11 +61,7 @@ export class Downloader {
     // never leaves a partial file under the real name.
     const partial = destination + '.part';
     try {
-      await pipeline(
-        Readable.fromWeb(response.body as import('node:stream/web').ReadableStream),
-        tap,
-        fs.createWriteStream(partial),
-      );
+      await pipeline(Readable.fromWeb(response.body as WebReadableStream), tap, fs.createWriteStream(partial));
       if (checks.some((c) => c.hash.digest('hex') !== c.want)) throw new Error('Checksum mismatch for ' + url);
       // Mapped folders refuse rename-over, so the old file goes first.
       fs.rmSync(destination, { force: true });

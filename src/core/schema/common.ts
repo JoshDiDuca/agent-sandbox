@@ -11,7 +11,8 @@ export const GuestPathSchema = z
   );
 export const NameSchema = z.string().regex(/^[A-Za-z0-9_-]+$/, 'letters, numbers, - and _ only');
 export const StringsSchema = z.array(z.string());
-export const toggle = (description: string) => z.strictObject({ enabled: z.boolean().describe(description) });
+export const toggle = (description: string): z.ZodObject<{ enabled: z.ZodBoolean }, z.core.$strict> =>
+  z.strictObject({ enabled: z.boolean().describe(description) });
 export const SchemaRefSchema = z.string().describe('Path or URL of the JSON Schema for editor autocomplete and docs.');
 
 export const GitAccessSchema = z
@@ -20,9 +21,12 @@ export const GitAccessSchema = z
     'full: normal git. readonly: status/log/diff/show/blame only (no commit, push, checkout, ...). none: no git at all; .git is hidden from the agent.',
   );
 
-/** true, false, or "auto": only when the project uses it (found from files like go.mod in the workspace or one level down). */
+/**
+ * true, false, or "auto": only when the project uses it (found from files like go.mod in the workspace or one level
+ * down).
+ */
 export const EnabledSchema = z.union([z.boolean(), z.literal('auto')]);
-export const enabled = (what: string, markers: string) =>
+export const enabled = (what: string, markers: string): typeof EnabledSchema =>
   EnabledSchema.describe(what + ' true, false, or "auto" = only when the project has ' + markers + '.');
-export const Packages = (what: string, example: string) =>
+export const Packages = (what: string, example: string): typeof StringsSchema =>
   StringsSchema.describe(what + ', installed once and kept (e.g. ' + example + ').');
