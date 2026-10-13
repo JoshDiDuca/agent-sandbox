@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
 import { moveIntoPlace, setChecksumRequired, spawnAsync, stagingFolder } from '../shared/download.js';
 import type { GuestSession, SandboxStatus } from '../core/types.js';
+import type { BootProgressT } from '../shared/schema.js';
 import { now, runPaths, writeJsonAtomic } from '../shared/rundir.js';
 import { safeRemove } from '../shared/safe-remove.js';
 import { SYSTEM } from '../shared/system.js';
@@ -39,15 +40,30 @@ export const exists = (p: string): boolean => fs.existsSync(p);
 export const mkdirp = (p: string): string => { fs.mkdirSync(p, { recursive: true }); return p; };
 export const logPath = logFile;
 
-/** Best-effort: progress reporting must never be what breaks the boot. */
-export const setSandboxStatus = (phase: SandboxStatus['phase'], message: string): void => {
-  try { writeJsonAtomicChecked(phase, message); } catch (e) { warn('Could not update sandbox status: ' + errMsg(e)); }
+/** The boot's structured progress (the host shows it as one line); kept between status writes. */
+let progress: BootProgressT | undefined;
+
+/**
+ * Best-effort: progress reporting must never be what breaks the boot. `update` changes the structured progress
+ * (a new step, what is being set up); it stays as it was otherwise.
+ */
+export const setSandboxStatus = (phase: SandboxStatus['phase'], message: string, update?: Partial<BootProgressT>): void => {
+  try {
+    if (update) progress = fitProgress({ step: 1, steps: 1, title: '', active: [], done: 0, total: 0, ...progress, ...update });
+    writeJsonAtomicChecked(phase, message);
+  } catch (e) { warn('Could not update sandbox status: ' + errMsg(e)); }
 };
+
+/** Within the limits the host accepts (it drops a progress that is not). */
+const fitProgress = (p: BootProgressT): BootProgressT => ({
+  ...p, title: p.title.slice(0, 120), done: Math.min(p.done, 1000), total: Math.min(p.total, 1000),
+  active: p.active.slice(0, 8).map((a) => ({ name: a.name.slice(0, 64), ...(a.percent === undefined ? {} : { percent: Math.max(0, Math.min(100, Math.round(a.percent))) }) })),
+});
 
 const ownAddresses = (): string[] => Object.values(os.networkInterfaces()).flat().filter((i): i is os.NetworkInterfaceInfo => Boolean(i) && i!.family === 'IPv4' && !i!.internal).map((i) => i.address).slice(0, 8);
 
 const writeJsonAtomicChecked = (phase: SandboxStatus['phase'], message: string): void => {
-  writeJsonAtomic(run.sandbox, { launchId: session.launchId, phase, message, updatedAt: now(), workspaceHost: session.workspaceHost, guestWorkspace: workspace, headless: session.headless, addresses: ownAddresses() } satisfies SandboxStatus);
+  writeJsonAtomic(run.sandbox, { launchId: session.launchId, phase, message, updatedAt: now(), workspaceHost: session.workspaceHost, guestWorkspace: workspace, headless: session.headless, addresses: ownAddresses(), ...(progress ? { progress } : {}) } satisfies SandboxStatus);
 };
 
 /** Runs a program, streaming output, and throws with a readable message when it fails. */

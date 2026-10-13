@@ -31,7 +31,8 @@ import { syncAgentCommands } from './agent-commands.js';
 import { askYesNo } from '../../core/prompt.js';
 import { resolveRun } from '../../core/workspace.js';
 import { c } from '../colors.js';
-import { working } from '../progress.js';
+import { follow, working } from '../progress.js';
+import { bootLine, firstStartNotice, pendingDownloads, readyIn, stillWorking } from '../boot-progress.js';
 import { requireOnPc, sandboxAlive, table, type Context } from './context.js';
 import _ from 'lodash';
 import { hereDir, joinHere, readyHere, type Joined } from './project.js';
@@ -47,8 +48,11 @@ export const attachHere = (ctx: Context, session: Parameters<typeof attachTermin
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
 const firstBoot = (dataPath: string): boolean => !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
-const FIRST_BOOT = 'First start for this storage: the sandbox downloads and installs the toolchains, databases and agent this project needs.\n' +
-  'That takes a few minutes, once. Everything is kept, so every later start reuses it and takes seconds.';
+/** The first-start heads-up (also when this project needs tools not downloaded yet), or null. */
+const FIRST_BOOT = (dataPath: string, generated: { toolchains: Record<string, { on: boolean }>; databases: { database: string }[] }, config: Config): string | null => {
+  const wanted = ['node', ...Object.entries(generated.toolchains).filter(([, d]) => d.on).map(([name]) => name), ...(config.toolchains.vscode.enabled ? ['vscode'] : []), ...generated.databases.map((d) => d.database)];
+  return firstStartNotice(firstBoot(dataPath), pendingDownloads(wanted, (dir) => fs.existsSync(path.join(dataPath, 'tools', dir))));
+};
 
 /** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
 export const runningSandboxStatus = async (dataPath: string): Promise<SandboxStatus> => {
@@ -60,10 +64,16 @@ export const runningSandboxStatus = async (dataPath: string): Promise<SandboxSta
   return fail('A Windows Sandbox is running that this tool did not start (or that uses another storage.dataName).', 'Close that sandbox window first, then run sandbox claude again.');
 };
 
-/** Waits for the boot with its current step on a spinner (plain lines without a terminal). */
-export const waitForBoot = (dataPath: string, launchId: string | null): Promise<SandboxStatus> => {
-  let step = 'starting Windows Sandbox';
-  return working(() => 'Waiting for the sandbox: ' + step, () => waitForReady(dataPath, launchId, sandboxAlive, (m) => { step = m; }));
+/**
+ * Waits for the boot with its current step and what it sets up on one line (plain lines without a terminal).
+ * timed: say how long it took (a first start, where that is worth knowing).
+ */
+export const waitForBoot = async (dataPath: string, launchId: string | null, timed = false): Promise<SandboxStatus> => {
+  let status: SandboxStatus | null = null;
+  const start = Date.now();
+  const ready = await follow(() => bootLine(status), () => waitForReady(dataPath, launchId, sandboxAlive, () => undefined, (s) => { if (s.phase !== 'failed') status = s; }), { stall: stillWorking });
+  if (timed) console.log(readyIn(Date.now() - start));
+  return ready;
 };
 
 /** The running sandbox, once it is ready. */
@@ -75,7 +85,8 @@ export const readySandbox = async (dataPath: string): Promise<SandboxStatus> => 
 /** Waits for a session to start (its project's setup, the agent's install) with its progress on a spinner. */
 const waitForStart = (ctx: Context, requestId: string, what: string): Promise<SessionStatus> => {
   let step = 'starting';
-  return working(() => what + ': ' + step, () => waitForSession(ctx.dataPath, requestId, sandboxAlive, 60 * 60 * 1000, (m) => { step = m; }));
+  const shown = (): { line: string; key: string; what: string } => ({ line: what + ': ' + step, key: step, what: step });
+  return follow(shown, () => waitForSession(ctx.dataPath, requestId, sandboxAlive, 60 * 60 * 1000, (m) => { step = m; }), { stall: stillWorking });
 };
 
 /**
@@ -311,15 +322,16 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', path.resolve(options.config)] : [])]);
   // Hiding runs alongside; a failure to find the window must never break the launch or an attach.
   const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot).catch(() => false) : null;
+  const headsUp = FIRST_BOOT(dataPath, generated, config);
   if (options.terminal || options.noAgent || extras.waitUntilReady) {
-    if (firstBoot(dataPath)) console.log(FIRST_BOOT);
-    await waitForBoot(dataPath, generated.launchId);
+    if (headsUp) console.log(headsUp);
+    await waitForBoot(dataPath, generated.launchId, Boolean(headsUp));
     if (extras.waitUntilReady) return 0;
     // Without an agent there is no session to attach to: the sandbox itself is the result.
     if (options.noAgent) { console.log('Sandbox ready. Its window has a terminal in ' + config.guestWorkspace + '; from here: sandbox exec -- <command>, sandbox stop.'); return 0; }
     return attachHere(ctx, await waitForStart(ctx, generated.launchId, 'Starting ' + run.harnessName));
   }
-  if (firstBoot(dataPath)) console.log(FIRST_BOOT);
+  if (headsUp) console.log(headsUp + '\nFollow along: sandbox logs -f');
   if (hidden) console.log(await hidden ? 'Sandbox running headless. Open the window: sbx-show   Attach here: sandbox claude -t' : 'Could not find the sandbox window to hide (it may still be starting); run sandbox hide in a moment.');
   else console.log('Sandbox starting. ' + run.harnessName + ' opens in Windows Terminal inside it. Attach here any time: sandbox claude -t');
   return 0;
