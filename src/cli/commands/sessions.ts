@@ -152,7 +152,8 @@ const printExecResult = (result: GuestResponse): void => {
 const guestFolderHere = async (ctx: Context, what: string): Promise<string> => {
   const ready = await readySandbox(ctx.dataPath);
   try {
-    const joined = await joinHere(ctx, ready);
+    // A command needs no restart for what the project wants at boot: it runs without them (and says so).
+    const joined = await joinHere(ctx, ready, { noRestart: true });
     for (const note of joined.notes) console.error(note);
     await provisionJoined(ctx, joined);
     return joined.guestDir;

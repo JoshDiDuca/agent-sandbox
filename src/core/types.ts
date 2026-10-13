@@ -54,9 +54,15 @@ export interface GenerateOptions {
   extraProjects?: string[]; knownProjects?: string[];
   /** false: no agent session at boot. */
   autoSession?: boolean;
+  /** The other projects mapped at boot with their effective configs: the sandbox boots with what they want too. */
+  bootWants?: { projects: import('./project-policy.js').BootWant[]; keepOff: string[] };
 }
 export interface Generated {
   wsbPath: string; launchPath: string; launchId: string; sessionPath: string; memoryMb: number;
+  /** The config the sandbox boots with: the launch folder's plus what the other projects mapped at boot want. */
+  bootConfig: Config;
+  /** Boot settings turned on for another project (setting -> project). */
+  widened: Record<string, string>;
   mappings: ResolvedMapping[]; profile: ProfileResult; databases: DatabasePlan[];
   /** Project roots and other projects mapped with the launch folder. */
   projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };

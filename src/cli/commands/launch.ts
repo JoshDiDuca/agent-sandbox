@@ -12,7 +12,7 @@ import { generateSandbox } from '../../host/generate.js';
 import { findSecretFiles } from '../../host/secrets.js';
 import { checkRepo, saveRepoSnapshot } from '../../host/repo-guard.js';
 import { assertCanLaunch, insideSandbox, isSandboxRunning, probeHost, spawnDetached, startSandbox } from '../../host/platform.js';
-import { NeedsRestart, rememberProject, startRegistry } from '../../host/projects.js';
+import { NeedsRestart, readKnown, rememberProject, startRegistry } from '../../host/projects.js';
 import { ensureConpty, ensureTerminal } from '../../host/terminal.js';
 import { planView, saveActiveViews, viewSkipped, WorkspaceView } from '../../host/workspace-view/index.js';
 import { saveForwards } from '../../host/port-forward.js';
@@ -24,9 +24,12 @@ import { readSandboxStatus } from '../../shared/rundir.js';
 import { isWithin } from '../../shared/projects.js';
 import { syncBeforeLaunch, watcherRunning } from '../../sync/watcher.js';
 import type { Config, ResolvedRun, SandboxStatus, SessionStatus } from '../../core/types.js';
-import { protectionsOf } from '../../core/project-policy.js';
+import type { GenerateOptions } from '../../core/types.js';
+import { BOOT_SETTINGS, protectionsOf, type BootWant } from '../../core/project-policy.js';
+import { LOCAL_CONFIG_NAME } from '../../core/local-config.js';
 import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js';
-import { errMsg, fail, isRootPath, sleep } from '../../core/util.js';
+import { dirExists, errMsg, fail, fileExists, isRootPath, sleep } from '../../core/util.js';
+import { planBootProjects } from '../../host/launch/projects.js';
 import { syncAgentCommands } from './agent-commands.js';
 import { askYesNo } from '../../core/prompt.js';
 import { autoGuestWorkspace, placeInRoot, resolveRun } from '../../core/workspace.js';
@@ -253,6 +256,31 @@ const prepare = async (ctx: Context, run: ResolvedRun) => {
   return { account, terminal: terminal.message + '; pseudo console: ' + conpty, history, pruned: describePrune(pruneStorage(storageRoot)), filter };
 };
 
+/**
+ * The other projects mapped at boot (a restart's, --session's, projects.all's, and the known projects in your roots),
+ * with their effective configs: only approved .sandbox-config.json files and the looser values you allowed for each
+ * (nothing is asked here). The sandbox boots with what they want too (generate.ts).
+ */
+const bootWantsFor = async (ctx: Context, run: ResolvedRun, extraProjects: string[] | undefined): Promise<{ wants: NonNullable<GenerateOptions['bootWants']>; notes: string[] }> => {
+  const { roots } = run.config.projects;
+  const planned = planBootProjects({ run, packageRoot: ctx.packageRoot, extraProjects }).projects.map((p) => p.host);
+  const inRoots = readKnown(run.storageRoot).map((k) => k.host).filter((h) => roots.some((r) => isWithin(path.resolve(r), h)));
+  const folders = _.uniqBy([...(extraProjects ?? []).map((p) => path.resolve(p)), ...planned, ...inRoots], (f) => f.toLowerCase())
+    .filter((f) => !isWithin(run.workspaceHost, f) && dirExists(f)).slice(0, 200);
+  const projects: BootWant[] = [];
+  const notes: string[] = [];
+  for (const folder of folders) {
+    try {
+      const other = await resolveRun({ packageRoot: ctx.packageRoot, loaded: ctx.loaded, cwd: folder, workspace: folder, noAgent: true, noLocalConfig: false, trustConfig: false, scripts: [] });
+      projects.push({ name: path.basename(folder), config: other.config });
+    } catch (e) {
+      if (fileExists(path.join(folder, LOCAL_CONFIG_NAME))) notes.push('What ' + path.basename(folder) + ' asks for at boot is not included: ' + errMsg(e).split('\n')[0]);
+    }
+  }
+  const keepOff = BOOT_SETTINGS.filter((s) => _.get(ctx.loaded.config, s) === true && _.get(run.config, s) === false);
+  return { wants: { projects, keepOff }, notes };
+};
+
 /** A restart that adds a project: map these too, start no session at boot (restart.ts opens them), wait until ready. */
 export interface LaunchExtras { extraProjects?: string[]; autoSession?: boolean; waitUntilReady?: boolean }
 
@@ -283,9 +311,12 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   if (!generateOnly) assertCanLaunch();
   if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
   const prepared = generateOnly ? null : await prepare(ctx, run);
-  const generated = generateSandbox({ packageRoot, run, harnessArgs: options.passthrough, probe: probeHost(config, run.harnessName), extraProjects: extras.extraProjects, autoSession: extras.autoSession });
+  const bootWants = await bootWantsFor(ctx, run, extras.extraProjects);
+  const generated = generateSandbox({ packageRoot, run, harnessArgs: options.passthrough, probe: probeHost(config, run.harnessName), extraProjects: extras.extraProjects, autoSession: extras.autoSession, bootWants: bootWants.wants });
+  // What the sandbox boots with (the launch folder's settings plus what the other projects at boot want).
+  const booted = generated.bootConfig;
 
-  for (const note of [...run.notes, ...generated.projects.notes]) console.log(note);
+  for (const note of [...run.notes, ...bootWants.notes, ...generated.projects.notes]) console.log(note);
   const secretFiles = config.secrets.warnFiles ? findSecretFiles(run.workspaceHost) : [];
   if (secretFiles.length) {
     const shown = secretFiles.slice(0, 12).join(', ') + (secretFiles.length > 12 ? ', ...' : '');
@@ -294,7 +325,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   const { roots, projects } = generated.projects;
   table([
     ['Workspace', run.workspaceHost + '  ->  ' + config.guestWorkspace + (config.readOnly ? '  (read-only)' : '')],
-    ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   CPU: ' + (config.sandbox.cpuLimit === 'none' ? 'all' : 'max ' + config.sandbox.cpuLimit + '%') + '   Network: ' + config.sandbox.networking + (config.sandbox.headless ? '   HEADLESS' : '')],
+    ['Agent', run.harnessName + (prepared?.account ? '  (account: ' + prepared.account + ')' : '') + '   Memory: ' + generated.memoryMb + ' MB   CPU: ' + (config.sandbox.cpuLimit === 'none' ? 'all' : 'max ' + config.sandbox.cpuLimit + '%') + '   Network: ' + booted.sandbox.networking + (booted.sandbox.vGpu ? '   vGPU' : '') + (config.sandbox.headless ? '   HEADLESS' : '')],
     ['Node', run.versions.node.spec + ' (' + run.versions.node.source + ')   Python: ' + run.versions.python.spec + ' (' + run.versions.python.source + ')'],
     ...(prepared ? [['Ignored files', prepared.filter], ['Terminal', prepared.terminal], ['History', prepared.history], ['Cleanup', prepared.pruned]] : []),
     ['Toolchains', Object.entries(generated.toolchains).filter(([, d]) => d.on).map(([name, d]) => name + ' (' + d.reason + ')').join(', ') || 'Node only (nothing else used by this project)'],
@@ -314,7 +345,8 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   // Every folder the sandbox can write is snapshotted before it starts (the guard compares against this), and the
   // projects it starts with are recorded host-side for the commands that run later.
   saveRepoSnapshot(dataPath, run.workspaceHost, projects.map((p) => p.host), roots.map((r) => r.host));
-  startRegistry(storageRoot, { launchId: generated.launchId, protections: protectionsOf(config), primary: { host: run.workspaceHost, guest: config.guestWorkspace }, roots, boot: projects });
+  startRegistry(storageRoot, { launchId: generated.launchId, protections: protectionsOf(booted), primary: { host: run.workspaceHost, guest: config.guestWorkspace }, roots, boot: projects,
+    atBoot: { memoryMb: generated.memoryMb, mappings: generated.mappings, widened: generated.widened } });
   rememberProject(storageRoot, run.workspaceHost);
   startLife(storageRoot, dataPath, config.sandbox.keepAwake);
   startSandbox(generated.wsbPath);

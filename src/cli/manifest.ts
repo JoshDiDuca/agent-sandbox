@@ -69,7 +69,7 @@ const SANDBOX_OPTIONS: OptionSpecT[] = [
   bool('--window', 'show the sandbox window even if config says headless', { advanced: true }),
   bool('--trust-config', 'approve the folder\'s .sandbox-config.json without asking', { advanced: true }),
   bool('--no-local-config', 'ignore the folder\'s .sandbox-config.json', { advanced: true }),
-  bool('--yes', 'when this folder is not in the running sandbox and adding it needs a restart, restart without asking', { noMenu: true }),
+  bool('--yes', 'when this folder is not in the running sandbox, or wants what it started without (vGPU, folders), restart without asking', { noMenu: true }),
 ];
 const AGENT_OPTIONS: OptionSpecT[] = [
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
