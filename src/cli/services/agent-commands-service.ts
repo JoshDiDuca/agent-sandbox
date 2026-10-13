@@ -1,0 +1,73 @@
+// "Agent commands" (Beta): typing claude, codex ... on this PC starts them in a hidden sandbox. Never prints.
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadConfig, userConfigPath } from '../../core/config/index.js';
+import type { Config } from '../../core/types.js';
+import { fail } from '../../core/util/index.js';
+import {
+  agentCommands,
+  commandsDir,
+  reconcileAgentCommands,
+  type Reconciled,
+} from '../../host/agent-commands/index.js';
+import { insideSandbox } from '../../host/sandbox/index.js';
+import { writeFileAtomic } from '../../shared/io/index.js';
+import type { Context } from '../commands/context.js';
+import { editConfigText } from '../menu/settings/index.js';
+
+export type AgentCommand = ReturnType<typeof agentCommands>[number];
+
+export interface AgentCommandsStatus {
+  readonly enabled: boolean;
+  /** Folder with the forwarding commands. */
+  readonly dir: string;
+  /** Agents found on this PC's PATH. */
+  readonly found: AgentCommand[];
+}
+
+export class AgentCommandsService {
+  constructor(private readonly ctx: Context) {}
+
+  /** Agent commands change this PC's PATH, so they are set up from the PC, not inside the sandbox. */
+  assertOnPc(): void {
+    if (insideSandbox())
+      fail(
+        "Agent commands change your PC's PATH, so they are set up from your PC, not inside the sandbox.",
+        'Run sandbox agent-commands on in a terminal on your PC.',
+      );
+  }
+
+  status(): AgentCommandsStatus {
+    const { config } = this.ctx.loaded;
+    return {
+      enabled: config.agentCommands.enabled,
+      dir: commandsDir(this.ctx.storageRoot),
+      found: agentCommands(config, this.ctx.storageRoot),
+    };
+  }
+
+  /** Writes agentCommands.enabled to your config file, then brings this PC in line with it. */
+  setEnabled(on: boolean): Reconciled | null {
+    const file = this.ctx.loaded.configPath ?? userConfigPath();
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    const edited = editConfigText(text, ['agentCommands', 'enabled'], on ? true : undefined);
+    if ('problems' in edited)
+      fail(
+        'Could not change ' + file + ': ' + edited.problems.join('; '),
+        'Fix the file with sandbox config check, then try again.',
+      );
+    writeFileAtomic(file, edited.text);
+    return this.reconcile(loadConfig(file).config);
+  }
+
+  /** Brings this PC in line with agentCommands. Null inside a sandbox (nothing to change there). */
+  reconcile(config: Config): Reconciled | null {
+    if (insideSandbox()) return null;
+    return reconcileAgentCommands(
+      config,
+      this.ctx.storageRoot,
+      process.execPath,
+      path.join(this.ctx.packageRoot, 'dist', 'bin', 'sandbox.js'),
+    );
+  }
+}
