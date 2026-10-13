@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { SYSTEM } from '../../shared/system.js';
 import { isWin } from '../../core/util/index.js';
 import { refuseInSelfTest } from '../test-guard.js';
-import { Iso } from './life-record.js';
+
+export const Iso = z.string().max(40);
 
 // ---- Windows' System log ----------------------------------------------------------------------------------------
 

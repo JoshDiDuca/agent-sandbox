@@ -5,9 +5,7 @@ import path from 'node:path';
 import { syncClaudeMem } from '../sync/index.js';
 import { readSyncState, syncStatePath, type SyncState } from '../sync/index.js';
 import { syncHistoryIn, syncHistoryOut, translatePaths } from '../sync/index.js';
-import { beatLife, endLife, startLife } from '../host/life/index.js';
-import { explainStop, type StopEvent } from '../host/life/index.js';
-import { lastStopWarning } from '../host/life/index.js';
+import { explainStop, LifeRecord, type StopEvent } from '../host/life/index.js';
 import type { Suite } from './support/suite.js';
 
 export const syncSuite: Suite = {
@@ -257,16 +255,13 @@ export const syncSuite: Suite = {
     const lifeRoot = t.at('life-storage');
     const lifeData = path.join(lifeRoot, 'data', 'testdata');
     const noEvents = (): null => null;
-    t.equal(lastStopWarning(lifeRoot, lifeData, false, noEvents), null, 'no record: nothing to say');
-    startLife(lifeRoot, lifeData, true, new Date('2026-10-12T20:16:00Z'));
-    beatLife(lifeRoot, lifeData, new Date('2026-10-13T02:09:00Z'));
-    t.equal(
-      lastStopWarning(lifeRoot, lifeData, true, noEvents),
-      null,
-      'its watcher still runs: the sandbox has not ended',
-    );
+    const life = new LifeRecord(lifeRoot, lifeData);
+    t.equal(life.lastStopWarning(false, noEvents), null, 'no record: nothing to say');
+    life.start(true, new Date('2026-10-12T20:16:00Z'));
+    life.beat(new Date('2026-10-13T02:09:00Z'));
+    t.equal(life.lastStopWarning(true, noEvents), null, 'its watcher still runs: the sandbox has not ended');
     let since = '';
-    const warning = lastStopWarning(lifeRoot, lifeData, false, (s) => {
+    const warning = life.lastStopWarning(false, (s) => {
       since = s;
       return { kind: 'updates', at: '2026-10-13T02:10:30Z', text: 'Windows restarted this PC to install updates' };
     });
@@ -281,22 +276,18 @@ export const syncSuite: Suite = {
       '2026-10-13T02:09:00.000Z',
       'the System log is read from the last time the sandbox was seen running',
     );
-    t.equal(lastStopWarning(lifeRoot, lifeData, false, noEvents), null, 'said once only');
-    startLife(lifeRoot, lifeData, true);
-    endLife(lifeRoot, lifeData, null);
-    t.equal(
-      lastStopWarning(lifeRoot, lifeData, false, noEvents),
-      null,
-      'closed while this PC ran (by you): nothing to say',
-    );
-    startLife(lifeRoot, lifeData, true);
-    endLife(lifeRoot, lifeData, {
+    t.equal(life.lastStopWarning(false, noEvents), null, 'said once only');
+    life.start(true);
+    life.end(null);
+    t.equal(life.lastStopWarning(false, noEvents), null, 'closed while this PC ran (by you): nothing to say');
+    life.start(true);
+    life.end({
       kind: 'sleep',
       at: '2026-10-13T02:10:00Z',
       text: 'this PC went to sleep or hibernated',
     });
     t.includes(
-      lastStopWarning(lifeRoot, lifeData, false, noEvents) ?? '',
+      life.lastStopWarning(false, noEvents) ?? '',
       'sandbox.keepAwake',
       'ended by sleep: the next launch names keepAwake',
     );

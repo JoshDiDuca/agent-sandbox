@@ -20,7 +20,7 @@ import { errMsg } from '../../../core/util/index.js';
 import { c } from '../../output/index.js';
 import { working } from '../../output/index.js';
 import { type Context } from '../context.js';
-import { lastStopWarning } from '../../../host/life/index.js';
+import { LifeRecord } from '../../../host/life/index.js';
 import { UPDATE_RESTART_WARNING, updateRestartPending } from '../../../host/life/index.js';
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
@@ -107,7 +107,7 @@ export const prepare = async (ctx: Context, run: ResolvedRun) => {
           ' change(s) the last sandbox made that could run code on this PC (see sandbox status).',
       ),
     );
-  const stopped = lastStopWarning(storageRoot, dataPath, watcherRunning(dataPath));
+  const stopped = new LifeRecord(storageRoot, dataPath).lastStopWarning(watcherRunning(dataPath));
   if (stopped) console.warn(c.yellow(stopped));
   if (updateRestartPending()) console.warn(c.yellow(UPDATE_RESTART_WARNING));
   new SandboxChannel(dataPath).reset();

@@ -14,9 +14,7 @@ import { readForwards, sandboxAddress, startPortForwards } from '../host/network
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
 import { sizeOf } from '../core/disk.js';
-import { beatLife, endLife, readLife } from '../host/life/index.js';
-import { causeSince } from '../host/life/index.js';
-import { keepAwake } from '../host/life/index.js';
+import { causeSince, KeepAwake, LifeRecord } from '../host/life/index.js';
 import { syncBack } from './sync-cycle.js';
 
 const WATCH_INTERVAL_MS = 60 * 1000;
@@ -110,18 +108,19 @@ export const watch = async (dataPath: string): Promise<void> => {
     }
   });
   // sandbox.keepAwake, and the life record that tells the next launch how this run ended (host/stops.ts).
-  const awake = readLife(storageOf(dataPath), dataPath)?.keepAwake ? keepAwake(process.pid) : null;
+  const life = new LifeRecord(storageOf(dataPath), dataPath);
+  const awake = life.read()?.keepAwake ? KeepAwake.start(process.pid) : null;
   try {
     await sleep(30000);
     while (isSandboxRunning()) {
-      beatLife(storageOf(dataPath), dataPath);
+      life.beat();
       sync(false);
       await sleep(WATCH_INTERVAL_MS);
     }
     try {
-      const life = readLife(storageOf(dataPath), dataPath);
-      const cause = life ? causeSince(life.lastSeen) : null;
-      endLife(storageOf(dataPath), dataPath, cause);
+      const last = life.read();
+      const cause = last ? causeSince(last.lastSeen) : null;
+      life.end(cause);
       if (cause) note('sandbox ended: ' + cause.text);
     } catch (e) {
       note('could not record how the sandbox ended: ' + errMsg(e));
@@ -129,7 +128,7 @@ export const watch = async (dataPath: string): Promise<void> => {
     await sleep(3000);
     sync(true);
   } finally {
-    awake?.kill();
+    awake?.stop();
     stops.forEach((stop) => stop());
     stopForwards();
     stopMarking();

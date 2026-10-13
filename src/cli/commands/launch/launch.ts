@@ -20,7 +20,7 @@ import { c } from '../../output/index.js';
 import { requireOnPc, type Context } from '../context.js';
 import { table } from '../../output/index.js';
 import _ from 'lodash';
-import { startLife } from '../../../host/life/index.js';
+import { LifeRecord } from '../../../host/life/index.js';
 import { startIntoRunning, launchIntoRunning, contextFor, waitForBoot, attachHere, waitForStart } from './running.js';
 import { maybeAddRoot } from './add-root.js';
 import { prepare, firstBoot, FIRST_BOOT } from './prepare.js';
@@ -206,7 +206,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
     boot: projects,
   });
   new KnownProjects(storageRoot).remember(run.workspaceHost);
-  startLife(storageRoot, dataPath, config.sandbox.keepAwake);
+  new LifeRecord(storageRoot, dataPath).start(config.sandbox.keepAwake);
   startSandbox(generated.wsbPath);
   // Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently.
   if (!watcherRunning(dataPath))

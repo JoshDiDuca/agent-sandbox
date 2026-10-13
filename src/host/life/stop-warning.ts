@@ -1,5 +1,5 @@
-import { type StopKind, causeSince } from './stop-events.js';
-import { readLife, writeLife } from './life-record.js';
+import type { StopCause, StopKind } from './stop-events.js';
+import type { Life } from './life-record.js';
 
 const ADVICE: Record<StopKind, string> = {
   updates:
@@ -17,19 +17,8 @@ const ADVICE: Record<StopKind, string> = {
 const when = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
-/**
- * At launch: one warning when the last sandbox ended without anyone closing it (the PC restarted, crashed, slept or ran
- * out of memory), then never again for that run. `watcherAlive` = its watcher is still running (then it did not end).
- */
-export const lastStopWarning = (
-  storageRoot: string,
-  dataPath: string,
-  watcherAlive: boolean,
-  find = causeSince,
-): string | null => {
-  const life = readLife(storageRoot, dataPath);
-  if (!life || life.reported || watcherAlive) return null;
-  writeLife(storageRoot, dataPath, { ...life, reported: true });
+/** What to tell about a sandbox that ended without anyone closing it (null: it was closed normally). */
+export function stopWarning(life: Life, find: (since: string) => StopCause | null): string | null {
   if (life.ended && !life.ended.cause) return null;
   const cause = life.ended ? life.ended.cause : find(life.lastSeen);
   const what = cause
@@ -42,4 +31,4 @@ export const lastStopWarning = (
     what +
     ' Agent conversations are kept: /resume in Claude picks one up.'
   );
-};
+}

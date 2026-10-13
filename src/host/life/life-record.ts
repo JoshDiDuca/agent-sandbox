@@ -4,11 +4,11 @@
 // next launch reads Windows' System log from that moment on and says what happened, and what keeps it from happening.
 import path from 'node:path';
 import { z } from 'zod';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
-import type { StopCause } from './stop-events.js';
+import { JsonFile } from '../../shared/io/index.js';
+import { causeSince, Iso, type StopCause } from './stop-events.js';
+import { stopWarning } from './stop-warning.js';
 
-export const Iso = z.string().max(40);
-const Life = z.object({
+const LifeSchema = z.object({
   started: Iso,
   lastSeen: Iso,
   keepAwake: z.boolean(),
@@ -26,27 +26,46 @@ const Life = z.object({
     .optional(),
   reported: z.boolean().optional(),
 });
-type LifeT = z.infer<typeof Life>;
+export type Life = z.output<typeof LifeSchema>;
 
-const lifeFile = (storageRoot: string, dataPath: string): string =>
-  path.join(storageRoot, 'sync', path.basename(dataPath) + '-life.json');
-export const readLife = (storageRoot: string, dataPath: string): LifeT | null =>
-  readValid(Life, lifeFile(storageRoot, dataPath));
-export const writeLife = (storageRoot: string, dataPath: string, life: LifeT): void =>
-  writeJsonAtomic(lifeFile(storageRoot, dataPath), life);
+/** <storage>\sync\<data>-life.json: how the running (or last) sandbox lived and ended. */
+export class LifeRecord {
+  private readonly file: JsonFile<Life>;
 
-/** At launch: a fresh record (the previous one has been reported by then). */
-export const startLife = (storageRoot: string, dataPath: string, keepAwake: boolean, now = new Date()): void =>
-  writeLife(storageRoot, dataPath, { started: now.toISOString(), lastSeen: now.toISOString(), keepAwake });
+  constructor(storageRoot: string, dataPath: string) {
+    this.file = new JsonFile(LifeSchema, path.join(storageRoot, 'sync', path.basename(dataPath) + '-life.json'));
+  }
 
-/** Every minute while the sandbox runs. */
-export const beatLife = (storageRoot: string, dataPath: string, now = new Date()): void => {
-  const life = readLife(storageRoot, dataPath);
-  if (life && !life.ended) writeLife(storageRoot, dataPath, { ...life, lastSeen: now.toISOString() });
-};
+  read(): Life | null {
+    return this.file.read();
+  }
 
-/** The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory. */
-export const endLife = (storageRoot: string, dataPath: string, cause: StopCause | null, now = new Date()): void => {
-  const life = readLife(storageRoot, dataPath);
-  if (life && !life.ended) writeLife(storageRoot, dataPath, { ...life, ended: { at: now.toISOString(), cause } });
-};
+  /** At launch: a fresh record (the previous one has been reported by then). */
+  start(keepAwake: boolean, now = new Date()): void {
+    this.file.write({ started: now.toISOString(), lastSeen: now.toISOString(), keepAwake });
+  }
+
+  /** Every minute while the sandbox runs. */
+  beat(now = new Date()): void {
+    const life = this.read();
+    if (life && !life.ended) this.file.write({ ...life, lastSeen: now.toISOString() });
+  }
+
+  /** The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory. */
+  end(cause: StopCause | null, now = new Date()): void {
+    const life = this.read();
+    if (life && !life.ended) this.file.write({ ...life, ended: { at: now.toISOString(), cause } });
+  }
+
+  /**
+   * At launch: one warning when the last sandbox ended without anyone closing it (the PC restarted, crashed, slept or
+   * ran out of memory), then never again for that run. `watcherAlive` = its watcher is still running (then it did not
+   * end).
+   */
+  lastStopWarning(watcherAlive: boolean, find = causeSince): string | null {
+    const life = this.read();
+    if (!life || life.reported || watcherAlive) return null;
+    this.file.write({ ...life, reported: true });
+    return stopWarning(life, find);
+  }
+}
