@@ -102,6 +102,7 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
     substDrives: substDrives(mappings.map((m) => m.guest)),
     cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
     apps: config.apps,
+    auditProcesses: config.audit.enabled && config.audit.processes,
   };
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);

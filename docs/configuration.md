@@ -98,6 +98,29 @@ These are applied inside the sandbox, where the agent is an administrator: they 
 tools it runs) in bounds, but a determined one could undo them. `sandbox.networking: false` is the only hard isolation.
 A project's `.sandbox-config.json` may add `blockHosts` and turn on `blockPrivateRanges`, nothing else here.
 
+## Audit log
+
+`audit.enabled: true` (menu: Settings > Security & privacy > Audit log) keeps a log on your PC of what happened in your
+sandboxes. It lives in `<storage>\audit\<data set>`, where the sandbox cannot reach it.
+
+- **Programs started** in the sandbox, with their command lines (`audit.processes`): Windows' own process auditing,
+  so it covers every agent and everything they start. Windows' background programs are left out.
+- **Files changed** in the project while the sandbox runs (`audit.files`), seen from your PC.
+- **Sessions** starting and ending, and what the **repo guard** caught.
+
+It stays small: one short line per event, the same event within a minute is one line with a count, at most 300 lines a
+minute (the rest is counted), finished days are compressed, and days past `audit.days` (14) or beyond `audit.maxMb`
+(100 MB) are deleted, oldest first.
+
+```powershell
+sandbox audit                    # today
+sandbox audit --days 7 --kind proc --grep "git push"
+sandbox audit --json             # for scripts
+```
+
+What the sandbox reports about the programs it ran is taken as it says (an agent with admin rights there could leave
+things out); file changes, sessions and repo-guard findings are observed from your PC.
+
 ## Git-ignored files
 
 `workspaceFilter.enabled: true` keeps what your `.gitignore` lists out of the sandbox: `.env` files, your

@@ -35,7 +35,7 @@ design decision first).
 
 | Item | Status |
 | --- | --- |
-| Audit log (optional): commands agents run, files changed in the workspace, sessions, repo-guard findings; kept *n* days, size-capped, compressed daily | planned |
+| Audit log (optional): programs started in the sandbox (Windows process auditing, every agent), files changed, sessions, repo-guard findings; kept *n* days, size-capped, compressed daily; `sandbox audit` | done |
 | Contained storage (optional): persisted data in one VHDX disk image, mounted only while a sandbox runs (nothing it wrote is reachable on the PC at rest), with a size cap; needs one admin prompt per launch | idea: test mounting in a sandbox first |
 | Smaller containment options without admin: "downloaded from the internet" mark on everything the sandbox wrote, a size cap on persisted data, read-only mappings by default | planned |
 

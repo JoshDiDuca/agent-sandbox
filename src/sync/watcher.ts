@@ -12,6 +12,7 @@ import { checkRepo } from '../host/repo-guard.js';
 import { isSandboxRunning } from '../host/platform.js';
 import { readActiveViews, WorkspaceView } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/port-forward.js';
+import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
 
@@ -96,7 +97,7 @@ export const watch = async (dataPath: string): Promise<void> => {
   const note = (message: string): void => { try { fs.appendFileSync(watcherLog(dataPath), new Date().toISOString() + ' ' + message + '\n'); } catch { /* ignore */ } };
   const sync = (final: boolean): void => {
     try {
-      for (const finding of checkRepo(dataPath)) note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail);
+      for (const finding of checkRepo(dataPath)) { note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail); audit?.guard(finding.kind + ': ' + finding.detail); }
     } catch (e) { note('repo guard failed: ' + errMsg(e)); }
     try {
       const s = syncBack(dataPath, final);
@@ -104,6 +105,11 @@ export const watch = async (dataPath: string): Promise<void> => {
     } catch (e) { note('sync failed: ' + errMsg(e)); }
   };
   // workspaceFilter: each filtered project is kept in step with its view from now until the sandbox closes.
+  // audit.enabled: programs, files, sessions and guard findings into the host-only audit log.
+  const auditSettings = readAuditSettings(storageOf(dataPath), dataPath);
+  const audit = auditSettings?.enabled ? new AuditCollector(dataPath, storageOf(dataPath), auditSettings) : null;
+  audit?.start();
+  const auditTimer = audit ? setInterval(() => { try { audit.flush(); } catch (e) { note('audit: ' + errMsg(e)); } }, 10000) : null;
   // network.forwardPorts: localhost on this PC reaches servers in the sandbox while it runs.
   const stopForwards = startPortForwards(readForwards(storageOf(dataPath), dataPath), () => sandboxAddress(dataPath), (m) => note('port forward: ' + m));
   const views = readActiveViews(storageOf(dataPath), dataPath);
@@ -118,6 +124,8 @@ export const watch = async (dataPath: string): Promise<void> => {
   } finally {
     stops.forEach((stop) => stop());
     stopForwards();
+    if (auditTimer) clearInterval(auditTimer);
+    try { audit?.stop(); } catch (e) { note('audit: ' + errMsg(e)); }
     for (const v of views) {
       try { const s = new WorkspaceView(v).syncAll(); note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in'); } catch (e) { note('workspace ' + v.host + ': final sync failed: ' + errMsg(e)); }
     }

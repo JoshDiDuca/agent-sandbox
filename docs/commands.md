@@ -108,6 +108,9 @@ Changes to what is mapped apply from the next start.
 
 ## Diagnostics
 
+`sandbox audit [--days n] [--kind proc|file|session|guard] [--grep text]` reads the [audit log](configuration.md#audit-log) (`audit.enabled`).
+
+
 | | |
 |---|---|
 | `sandbox setup` | check this PC (edition, virtualization, Windows Sandbox, RAM, disk, Node) and offer fixes |

@@ -17,6 +17,8 @@ export interface CliOptions {
   all: boolean;
   /** launch --session <agent>@<folder> (repeatable): several sessions at once, folders made absolute. */
   sessions: SessionWant[];
+  /** audit: only events of this kind, and containing this text. */
+  kind?: string; grep?: string;
 }
 
 /** One session to start: an agent in a folder, with arguments of its own (after the ones given after --). */
@@ -144,7 +146,9 @@ export const parseCli = (argv: string[], wrapper = false): CliOptions => {
     all: Boolean(o.all),
     sessions: ((o.session as string[] | undefined) ?? []).map((s) => parseSessionWant(s)),
     timeout: (o.timeout as number | undefined) ?? 600,
-    days: (o.days as number | undefined) ?? 7,
+    days: (o.days as number | undefined) ?? (name === 'audit' ? 1 : 7),
+    kind: o.kind as string | undefined,
+    grep: o.grep as string | undefined,
   };
 };
 

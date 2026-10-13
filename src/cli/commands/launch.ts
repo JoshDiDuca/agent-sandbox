@@ -16,6 +16,7 @@ import { NeedsRestart, rememberProject, startRegistry } from '../../host/project
 import { ensureConpty, ensureTerminal } from '../../host/terminal.js';
 import { planView, saveActiveViews, viewSkipped, WorkspaceView } from '../../host/workspace-view/index.js';
 import { saveForwards } from '../../host/port-forward.js';
+import { saveAuditSettings } from '../../host/audit/collect.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../host/window.js';
 import { readSandboxStatus } from '../../shared/rundir.js';
 import { isWithin } from '../../shared/projects.js';
@@ -209,6 +210,7 @@ const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<str
   const plan = planView(run.config, ctx.storageRoot, run.workspaceHost);
   saveActiveViews(ctx.storageRoot, ctx.dataPath, plan ? [plan.options] : []);
   saveForwards(ctx.storageRoot, ctx.dataPath, run.config.sandbox.networking ? run.config.network.forwardPorts : []);
+  saveAuditSettings(ctx.storageRoot, ctx.dataPath, { ...run.config.audit, projects: [run.workspaceHost] });
   if (!plan) return viewSkipped(run.config, run.workspaceHost) ?? 'off (git-ignored files are visible in the sandbox; workspaceFilter.enabled keeps them out)';
   const stats = await working('Preparing the workspace without its git-ignored files', () => new WorkspaceView(plan.options).prepare());
   return 'on: git-ignored files stay on this PC' + (stats.toView || stats.toHost ? ' (' + stats.toView + ' copied in, ' + stats.toHost + ' out' + (stats.conflicts ? ', ' + stats.conflicts + ' conflicts kept next to the file' : '') + ')' : '') + '; ' + plan.options.view;

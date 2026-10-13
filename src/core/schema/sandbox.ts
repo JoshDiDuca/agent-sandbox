@@ -41,6 +41,14 @@ export const Network = z.strictObject({
   proxy: z.string().regex(/^(https?:\/\/[^\s]+)?$/, 'http://host:port').describe('An HTTP proxy the sandbox uses to reach the internet (HTTP_PROXY / HTTPS_PROXY for everything in it), e.g. http://proxy.corp:8080. Empty = none.'),
 });
 
+export const Audit = z.strictObject({
+  enabled: z.boolean().describe('Keep an audit log on this PC of what happened in your sandboxes: programs started (with their command lines), files changed in the project, sessions, and what the repo guard caught. The sandbox cannot change it. Read it with sandbox audit.'),
+  days: z.number().int().min(1).max(365).describe('Days the audit log is kept.'),
+  maxMb: z.number().int().min(5).max(5000).describe('Most space the audit log may take, in MB (older days go first). Days before today are compressed.'),
+  processes: z.boolean().describe('Record every program started in the sandbox with its command line (Windows process auditing; repeated runs are counted, not listed).'),
+  files: z.boolean().describe('Record the files changed in the project while the sandbox runs.'),
+});
+
 export const WorkspaceFilter = z.strictObject({
   enabled: z.boolean().describe('Keep what your .gitignore lists (.env files, node_modules, build output ...) out of the sandbox. The sandbox works on a copy of the project without those files, kept in step with it both ways within about a second; what it creates that is ignored (its own node_modules, builds) stays in the sandbox. Git works as usual. Off = the project folder itself is mapped.'),
   exclude: z.array(z.string().max(500)).describe('Also keep these out, as .gitignore patterns, e.g. secrets/, *.pem, data/private/.'),

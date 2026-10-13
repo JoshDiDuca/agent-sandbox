@@ -92,4 +92,6 @@ export interface GuestSession {
   cpuLimitPercent?: number | null;
   /** Apps to install (catalogue ids and your own programs); missing in launch folders of older versions. */
   apps?: Config['apps'];
+  /** audit.enabled and audit.processes: the sandbox reports the programs it starts (host keeps the log). */
+  auditProcesses?: boolean;
 }

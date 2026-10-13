@@ -6,7 +6,7 @@ import { Name, SchemaRef, Strings, toggle } from './common.js';
 import { Databases } from './databases.js';
 import { Harness } from './harness.js';
 import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
-import { Downloads, Git, GuestWorkspace, Mapping, Network, Provisioning, Sandbox, WorkspaceFilter } from './sandbox.js';
+import { Audit, Downloads, Git, GuestWorkspace, Mapping, Network, Provisioning, Sandbox, WorkspaceFilter } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
 import { Apps } from './apps.js';
 import { Projects } from './projects.js';
@@ -17,6 +17,7 @@ export const Config = z.strictObject({
   guestWorkspace: GuestWorkspace,
   readOnly: z.boolean().describe('Map the workspace read-only.'),
   workspaceFilter: WorkspaceFilter,
+  audit: Audit,
   mappings: z.array(Mapping).describe('Extra folders from this PC.'),
   sandbox: Sandbox,
   storage: z.strictObject({

@@ -16,6 +16,7 @@ import { ensurePtyHost } from './ptyhost.js';
 import { pruneToolLeftovers } from './toolchains/leftovers.js';
 import { wanted } from './toolchains/common.js';
 import { configureVscode } from './toolchains/vscode.js';
+import { enableProcessAudit } from './audit.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
 import { saveBootEnv } from './boot-env.js';
@@ -59,6 +60,7 @@ const main = async (): Promise<void> => {
   if (isWin && !dryRun && session.attach.enabled) await soft('Building the session host', () => { ptyHost = ensurePtyHost(); });
   let lan: LanState = session.networking ? 'open' : 'offline';
   await soft('Private-network blocking', async () => { lan = await applyNetworkPolicy(ptyHost); });
+  await soft('Audit', enableProcessAudit);
 
   step(2, 'Pre-provision hooks and desktop');
   runHooks('pre-provision', process.env);

@@ -45,7 +45,7 @@ const TITLES: Record<string, string> = {
   restart: 'Restart this project\'s agents', status: 'Sandbox status', db: 'Databases', exec: 'Run a command inside', stop: 'Stop the sandbox', projects: 'Projects',
   show: 'Show the sandbox window', hide: 'Hide the sandbox window', account: 'Claude accounts', data: 'Saved data', clean: 'Clean up old files', sync: 'Sync history now',
   logs: 'Logs', setup: 'Set up this PC', doctor: 'Doctor (check this PC)', repair: 'Repair', 'self-test': 'Self-test', generate: 'Preview a start (no sandbox)',
-  config: 'Config file', 'agent-commands': 'Agent commands (Beta)', launch: 'Start an agent',
+  config: 'Config file', audit: 'Audit log', 'agent-commands': 'Agent commands (Beta)', launch: 'Start an agent',
 };
 const CATEGORY_OF_GROUP: Record<string, string> = { Agents: 'start', Sandbox: 'sandbox', Sessions: 'sessions', Accounts: 'accounts', Data: 'data', Health: 'health', Config: 'settings' };
 

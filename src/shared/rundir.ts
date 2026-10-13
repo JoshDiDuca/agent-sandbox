@@ -24,6 +24,8 @@ export const runPaths = (dataDir: string) => {
     responses: path.join(run, 'responses'),
     sessions: path.join(run, 'sessions'),
     projects: path.join(run, 'projects'),
+    /** audit.processes: programs the sandbox started, in small .jsonl files the host takes in and deletes. */
+    audit: path.join(run, 'audit'),
     request: file('requests'),
     response: file('responses'),
     session: file('sessions'),

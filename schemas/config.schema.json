@@ -58,6 +58,36 @@
       },
       "additionalProperties": false
     },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Keep an audit log on this PC of what happened in your sandboxes: programs started (with their command lines), files changed in the project, sessions, and what the repo guard caught. The sandbox cannot change it. Read it with sandbox audit."
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "description": "Days the audit log is kept."
+        },
+        "maxMb": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 5000,
+          "description": "Most space the audit log may take, in MB (older days go first). Days before today are compressed."
+        },
+        "processes": {
+          "type": "boolean",
+          "description": "Record every program started in the sandbox with its command line (Windows process auditing; repeated runs are counted, not listed)."
+        },
+        "files": {
+          "type": "boolean",
+          "description": "Record the files changed in the project while the sandbox runs."
+        }
+      },
+      "additionalProperties": false
+    },
     "mappings": {
       "type": "array",
       "items": {

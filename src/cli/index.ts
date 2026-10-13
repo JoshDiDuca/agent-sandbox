@@ -34,6 +34,7 @@ const HANDLERS: Record<string, Handler> = {
   projects: commands.projects,
   sync: commands.sync,
   logs: commands.logs,
+  audit: commands.audit,
   clean: commands.clean,
   config: commands.config,
   doctor: commands.doctor,

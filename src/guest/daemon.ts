@@ -8,6 +8,7 @@ import { readSession, scanRequests } from '../shared/rundir.js';
 import { saveClaudeMem } from './setup/claude.js';
 import { execCommand } from './daemon/exec.js';
 import { startRelays } from './daemon/relays.js';
+import { startProcessCollector } from './audit.js';
 import { prepareProject, restartSessions, startSession } from './daemon/session.js';
 import { live, respond, safely } from './daemon/state.js';
 import { dataDir, errMsg, log, run, warn } from './env.js';
@@ -46,4 +47,5 @@ const loop = (): void => {
 
 log('Session daemon started (pid ' + process.pid + ').');
 safely('port forwards', startRelays);
+safely('audit', startProcessCollector);
 loop();

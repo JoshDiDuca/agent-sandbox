@@ -106,6 +106,11 @@ export const COMMANDS: CommandSpecT[] = z.array(CommandSpec).parse([
   { name: 'data', summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it', group: 'Data', args: [{ name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] }, { name: 'targets', description: 'what to clean, e.g. tools/go databases logs', required: false, variadic: true, when: 'clean' }], options: [bool('--yes', 'do not ask before deleting', { noMenu: true })], json },
   { name: 'clean', summary: 'delete old launch folders, logs and leftovers', group: 'Data', args: [], options: [{ flag: '--days', type: 'number', value: 'n', description: 'launch folders older than this many days', default: 7 }] },
   { name: 'sync', summary: 'copy conversation history back to this PC now', group: 'Data', args: [], options: [] },
+  {
+    name: 'audit', summary: 'what happened in your sandboxes: programs started, files changed, sessions, repo guard (audit.enabled)', group: 'Health', json,
+    args: [],
+    options: [{ flag: '--days', type: 'number', value: 'n', description: 'the last n days (default: today)', default: 1 }, text('--kind', 'kind', 'only proc, file, session or guard events', { choices: ['proc', 'file', 'session', 'guard'] }), text('--grep', 'text', 'only events containing this text')],
+  },
   { name: 'logs', summary: 'print the newest sandbox log', group: 'Health', args: [], options: [bool('--follow', 'keep printing new lines', { short: '-f' })] },
   { name: 'setup', summary: 'check this PC can run Windows Sandbox and offer to turn it on', group: 'Health', args: [], options: [] },
   { name: 'doctor', summary: 'check this PC and show what will be copied or downloaded', group: 'Health', args: [], options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })] },

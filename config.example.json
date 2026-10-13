@@ -8,6 +8,13 @@
     "exclude": [],
     "include": []
   },
+  "audit": {
+    "enabled": false,
+    "days": 14,
+    "maxMb": 100,
+    "processes": true,
+    "files": true
+  },
   "mappings": [],
   "sandbox": {
     "memoryMb": "auto",
