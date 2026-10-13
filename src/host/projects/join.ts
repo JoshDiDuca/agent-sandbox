@@ -18,7 +18,7 @@ import { ProjectRegistry, type RegistryEntry } from './registry.js';
 import { projectMapper, type ProjectMapper } from './mapper.js';
 import { KnownProjects } from './known.js';
 import { stageScripts } from '../launch/index.js';
-import { addRepoSnapshot } from '../guard/index.js';
+import { RepoGuardStore } from '../guard/index.js';
 
 /** The launch folder of the running sandbox (host-only storage; its id comes from the guest, so it is checked). */
 export const runningLaunchPath = (storageRoot: string, dataPath: string): string | null => {
@@ -99,7 +99,7 @@ export const joinRunning = async (o: {
   // Guarded from now on. A folder the sandbox could already write (inside a root, or mapped at boot) and that has no
   // snapshot from the launch gets an empty one: what is there now may have been planted, so it counts as new.
   // Anything else is snapshotted before it becomes visible.
-  addRepoSnapshot(o.dataPath, root, {
+  new RepoGuardStore(o.dataPath).add(root, {
     empty: Boolean(here) || Boolean(new ProjectRegistry(o.storageRoot).rootHere(root)),
   });
   const entry = mapper.register(root);

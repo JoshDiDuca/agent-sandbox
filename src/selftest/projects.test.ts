@@ -12,7 +12,7 @@ import { projectSpec, joinRunning } from '../host/projects/index.js';
 import { allProjectsToMap, KnownProjects } from '../host/projects/index.js';
 import { NeedsRestart, projectMapper } from '../host/projects/index.js';
 import { ProjectRegistry } from '../host/projects/index.js';
-import { checkRepo, saveRepoSnapshot } from '../host/guard/index.js';
+import { RepoGuardStore } from '../host/guard/index.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/sandbox/index.js';
 import { baseEnvFor } from '../guest/boot/project-env.js';
 import {
@@ -445,13 +445,13 @@ export const projectsSuite: Suite = {
     const old = path.join(rootG, 'old');
     t.write(path.join(old, '.git', 'hooks', 'pre-commit'), 'mine');
     t.write(path.join(old, '.git', 'config'), '[core]\n\tbare = false\n');
-    saveRepoSnapshot(guardData, f.workA, [], [rootG]);
+    new RepoGuardStore(guardData).save(f.workA, [], [rootG]);
     t.write(path.join(old, '.git', 'hooks', 'post-checkout'), 'planted');
     const fresh = path.join(rootG, 'created-later');
     t.write(path.join(fresh, '.git', 'hooks', 'pre-push'), 'planted');
     t.write(path.join(fresh, '.git', 'config'), '[core]\n\tfsmonitor = evil.exe\n\tbare = false\n');
     t.write(path.join(fresh, 'node.exe'), 'planted');
-    const found = checkRepo(guardData);
+    const found = new RepoGuardStore(guardData).check();
     t.check(
       fs.existsSync(path.join(old, '.git', 'hooks', 'pre-commit')),
       'a hook that was there before the sandbox ran stays',

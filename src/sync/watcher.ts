@@ -6,7 +6,7 @@ import path from 'node:path';
 import { writeFileAtomic } from '../shared/io/index.js';
 import { refuseInSelfTest } from '../host/test-guard.js';
 import { errMsg, sleep } from '../core/util/index.js';
-import { checkRepo } from '../host/guard/index.js';
+import { RepoGuardStore } from '../host/guard/index.js';
 import { isSandboxRunning } from '../host/sandbox/index.js';
 import { readActiveViews } from '../host/workspace-view/index.js';
 import { WorkspaceView } from '../host/workspace-view/index.js';
@@ -61,7 +61,7 @@ export const watch = async (dataPath: string): Promise<void> => {
   };
   const sync = (final: boolean): void => {
     try {
-      for (const finding of checkRepo(dataPath)) {
+      for (const finding of new RepoGuardStore(dataPath).check()) {
         note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail);
         audit?.guard(finding.kind + ': ' + finding.detail);
       }

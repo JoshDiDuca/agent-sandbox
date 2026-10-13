@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { describePrune, pruneStorage } from '../../../host/storage/index.js';
-import { checkRepo } from '../../../host/guard/index.js';
+import { RepoGuardStore } from '../../../host/guard/index.js';
 import { ensureConpty } from '../../../host/tools/index.js';
 import { ensureTerminal } from '../../../host/tools/index.js';
 import { planView, viewSkipped } from '../../../host/workspace-view/index.js';
@@ -98,7 +98,7 @@ export const prepare = async (ctx: Context, run: ResolvedRun) => {
     : { exe: null, message: 'disabled' };
   const conpty = config.provisioning.conpty.enabled ? await ensureConpty(dataPath, config.provisioning.refresh) : 'off';
   const history = syncSummary(config, dataPath, run.workspaceHost);
-  const guarded = checkRepo(dataPath);
+  const guarded = new RepoGuardStore(dataPath).check();
   if (guarded.length)
     console.warn(
       c.yellow(

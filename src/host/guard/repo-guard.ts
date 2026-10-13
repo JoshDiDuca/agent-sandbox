@@ -37,58 +37,61 @@ export interface RepoFinding {
 }
 const relative = (workspace: string, dir: string): string => path.relative(workspace, dir).split(path.sep).join('/');
 
-export const snapshotRepo = (workspace: string): RepoSnapshot => {
-  const dir = plainGitDir(workspace);
-  return {
-    gitDir: dir !== null,
-    ...gitState(dir),
-    commands: filesIn(workspace, (n) => COMMANDS.test(n)),
-    agent: agentSnapshot(workspace),
-    repos: Object.fromEntries(otherGitDirs(workspace).map((d) => [relative(workspace, d), gitState(d)])),
-  };
-};
-
-/**
- * Compares the workspace with its pre-launch snapshot and neutralises anything new that would execute on this PC.
- * Returns what was found (and fixed). Never touches what was already there before the sandbox ran.
- */
-export const guardRepo = (workspace: string, before: RepoSnapshot): RepoFinding[] => {
-  assertTestWritable(workspace);
-  const findings: RepoFinding[] = [];
-  const commandsNow = filesIn(workspace, (n) => COMMANDS.test(n));
-  findings.push(
-    ...quarantine(
-      workspace,
-      Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]),
-      workspace,
-      'command',
-    ),
-  );
-
-  // Snapshots from before these checks existed have no baseline: checking against nothing would move your own files.
-  if (before.agent) findings.push(...guardAgentFiles(workspace, before.agent));
-  if (before.repos) {
-    for (const other of otherGitDirs(workspace)) {
-      const rel = relative(workspace, other);
-      findings.push(
-        ...guardGitDir(other, before.repos[rel] ?? EMPTY_GIT).map((f) => ({ ...f, detail: rel + ': ' + f.detail })),
-      );
-    }
+/** Snapshots a project before the sandbox can write it, and later neutralises what it added. */
+export class RepoGuard {
+  snapshot(workspace: string): RepoSnapshot {
+    const dir = plainGitDir(workspace);
+    return {
+      gitDir: dir !== null,
+      ...gitState(dir),
+      commands: filesIn(workspace, (n) => COMMANDS.test(n)),
+      agent: agentSnapshot(workspace),
+      repos: Object.fromEntries(otherGitDirs(workspace).map((d) => [relative(workspace, d), gitState(d)])),
+    };
   }
 
-  const dir = plainGitDir(workspace);
-  if (!dir) {
-    const replaced = before.gitDir && fs.existsSync(path.join(workspace, '.git'));
-    if (replaced)
-      findings.push({
-        kind: 'git',
-        detail:
-          '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' +
-          workspace +
-          ' until you have checked it.',
-      });
+  /**
+   * Compares the workspace with its pre-launch snapshot and neutralises anything new that would execute on this PC.
+   * Returns what was found (and fixed). Never touches what was already there before the sandbox ran.
+   */
+  guard(workspace: string, before: RepoSnapshot): RepoFinding[] {
+    assertTestWritable(workspace);
+    const findings: RepoFinding[] = [];
+    const commandsNow = filesIn(workspace, (n) => COMMANDS.test(n));
+    findings.push(
+      ...quarantine(
+        workspace,
+        Object.keys(commandsNow).filter((n) => before.commands[n] !== commandsNow[n]),
+        workspace,
+        'command',
+      ),
+    );
+
+    // Snapshots from before these checks existed have no baseline: checking against nothing would move your own files.
+    if (before.agent) findings.push(...guardAgentFiles(workspace, before.agent));
+    if (before.repos) {
+      for (const other of otherGitDirs(workspace)) {
+        const rel = relative(workspace, other);
+        findings.push(
+          ...guardGitDir(other, before.repos[rel] ?? EMPTY_GIT).map((f) => ({ ...f, detail: rel + ': ' + f.detail })),
+        );
+      }
+    }
+
+    const dir = plainGitDir(workspace);
+    if (!dir) {
+      const replaced = before.gitDir && fs.existsSync(path.join(workspace, '.git'));
+      if (replaced)
+        findings.push({
+          kind: 'git',
+          detail:
+            '.git was replaced by a link or a "gitdir:" file inside the sandbox. Do not run git in ' +
+            workspace +
+            ' until you have checked it.',
+        });
+      return findings;
+    }
+    findings.push(...guardGitDir(dir, before));
     return findings;
   }
-  findings.push(...guardGitDir(dir, before));
-  return findings;
-};
+}

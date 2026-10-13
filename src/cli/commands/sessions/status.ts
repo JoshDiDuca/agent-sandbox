@@ -3,7 +3,7 @@ import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { ProjectRegistry } from '../../../host/projects/index.js';
-import { guardedProjects, repoFindings } from '../../../host/guard/index.js';
+import { RepoGuardStore } from '../../../host/guard/index.js';
 import { projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
@@ -45,7 +45,7 @@ export const status = async (ctx: Context): Promise<number> => {
   const sessionList = running ? await listedSessions(ctx) : [];
   const provisioning = running ? new RunDir(ctx.dataPath).listProjectStatus() : [];
   const ports = ready && sandbox ? await runningPorts(ctx, sandbox.guestWorkspace) : null;
-  const findings = repoFindings(ctx.dataPath);
+  const findings = new RepoGuardStore(ctx.dataPath).findings();
   const startedAt = Number(/^(\d+)-/.exec(registry?.launchId ?? sandbox?.launchId ?? '')?.[1]) || null;
   const projects = (registry?.projects ?? []).map((p) => {
     const prov = provisioning.find((s) => s.name.toLowerCase() === p.name.toLowerCase());
@@ -96,7 +96,7 @@ export const status = async (ctx: Context): Promise<number> => {
       .filter((s) => s.phase === 'running' && !projects.some((p) => p.sessions.some((x) => x.id === s.id)))
       .map((s) => ({ id: s.id, harness: safeText(s.harness), cwd: safeText(s.cwd) })),
     repoGuard: {
-      guarded: guardedProjects(ctx.dataPath).length,
+      guarded: new RepoGuardStore(ctx.dataPath).guarded().length,
       findings: findings.map((f) => f.kind + ': ' + f.detail),
     },
   };

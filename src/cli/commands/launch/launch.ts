@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { generateSandbox } from '../../../host/launch/index.js';
 import { findSecretFiles } from '../../../host/profile/index.js';
-import { saveRepoSnapshot } from '../../../host/guard/index.js';
+import { RepoGuardStore } from '../../../host/guard/index.js';
 import { assertCanLaunch, isSandboxRunning, spawnDetached, startSandbox } from '../../../host/sandbox/index.js';
 import { probeHost } from '../../../host/sandbox/index.js';
 import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
@@ -192,8 +192,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
 
   // Every folder the sandbox can write is snapshotted before it starts (the guard compares against this), and the
   // projects it starts with are recorded host-side for the commands that run later.
-  saveRepoSnapshot(
-    dataPath,
+  new RepoGuardStore(dataPath).save(
     run.workspaceHost,
     projects.map((p) => p.host),
     roots.map((r) => r.host),
