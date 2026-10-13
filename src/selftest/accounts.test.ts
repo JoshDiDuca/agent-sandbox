@@ -1,16 +1,7 @@
 // Claude accounts: saving logins from the sandbox or this PC, switching, and the names that are refused.
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  activateAccount,
-  activeAccount,
-  defaultAccount,
-  listAccounts,
-  readAccount,
-  removeAccount,
-  saveAccount,
-  setDefaultAccount,
-} from '../host/profile/index.js';
+import { AccountStore } from '../host/profile/index.js';
 import type { Suite } from './support/suite.js';
 
 export const accountsSuite: Suite = {
@@ -23,13 +14,16 @@ export const accountsSuite: Suite = {
     const sandboxClaude = path.join(dataA, 'state', 'claude');
     t.write(path.join(sandboxClaude, '.credentials.json'), '{"claudeAiOauth":{"refreshToken":"personal-1"}}');
     t.write(path.join(sandboxClaude, '.claude.json'), '{"oauthAccount":{"emailAddress":"me@personal"},"other":1}');
-    saveAccount(storage, dataA, 'personal', null);
+    new AccountStore(storage).save(dataA, 'personal', null);
     t.write(t.at('host-login', '.credentials.json'), '{"claudeAiOauth":{"refreshToken":"work-1"}}');
     t.write(t.at('host-login.json'), '{"oauthAccount":{"emailAddress":"me@work"}}');
-    saveAccount(storage, dataA, 'work', { claudeDir: t.at('host-login'), globalStateFile: t.at('host-login.json') });
-    t.equal(listAccounts(storage, dataA).length, 2, 'accounts can be saved from the sandbox and from this PC');
-    t.equal(defaultAccount(storage), 'personal', 'the first account saved becomes the default');
-    t.equal(activeAccount(dataA), 'personal', 'the first account saved is the active one');
+    new AccountStore(storage).save(dataA, 'work', {
+      claudeDir: t.at('host-login'),
+      globalStateFile: t.at('host-login.json'),
+    });
+    t.equal(new AccountStore(storage).list(dataA).length, 2, 'accounts can be saved from the sandbox and from this PC');
+    t.equal(new AccountStore(storage).defaultName(), 'personal', 'the first account saved becomes the default');
+    t.equal(new AccountStore(storage).activeFor(dataA), 'personal', 'the first account saved is the active one');
     t.check(
       !fs.existsSync(path.join(sandboxClaude, '.agent-sandbox-account')),
       'which account is active is not recorded inside the sandbox...',
@@ -37,7 +31,7 @@ export const accountsSuite: Suite = {
     t.check(fs.existsSync(path.join(storage, 'accounts', 'index.json')), '... it is recorded host-side');
 
     t.write(path.join(sandboxClaude, '.credentials.json'), '{"claudeAiOauth":{"refreshToken":"personal-2"}}');
-    activateAccount(storage, dataA, 'work');
+    new AccountStore(storage).activate(dataA, 'work');
     const stateAfter = f.readJson(path.join(sandboxClaude, '.claude.json'));
     t.includes(
       fs.readFileSync(path.join(sandboxClaude, '.credentials.json'), 'utf8'),
@@ -46,24 +40,24 @@ export const accountsSuite: Suite = {
     );
     t.equal(stateAfter.oauthAccount.emailAddress, 'me@work', 'switching swaps the signed-in account');
     t.equal(stateAfter.other, 1, 'switching keeps the rest of the sandbox state');
-    t.equal(activeAccount(dataA), 'work', 'the new account is active');
+    t.equal(new AccountStore(storage).activeFor(dataA), 'work', 'the new account is active');
     t.includes(
-      JSON.stringify(readAccount(storage, 'personal')?.credentials),
+      JSON.stringify(new AccountStore(storage).read('personal')?.credentials),
       'personal-2',
       "the outgoing account's refreshed tokens are saved back before switching",
     );
 
     t.section('removing and refusing');
-    setDefaultAccount(storage, 'work');
-    removeAccount(storage, 'work');
-    t.equal(defaultAccount(storage), null, 'removing the default account clears the default');
+    new AccountStore(storage).setDefault('work');
+    new AccountStore(storage).remove('work');
+    t.equal(new AccountStore(storage).defaultName(), null, 'removing the default account clears the default');
     await t.throws(
-      () => activateAccount(storage, dataA, 'nope'),
+      () => new AccountStore(storage).activate(dataA, 'nope'),
       'Unknown account',
       'an unknown account cannot be activated',
     );
     await t.throws(
-      () => saveAccount(storage, dataA, '../x', null),
+      () => new AccountStore(storage).save(dataA, '../x', null),
       'Invalid account name',
       'a path-like account name is rejected',
     );
@@ -71,12 +65,12 @@ export const accountsSuite: Suite = {
     const otherData = t.at('acct-storage', 'data', 'd');
     const fromHost = { claudeDir: victim, globalStateFile: victim };
     await t.throws(
-      () => saveAccount(t.at('acct-storage'), otherData, 'index', fromHost),
+      () => new AccountStore(t.at('acct-storage')).save(otherData, 'index', fromHost),
       'Invalid account name',
       'an account cannot be called "index" (it would overwrite the index)',
     );
     await t.throws(
-      () => saveAccount(t.at('acct-storage'), otherData, 'con', fromHost),
+      () => new AccountStore(t.at('acct-storage')).save(otherData, 'con', fromHost),
       'Invalid account name',
       'an account cannot be named after a device (it would open a device)',
     );

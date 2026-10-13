@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { activeAccount } from '../../../host/profile/index.js';
+import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { ProjectRegistry } from '../../../host/projects/index.js';
@@ -86,7 +86,7 @@ export const status = async (ctx: Context): Promise<number> => {
       headless: sandbox?.headless,
       uptime: running && startedAt ? ago(startedAt).replace(' ago', '') : null,
       daemon,
-      account: activeAccount(ctx.dataPath),
+      account: new AccountStore(ctx.storageRoot).activeFor(ctx.dataPath),
       syncWatcher: watcherRunning(ctx.dataPath),
     },
     here: { folder: hereDir(ctx), project: here.project?.name ?? null, guest: here.guestDir },

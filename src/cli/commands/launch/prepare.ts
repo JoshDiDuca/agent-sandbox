@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { activateAccount, activeAccount, defaultAccount } from '../../../host/profile/index.js';
+import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { describePrune, pruneStorage } from '../../../host/storage/index.js';
 import { checkRepo } from '../../../host/guard/index.js';
@@ -89,9 +89,10 @@ const prepareWorkspaceView = async (ctx: Context, run: ResolvedRun): Promise<str
 export const prepare = async (ctx: Context, run: ResolvedRun) => {
   const { options, dataPath, storageRoot } = ctx;
   const { config } = run;
-  const account = options.account ?? defaultAccount(storageRoot);
-  if (account && run.harnessName === 'claude' && account !== activeAccount(dataPath))
-    activateAccount(storageRoot, dataPath, account);
+  const accounts = new AccountStore(storageRoot);
+  const account = options.account ?? accounts.defaultName();
+  if (account && run.harnessName === 'claude' && account !== accounts.activeFor(dataPath))
+    accounts.activate(dataPath, account);
   const terminal = config.provisioning.terminal.enabled
     ? await ensureTerminal(dataPath, config.provisioning.refresh, { pwsh: config.toolchains.pwsh.enabled !== false })
     : { exe: null, message: 'disabled' };

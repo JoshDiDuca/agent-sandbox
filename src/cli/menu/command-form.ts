@@ -3,7 +3,7 @@
 // command or option appears here on its own.
 import { humanBytes } from '../../core/disk.js';
 import { fail, plainText } from '../../core/util/index.js';
-import { listAccounts } from '../../host/profile/index.js';
+import { AccountStore } from '../../host/profile/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { splitArgs } from '../args.js';
@@ -41,7 +41,8 @@ export class CommandForm {
   private choices(choices: OptionSpecT['choices']): string[] {
     if (Array.isArray(choices)) return choices;
     if (choices === 'harnesses') return Object.keys(this.ctx.loaded.config.harnesses);
-    if (choices === 'accounts') return listAccounts(this.ctx.storageRoot, this.ctx.dataPath).map((a) => a.name);
+    if (choices === 'accounts')
+      return new AccountStore(this.ctx.storageRoot).list(this.ctx.dataPath).map((a) => a.name);
     if (choices === 'sessions')
       return isSandboxRunning()
         ? new SandboxChannel(this.ctx.dataPath).runningSessions().map((s) => plainText(s.id))

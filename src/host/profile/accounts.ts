@@ -7,7 +7,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isSafeFileName } from '../../shared/paths/index.js';
 import { assertTestWritable } from '../test-guard.js';
-import { readValid, writeJsonAtomic } from '../../shared/io/index.js';
+import { JsonFile } from '../../shared/io/index.js';
 import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../../core/util/index.js';
 
 export interface Account {
@@ -51,11 +51,15 @@ export const accountsDir = (storageRoot: string): string => path.join(storageRoo
 export const sandboxClaudeDir = (dataPath: string): string => path.join(dataPath, 'state', 'claude');
 const storageOf = (dataPath: string): string => path.dirname(path.dirname(dataPath));
 const dataName = (dataPath: string): string => path.basename(dataPath);
-const accountFile = (storageRoot: string, name: string): string => path.join(accountsDir(storageRoot), name + '.json');
-const indexFile = (storageRoot: string): string => path.join(accountsDir(storageRoot), 'index.json');
-const readIndex = (storageRoot: string): Index => readValid(IndexSchema, indexFile(storageRoot)) ?? {};
-const updateIndex = (storageRoot: string, change: (index: Index) => Index): void =>
-  writeJsonAtomic(indexFile(storageRoot), change(readIndex(storageRoot)));
+const indexFile = (storageRoot: string): JsonFile<Index> =>
+  new JsonFile(IndexSchema, path.join(accountsDir(storageRoot), 'index.json'));
+const readIndex = (storageRoot: string): Index => indexFile(storageRoot).read() ?? {};
+const updateIndex = (storageRoot: string, change: (index: Index) => Index): void => {
+  indexFile(storageRoot).write(change(readIndex(storageRoot)));
+};
+
+const setActive = (dataPath: string, name: string): void =>
+  updateIndex(storageOf(dataPath), (i) => ({ ...i, active: { ...i.active, [dataName(dataPath)]: name } }));
 
 /** A file name of its own: not "index" (the index file), not a Windows device name such as con or nul. */
 const validName = (name: string): boolean =>
@@ -67,33 +71,6 @@ const assertName = (name: string): void => {
 const emailOf = (oauthAccount: unknown): string | null => {
   const email = (oauthAccount as { emailAddress?: unknown } | null)?.emailAddress;
   return typeof email === 'string' ? email.slice(0, 200) : null;
-};
-
-export const readAccount = (storageRoot: string, name: string): Account | null =>
-  validName(name) ? (readValid(AccountSchema, accountFile(storageRoot, name)) as Account | null) : null;
-export const defaultAccount = (storageRoot: string): string | null => readIndex(storageRoot).default ?? null;
-export const activeAccount = (dataPath: string): string | null =>
-  readIndex(storageOf(dataPath)).active?.[dataName(dataPath)] ?? null;
-const setActive = (dataPath: string, name: string): void =>
-  updateIndex(storageOf(dataPath), (i) => ({ ...i, active: { ...i.active, [dataName(dataPath)]: name } }));
-
-export const listAccounts = (storageRoot: string, dataPath: string): AccountRow[] => {
-  const dir = accountsDir(storageRoot);
-  if (!fs.existsSync(dir)) return [];
-  const def = defaultAccount(storageRoot);
-  const active = activeAccount(dataPath);
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.json') && f !== 'index.json')
-    .map((f) => readAccount(storageRoot, f.slice(0, -5)))
-    .filter((a): a is Account => a !== null)
-    .map((a) => ({
-      name: a.name,
-      email: a.email,
-      isDefault: a.name === def,
-      isActive: a.name === active,
-      savedAt: a.savedAt,
-    }));
 };
 
 /** Reads a JSON file that may be sandbox-written: no links, size-capped. */
@@ -115,33 +92,12 @@ const readLogin = (claudeDir: string, globalStateFile: string): Login => {
   };
 };
 
-const store = (storageRoot: string, name: string, login: Login): Account => {
-  const account: Account = { name, savedAt: new Date().toISOString(), email: emailOf(login.oauthAccount), ...login };
-  writeJsonAtomic(accountFile(storageRoot, name), account);
-  return account;
-};
-
 const sandboxLogin = (dataPath: string): { claudeDir: string; globalStateFile: string } => {
   assertNoLinks(dataPath, sandboxClaudeDir(dataPath));
   return {
     claudeDir: sandboxClaudeDir(dataPath),
     globalStateFile: path.join(sandboxClaudeDir(dataPath), '.claude.json'),
   };
-};
-
-/** Saves the sandbox's current login (or this PC's, with fromHost) under `name`. */
-export const saveAccount = (
-  storageRoot: string,
-  dataPath: string,
-  name: string,
-  fromHost: { claudeDir: string; globalStateFile: string } | null,
-): Account => {
-  assertName(name);
-  const source = fromHost ?? sandboxLogin(dataPath);
-  const account = store(storageRoot, name, readLogin(source.claudeDir, source.globalStateFile));
-  if (!fromHost) setActive(dataPath, name);
-  if (!defaultAccount(storageRoot)) setDefaultAccount(storageRoot, name);
-  return account;
 };
 
 /** Replaces a file that may be a sandbox-planted link instead of writing through it. */
@@ -151,58 +107,109 @@ const writeSandboxJson = (file: string, value: unknown): void => {
   writeJson(file, value);
 };
 
-/**
- * Makes `name` the sandbox's login. Claude refreshes (rotates) tokens while it runs, so the outgoing account's
- * current tokens are saved back first; otherwise its stored refresh token could already be invalid.
- */
-export const activateAccount = (storageRoot: string, dataPath: string, name: string): Account => {
-  const account =
-    readAccount(storageRoot, name) ??
-    fail(
-      'Unknown account "' + name + '".',
-      'Saved accounts: ' +
-        (listAccounts(storageRoot, dataPath)
-          .map((a) => a.name)
-          .join(', ') || 'none yet; save one with sandbox account save <name>'),
-    );
-  const { claudeDir, globalStateFile } = sandboxLogin(dataPath);
-  const outgoing = activeAccount(dataPath);
-  if (
-    outgoing &&
-    outgoing !== name &&
-    readAccount(storageRoot, outgoing) &&
-    fileExists(path.join(claudeDir, '.credentials.json'))
-  ) {
-    try {
-      store(storageRoot, outgoing, readLogin(claudeDir, globalStateFile));
-    } catch {
-      /* nothing usable to save back */
+/** The saved Claude logins under <storage>\accounts, and which one each sandbox data folder uses. */
+export class AccountStore {
+  constructor(private readonly storageRoot: string) {}
+
+  private file(name: string): JsonFile<Account> {
+    return new JsonFile(AccountSchema as z.ZodType<Account>, path.join(accountsDir(this.storageRoot), name + '.json'));
+  }
+
+  private store(name: string, login: Login): Account {
+    const account: Account = { name, savedAt: new Date().toISOString(), email: emailOf(login.oauthAccount), ...login };
+    this.file(name).write(account);
+    return account;
+  }
+
+  read(name: string): Account | null {
+    return validName(name) ? this.file(name).read() : null;
+  }
+
+  defaultName(): string | null {
+    return readIndex(this.storageRoot).default ?? null;
+  }
+
+  /** The account a data folder uses (kept in the index of the storage folder that data folder is in). */
+  activeFor(dataPath: string): string | null {
+    return readIndex(storageOf(dataPath)).active?.[dataName(dataPath)] ?? null;
+  }
+
+  list(dataPath: string): AccountRow[] {
+    const dir = accountsDir(this.storageRoot);
+    if (!fs.existsSync(dir)) return [];
+    const def = this.defaultName();
+    const active = this.activeFor(dataPath);
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith('.json') && f !== 'index.json')
+      .map((f) => this.read(f.slice(0, -5)))
+      .filter((a): a is Account => a !== null)
+      .map((a) => ({
+        name: a.name,
+        email: a.email,
+        isDefault: a.name === def,
+        isActive: a.name === active,
+        savedAt: a.savedAt,
+      }));
+  }
+
+  /** Saves the sandbox's current login (or this PC's, with fromHost) under `name`. */
+  save(dataPath: string, name: string, fromHost: { claudeDir: string; globalStateFile: string } | null): Account {
+    assertName(name);
+    const source = fromHost ?? sandboxLogin(dataPath);
+    const account = this.store(name, readLogin(source.claudeDir, source.globalStateFile));
+    if (!fromHost) setActive(dataPath, name);
+    if (!this.defaultName()) this.setDefault(name);
+    return account;
+  }
+
+  /**
+   * Makes `name` the sandbox's login. Claude refreshes (rotates) tokens while it runs, so the outgoing account's
+   * current tokens are saved back first; otherwise its stored refresh token could already be invalid.
+   */
+  activate(dataPath: string, name: string): Account {
+    const account =
+      this.read(name) ??
+      fail(
+        'Unknown account "' + name + '".',
+        'Saved accounts: ' +
+          (this.list(dataPath)
+            .map((a) => a.name)
+            .join(', ') || 'none yet; save one with sandbox account save <name>'),
+      );
+    const { claudeDir, globalStateFile } = sandboxLogin(dataPath);
+    const outgoing = this.activeFor(dataPath);
+    if (outgoing && outgoing !== name && this.read(outgoing) && fileExists(path.join(claudeDir, '.credentials.json'))) {
+      try {
+        this.store(outgoing, readLogin(claudeDir, globalStateFile));
+      } catch {
+        /* nothing usable to save back */
+      }
     }
+    fs.mkdirSync(claudeDir, { recursive: true });
+    // Caches tied to the previous account (Claude deletes these on /logout); otherwise its org policy could linger.
+    for (const cache of ACCOUNT_CACHES) {
+      const file = path.join(claudeDir, cache);
+      if (isLink(file)) removeLink(file);
+      else fs.rmSync(file, { force: true });
+    }
+    writeSandboxJson(path.join(claudeDir, '.credentials.json'), account.credentials);
+    const state = readUntrusted(globalStateFile, MAX_STATE_BYTES) as Record<string, unknown> | null;
+    if (account.oauthAccount && (state || !fileExists(globalStateFile)))
+      writeSandboxJson(globalStateFile, { ...(state ?? {}), oauthAccount: account.oauthAccount });
+    setActive(dataPath, name);
+    return account;
   }
-  fs.mkdirSync(claudeDir, { recursive: true });
-  // Caches tied to the previous account (Claude deletes these on /logout); otherwise its org policy could linger.
-  for (const cache of ACCOUNT_CACHES) {
-    const file = path.join(claudeDir, cache);
-    if (isLink(file)) removeLink(file);
-    else fs.rmSync(file, { force: true });
+
+  setDefault(name: string | null): void {
+    if (name !== null && !this.read(name))
+      fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
+    updateIndex(this.storageRoot, (i) => ({ ...i, default: name ?? undefined }));
   }
-  writeSandboxJson(path.join(claudeDir, '.credentials.json'), account.credentials);
-  const state = readUntrusted(globalStateFile, MAX_STATE_BYTES) as Record<string, unknown> | null;
-  if (account.oauthAccount && (state || !fileExists(globalStateFile)))
-    writeSandboxJson(globalStateFile, { ...(state ?? {}), oauthAccount: account.oauthAccount });
-  setActive(dataPath, name);
-  return account;
-};
 
-export const setDefaultAccount = (storageRoot: string, name: string | null): void => {
-  if (name !== null && !readAccount(storageRoot, name))
-    fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
-  updateIndex(storageRoot, (i) => ({ ...i, default: name ?? undefined }));
-};
-
-export const removeAccount = (storageRoot: string, name: string): void => {
-  if (!readAccount(storageRoot, name))
-    fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
-  fs.rmSync(accountFile(storageRoot, name));
-  if (defaultAccount(storageRoot) === name) setDefaultAccount(storageRoot, null);
-};
+  remove(name: string): void {
+    if (!this.read(name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
+    fs.rmSync(this.file(name).file);
+    if (this.defaultName() === name) this.setDefault(null);
+  }
+}

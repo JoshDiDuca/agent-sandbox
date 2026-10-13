@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATABASES } from '../core/detect/index.js';
 import { fail } from '../core/util/index.js';
-import { listAccounts } from '../host/profile/index.js';
+import { AccountStore } from '../host/profile/index.js';
 import type { CliOptions } from './args.js';
 import type { Context } from './commands/context.js';
 
@@ -92,7 +92,7 @@ export const validateOptions = (ctx: Context): void => {
       unknownValue('database', db, DATABASES, 'Repeat --database for several.');
   }
   if (o.account !== undefined) {
-    const names = listAccounts(ctx.storageRoot, ctx.dataPath).map((a) => a.name);
+    const names = new AccountStore(ctx.storageRoot).list(ctx.dataPath).map((a) => a.name);
     if (!names.includes(o.account))
       unknownValue(
         'account',

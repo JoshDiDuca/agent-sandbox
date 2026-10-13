@@ -2,7 +2,7 @@
 // must never write, delete or walk through them.
 import fs from 'node:fs';
 import path from 'node:path';
-import { activateAccount, saveAccount } from '../host/profile/index.js';
+import { AccountStore } from '../host/profile/index.js';
 import { SandboxChannel } from '../host/channel/index.js';
 import { pruneStorage } from '../host/storage/index.js';
 import { assertNoLinks } from '../core/util/index.js';
@@ -27,12 +27,12 @@ export const linksSuite: Suite = {
       'any host write under the data folder through a junction is refused',
     );
     await t.throws(
-      () => activateAccount(storage, data, 'any'),
+      () => new AccountStore(storage).activate(data, 'any'),
       'Unknown account',
       'accounts never read through a sandbox junction',
     );
     await t.throws(
-      () => saveAccount(storage, data, 'a', null),
+      () => new AccountStore(storage).save(data, 'a', null),
       'is a link',
       'accounts never write through a sandbox junction',
     );

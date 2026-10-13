@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { saveAccount } from '../host/profile/index.js';
+import { AccountStore } from '../host/profile/index.js';
 import { SandboxChannel } from '../host/channel/index.js';
 import { hostClaude } from '../host/sandbox/index.js';
 import { spawnDetached, startSandbox } from '../host/sandbox/index.js';
@@ -73,7 +73,7 @@ export const testGuardSuite: Suite = {
       [
         'save a login into a profile',
         () =>
-          saveAccount(real, t.at('acct-storage', 'data', 'd'), 'work', {
+          new AccountStore(real).save(t.at('acct-storage', 'data', 'd'), 'work', {
             claudeDir: path.dirname(login),
             globalStateFile: t.at('guard-login', '.claude.json'),
           }),

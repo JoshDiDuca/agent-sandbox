@@ -1,12 +1,5 @@
 // `account list | save | use | default | remove`
-import {
-  activateAccount,
-  listAccounts,
-  removeAccount,
-  saveAccount,
-  setDefaultAccount,
-  type Account,
-} from '../../host/profile/index.js';
+import { AccountStore, type Account } from '../../host/profile/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
@@ -23,7 +16,7 @@ const hostLogin = (ctx: Context): { claudeDir: string; globalStateFile: string }
 };
 
 const list = (ctx: Context): number => {
-  const rows = listAccounts(ctx.storageRoot, ctx.dataPath);
+  const rows = new AccountStore(ctx.storageRoot).list(ctx.dataPath);
   if (printJson(ctx, rows)) return 0;
   if (rows.length === 0) {
     console.log(
@@ -45,7 +38,7 @@ const list = (ctx: Context): number => {
 };
 
 const use = async (ctx: Context, name: string): Promise<number> => {
-  console.log('Sandbox now uses ' + label(activateAccount(ctx.storageRoot, ctx.dataPath, name)) + '.');
+  console.log('Sandbox now uses ' + label(new AccountStore(ctx.storageRoot).activate(ctx.dataPath, name)) + '.');
   const claudeRunning =
     isSandboxRunning() && new SandboxChannel(ctx.dataPath).runningSessions().some((s) => s.harness === 'claude');
   if (claudeRunning && !ctx.options.noRestart)
@@ -65,18 +58,24 @@ export const account = async (ctx: Context): Promise<number> => {
     case 'save':
       console.log(
         'Saved account ' +
-          label(saveAccount(ctx.storageRoot, ctx.dataPath, needName(), ctx.options.fromHost ? hostLogin(ctx) : null)) +
+          label(
+            new AccountStore(ctx.storageRoot).save(
+              ctx.dataPath,
+              needName(),
+              ctx.options.fromHost ? hostLogin(ctx) : null,
+            ),
+          ) +
           '.',
       );
       return 0;
     case 'use':
       return use(ctx, needName());
     case 'default':
-      setDefaultAccount(ctx.storageRoot, needName());
+      new AccountStore(ctx.storageRoot).setDefault(needName());
       console.log('Default account: ' + name);
       return 0;
     case 'remove':
-      removeAccount(ctx.storageRoot, needName());
+      new AccountStore(ctx.storageRoot).remove(needName());
       console.log('Removed account ' + name);
       return 0;
     default:
