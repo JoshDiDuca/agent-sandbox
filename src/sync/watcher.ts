@@ -14,7 +14,7 @@ import { readForwards, sandboxAddress, startPortForwards } from '../host/network
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
 import { sizeWithin } from '../core/disk.js';
-import { causeSince, KeepAwake, LifeRecord } from '../host/life/index.js';
+import { causeSince, KeepAwake, LifeRecord, saveCrashReport } from '../host/life/index.js';
 import { storageOf } from '../host/storage/index.js';
 import { syncBack } from './sync-cycle.js';
 
@@ -122,8 +122,9 @@ export const watch = async (dataPath: string): Promise<void> => {
     try {
       const last = life.read();
       const cause = last ? causeSince(last.lastSeen) : null;
-      life.end(cause);
-      if (cause) note('sandbox ended: ' + cause.text);
+      const report = last && cause ? saveCrashReport(storageOf(dataPath), dataPath, last.lastSeen) : null;
+      life.end(cause, new Date(), report);
+      if (cause) note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));
     } catch (e) {
       note('could not record how the sandbox ended: ' + errMsg(e));
     }

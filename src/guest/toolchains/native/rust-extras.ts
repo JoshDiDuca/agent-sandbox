@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Toolchains } from '../../../core/types.js';
 import { dataDir, localDir } from '../../runtime/paths.js';
 import { exists, mkdirp } from '../../runtime/fs.js';
+import { execOutput } from '../../runtime/process.js';
 import { ensureCompiled } from '../../runtime/csc.js';
 import { arch, tool, type ToolEnv } from '../tool-env.js';
 import { wanted } from '../detect.js';
@@ -27,6 +28,36 @@ export function cargoShim(env: ToolEnv, rust: Toolchains['rust']): void {
   fs.copyFileSync(ensureCompiled('cargoshim'), path.join(dir, 'cargo.exe'));
   env.prepend.unshift(dir);
   env.vars.AGENT_REAL_CARGO = real;
+}
+
+/**
+ * GNU host: Rust links through tools\shims\linkgate.exe (sandbox/linkgate.cs), which lets only `linkSlots` links run
+ * at once in the whole sandbox and, with linker "lld", has MinGW's gcc use Rust's own lld instead of GNU ld.
+ */
+export function linkGate(env: ToolEnv, rust: Toolchains['rust'], host: string): void {
+  const gcc = tool('mingw', 'mingw64', 'bin', 'gcc.exe');
+  if (!host.endsWith('-pc-windows-gnu') || !exists(gcc)) return;
+  const gate = path.join(mkdirp(tool('shims')), 'linkgate.exe');
+  fs.copyFileSync(ensureCompiled('linkgate'), gate);
+  const memoryGb = os.totalmem() / 1024 ** 3;
+  const slots = rust.linkSlots === 'auto' ? Math.max(2, Math.min(4, Math.floor(memoryGb / 8))) : rust.linkSlots;
+  env.vars.AGENT_LINK_SLOTS = String(slots);
+  env.vars.AGENT_REAL_LINKER = gcc;
+  env.vars.CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = gate;
+  const rustEnv = { ...process.env, RUSTUP_HOME: tool('rust', 'rustup'), CARGO_HOME: tool('rust', 'cargo') };
+  const sysroot =
+    rust.linker === 'lld'
+      ? execOutput(tool('rust', 'cargo', 'bin', 'rustc.exe'), ['--print', 'sysroot'], { env: rustEnv })
+      : '';
+  const lld = sysroot ? path.join(sysroot, 'lib', 'rustlib', host, 'bin', 'gcc-ld') : '';
+  if (lld && exists(path.join(lld, 'ld.lld.exe'))) env.vars.AGENT_LLD_DIR = lld;
+  env.summary.push(
+    'rust linking: ' +
+      (env.vars.AGENT_LLD_DIR ? 'lld' : 'GNU ld') +
+      ', at most ' +
+      env.vars.AGENT_LINK_SLOTS +
+      ' at once',
+  );
 }
 
 /**

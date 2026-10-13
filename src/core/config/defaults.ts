@@ -52,6 +52,8 @@ export const DEFAULTS: Config = {
       targets: [],
       crates: [],
       targetDir: 'separate',
+      linker: 'lld',
+      linkSlots: 'auto',
     },
     msvc: { enabled: 'auto', acceptLicense: false, msvcVersion: 'latest', sdkVersion: 'latest' },
     cpp: { enabled: 'auto', flexBison: true },

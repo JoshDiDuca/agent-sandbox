@@ -5,7 +5,7 @@ import path from 'node:path';
 import { syncClaudeMem } from '../sync/index.js';
 import { readSyncState, syncStatePath, type SyncState } from '../sync/index.js';
 import { syncHistoryIn, syncHistoryOut, translatePaths } from '../sync/index.js';
-import { explainStop, LifeRecord, type StopEvent } from '../host/life/index.js';
+import { crashReportText, explainStop, LifeRecord, type StopEvent } from '../host/life/index.js';
 import type { Suite } from './support/suite.js';
 
 export const syncSuite: Suite = {
@@ -253,6 +253,35 @@ export const syncSuite: Suite = {
       null,
       'switching user is not taken for the cause (the sandbox keeps running)',
     );
+    const bugcheck = ev(
+      1001,
+      'Microsoft-Windows-WER-SystemErrorReporting',
+      '2026-10-13T19:55:00Z',
+      'The computer has rebooted from a bugcheck.  The bugcheck was: 0x0000001a (0x0000000000041792, 0x0, 0x0, 0x0).',
+    );
+    t.equal(
+      explainStop([bugcheck])?.text,
+      'this PC blue-screened (stop code 0x0000001a)',
+      'a blue screen of this PC is recognised, with its stop code',
+    );
+    const report = crashReportText(
+      {
+        kind: 'sandboxCrash',
+        at: '2026-10-13T08:49:08Z',
+        text: 'Windows inside the sandbox crashed (stop code 0x1A, 0x13003)',
+      },
+      [ev(18590, 'Microsoft-Windows-Hyper-V-Worker', '2026-10-13T08:49:08Z', crashMessage)],
+      'time | RAM\n20:50:28 | 16847/32767 | 23552/49151 | rustc 2535\x1b]52;c;evil\x07\n',
+      '2026-10-13T08:48:30Z',
+    );
+    t.check(
+      report.includes('stop code 0x1A, 0x13003') &&
+        report.includes('Hyper-V-Worker 18590') &&
+        report.includes('20:50:28 | 16847/32767'),
+      'the crash report has what happened, the Windows events and the last memory samples',
+      report,
+    );
+    t.excludes(report, '\x1b]52', "the sandbox's memory log is shown without escape codes");
 
     const lifeRoot = t.at('life-storage');
     const lifeData = path.join(lifeRoot, 'data', 'testdata');

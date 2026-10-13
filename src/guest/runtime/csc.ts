@@ -13,7 +13,7 @@ import { launchDir } from './paths.js';
 
 const CSC = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
 
-export type Helper = 'ptyhost' | 'gitshim' | 'vswhere' | 'openssl' | 'cargoshim';
+export type Helper = 'ptyhost' | 'gitshim' | 'vswhere' | 'openssl' | 'cargoshim' | 'linkgate';
 
 const sourceHash = (name: Helper): string =>
   crypto

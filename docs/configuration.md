@@ -35,6 +35,7 @@ Commonly changed:
 | `toolchains.environment` | extra environment variables (e.g. registry mirrors) |
 | `toolchains.msvc.acceptLicense` | `true` to allow installing MSVC (see [toolchains](toolchains.md#msvc)) |
 | `toolchains.rust.host`, `.targetDir`, `.crates` | Rust target (`auto`, msvc or gnu), where builds go, and binaries to install with cargo |
+| `toolchains.rust.linker`, `.linkSlots` | GNU host: `"lld"` (default, far less memory than GNU ld) or `"gnu"`, and how many programs may link at once in the whole sandbox (`"auto"` = one per 8 GB, 2 to 4) |
 | `toolchains.cli.gh`, `.zstd`, `.openssl` | small command-line tools |
 | `toolchains.mesa.enabled`, `.vulkan` | software OpenGL / Vulkan when there is no GPU |
 | `harnesses` | agents and how to install them |

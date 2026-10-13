@@ -3,3 +3,4 @@ export * from './stop-events.js';
 export * from './stop-warning.js';
 export * from './keep-awake.js';
 export * from './windows-update.js';
+export * from './crash-report.js';

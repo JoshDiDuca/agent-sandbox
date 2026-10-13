@@ -88,7 +88,9 @@
       "components": [],
       "targets": [],
       "crates": [],
-      "targetDir": "separate"
+      "targetDir": "separate",
+      "linker": "lld",
+      "linkSlots": "auto"
     },
     "msvc": {
       "enabled": "auto",

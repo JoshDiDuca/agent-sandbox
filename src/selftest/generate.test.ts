@@ -47,6 +47,7 @@ export const generateSuite: Suite = {
       'sandbox/pagefile.ps1',
       'sandbox/pagefile.cs',
       'sandbox/memlog.ps1',
+      'sandbox/linkgate.cs',
     ];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
     t.equal(missing, [], 'the launch folder has the runtime, the C# sources and the boot scripts');

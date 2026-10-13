@@ -44,15 +44,24 @@ const installPython = async (pkg: Package, spec: string): Promise<string> => {
  */
 const shimDir = (dir: string): string => (duringSession() ? tool('shims', path.basename(dir)) : tool('shims'));
 
-/** Writes `<name>.cmd` into the shims folder, e.g. python2.cmd. */
-const shim = (folder: string, name: string, command: string): void => {
-  fs.writeFileSync(path.join(mkdirp(folder), name + '.cmd'), '@echo off\r\n' + command + ' %*\r\n');
+/**
+ * Writes `<name>.cmd` (cmd, PowerShell) and `<name>` (Git Bash, which runs neither .cmd nor .bat by bare name) into
+ * the shims folder, both running `program` with `args` and then the caller's arguments, e.g. python2.
+ */
+const shim = (folder: string, name: string, program: string, args: readonly string[] = []): void => {
+  const fixed = [program, ...args];
+  fs.writeFileSync(
+    path.join(mkdirp(folder), name + '.cmd'),
+    '@echo off\r\n' + fixed.map((a) => '"' + a + '"').join(' ') + ' %*\r\n',
+  );
+  const sh = fixed.map((a) => "'" + a.replace(/\\/g, '/').replace(/'/g, "'\\''") + "'").join(' ');
+  fs.writeFileSync(path.join(folder, name), '#!/bin/sh\nexec ' + sh + ' "$@"\n');
 };
 
 const shimPair = (folder: string, version: '2' | '3', dir: string): void => {
-  const python = '"' + path.join(dir, 'python.exe') + '"';
+  const python = path.join(dir, 'python.exe');
   shim(folder, 'python' + version, python);
-  shim(folder, 'pip' + version, python + ' -m pip');
+  shim(folder, 'pip' + version, python, ['-m', 'pip']);
 };
 
 /**
@@ -80,7 +89,7 @@ const pyLauncher = (folder: string, py3: string, py2: string | null): void => {
       '',
     ].join('\n'),
   );
-  shim(folder, 'py', '"' + path.join(py3, 'python.exe') + '" "' + script + '"');
+  shim(folder, 'py', path.join(py3, 'python.exe'), [script]);
 };
 
 export async function setupPython(env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> {

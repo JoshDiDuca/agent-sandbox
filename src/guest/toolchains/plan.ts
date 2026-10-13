@@ -24,7 +24,7 @@ import { setupRuby } from './languages/ruby.js';
 import { setupVcRuntime } from './native/vcruntime.js';
 import { setupVscode } from './tools/vscode.js';
 import type { ToolchainOptions, ToolchainStep } from './step.js';
-import { rustHost, rustCaches, cargoDefaults, cargoShim } from './native/rust-extras.js';
+import { rustHost, rustCaches, cargoDefaults, cargoShim, linkGate } from './native/rust-extras.js';
 import { setupPythonTools } from './languages/python-tools.js';
 
 export function plan(config: Toolchains, versions: ToolVersions, o: ToolchainOptions): ToolchainStep[] {
@@ -60,6 +60,7 @@ export function plan(config: Toolchains, versions: ToolVersions, o: ToolchainOpt
         if (!dryRun) {
           cargoDefaults(rustHost(config));
           cargoShim(env, config.rust);
+          linkGate(env, config.rust, rustHost(config));
         }
       },
     },

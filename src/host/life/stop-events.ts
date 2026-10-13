@@ -3,10 +3,9 @@ import { z } from 'zod';
 import { SYSTEM } from '../../shared/system.js';
 import { isWin } from '../../core/util/index.js';
 import { refuseInSelfTest } from '../test-guard.js';
+import { nativeScript } from '../native.js';
 
 export const IsoSchema = z.string().max(40);
-
-// ---- Windows' System log ----------------------------------------------------------------------------------------
 
 export interface StopEvent {
   at: string;
@@ -75,6 +74,10 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
       return [{ kind: 'sleep', at: e.at, text: 'this PC went to sleep or hibernated' }];
     if (e.id === 2004 && p.includes('resource-exhaustion'))
       return [{ kind: 'memory', at: e.at, text: 'this PC ran out of memory' }];
+    if (e.id === 1001 && p.includes('systemerrorreporting')) {
+      const code = /bugcheck was:\s*(0x[0-9a-f]{1,8})/i.exec(e.process)?.[1];
+      return [{ kind: 'crash', at: e.at, text: 'this PC blue-screened' + (code ? ' (stop code ' + code + ')' : '') }];
+    }
     if (e.id === 18590 && p.includes('hyper-v-worker')) {
       const code = /ErrorCode0:\s*(0x[0-9a-f]{1,8})/i.exec(e.process)?.[1];
       const sub = /ErrorCode1:\s*(0x[0-9a-f]{1,16})/i.exec(e.process)?.[1];
@@ -99,15 +102,11 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
 export const readStopEvents = (since: Date): StopEvent[] => {
   if (!isWin) return [];
   refuseInSelfTest('read the Windows event log');
-  const script =
-    "$ErrorActionPreference='SilentlyContinue'; $t=[datetime]::Parse('" +
-    since.toISOString() +
-    "').ToLocalTime(); $e = Get-WinEvent -FilterHashtable @(@{LogName='System'; Id=1074,6008,41,42,2004; StartTime=$t}, @{LogName='Microsoft-Windows-Hyper-V-Worker-Admin'; Id=18590; StartTime=$t}) -MaxEvents 100 | ForEach-Object { [pscustomobject]@{ at=$_.TimeCreated.ToUniversalTime().ToString('o'); id=$_.Id; provider=$_.ProviderName; process=$(if ($_.Id -eq 1074) { [string]$_.Properties[0].Value } elseif ($_.Id -eq 18590) { ([string]$_.Message).Substring(0, [math]::Min(390, ([string]$_.Message).Length)) } else { '' }) } }; ConvertTo-Json -Compress -InputObject @($e)";
-  const result = spawnSync(
-    SYSTEM.powershell(),
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-    { encoding: 'utf8', windowsHide: true, timeout: 60000 },
-  );
+  const result = spawnSync(SYSTEM.powershell(), nativeScript('stop-events.ps1', ['-Since', since.toISOString()]), {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 60000,
+  });
   try {
     return StopEventsSchema.parse(JSON.parse(result.stdout || '[]'));
   } catch {

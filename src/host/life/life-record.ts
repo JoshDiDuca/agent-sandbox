@@ -7,6 +7,7 @@ import { JsonFile } from '../../shared/io/index.js';
 import { hostStateFile } from '../storage/index.js';
 import { causeSince, IsoSchema, type StopCause } from './stop-events.js';
 import { stopWarning } from './stop-warning.js';
+import { saveCrashReport } from './crash-report.js';
 
 const LifeSchema = z.object({
   started: IsoSchema,
@@ -22,6 +23,7 @@ const LifeSchema = z.object({
           text: z.string().max(400),
         })
         .nullable(),
+      report: z.string().max(1000).optional(),
     })
     .optional(),
   reported: z.boolean().optional(),
@@ -32,7 +34,10 @@ export type Life = z.output<typeof LifeSchema>;
 export class LifeRecord {
   private readonly file: JsonFile<Life>;
 
-  constructor(storageRoot: string, dataPath: string) {
+  constructor(
+    private readonly storageRoot: string,
+    private readonly dataPath: string,
+  ) {
     this.file = new JsonFile(LifeSchema, hostStateFile(storageRoot, dataPath, '-life.json'));
   }
 
@@ -54,9 +59,10 @@ export class LifeRecord {
   /**
    * The watcher saw the sandbox close while this PC kept running: closed by you (no cause), or by sleep / low memory.
    */
-  end(cause: StopCause | null, now = new Date()): void {
+  end(cause: StopCause | null, now = new Date(), report: string | null = null): void {
     const life = this.read();
-    if (life && !life.ended) this.file.write({ ...life, ended: { at: now.toISOString(), cause } });
+    if (life && !life.ended)
+      this.file.write({ ...life, ended: { at: now.toISOString(), cause, ...(report ? { report } : {}) } });
   }
 
   /**
@@ -68,6 +74,10 @@ export class LifeRecord {
     const life = this.read();
     if (!life || life.reported || watcherAlive) return null;
     this.file.write({ ...life, reported: true });
-    return stopWarning(life, find);
+    // The watcher writes the report when it sees the end; when this PC itself went down, it is written now.
+    const report = (): string | null =>
+      life.ended?.report ??
+      (find === causeSince ? saveCrashReport(this.storageRoot, this.dataPath, life.lastSeen) : null);
+    return stopWarning(life, find, report);
   }
 }
