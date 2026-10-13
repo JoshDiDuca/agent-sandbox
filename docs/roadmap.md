@@ -17,7 +17,7 @@ design decision first).
 | Agent sessions on Microsoft's newer ConPTY: no garbled screen after resizing, real scrollback for the mouse wheel; late viewers get a replay | done |
 | Security: attach output filter rewritten (OSC 52 bypasses), project files cannot map folders outside the project, repo guard covers Claude/VS Code/MCP files, submodules and more git keys | done |
 
-## 1.3 — Settings and network
+## 1.3 — Settings and network (released in 1.4.0)
 
 | Item | Status |
 | --- | --- |
@@ -31,13 +31,17 @@ design decision first).
 | Network category: allow only these hosts (proxy + firewall), blocked hosts, LAN block, DNS, an upstream proxy, port forwarding from the PC into the sandbox | done |
 | Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | done |
 
-## 1.4 — Accountability and containment
+## 1.4 — Accountability, containment and reliability (released)
 
 | Item | Status |
 | --- | --- |
 | Audit log (optional): programs started in the sandbox (Windows process auditing, every agent), files changed, sessions, repo-guard findings; kept *n* days, size-capped, compressed daily; `sandbox audit` | done |
 | Contained storage (optional): persisted data in one VHDX disk image, mounted only while a sandbox runs (nothing it wrote is reachable on the PC at rest), with a size cap; needs one admin prompt per launch | idea: cannot be tested inside Windows Sandbox (its Virtual Disk Service does not start); needs testing on a PC before it is built |
 | Containment without admin: programs and scripts the sandbox writes into a project get the "downloaded from the internet" mark (`storage.markSandboxFiles`); a warning when the persisted data passes `storage.warnDataGb` | done |
+| Agents left overnight: the PC kept awake while a sandbox runs (`sandbox.keepAwake`); a warning when Windows Update waits to restart; the next launch says why the last sandbox ended (crash inside it with its stop code, restart, sleep, power, low memory) | done |
+| Windows inside the sandbox crashed under heavy parallel builds (twice on 13 Oct 2026): a fixed-size paging file created at start (`sandbox.pageFileMb`), a memory log in `C:\AgentData\logs` (size-capped) so a crash leaves evidence, fewer cargo jobs per agent by default | done |
+| A project's looser request (vGPU, ...) can be allowed once, for that project only; with vGPU, Vulkan runs on the GPU (Dozen) | done |
+| The CPU cap and paging file scripts: Windows calls in their own small C# files, the scripts a few readable lines | done |
 
 ## 1.5 — VPN
 

@@ -74,7 +74,8 @@ const cargoShim = (env: ToolEnv, rust: Toolchains['rust']): void => {
 const cargoDefaults = (host: string): void => {
   const file = tool('rust', 'cargo', 'config.toml');
   if (exists(file) || !exists(path.dirname(file))) return;
-  const jobs = Math.max(2, Math.min(8, Math.floor(os.cpus().length / 2)));
+  // Several agents often build at once: up to 4 jobs each (8 each crashed Windows inside the sandbox on 13 Oct 2026).
+  const jobs = Math.max(2, Math.min(4, Math.floor(os.cpus().length / 4)));
   const gnu = host.endsWith('-gnu');
   fs.writeFileSync(file, [
     '# Written by windows-development-sandbox once; edit freely, it is never overwritten.',

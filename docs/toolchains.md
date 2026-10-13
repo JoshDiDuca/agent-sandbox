@@ -52,8 +52,9 @@ publishes a Windows build, else compiled once.
 `CARGO_TARGET_DIR` you set yourself always wins. sccache keeps its cache in `C:\AgentData\cache\sccache` unless the
 project sets `SCCACHE_DIR`.
 
-The first time, `C:\AgentData\tools\rust\cargo\config.toml` gets Windows-friendly defaults: half the CPUs as build
-jobs (at most 8; many parallel rustc processes ran out of paging file) and, for the GNU host, `debug =
+The first time, `C:\AgentData\tools\rust\cargo\config.toml` gets Windows-friendly defaults: a quarter of the CPUs
+as build jobs (2 to 4: several agents often build at once, and many parallel rustc processes ran out of memory and
+crashed Windows inside the sandbox) and, for the GNU host, `debug =
 "line-tables-only"` (full debug info made test executables bigger than the 2 GB Windows allows). It is never
 overwritten; edit it freely.
 
