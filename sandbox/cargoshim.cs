@@ -17,11 +17,15 @@ static class CargoShim
             Console.Error.WriteLine("error: the real cargo was not found (AGENT_REAL_CARGO).");
             return 101;
         }
-        var start = new ProcessStartInfo(real, ArgumentsOf(Environment.CommandLine)) { UseShellExecute = false };
+        ProcessStartInfo start = new ProcessStartInfo(real, ArgumentsOf(Environment.CommandLine));
+        start.UseShellExecute = false;
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CARGO_TARGET_DIR")))
         {
             string root = CheckoutOf(Environment.CurrentDirectory);
-            if (root != null) start.EnvironmentVariables["CARGO_TARGET_DIR"] = Path.Combine(root, "target", "sandbox");
+            if (root != null)
+            {
+                start.EnvironmentVariables["CARGO_TARGET_DIR"] = Path.Combine(root, "target", "sandbox");
+            }
         }
         // Ctrl+C reaches cargo too (same console); the shim only waits for it to finish.
         Console.CancelKeyPress += delegate(object sender, ConsoleCancelEventArgs e) { e.Cancel = true; };
@@ -35,11 +39,17 @@ static class CargoShim
     static string CheckoutOf(string dir)
     {
         string cargoRoot = null;
-        for (var d = new DirectoryInfo(dir); d != null; d = d.Parent)
+        for (DirectoryInfo d = new DirectoryInfo(dir); d != null; d = d.Parent)
         {
             string git = Path.Combine(d.FullName, ".git");
-            if (Directory.Exists(git) || File.Exists(git)) return d.FullName;
-            if (cargoRoot == null && File.Exists(Path.Combine(d.FullName, "Cargo.toml"))) cargoRoot = d.FullName;
+            if (Directory.Exists(git) || File.Exists(git))
+            {
+                return d.FullName;
+            }
+            if (cargoRoot == null && File.Exists(Path.Combine(d.FullName, "Cargo.toml")))
+            {
+                cargoRoot = d.FullName;
+            }
         }
         return cargoRoot;
     }
@@ -49,8 +59,19 @@ static class CargoShim
     {
         string s = commandLine.TrimStart();
         int end;
-        if (s.StartsWith("\"")) { end = s.IndexOf('"', 1); end = end < 0 ? s.Length : end + 1; }
-        else { end = s.IndexOf(' '); if (end < 0) end = s.Length; }
+        if (s.StartsWith("\""))
+        {
+            end = s.IndexOf('"', 1);
+            end = end < 0 ? s.Length : end + 1;
+        }
+        else
+        {
+            end = s.IndexOf(' ');
+            if (end < 0)
+            {
+                end = s.Length;
+            }
+        }
         return s.Substring(end).TrimStart();
     }
 }

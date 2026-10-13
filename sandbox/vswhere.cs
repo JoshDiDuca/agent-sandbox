@@ -12,13 +12,19 @@ using System.Text.RegularExpressions;
 
 static class Program
 {
+    private const int MaxFindResults = 100;
+
     static int Main(string[] args)
     {
         string here = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
         string config = Path.Combine(here, "vswhere.json");
-        if (!File.Exists(config)) return 0; // no instance: print nothing, like vswhere without Visual Studio
+        if (!File.Exists(config))
+        {
+            // No instance: print nothing, like vswhere without Visual Studio.
+            return 0;
+        }
         string json = File.ReadAllText(config);
-        var instance = new Dictionary<string, string>();
+        Dictionary<string, string> instance = new Dictionary<string, string>();
         instance["instanceId"] = "agentsandbox";
         instance["installationName"] = "VisualStudio/portable";
         instance["installationPath"] = Read(json, "installationPath");
@@ -29,54 +35,110 @@ static class Program
         instance["isComplete"] = "true";
         instance["isLaunchable"] = "true";
 
-        string property = null, find = null, format = "text";
+        string property = null;
+        string find = null;
+        string format = "text";
         for (int i = 0; i < args.Length; i++)
         {
             string a = args[i].TrimStart('-', '/').ToLowerInvariant();
             string next = i + 1 < args.Length ? args[i + 1] : null;
-            if (a == "property" && next != null) { property = next; i++; }
-            else if (a == "find" && next != null) { find = next; i++; }
-            else if (a == "format" && next != null) { format = next.ToLowerInvariant(); i++; }
-            else if ((a == "products" || a == "requires" || a == "version" || a == "requiresany") && next != null) { i++; while (i + 1 < args.Length && !args[i + 1].StartsWith("-")) i++; }
+            if (next == null)
+            {
+                continue;
+            }
+            if (a == "property")
+            {
+                property = next;
+                i++;
+            }
+            else if (a == "find")
+            {
+                find = next;
+                i++;
+            }
+            else if (a == "format")
+            {
+                format = next.ToLowerInvariant();
+                i++;
+            }
+            else if (a == "products" || a == "requires" || a == "version" || a == "requiresany")
+            {
+                i++;
+                while (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
+                {
+                    i++;
+                }
+            }
         }
-        if (find != null) { foreach (string f in Find(instance["installationPath"], find)) Console.WriteLine(f); return 0; }
+        if (find != null)
+        {
+            foreach (string f in Find(instance["installationPath"], find))
+            {
+                Console.WriteLine(f);
+            }
+            return 0;
+        }
         if (property != null)
         {
             string value;
-            if (instance.TryGetValue(property, out value)) Console.WriteLine(value);
+            if (instance.TryGetValue(property, out value))
+            {
+                Console.WriteLine(value);
+            }
             return 0;
         }
         if (format == "json")
         {
-            var sb = new StringBuilder("[\n  {\n");
-            int n = 0;
-            foreach (var pair in instance) sb.Append("    \"" + pair.Key + "\": \"" + pair.Value.Replace("\\", "\\\\") + "\"" + (++n < instance.Count ? ",\n" : "\n"));
-            sb.Append("  }\n]");
-            Console.WriteLine(sb.ToString());
+            Console.WriteLine(Json(instance));
             return 0;
         }
-        foreach (var pair in instance) Console.WriteLine(pair.Key + ": " + pair.Value);
+        foreach (KeyValuePair<string, string> pair in instance)
+        {
+            Console.WriteLine(pair.Key + ": " + pair.Value);
+        }
         return 0;
+    }
+
+    static string Json(Dictionary<string, string> instance)
+    {
+        StringBuilder sb = new StringBuilder("[\n  {\n");
+        int n = 0;
+        foreach (KeyValuePair<string, string> pair in instance)
+        {
+            n++;
+            sb.Append("    \"" + pair.Key + "\": \"" + pair.Value.Replace("\\", "\\\\") + "\"" + (n < instance.Count ? ",\n" : "\n"));
+        }
+        sb.Append("  }\n]");
+        return sb.ToString();
     }
 
     static string Read(string json, string key)
     {
-        var m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+        Match m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
         return m.Success ? Regex.Unescape(m.Groups[1].Value) : "";
     }
 
-    /** -find with * and ** (e.g. VC\Tools\MSVC\**\bin\Hostx64\x64\cl.exe), relative to the installation. */
+    // -find with * and ** (e.g. VC\Tools\MSVC\**\bin\Hostx64\x64\cl.exe), relative to the installation.
     static IEnumerable<string> Find(string root, string pattern)
     {
         string regex = "^" + Regex.Escape(pattern.Replace('/', '\\')).Replace("\\*\\*\\\\", "(?:.*\\\\)?").Replace("\\*\\*", ".*").Replace("\\*", "[^\\\\]*") + "$";
-        var re = new Regex(regex, RegexOptions.IgnoreCase);
-        var results = new List<string>();
-        if (!Directory.Exists(root)) return results;
+        Regex re = new Regex(regex, RegexOptions.IgnoreCase);
+        List<string> results = new List<string>();
+        if (!Directory.Exists(root))
+        {
+            return results;
+        }
         foreach (string file in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories))
         {
             string rel = file.Substring(root.TrimEnd('\\').Length + 1);
-            if (re.IsMatch(rel)) results.Add(file);
-            if (results.Count >= 100) break;
+            if (re.IsMatch(rel))
+            {
+                results.Add(file);
+            }
+            if (results.Count >= MaxFindResults)
+            {
+                break;
+            }
         }
         return results;
     }

@@ -19,10 +19,13 @@ static class OpensslShim
             Console.Error.WriteLine("openssl is not available: Git for Windows is not installed in this sandbox.");
             return 127;
         }
-        var start = new ProcessStartInfo(exe, ArgumentsOf(Environment.CommandLine)) { UseShellExecute = false };
+        ProcessStartInfo start = new ProcessStartInfo(exe, ArgumentsOf(Environment.CommandLine));
+        start.UseShellExecute = false;
         string conf = Path.Combine(mingw, "etc\\ssl\\openssl.cnf");
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OPENSSL_CONF")) && File.Exists(conf))
+        {
             start.EnvironmentVariables["OPENSSL_CONF"] = conf;
+        }
         using (Process p = Process.Start(start))
         {
             p.WaitForExit();
@@ -35,8 +38,19 @@ static class OpensslShim
     {
         string s = commandLine.TrimStart();
         int end;
-        if (s.StartsWith("\"")) { end = s.IndexOf('"', 1); end = end < 0 ? s.Length : end + 1; }
-        else { end = s.IndexOf(' '); if (end < 0) end = s.Length; }
+        if (s.StartsWith("\""))
+        {
+            end = s.IndexOf('"', 1);
+            end = end < 0 ? s.Length : end + 1;
+        }
+        else
+        {
+            end = s.IndexOf(' ');
+            if (end < 0)
+            {
+                end = s.Length;
+            }
+        }
         return s.Substring(end).TrimStart();
     }
 }

@@ -15,7 +15,8 @@ static class GitShim
             Console.Error.WriteLine("fatal: git is not available in this sandbox.");
             return 128;
         }
-        var start = new ProcessStartInfo(node, "\"" + guard + "\" " + ArgumentsOf(Environment.CommandLine)) { UseShellExecute = false };
+        ProcessStartInfo start = new ProcessStartInfo(node, "\"" + guard + "\" " + ArgumentsOf(Environment.CommandLine));
+        start.UseShellExecute = false;
         using (Process p = Process.Start(start))
         {
             p.WaitForExit();
@@ -28,8 +29,19 @@ static class GitShim
     {
         string s = commandLine.TrimStart();
         int end;
-        if (s.StartsWith("\"")) { end = s.IndexOf('"', 1); end = end < 0 ? s.Length : end + 1; }
-        else { end = s.IndexOf(' '); if (end < 0) end = s.Length; }
+        if (s.StartsWith("\""))
+        {
+            end = s.IndexOf('"', 1);
+            end = end < 0 ? s.Length : end + 1;
+        }
+        else
+        {
+            end = s.IndexOf(' ');
+            if (end < 0)
+            {
+                end = s.Length;
+            }
+        }
         return s.Substring(end).TrimStart();
     }
 }

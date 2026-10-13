@@ -10,7 +10,7 @@ using System.Threading;
 
 static class LinkGate
 {
-    const string SlotPrefix = @"Global\AgentSandboxLinkSlot";
+    private const string SlotPrefix = @"Global\AgentSandboxLinkSlot";
 
     static int Main()
     {
@@ -27,7 +27,10 @@ static class LinkGate
             args = args + " -fuse-ld=lld \"-B" + lld + "\"";
         }
         Mutex[] slots = new Mutex[SlotCount()];
-        for (int i = 0; i < slots.Length; i++) slots[i] = new Mutex(false, SlotPrefix + i);
+        for (int i = 0; i < slots.Length; i++)
+        {
+            slots[i] = new Mutex(false, SlotPrefix + i);
+        }
         try
         {
             int held = Acquire(slots);
@@ -42,7 +45,10 @@ static class LinkGate
         }
         finally
         {
-            foreach (Mutex slot in slots) slot.Dispose();
+            foreach (Mutex slot in slots)
+            {
+                slot.Dispose();
+            }
         }
     }
 
@@ -61,7 +67,8 @@ static class LinkGate
 
     static int Run(string program, string args)
     {
-        var start = new ProcessStartInfo(program, args) { UseShellExecute = false };
+        ProcessStartInfo start = new ProcessStartInfo(program, args);
+        start.UseShellExecute = false;
         // Ctrl+C reaches the linker too (same console); the gate only waits for it to finish.
         Console.CancelKeyPress += delegate(object sender, ConsoleCancelEventArgs e) { e.Cancel = true; };
         using (Process p = Process.Start(start))
@@ -91,7 +98,10 @@ static class LinkGate
         else
         {
             end = s.IndexOf(' ');
-            if (end < 0) end = s.Length;
+            if (end < 0)
+            {
+                end = s.Length;
+            }
         }
         return s.Substring(end).TrimStart();
     }
