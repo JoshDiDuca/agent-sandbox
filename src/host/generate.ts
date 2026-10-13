@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import type { GenerateOptions, Generated, GuestSession, HostProbe, ProfileResult } from '../core/types.js';
 import { decideToolchains, resolveToolchains } from '../core/detect-toolchains.js';
 import { readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
+import { widenForProjects } from '../core/project-policy.js';
 import { dirExists, ensureDir, fail, writeJson } from '../core/util.js';
 import { substDrives } from '../shared/guest-paths.js';
 import { PROJECTS_GUEST, hubName } from '../shared/projects.js';
@@ -49,7 +50,12 @@ const hostToolsOf = (probe: HostProbe): GuestSession['hostTools'] => ({
  */
 export const logonEnv = (workspace: string): string => '@set "AGENT_WORKSPACE=' + workspace.replace(/[\r\n"]/g, '').replace(/%/g, '%%') + '"\r\n';
 
-export const generateSandbox =(o: GenerateOptions): Generated & { personalization: string } => {
+export const generateSandbox = (given: GenerateOptions): Generated & { personalization: string } => {
+  // Several projects at boot: the sandbox also gets what the others want and you allowed (core/project-policy.ts).
+  const others = given.bootWants?.projects ?? [];
+  const boot = planBootProjects({ run: given.run, packageRoot: given.packageRoot, extraProjects: given.extraProjects, knownProjects: given.knownProjects });
+  const wide = widenForProjects(given.run.config, others, { keepOff: given.bootWants?.keepOff, reserved: [...boot.roots, ...boot.projects].map((p) => p.guest), exists: dirExists });
+  const o: GenerateOptions = { ...given, run: { ...given.run, config: wide.config } };
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness = harnessName === 'none' ? null : config.harnesses[harnessName] ?? fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', '));
   if (!dirExists(workspaceHost)) fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
@@ -57,12 +63,11 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
   assertTestWritable(dataPath);
 
   // Checked before anything is written, so a refusal leaves nothing behind.
-  const memoryMb = resolveMemoryMb(config.sandbox, o.freeMemoryBytes);
+  const memoryMb = Math.max(resolveMemoryMb(config.sandbox, o.freeMemoryBytes), ...others.map((p) => typeof p.config.sandbox.memoryMb === 'number' ? p.config.sandbox.memoryMb : 0));
   const launchId = Date.now() + '-' + crypto.randomBytes(3).toString('hex');
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
-  const boot = planBootProjects({ run: o.run, packageRoot: o.packageRoot, extraProjects: o.extraProjects, knownProjects: o.knownProjects });
   const mappings = collectMappings(o, launchPath, boot);
 
   const profile = harnessName === 'claude' ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets) : NO_PROFILE;
@@ -113,5 +118,5 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
 
   const wsbPath = path.join(launchPath, 'agent.wsb');
   fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
-  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: boot };
+  return { wsbPath, launchPath, launchId, sessionPath, memoryMb, bootConfig: config, widened: wide.widened, mappings, profile, personalization, databases, toolchains: toolchainDecisions, projects: { ...boot, notes: [...boot.notes, ...wide.notes] } };
 };
