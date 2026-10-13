@@ -89,3 +89,18 @@ export function msvcHint(root: string): string | undefined {
   }
   return undefined;
 }
+
+/** A pyproject.toml in the project root or one folder down that has a [tool.uv] table (read with bounded effort). */
+export function uvHint(root: string): string | undefined {
+  const files = projectEntries(root).filter((e) => e === 'pyproject.toml' || e.endsWith('/pyproject.toml'));
+  for (const rel of files) {
+    try {
+      const file = path.join(root, rel);
+      if (fs.statSync(file).size <= 64 * 1024 && fs.readFileSync(file, 'utf8').includes('[tool.uv]'))
+        return 'pyproject.toml uses uv';
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+}

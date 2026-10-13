@@ -17,7 +17,7 @@ Commonly changed:
 | Setting | |
 |---|---|
 | `defaultHarness` | the agent `sandbox launch` starts |
-| `toolchains.<lang>.enabled` | `true`, `false` or `"auto"` (only when the project uses it) |
+| `toolchains.<lang>.enabled` | `true`, `false` or `"auto"` (only when the project uses it). Every tool is like this, Bun, uv and VS Code too, and a project's `.sandbox-config.json` can set it |
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |

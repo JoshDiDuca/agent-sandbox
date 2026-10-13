@@ -25,14 +25,12 @@ export function firstBoot(dataPath: string): boolean {
 export function firstBootNotice(
   dataPath: string,
   generated: { toolchains: Record<string, { on: boolean }>; databases: { database: string }[] },
-  config: Config,
 ): string | null {
   const wanted = [
     'node',
     ...Object.entries(generated.toolchains)
       .filter(([, d]) => d.on)
       .map(([name]) => name),
-    ...(config.toolchains.vscode.enabled ? ['vscode'] : []),
     ...generated.databases.map((d) => d.database),
   ];
   return firstStartNotice(

@@ -88,8 +88,8 @@ export function plan(config: Toolchains, versions: ToolVersions, o: ToolchainOpt
       install: (env) => setupPhp(env, config.php),
     },
     { name: 'Deno', enabled: wanted(config.deno.enabled, 'deno'), install: (env) => setupDeno(env) },
-    { name: 'Bun', enabled: config.bun.enabled, install: (env) => setupBun(env) },
-    { name: 'uv', enabled: config.uv.enabled, install: (env) => setupUv(env) },
+    { name: 'Bun', enabled: wanted(config.bun.enabled, 'bun'), install: (env) => setupBun(env) },
+    { name: 'uv', enabled: wanted(config.uv.enabled, 'uv'), install: (env) => setupUv(env) },
     { name: 'PowerShell 7', enabled: wanted(config.pwsh.enabled, 'pwsh'), install: (env) => setupPwsh(env, o.refresh) },
     // The openssl tool comes from Git's install: after Git.
     {
@@ -104,7 +104,12 @@ export function plan(config: Toolchains, versions: ToolVersions, o: ToolchainOpt
       shared: true,
       install: (env) => setupMesa(env, config.mesa),
     },
-    { name: 'VS Code', enabled: config.vscode.enabled, shared: true, install: (env) => setupVscode(env, o.refresh) },
+    {
+      name: 'VS Code',
+      enabled: wanted(config.vscode.enabled, 'vscode'),
+      shared: true,
+      install: (env) => setupVscode(env, o.refresh),
+    },
     // Desktop apps and extra tools (apps.install / apps.custom); games and 3D apps copy Mesa's OpenGL next to them.
     {
       name: 'Apps',

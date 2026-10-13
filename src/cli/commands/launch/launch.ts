@@ -210,7 +210,7 @@ class Launcher {
     const { config } = run;
     // Hiding runs alongside; a failure to find the window must never break the launch or an attach.
     const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot).catch(() => false) : null;
-    const headsUp = firstBootNotice(dataPath, generated, config);
+    const headsUp = firstBootNotice(dataPath, generated);
     if (options.terminal || options.noAgent || extras.waitUntilReady) {
       if (headsUp) console.log(headsUp);
       await waitForBoot(dataPath, generated.launchId, Boolean(headsUp));

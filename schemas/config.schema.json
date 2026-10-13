@@ -819,8 +819,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": "Bun runtime (claude-mem needs it)."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Bun (JavaScript runtime and package manager; claude-mem needs it). true, false, or \"auto\" = only when the project has bun.lock, bun.lockb or bunfig.toml."
             }
           },
           "additionalProperties": false
@@ -829,8 +837,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": "uv, the Python package manager (claude-mem needs it)."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "uv (fast Python package and tool manager; claude-mem needs it for its search index). true, false, or \"auto\" = only when the project has uv.lock, a [tool.uv] pyproject.toml, toolchains.python.tools, or an agent installed with uv."
             }
           },
           "additionalProperties": false
@@ -863,8 +879,16 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "description": "Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist."
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "const": "auto"
+                }
+              ],
+              "description": "Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist. true, false, or \"auto\" = when VS Code is installed on this PC."
             },
             "setup": {
               "type": "boolean",
