@@ -9,7 +9,7 @@ import { assertTestWritable } from '../../../shared/test-guard.js';
 import { assertNoLinks, fileExists, isLink, isWin, removeLink } from '../../../core/util/index.js';
 import { resetRunDir } from '../../../host/channel/index.js';
 import { sandboxFeatureInstalled } from '../../../host/sandbox/index.js';
-import { listSessions, runPaths, scanRequests } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import { removeTree } from '../data/remove.js';
 import {
   deadPidFiles,
@@ -88,13 +88,13 @@ export const CHECKS: RepairCheck[] = [
     name: 'Sandbox run state',
     run: (env) => {
       if (env.running) return ok('a sandbox is running; its state is in use.');
-      if (isLink(runPaths(env.dataPath).run)) {
+      if (isLink(new RunDir(env.dataPath).root)) {
         resetRunDir(env.dataPath);
         return { status: 'fixed', detail: 'the run folder was a link; removed the link itself.' };
       }
       // The last sandbox's status file is normal after it closes; sessions still marked running or unanswered requests are not.
-      const ghosts = listSessions(env.dataPath).filter((s) => s.phase === 'running' || s.phase === 'starting').length;
-      const requests = scanRequests(env.dataPath);
+      const ghosts = new RunDir(env.dataPath).listSessions().filter((s) => s.phase === 'running' || s.phase === 'starting').length;
+      const requests = new RunDir(env.dataPath).scanRequests();
       const pending = requests.valid.length + requests.invalid.length;
       if (!ghosts && !pending) return ok('clean.');
       resetRunDir(env.dataPath);

@@ -3,7 +3,7 @@ import { requestSession, waitForReady, waitForSession } from '../../../host/chan
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../../host/sandbox/index.js';
-import { readSandboxStatus } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import type { SandboxStatus, SessionStatus } from '../../../core/types.js';
 import { errMsg, fail, sleep } from '../../../core/util/index.js';
 import { c } from '../../output/index.js';
@@ -24,7 +24,7 @@ export const attachHere = (ctx: Context, session: Parameters<typeof attachTermin
 /** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
 export const runningSandboxStatus = async (dataPath: string): Promise<SandboxStatus> => {
   for (let i = 0; i < 60; i++) {
-    const status = readSandboxStatus(dataPath);
+    const status = new RunDir(dataPath).readSandboxStatus();
     if (status) return status;
     await sleep(1000);
   }

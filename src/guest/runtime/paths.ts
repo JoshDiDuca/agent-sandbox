@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { runPaths } from '../../shared/channel/run-dir.js';
+import { RunDir } from '../../shared/channel/run-dir.js';
 
 export const isWin = process.platform === 'win32';
 export const dryRun = process.env.AGENT_DRY_RUN === '1';
@@ -12,4 +12,4 @@ export const hostToolsDir = process.env.AGENT_HOST_TOOLS_DIR ?? 'C:\\HostTools';
 export const localDir = process.env.AGENT_LOCAL_DIR ?? 'C:\\nvm';
 export const toolsDir = path.join(dataDir, 'tools');
 export const logsDir = path.join(dataDir, 'logs');
-export const run = runPaths(dataDir);
+export const run = new RunDir(dataDir);

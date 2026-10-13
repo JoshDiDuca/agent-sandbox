@@ -36,9 +36,9 @@ const tryWrite = (file: string, value: unknown): void => {
   }
 };
 export const respond = (id: string, result: Omit<GuestResponse, 'id' | 'finishedAt'>): void =>
-  tryWrite(run.response(id), { id, ...result, message: result.message.slice(0, MAX_MESSAGE), finishedAt: now() });
+  tryWrite(run.responseFile(id), { id, ...result, message: result.message.slice(0, MAX_MESSAGE), finishedAt: now() });
 export const saveStatus = (status: SessionStatus): void =>
-  tryWrite(run.session(status.id), { ...status, message: status.message.slice(0, MAX_MESSAGE), updatedAt: now() });
+  tryWrite(run.sessionFile(status.id), { ...status, message: status.message.slice(0, MAX_MESSAGE), updatedAt: now() });
 export const safely = (what: string, work: () => void): void => {
   try {
     work();

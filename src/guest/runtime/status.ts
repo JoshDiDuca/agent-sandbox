@@ -24,7 +24,7 @@ const ownAddresses = (): string[] =>
     .slice(0, 8);
 
 const writeJsonAtomicChecked = (phase: SandboxStatus['phase'], message: string): void => {
-  writeJsonAtomic(run.sandbox, {
+  writeJsonAtomic(run.sandboxFile, {
     launchId: session.launchId,
     phase,
     message,

@@ -5,7 +5,7 @@ import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { readRegistry } from '../../../host/projects/index.js';
 import { guardedProjects, repoFindings } from '../../../host/guard/index.js';
 import { projectForGuestDir } from '../../../shared/paths/index.js';
-import { listProjectStatus, readSandboxStatus } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { errMsg, safeText } from '../../../core/util/index.js';
 import { printJson, table } from '../../output/index.js';
@@ -32,7 +32,7 @@ const runningPorts = async (ctx: Context, cwd: string): Promise<Set<number> | nu
 
 export const status = async (ctx: Context): Promise<number> => {
   const running = isSandboxRunning();
-  const sandbox = readSandboxStatus(ctx.dataPath);
+  const sandbox = new RunDir(ctx.dataPath).readSandboxStatus();
   const registry = running ? readRegistry(ctx.storageRoot) : null;
   const ready = running && sandbox?.phase === 'ready';
   const daemon = ready
@@ -43,7 +43,7 @@ export const status = async (ctx: Context): Promise<number> => {
     : '-';
   const here = running ? locateHere(ctx, sandbox) : { project: null, guestDir: null };
   const sessionList = running ? await listedSessions(ctx) : [];
-  const provisioning = running ? listProjectStatus(ctx.dataPath) : [];
+  const provisioning = running ? new RunDir(ctx.dataPath).listProjectStatus() : [];
   const ports = ready && sandbox ? await runningPorts(ctx, sandbox.guestWorkspace) : null;
   const findings = repoFindings(ctx.dataPath);
   const startedAt = Number(/^(\d+)-/.exec(registry?.launchId ?? sandbox?.launchId ?? '')?.[1]) || null;

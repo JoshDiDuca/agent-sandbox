@@ -1,12 +1,12 @@
 import { connect, runTerminalClient } from '../../shared/pty/index.js';
-import { readSession } from '../../shared/channel/run-dir.js';
-import { dataDir } from '../runtime/paths.js';
+import type { SessionStatusT } from '../../shared/channel/schema.js';
+import { run } from '../runtime/paths.js';
 
 /** A session that is still being set up (its project provisioning, its agent installing): show the progress until it runs. */
-const waitUntilStarted = async (id: string): Promise<ReturnType<typeof readSession>> => {
+const waitUntilStarted = async (id: string): Promise<SessionStatusT | null> => {
   let last = '';
   for (let i = 0; i < 3600; i++) {
-    const s = readSession(dataDir, id);
+    const s = run.readSession(id);
     if (s && s.phase !== 'starting') return s;
     if (s && s.message !== last) {
       console.log('  ' + s.message);
@@ -14,7 +14,7 @@ const waitUntilStarted = async (id: string): Promise<ReturnType<typeof readSessi
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  return readSession(dataDir, id);
+  return run.readSession(id);
 };
 
 export const viewSession = async (id: string): Promise<number> => {

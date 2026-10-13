@@ -13,7 +13,7 @@ import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { readRegistry, type ProjectRegistry } from '../../../host/projects/index.js';
 import { type NeedsRestart } from '../../../host/projects/index.js';
 import { hostDirFor, projectForGuestDir } from '../../../shared/paths/index.js';
-import { readSandboxStatus } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { c } from '../../output/index.js';
 import { working } from '../../output/index.js';
@@ -49,7 +49,7 @@ const sessionsToReopen = (
 
 /** Shuts the sandbox down and waits until it (and the background sync's final pass) is gone. */
 const stopAndWait = async (ctx: Context): Promise<void> => {
-  const status = readSandboxStatus(ctx.dataPath);
+  const status = new RunDir(ctx.dataPath).readSandboxStatus();
   await working('Stopping the sandbox (history syncs back)', async () => {
     await execInSandbox(
       ctx.dataPath,

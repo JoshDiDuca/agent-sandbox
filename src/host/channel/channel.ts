@@ -6,15 +6,7 @@ import type { GuestRequest, GuestResponse, Harness, SandboxStatus, SessionStatus
 import { assertNoLinks, fail, isLink, removeLink, safeText, sleep } from '../../core/util/index.js';
 import { isWithin } from '../../shared/paths/index.js';
 import type { ProjectSpecT } from '../../shared/channel/index.js';
-import {
-  listSessions,
-  now,
-  readProjectStatus,
-  readResponse,
-  readSandboxStatus,
-  readSession,
-  runPaths,
-} from '../../shared/channel/index.js';
+import { now, RunDir } from '../../shared/channel/index.js';
 import { writeJsonAtomic } from '../../shared/io/index.js';
 import { safeRemove } from '../../shared/io/index.js';
 import { assertTestWritable, refuseInSelfTest } from '../test-guard.js';
@@ -59,7 +51,7 @@ export const waitForReady = (
     BOOT_TIMEOUT_MS,
     isAlive,
     () => {
-      const status = readSandboxStatus(dataPath);
+      const status = new RunDir(dataPath).readSandboxStatus();
       if (!status || (launchId !== null && status.launchId !== launchId)) return null;
       if (status.message !== last) {
         progress(safeText(status.message).slice(0, 300));
@@ -81,8 +73,8 @@ export const sendRequest = (dataPath: string, request: GuestRequest): void => {
   // Asking the sandbox to power off is the one request with an effect outside it, so the self-test never sends it.
   if (request.kind === 'exec' && /shutdown/i.test(request.command[0] ?? ''))
     refuseInSelfTest('shut down Windows Sandbox');
-  assertNoLinks(dataPath, runPaths(dataPath).requests);
-  writeJsonAtomic(runPaths(dataPath).request(request.id), request);
+  assertNoLinks(dataPath, new RunDir(dataPath).requestsDir);
+  writeJsonAtomic(new RunDir(dataPath).requestFile(request.id), request);
 };
 
 export const waitForResponse = (
@@ -95,11 +87,11 @@ export const waitForResponse = (
     timeoutMs,
     isAlive,
     () => {
-      const response = readResponse(dataPath, requestId);
+      const response = new RunDir(dataPath).readResponse(requestId);
       if (response)
         try {
-          assertNoLinks(dataPath, runPaths(dataPath).responses);
-          fs.rmSync(runPaths(dataPath).response(requestId), { force: true });
+          assertNoLinks(dataPath, new RunDir(dataPath).responsesDir);
+          fs.rmSync(new RunDir(dataPath).responseFile(requestId), { force: true });
         } catch {
           /* a planted link: the answer is read, nothing is deleted */
         }
@@ -147,18 +139,18 @@ export const prepareProject = async (
     60 * 60 * 1000,
     isAlive,
     () => {
-      const status = readProjectStatus(dataPath, project.name);
+      const status = new RunDir(dataPath).readProjectStatus(project.name);
       if (status && status.message !== last) {
         progress(safeText(status.message).slice(0, 300));
         last = status.message;
       }
-      return readResponse(dataPath, requestId);
+      return new RunDir(dataPath).readResponse(requestId);
     },
     'Timed out waiting for the project to be set up.',
   );
   try {
-    assertNoLinks(dataPath, runPaths(dataPath).responses);
-    fs.rmSync(runPaths(dataPath).response(requestId), { force: true });
+    assertNoLinks(dataPath, new RunDir(dataPath).responsesDir);
+    fs.rmSync(new RunDir(dataPath).responseFile(requestId), { force: true });
   } catch {
     /* read, nothing deleted */
   }
@@ -178,7 +170,7 @@ export const waitForSession = (
     timeoutMs,
     isAlive,
     () => {
-      const session = readSession(dataPath, sessionId);
+      const session = new RunDir(dataPath).readSession(sessionId);
       if (!session) return null;
       if (session.message !== last) {
         progress(safeText(session.message).slice(0, 300));
@@ -229,14 +221,14 @@ export const pingSandbox = async (dataPath: string, isAlive: () => boolean): Pro
 };
 
 export const runningSessions = (dataPath: string): SessionStatus[] =>
-  listSessions(dataPath).filter((s: SessionStatus) => s.phase === 'running');
+  new RunDir(dataPath).listSessions().filter((s: SessionStatus) => s.phase === 'running');
 
 /** Most sessions the host will ever contact for one listing: a sandbox can write as many session files as it likes. */
 export const MAX_QUERIED_SESSIONS = 32;
 
 /** Running sessions of the sandbox that is running now (its launch id), newest last, capped. */
 export const currentSessions = (dataPath: string): SessionStatus[] => {
-  const launchId = readSandboxStatus(dataPath)?.launchId;
+  const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
   return runningSessions(dataPath)
     .filter((s) => s.launchId === launchId)
     .slice(-MAX_QUERIED_SESSIONS);
@@ -272,13 +264,13 @@ export const pickSession = (dataPath: string, sessionId?: string, guestDir: stri
 
 /** Forgets status from a previous sandbox run so nothing stale is picked up. */
 export const resetRunDir = (dataPath: string): void => {
-  const p = runPaths(dataPath);
+  const p = new RunDir(dataPath);
   // A link (planted by a sandbox) is removed itself and never followed, including `run` itself.
-  if (isLink(p.run)) {
-    removeLink(p.run);
+  if (isLink(p.root)) {
+    removeLink(p.root);
     return;
   }
-  for (const target of [p.sandbox, p.requests, p.responses, p.sessions, p.projects]) {
+  for (const target of [p.sandboxFile, p.requestsDir, p.responsesDir, p.sessionsDir, p.projectsDir]) {
     safeRemove(target, dataPath);
   }
 };

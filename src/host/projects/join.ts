@@ -10,7 +10,7 @@ import { checkJoin, protectionsOf } from '../../core/local-config/index.js';
 import { resolveToolchains } from '../../core/detect/index.js';
 import { assertNoLinks, fail } from '../../core/util/index.js';
 import { Id, type ProjectSpecT } from '../../shared/channel/index.js';
-import { readSandboxStatus } from '../../shared/channel/index.js';
+import { RunDir } from '../../shared/channel/index.js';
 import { syncProjectIn } from '../../sync/index.js';
 import { planDatabases } from '../launch/index.js';
 import { decideProjectToolchains } from '../launch/index.js';
@@ -22,7 +22,7 @@ import { addRepoSnapshot } from '../guard/index.js';
 
 /** The launch folder of the running sandbox (host-only storage; its id comes from the guest, so it is checked). */
 export const runningLaunchPath = (storageRoot: string, dataPath: string): string | null => {
-  const launchId = readSandboxStatus(dataPath)?.launchId;
+  const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
   if (!launchId || !/^\d+-[0-9a-f]{6}$/.test(launchId) || readRegistry(storageRoot)?.launchId !== launchId) return null;
   const launchPath = path.join(storageRoot, 'launches', launchId);
   assertNoLinks(storageRoot, launchPath);

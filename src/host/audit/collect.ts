@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { assertNoLinks } from '../../core/util/index.js';
-import { listSessions, runPaths } from '../../shared/channel/index.js';
+import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { AuditEvent, AuditLog, fold } from './log.js';
 
@@ -85,7 +85,7 @@ export class AuditCollector {
   /** Programs the sandbox reported: taken in (checked) and deleted. */
   private takeGuestReports(): void {
     if (!this.settings.processes) return;
-    const dir = runPaths(this.dataPath).audit;
+    const dir = new RunDir(this.dataPath).auditDir;
     assertNoLinks(this.dataPath, dir);
     let names: string[] = [];
     try {
@@ -121,8 +121,8 @@ export class AuditCollector {
   }
 
   private trackSessions(): void {
-    const now = new Map(listSessions(this.dataPath).map((s) => [s.id, s.phase]));
-    for (const s of listSessions(this.dataPath)) {
+    const now = new Map(new RunDir(this.dataPath).listSessions().map((s) => [s.id, s.phase]));
+    for (const s of new RunDir(this.dataPath).listSessions()) {
       const before = this.sessions.get(s.id);
       if (!before && s.phase === 'running') this.add({ k: 'session', a: 'start', p: s.harness, w: s.cwd, c: s.id });
       if (before === 'running' && (s.phase === 'exited' || s.phase === 'failed'))

@@ -18,12 +18,12 @@ import { pruneToolLeftovers } from '../toolchains/leftovers.js';
 import { wanted } from '../toolchains/detect.js';
 import { configureVscode } from '../toolchains/tools/vscode.js';
 import { enableProcessAudit } from '../audit/process-audit.js';
-import { now, readSession } from '../../shared/channel/run-dir.js';
+import { now } from '../../shared/channel/run-dir.js';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { viewSession } from '../sessions/viewer.js';
 import { saveBootEnv } from './boot-env.js';
 import { primaryProject, saveProjectStatus } from './project-status.js';
-import { dataDir, dryRun, isWin, localDir, logsDir, run, toolsDir } from '../runtime/paths.js';
+import { dryRun, isWin, localDir, logsDir, run, toolsDir } from '../runtime/paths.js';
 import { log, logPath, warn } from '../runtime/log.js';
 import { mkdirp } from '../runtime/fs.js';
 import { session, workspace } from '../runtime/session.js';
@@ -65,7 +65,7 @@ const writeDbCommand = (): string => {
 
 const waitForPrimary = async (): Promise<boolean> => {
   for (let i = 0; i < 600; i++) {
-    const s = readSession(dataDir, session.launchId);
+    const s = run.readSession(session.launchId);
     if (s?.phase === 'running') return true;
     if (s?.phase === 'failed' || s?.phase === 'exited') {
       warn(s.message);
@@ -90,7 +90,7 @@ export const runBoot = async (): Promise<void> => {
   if (!fs.statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
     throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
   mkdirp(toolsDir);
-  mkdirp(run.run);
+  mkdirp(run.root);
 
   step(1, 'Network and session host');
   let ptyHost: string | null = null;
@@ -186,7 +186,7 @@ export const runBoot = async (): Promise<void> => {
     return;
   }
   startDaemon(env);
-  writeJsonAtomic(run.request(session.launchId), {
+  writeJsonAtomic(run.requestFile(session.launchId), {
     kind: 'session',
     id: session.launchId,
     harness: session.harnessName,

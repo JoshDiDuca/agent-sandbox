@@ -21,7 +21,7 @@ export const saveProjectStatus = (
   summary: string[],
 ): void => {
   try {
-    writeJsonAtomic(run.project(name), {
+    writeJsonAtomic(run.projectFile(name), {
       name,
       workspace,
       phase,

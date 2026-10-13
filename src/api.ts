@@ -13,7 +13,7 @@ import {
   waitForSession,
 } from './host/channel/index.js';
 import { loadConfig } from './core/config/index.js';
-import { listSessions, readSandboxStatus } from './shared/channel/index.js';
+import { RunDir } from './shared/channel/index.js';
 import { isSandboxRunning } from './host/sandbox/index.js';
 import { expandPath, fail } from './core/util/index.js';
 
@@ -51,9 +51,9 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
       : fail('No Windows Sandbox is running.', 'Start one first, e.g. sandbox claude --headless.');
   return {
     isRunning: alive,
-    status: () => readSandboxStatus(dataPath),
+    status: () => new RunDir(dataPath).readSandboxStatus(),
     ready,
-    sessions: () => listSessions(dataPath),
+    sessions: () => new RunDir(dataPath).listSessions(),
     exec: async (command, o = {}) =>
       execInSandbox(dataPath, command, o.cwd ?? (await ready()).guestWorkspace, o.timeoutSeconds ?? 600, alive),
     startSession: async (o = {}) => {

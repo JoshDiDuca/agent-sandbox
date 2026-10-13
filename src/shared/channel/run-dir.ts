@@ -9,29 +9,13 @@ import type { GuestRequestT, GuestResponseT, ProjectStatusT, SandboxStatusT, Ses
 import { readValid } from '../io/index.js';
 
 /** Ids become file names, so only a strict alphabet is allowed (no separators, no dots). */
-export const safeId = (id: string): string => Id.parse(id);
+export function safeId(id: string): string {
+  return Id.parse(id);
+}
 
-export const runPaths = (dataDir: string) => {
-  const run = path.join(dataDir, 'run');
-  const file =
-    (dir: string) =>
-    (id: string): string =>
-      path.join(run, dir, safeId(id) + '.json');
-  return {
-    run,
-    sandbox: path.join(run, 'sandbox.json'),
-    requests: path.join(run, 'requests'),
-    responses: path.join(run, 'responses'),
-    sessions: path.join(run, 'sessions'),
-    projects: path.join(run, 'projects'),
-    /** audit.processes: programs the sandbox started, in small .jsonl files the host takes in and deletes. */
-    audit: path.join(run, 'audit'),
-    request: file('requests'),
-    response: file('responses'),
-    session: file('sessions'),
-    project: file('projects'),
-  };
-};
+export function now(): string {
+  return new Date().toISOString();
+}
 
 /** Message files in a folder (strict names only), validated; invalid ones are reported separately for deletion. */
 const scan = <S extends z.ZodType>(schema: S, dir: string): { valid: z.output<S>[]; invalid: string[] } => {
@@ -47,18 +31,59 @@ const scan = <S extends z.ZodType>(schema: S, dir: string): { valid: z.output<S>
   return { valid, invalid };
 };
 
-export const readSandboxStatus = (dataDir: string): SandboxStatusT | null =>
-  readValid(SandboxStatus, runPaths(dataDir).sandbox);
-export const readSession = (dataDir: string, id: string): SessionStatusT | null =>
-  readValid(SessionStatus, runPaths(dataDir).session(id));
-export const readResponse = (dataDir: string, id: string): GuestResponseT | null =>
-  readValid(GuestResponse, runPaths(dataDir).response(id));
-export const listSessions = (dataDir: string): SessionStatusT[] =>
-  scan(SessionStatus, runPaths(dataDir).sessions).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-export const readProjectStatus = (dataDir: string, name: string): ProjectStatusT | null =>
-  readValid(ProjectStatus, runPaths(dataDir).project(name));
-export const listProjectStatus = (dataDir: string): ProjectStatusT[] =>
-  scan(ProjectStatus, runPaths(dataDir).projects).valid.slice(0, 64);
-export const scanRequests = (dataDir: string): { valid: GuestRequestT[]; invalid: string[] } =>
-  scan(GuestRequest, runPaths(dataDir).requests);
-export const now = (): string => new Date().toISOString();
+/** The run folder of one data folder: where each message lives, and reading them validated. */
+export class RunDir {
+  readonly root: string;
+  readonly sandboxFile: string;
+  readonly requestsDir: string;
+  readonly responsesDir: string;
+  readonly sessionsDir: string;
+  readonly projectsDir: string;
+  /** audit.processes: programs the sandbox started, in small .jsonl files the host takes in and deletes. */
+  readonly auditDir: string;
+
+  constructor(dataDir: string) {
+    this.root = path.join(dataDir, 'run');
+    this.sandboxFile = path.join(this.root, 'sandbox.json');
+    this.requestsDir = path.join(this.root, 'requests');
+    this.responsesDir = path.join(this.root, 'responses');
+    this.sessionsDir = path.join(this.root, 'sessions');
+    this.projectsDir = path.join(this.root, 'projects');
+    this.auditDir = path.join(this.root, 'audit');
+  }
+
+  requestFile(id: string): string {
+    return path.join(this.requestsDir, safeId(id) + '.json');
+  }
+  responseFile(id: string): string {
+    return path.join(this.responsesDir, safeId(id) + '.json');
+  }
+  sessionFile(id: string): string {
+    return path.join(this.sessionsDir, safeId(id) + '.json');
+  }
+  projectFile(name: string): string {
+    return path.join(this.projectsDir, safeId(name) + '.json');
+  }
+
+  readSandboxStatus(): SandboxStatusT | null {
+    return readValid(SandboxStatus, this.sandboxFile);
+  }
+  readSession(id: string): SessionStatusT | null {
+    return readValid(SessionStatus, this.sessionFile(id));
+  }
+  readResponse(id: string): GuestResponseT | null {
+    return readValid(GuestResponse, this.responseFile(id));
+  }
+  listSessions(): SessionStatusT[] {
+    return scan(SessionStatus, this.sessionsDir).valid.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  }
+  readProjectStatus(name: string): ProjectStatusT | null {
+    return readValid(ProjectStatus, this.projectFile(name));
+  }
+  listProjectStatus(): ProjectStatusT[] {
+    return scan(ProjectStatus, this.projectsDir).valid.slice(0, 64);
+  }
+  scanRequests(): { valid: GuestRequestT[]; invalid: string[] } {
+    return scan(GuestRequest, this.requestsDir);
+  }
+}

@@ -3,7 +3,7 @@ import { askYesNo } from '../../../core/prompt.js';
 import { execInSandbox, restartSessions, currentSessions } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
-import { readSandboxStatus } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
 import { requireOnPc, requireRunning, sandboxAlive, type Context } from '../context.js';
 import { hereDir, locateHere } from '../projects/index.js';
@@ -14,7 +14,7 @@ import { c } from '../../output/index.js';
 export const restart = async (ctx: Context): Promise<number> => {
   requireOnPc('restart');
   requireRunning();
-  const here = locateHere(ctx, readSandboxStatus(ctx.dataPath));
+  const here = locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus());
   const scope = ctx.options.all || !here.project ? undefined : here.project.guest;
   if (!scope && !ctx.options.all)
     console.log(c.dim(hereDir(ctx) + ' is not a project of the running sandbox: restarting every session.'));
@@ -37,7 +37,7 @@ export const stop = async (ctx: Context): Promise<number> => {
     return 0;
   }
   const sandbox =
-    readSandboxStatus(ctx.dataPath) ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
+    new RunDir(ctx.dataPath).readSandboxStatus() ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
   // Stopping ends every project's sessions, not just this folder's: say which, and ask when others would end too.
   const here = locateHere(ctx, sandbox);
   const running = currentSessions(ctx.dataPath);

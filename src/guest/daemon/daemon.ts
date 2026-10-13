@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import type { GuestRequest } from '../../core/types.js';
-import { readSession, scanRequests } from '../../shared/channel/run-dir.js';
 import { saveClaudeMem } from '../setup/claude-mem.js';
 import { execCommand } from './exec.js';
 import { prepareProject, restartSessions, startSession } from './sessions.js';
 import { live, respond, safely } from './state.js';
-import { dataDir, run } from '../runtime/paths.js';
+import { run } from '../runtime/paths.js';
 import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
 
@@ -27,13 +26,13 @@ const handle = (req: GuestRequest): Promise<void> | void => {
 };
 
 const tick = (): void => {
-  const { valid, invalid } = scanRequests(dataDir);
+  const { valid, invalid } = run.scanRequests();
   // Anything in requests/ that is not a valid request (wrong kind, bad id, junk) is deleted unread.
   for (const file of invalid)
     safely('removing an invalid request', () => fs.rmSync(file, { recursive: true, force: true }));
   for (const req of valid) {
-    safely('claiming a request', () => fs.rmSync(run.request(req.id), { force: true }));
-    if (readSession(dataDir, req.id)) continue;
+    safely('claiming a request', () => fs.rmSync(run.requestFile(req.id), { force: true }));
+    if (run.readSession(req.id)) continue;
     // Not awaited: starting a session or running a command must not hold up other requests.
     void Promise.resolve(handle(req)).catch((e: unknown) => respond(req.id, { ok: false, message: errMsg(e) }));
   }

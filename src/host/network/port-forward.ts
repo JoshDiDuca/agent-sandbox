@@ -6,7 +6,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { z } from 'zod';
 import { relayPort, type PortForward } from '../../shared/network/index.js';
-import { readSandboxStatus } from '../../shared/channel/index.js';
+import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { isSandboxAddress } from '../channel/index.js';
 
@@ -24,7 +24,7 @@ export const readForwards = (storageRoot: string, dataPath: string): PortForward
 
 /** The sandbox's address on this PC's Hyper-V network, from its status (null until it has one). */
 export const sandboxAddress = (dataPath: string): string | null =>
-  readSandboxStatus(dataPath)?.addresses?.find((a: string) => isSandboxAddress(a)) ?? null;
+  new RunDir(dataPath).readSandboxStatus()?.addresses?.find((a: string) => isSandboxAddress(a)) ?? null;
 
 /** Starts one listener per forward; returns a function that stops them. */
 export const startPortForwards = (

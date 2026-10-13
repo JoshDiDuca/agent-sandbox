@@ -6,7 +6,7 @@ import type { Viewers } from '../../../shared/pty/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { readRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { isWithin, projectForGuestDir } from '../../../shared/paths/index.js';
-import { listSessions, readSandboxStatus } from '../../../shared/channel/index.js';
+import { RunDir } from '../../../shared/channel/index.js';
 import { safeText } from '../../../core/util/index.js';
 import { printJson, table } from '../../output/index.js';
 import { type Context } from '../context.js';
@@ -30,10 +30,10 @@ export const listedSessions = async (ctx: Context): Promise<Listed[]> => {
   const live = isSandboxRunning();
   // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
   const ask = new Set(live ? currentSessions(ctx.dataPath).map((s) => s.id) : []);
-  const here = live ? locateHere(ctx, readSandboxStatus(ctx.dataPath)) : { guestDir: null };
+  const here = live ? locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus()) : { guestDir: null };
   const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
   return Promise.all(
-    listSessions(ctx.dataPath).map(async (s) => ({
+    new RunDir(ctx.dataPath).listSessions().map(async (s) => ({
       ...s,
       projectName: projectOf(projects, s),
       here: Boolean(here.guestDir && isWithin(here.guestDir, s.cwd)),

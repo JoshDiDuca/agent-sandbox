@@ -75,7 +75,7 @@ export const startProcessCollector = (): void => {
       if (newest) last = newest;
       if (lines.length)
         fs.writeFileSync(
-          path.join(mkdirp(run.audit), Date.now() + '-' + process.pid + '.jsonl'),
+          path.join(mkdirp(run.auditDir), Date.now() + '-' + process.pid + '.jsonl'),
           lines.join('\n') + '\n',
         );
     } catch (e) {
