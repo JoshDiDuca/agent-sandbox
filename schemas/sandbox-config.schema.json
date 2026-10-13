@@ -701,6 +701,22 @@
             "enabled": {
               "type": "boolean",
               "description": "Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist."
+            },
+            "setup": {
+              "type": "boolean",
+              "description": "Point VS Code at the sandbox's own tools (JDK, Python, Go, compilers, .NET, Git, PowerShell 7 and Git Bash terminals) and install the language extensions for the toolchains in use."
+            },
+            "recommended": {
+              "type": "boolean",
+              "description": "Also install the extensions a project recommends in its .vscode/extensions.json."
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[\\w-]+\\.[\\w-]+$"
+              },
+              "description": "More extensions to install in every sandbox, e.g. eamodio.gitlens, ms-azuretools.vscode-docker."
             }
           },
           "additionalProperties": false

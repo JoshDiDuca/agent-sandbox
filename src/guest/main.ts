@@ -14,6 +14,8 @@ import { writeManagedSettings } from './setup/policy.js';
 import { applyPersonalization, setupGitConfig } from './setup/user.js';
 import { ensurePtyHost } from './ptyhost.js';
 import { pruneToolLeftovers } from './toolchains/leftovers.js';
+import { wanted } from './toolchains/common.js';
+import { configureVscode } from './toolchains/vscode.js';
 import { now, readSession, writeJsonAtomic } from '../shared/rundir.js';
 import { viewSession } from './view.js';
 import { saveBootEnv } from './boot-env.js';
@@ -69,6 +71,11 @@ const main = async (): Promise<void> => {
     gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [], apps: session.apps,
   });
   if (!dryRun) tools.prepend.push(writeDbCommand());
+  const vscode = session.toolchains.vscode;
+  if (vscode.enabled && vscode.setup !== false) {
+    const languages = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'].filter((t) => wanted((session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>)[t]?.enabled ?? false, t));
+    await soft('VS Code setup', () => configureVscode(tools, { toolchains: ['node', ...languages], databases: (session.databases ?? []).map((d) => d.database), config: vscode, workspace }));
+  }
   const env = agentEnv(tools);
   persistEnvironment(env, Object.keys(tools.vars));
   saveBootEnv({ basePath, toolVars: Object.keys(tools.vars), steps: tools.steps, summary: tools.summary, lan });

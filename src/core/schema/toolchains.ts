@@ -79,6 +79,11 @@ export const Toolchains = z.strictObject({
     enabled: z.boolean().describe('Mesa 3D (llvmpipe): OpenGL 4.5 in software for games and apps when there is no GPU (sandbox.vGpu off). Copy opengl32.dll and libgallium_wgl.dll from %MESA_DIR% next to the program\'s .exe.'),
     vulkan: z.boolean().describe('Also software Vulkan 1.4 (Mesa lavapipe) with the Khronos loader, registered for every program; for wgpu set WGPU_BACKEND=vulkan.'),
   }),
-  vscode: toggle('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
+  vscode: z.strictObject({
+    enabled: z.boolean().describe('Portable VS Code inside the sandbox (code on PATH, desktop shortcut); its settings and extensions persist.'),
+    setup: z.boolean().describe('Point VS Code at the sandbox\'s own tools (JDK, Python, Go, compilers, .NET, Git, PowerShell 7 and Git Bash terminals) and install the language extensions for the toolchains in use.'),
+    recommended: z.boolean().describe('Also install the extensions a project recommends in its .vscode/extensions.json.'),
+    extensions: z.array(z.string().regex(/^[\w-]+\.[\w-]+$/, 'publisher.name, e.g. eamodio.gitlens')).describe('More extensions to install in every sandbox, e.g. eamodio.gitlens, ms-azuretools.vscode-docker.'),
+  }),
   environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'letters, digits and _ only'), z.string()).describe('Extra environment variables for the agent and every terminal, e.g. registry mirrors: {"NPM_CONFIG_REGISTRY": "https://...", "PIP_INDEX_URL": "https://..."}.'),
 });

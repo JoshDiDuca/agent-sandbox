@@ -138,7 +138,10 @@
       "vulkan": false
     },
     "vscode": {
-      "enabled": true
+      "enabled": true,
+      "setup": true,
+      "recommended": true,
+      "extensions": []
     },
     "environment": {}
   },

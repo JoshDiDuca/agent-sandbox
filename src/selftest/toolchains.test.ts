@@ -5,6 +5,7 @@ import { javaMajorFrom, pickGoRelease, pickNodeVersion, pickPackageVersion, pick
 import { parseReleasePage, parseReleaseTags } from '../shared/download.js';
 import { decidePwsh, pcHasPwsh, PWSH_MAX_BYTES, readPwshScripts, usesPwsh } from '../core/detect-pwsh.js';
 import { binstallAsset, CLI_TOOLS, decideCli, pwshAsset, type CliSettings } from '../guest/toolchains/catalogue.js';
+import { missingExtensions, vscodeExtensions, vscodeSettings } from '../guest/toolchains/vscode-profile.js';
 import { APP_CATEGORIES, APPS, appsNeedMesa, appsToInstall, exeMatcher } from '../shared/apps.js';
 import { Config, LocalOverrides } from '../core/schema.js';
 import type { Suite } from './suite.js';
@@ -114,6 +115,15 @@ export const toolchainsSuite: Suite = {
     const scanned = readPwshScripts(scanRoot);
     t.equal(scanned.map((s) => s.path), ['moh.ps1', 'scripts/build.ps1'], 'pwsh scan: *.ps1 at the root and one folder down only (node_modules skipped)');
     t.equal(scanned[1].text.length, PWSH_MAX_BYTES, 'pwsh scan: each script is read up to its cap');
+
+    t.section('VS Code set-up');
+    const vs = vscodeSettings({ javaHome: 'C:\\t\\java\\jdk-17.0.9+9', python: 'C:\\t\\python\\python.exe', pwsh: 'C:\\t\\pwsh\\pwsh.exe', gcc: 'C:\\t\\mingw\\bin\\gcc.exe', cl: 'C:\\t\\msvc\\cl.exe', dotnet: 'C:\\t\\dotnet\\dotnet.exe' });
+    t.equal([vs['java.jdt.ls.java.home'], (vs['java.configuration.runtimes'] as { name: string }[])[0].name, vs['python.defaultInterpreterPath'], vs['terminal.integrated.defaultProfile.windows'], vs['C_Cpp.default.compilerPath'], vs['dotnet.dotnetPath']],
+      ['C:\\t\\java\\jdk-17.0.9+9', 'JavaSE-17', 'C:\\t\\python\\python.exe', 'PowerShell 7', 'C:\\t\\msvc\\cl.exe', 'C:\\t\\dotnet'], 'vscode: settings point at the sandbox\'s JDK (with its version), Python, PowerShell 7, compiler (MSVC first) and .NET');
+    t.check(!('go.goroot' in vs) && !('git.path' in vs), 'vscode: tools that are not installed are not set');
+    const ext = vscodeExtensions({ toolchains: ['node', 'java'], databases: ['postgres'], recommended: ['Foo.Bar', 'not an id'], extra: ['eamodio.gitlens', 'redhat.java'] });
+    t.check(ext.includes('redhat.java') && ext.includes('mtxr.sqltools-driver-pg') && ext.includes('foo.bar') && ext.includes('eamodio.gitlens') && !ext.includes('not an id') && ext.filter((e) => e === 'redhat.java').length === 1, 'vscode: extensions for the languages and databases in use, the project\'s and yours (no duplicates, nothing malformed)');
+    t.equal(missingExtensions(['golang.go', 'redhat.java'], ['golang.go-0.48.0', 'extensions.json']), ['redhat.java'], 'vscode: only extensions not installed yet are downloaded');
 
     t.section('apps catalogue');
     const ids = APPS.map((a) => a.id);

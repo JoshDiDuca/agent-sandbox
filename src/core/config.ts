@@ -35,7 +35,7 @@ export const DEFAULTS: Config = {
     uv: { enabled: true },
     vcRuntime: { enabled: false },
     mesa: { enabled: false, vulkan: false },
-    vscode: { enabled: true },
+    vscode: { enabled: true, setup: true, recommended: true, extensions: [] },
     environment: {},
   },
   databases: {
