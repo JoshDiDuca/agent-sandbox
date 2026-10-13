@@ -14,6 +14,7 @@ export type AppCategory =
   | 'cloud'
   | 'diagrams'
   | 'network'
+  | 'reversing'
   | 'cli';
 
 export const APP_CATEGORIES: { id: AppCategory; label: string; description: string }[] = [
@@ -51,6 +52,11 @@ export const APP_CATEGORIES: { id: AppCategory; label: string; description: stri
   },
   { id: 'diagrams', label: 'Diagrams & docs', description: 'Diagrams and document conversion.' },
   { id: 'network', label: 'Network & HTTP', description: 'Inspect and test HTTP traffic and APIs.' },
+  {
+    id: 'reversing',
+    label: 'Reverse engineering',
+    description: 'Decompilers, debuggers and binary tools for programs you are allowed to analyse.',
+  },
   {
     id: 'cli',
     label: 'Command-line tools',
@@ -533,6 +539,109 @@ export const APPS: AppEntry[] = [
     source: gh('grafana/k6', '^k6-v[\\d.]+-windows-amd64\\.zip$'),
     exe: 'k6.exe',
     cli: true,
+  },
+  // ---- reverse engineering
+  {
+    id: 'rea',
+    name: 'REA (Reverse Engineer Anything)',
+    category: 'reversing',
+    about:
+      'Agent-driven reverse engineering (MCP server and CLI, by morluto). Run `rea setup` once to add it to Claude Code and Codex. Native binaries need Ghidra; needs Node 22.19+.',
+    size: '8 MB',
+    source: { npm: 'rea-agents' },
+    exe: 'rea.cmd',
+    cli: true,
+  },
+  {
+    id: 'ghidra',
+    name: 'Ghidra',
+    category: 'reversing',
+    about: "NSA's reverse-engineering suite: disassembler and decompiler. Needs Java 21 (toolchains.java).",
+    size: '570 MB',
+    source: gh('NationalSecurityAgency/ghidra', '^ghidra_[\\d.]+_PUBLIC_[\\d]+\\.zip$'),
+    exe: 'ghidraRun.bat',
+  },
+  {
+    id: 'x64dbg',
+    name: 'x64dbg',
+    category: 'reversing',
+    about: 'Debugger for 64- and 32-bit Windows programs.',
+    size: '32 MB',
+    source: gh('x64dbg/x64dbg', '^snapshot_[\\d_-]+\\.zip$'),
+    exe: '/^x64dbg\\.exe$/',
+  },
+  {
+    id: 'ilspy',
+    name: 'ILSpy',
+    category: 'reversing',
+    about: '.NET decompiler.',
+    size: '55 MB',
+    source: gh('icsharpcode/ILSpy', '^ILSpy_windows_selfcontained_[\\d.]+-x64\\.zip$'),
+    exe: 'ILSpy.exe',
+  },
+  {
+    id: 'dnspy',
+    name: 'dnSpyEx',
+    category: 'reversing',
+    about: '.NET debugger and assembly editor.',
+    size: '100 MB',
+    source: gh('dnSpyEx/dnSpy', '^dnSpy-net-win64\\.zip$'),
+    exe: 'dnSpy.exe',
+  },
+  {
+    id: 'die',
+    name: 'Detect It Easy',
+    category: 'reversing',
+    about: 'Identifies file types, compilers and packers.',
+    size: '25 MB',
+    source: gh('horsicq/DIE-engine', '^die_win64_portable_[\\d.]+_x64\\.zip$'),
+    exe: 'die.exe',
+  },
+  {
+    id: 'pe-bear',
+    name: 'PE-bear',
+    category: 'reversing',
+    about: 'Views and edits Windows executables (PE files).',
+    size: '12 MB',
+    source: gh('hasherezade/pe-bear', '^PE-bear_[\\d.]+_qt6_x64_win_vs22\\.zip$'),
+    exe: 'PE-bear.exe',
+  },
+  {
+    id: 'cutter',
+    name: 'Cutter',
+    category: 'reversing',
+    about: 'Reverse-engineering GUI built on rizin.',
+    size: '141 MB',
+    source: gh('rizinorg/cutter', '^Cutter-v[\\d.]+-Windows-x86_64\\.zip$'),
+    exe: 'cutter.exe',
+  },
+  {
+    id: 'radare2',
+    name: 'radare2',
+    category: 'reversing',
+    about: 'Command-line reverse-engineering framework (r2).',
+    size: '14 MB',
+    source: gh('radareorg/radare2', '^radare2-[\\d.]+-w64\\.zip$'),
+    exe: 'radare2.exe',
+    cli: true,
+  },
+  {
+    id: 'jadx',
+    name: 'JADX',
+    category: 'reversing',
+    about: 'Android APK and DEX decompiler.',
+    size: '99 MB',
+    source: gh('skylot/jadx', '^jadx-gui-[\\d.]+-with-jre-win\\.zip$'),
+    exe: 'jadx-gui.exe',
+  },
+  {
+    id: 'system-informer',
+    name: 'System Informer',
+    category: 'reversing',
+    about: "Process, service and network monitor (Process Hacker's successor).",
+    size: '22 MB',
+    source: gh('winsiderss/systeminformer', '^systeminformer-[\\d.]+-bin\\.zip$'),
+    exe: 'SystemInformer.exe',
   },
   // ---- command-line tools
   {
