@@ -195,6 +195,59 @@
         "blockPrivateRanges": {
           "type": "boolean",
           "description": "Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox."
+        },
+        "allowOnly": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^(@developer|(\\*\\.)?([a-zA-Z0-9-]+\\.)*[a-zA-Z0-9-]+)$"
+          },
+          "description": "Only these hosts can be reached once the sandbox is set up (tools still download first). *.example.com covers its subdomains; @developer adds package registries, GitHub, toolchain downloads and the AI providers. Programs go through a proxy in the sandbox (HTTP_PROXY); anything else is blocked by its firewall. Empty = no limit."
+        },
+        "blockHosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-zA-Z0-9-]+\\.)*[a-zA-Z0-9-]+$"
+          },
+          "description": "Never reachable from the sandbox, e.g. production servers or telemetry (each exact name; the sandbox's hosts file sends them nowhere)."
+        },
+        "forwardPorts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pc": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "The port on this PC (localhost only)."
+              },
+              "sandbox": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "The port inside the sandbox (a server there may listen on localhost only)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Reach servers in the sandbox from this PC: http://localhost:<pc> here goes to <sandbox> inside, while it runs. Nothing else on your network can use them."
+        },
+        "dns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d{1,3}(\\.\\d{1,3}){3}$"
+          },
+          "description": "DNS servers for the sandbox instead of your network's, e.g. 1.1.1.1 and 9.9.9.9."
+        },
+        "proxy": {
+          "type": "string",
+          "pattern": "^(https?:\\/\\/[^\\s]+)?$",
+          "description": "An HTTP proxy the sandbox uses to reach the internet (HTTP_PROXY / HTTPS_PROXY for everything in it), e.g. http://proxy.corp:8080. Empty = none."
         }
       },
       "additionalProperties": false

@@ -42,6 +42,7 @@ import { testGuardSuite } from './test-guard.test.js';
 import { toolchainsSuite } from './toolchains.test.js';
 import { workspaceSuite } from './workspace.test.js';
 import { workspaceViewSuite } from './workspace-view.test.js';
+import { liveNetworkSuite } from './live-network.test.js';
 
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
@@ -58,7 +59,7 @@ export const SUITES: Suite[] = [
   // every command as its own process
   hostSimSuite,
   // real processes
-  liveDaemonSuite, liveProjectsSuite, liveGitSuite,
+  liveDaemonSuite, liveProjectsSuite, liveGitSuite, liveNetworkSuite,
 ];
 
 /** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */

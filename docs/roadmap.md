@@ -28,7 +28,7 @@ design decision first).
 | Git in the sandbox: `core.autocrlf` no longer `true` (worktrees made inside checked out CRLF) | done |
 | claude-mem: keep a few dated backups instead of replacing the only copy | done |
 | `py` launcher next to `python` | done |
-| Network category: offline, allow only these hosts, blocked hosts, LAN rules, firewall rules, port forwarding between the PC and the sandbox | planned |
+| Network category: allow only these hosts (proxy + firewall), blocked hosts, LAN block, DNS, an upstream proxy, port forwarding from the PC into the sandbox | done |
 | Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | done |
 
 ## 1.4 — Accountability and containment

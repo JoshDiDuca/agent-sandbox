@@ -26,6 +26,21 @@ export const Sandbox = z.strictObject({
   protectedClient: z.boolean().describe('Run the sandbox window in Protected Client mode (recommended).'),
   headless: z.boolean().describe('Hide the sandbox window (sbx-show brings it back). A headless sandbox shuts down when its last session ends.'),
 });
+const Port = z.number().int().min(1).max(65535);
+const HostEntry = z.string().max(253).regex(/^(@developer|(\*\.)?([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+)$/, 'a host name like example.com, *.example.com, or @developer');
+
+export const Network = z.strictObject({
+  blockPrivateRanges: z.boolean().describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.'),
+  allowOnly: z.array(HostEntry).describe('Only these hosts can be reached once the sandbox is set up (tools still download first). *.example.com covers its subdomains; @developer adds package registries, GitHub, toolchain downloads and the AI providers. Programs go through a proxy in the sandbox (HTTP_PROXY); anything else is blocked by its firewall. Empty = no limit.'),
+  blockHosts: z.array(z.string().max(253).regex(/^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+$/, 'a host name like telemetry.example.com')).describe('Never reachable from the sandbox, e.g. production servers or telemetry (each exact name; the sandbox\'s hosts file sends them nowhere).'),
+  forwardPorts: z.array(z.strictObject({
+    pc: Port.describe('The port on this PC (localhost only).'),
+    sandbox: Port.describe('The port inside the sandbox (a server there may listen on localhost only).'),
+  })).describe('Reach servers in the sandbox from this PC: http://localhost:<pc> here goes to <sandbox> inside, while it runs. Nothing else on your network can use them.'),
+  dns: z.array(z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/, 'an IPv4 address like 1.1.1.1')).describe('DNS servers for the sandbox instead of your network\'s, e.g. 1.1.1.1 and 9.9.9.9.'),
+  proxy: z.string().regex(/^(https?:\/\/[^\s]+)?$/, 'http://host:port').describe('An HTTP proxy the sandbox uses to reach the internet (HTTP_PROXY / HTTPS_PROXY for everything in it), e.g. http://proxy.corp:8080. Empty = none.'),
+});
+
 export const WorkspaceFilter = z.strictObject({
   enabled: z.boolean().describe('Keep what your .gitignore lists (.env files, node_modules, build output ...) out of the sandbox. The sandbox works on a copy of the project without those files, kept in step with it both ways within about a second; what it creates that is ignored (its own node_modules, builds) stays in the sandbox. Git works as usual. Off = the project folder itself is mapped.'),
   exclude: z.array(z.string().max(500)).describe('Also keep these out, as .gitignore patterns, e.g. secrets/, *.pem, data/private/.'),

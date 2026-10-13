@@ -81,6 +81,23 @@ On older Windows: folders inside a project root open instantly; anything else of
 Settings > Windows Update ("Get the latest updates as soon as they're available") or the Windows 11 Installation
 Assistant, then update Windows Sandbox from the Microsoft Store; check with `wsb --version`.
 
+## Network
+
+The **Network** category of the settings (or `network` in your file):
+
+| Setting | |
+| --- | --- |
+| `blockPrivateRanges` | your LAN (and SMB) is unreachable from the sandbox; DNS to the gateway still works (on by default) |
+| `allowOnly` | only these hosts can be reached once the sandbox is set up (tools still download first). `*.example.com` covers its subdomains; `@developer` adds package registries, GitHub/GitLab, toolchain downloads and the AI providers. Programs go through a small proxy inside the sandbox (`HTTP_PROXY`, and the Windows proxy setting for browsers); everything else is blocked by the sandbox's firewall. Refused hosts are listed in `logs\netproxy.log` |
+| `blockHosts` | names that go nowhere (the sandbox's hosts file), e.g. production servers or telemetry; exact names, no wildcards |
+| `forwardPorts` | `{ "pc": 3000, "sandbox": 5173 }`: `http://localhost:3000` on your PC reaches port 5173 inside while the sandbox runs, even a dev server that only listens on localhost there. Only this PC can use it; no admin rights needed |
+| `dns` | DNS servers for the sandbox, e.g. `["1.1.1.1", "9.9.9.9"]` |
+| `proxy` | your HTTP proxy for everything in the sandbox (`HTTP_PROXY` / `HTTPS_PROXY`), e.g. `http://proxy.corp:8080`; with `allowOnly`, the sandbox's proxy hands on to it |
+
+These are applied inside the sandbox, where the agent is an administrator: they keep a well-behaved agent (and the
+tools it runs) in bounds, but a determined one could undo them. `sandbox.networking: false` is the only hard isolation.
+A project's `.sandbox-config.json` may add `blockHosts` and turn on `blockPrivateRanges`, nothing else here.
+
 ## Git-ignored files
 
 `workspaceFilter.enabled: true` keeps what your `.gitignore` lists out of the sandbox: `.env` files, your

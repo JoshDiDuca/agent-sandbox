@@ -9,7 +9,7 @@ The sandbox is treated as hostile and your PC as precious.
 - `workspaceFilter.enabled` keeps what git ignores (`.env` files with real keys, your `node_modules`, build output) out
   of the sandbox entirely: it works on a copy without them, synced both ways
   ([details](configuration.md#git-ignored-files)).
-- Your LAN is blocked from inside the sandbox (DNS excepted). `sandbox.networking: false` cuts all network access.
+- Your LAN is blocked from inside the sandbox (DNS excepted). `network.allowOnly` limits it to the hosts you list, `network.blockHosts` blocks names (see [network](configuration.md#network)); these are guardrails inside the sandbox. `sandbox.networking: false` cuts all network access.
 - vGPU is off by default.
 
 ## Secrets

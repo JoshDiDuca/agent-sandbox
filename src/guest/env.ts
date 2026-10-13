@@ -1,5 +1,6 @@
 // Shared state for the guest scripts (main, daemon, view): fixed paths, the session description, logging, status.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, type SpawnOptions, type SpawnSyncOptions } from 'node:child_process';
 import { moveIntoPlace, setChecksumRequired, spawnAsync, stagingFolder } from '../shared/download.js';
@@ -43,8 +44,10 @@ export const setSandboxStatus = (phase: SandboxStatus['phase'], message: string)
   try { writeJsonAtomicChecked(phase, message); } catch (e) { warn('Could not update sandbox status: ' + errMsg(e)); }
 };
 
+const ownAddresses = (): string[] => Object.values(os.networkInterfaces()).flat().filter((i): i is os.NetworkInterfaceInfo => Boolean(i) && i!.family === 'IPv4' && !i!.internal).map((i) => i.address).slice(0, 8);
+
 const writeJsonAtomicChecked = (phase: SandboxStatus['phase'], message: string): void => {
-  writeJsonAtomic(run.sandbox, { launchId: session.launchId, phase, message, updatedAt: now(), workspaceHost: session.workspaceHost, guestWorkspace: workspace, headless: session.headless } satisfies SandboxStatus);
+  writeJsonAtomic(run.sandbox, { launchId: session.launchId, phase, message, updatedAt: now(), workspaceHost: session.workspaceHost, guestWorkspace: workspace, headless: session.headless, addresses: ownAddresses() } satisfies SandboxStatus);
 };
 
 /** Runs a program, streaming output, and throws with a readable message when it fails. */

@@ -28,7 +28,7 @@ export const generateSuite: Suite = {
     const expectedFiles = ['package.json', 'runtime/main.js', 'runtime/daemon.js', 'runtime/view.js', 'runtime/gitguard.js', 'sandbox/bootstrap.ps1', 'sandbox/logon.cmd', 'sandbox/trust.cmd', 'sandbox/ptyhost.cs', 'sandbox/gitshim.cs'];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
     t.equal(missing, [], 'the launch folder has the runtime, the C# sources and the boot scripts');
-    t.equal(fs.readdirSync(path.join(gen.launchPath, 'runtime')).length, 5, 'the runtime is 5 self-contained files');
+    t.equal(fs.readdirSync(path.join(gen.launchPath, 'runtime')).length, 6, 'the runtime is 6 self-contained files');
     const logon = fs.readFileSync(path.join(gen.launchPath, 'sandbox', 'logon.cmd'), 'utf8');
     t.check(logon.indexOf('trust.cmd') < logon.indexOf('wt.exe'), 'logon.cmd applies the sandbox trust settings before opening Windows Terminal');
     t.includes(logon, 'tools\\terminal\\wt.exe', 'logon.cmd opens Windows Terminal from the tools folder');

@@ -3,7 +3,7 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['src/guest/main.ts', 'src/guest/daemon.ts', 'src/guest/view.ts', 'src/guest/gitguard.ts', 'src/guest/db.ts'],
+  entryPoints: ['src/guest/main.ts', 'src/guest/daemon.ts', 'src/guest/view.ts', 'src/guest/gitguard.ts', 'src/guest/db.ts', 'src/guest/netproxy.ts'],
   outdir: 'dist/runtime',
   bundle: true,
   platform: 'node',

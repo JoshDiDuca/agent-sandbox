@@ -3,6 +3,7 @@
 import os from 'node:os';
 import { isSandboxAddress } from '../host/attach.js';
 import { buildFirewallCommands, cidrToRange, ipv4DnsServers, parseDefaultGateways, parseDnsServers, subtractIps } from '../shared/netrules.js';
+import { expandAllowList, hostAllowed, withBlockedHosts } from '../shared/netpolicy.js';
 import type { Suite } from './suite.js';
 
 export const networkSuite: Suite = {
@@ -33,5 +34,15 @@ export const networkSuite: Suite = {
     t.check(!isSandboxAddress('127.0.0.1', interfaces), 'loopback is not');
     t.check(!isSandboxAddress('8.8.8.8', interfaces), 'an internet address is not');
     t.check(!isSandboxAddress('172.20.0.1', interfaces), 'this PC\'s own address on that subnet is not');
+
+    t.section('network settings');
+    const allow = expandAllowList(['@developer', 'Example.COM', '*.corp.example', 'not a host!']);
+    t.check(allow.includes('registry.npmjs.org') && allow.includes('api.anthropic.com') && allow.includes('example.com') && !allow.includes('not a host!'), 'allowOnly: @developer expands to registries, GitHub and AI providers; bad entries are dropped');
+    t.equal(['a.corp.example', 'corp.example', 'example.com', 'www.example.com', 'evil-example.com'].map((h) => hostAllowed(h, allow)), [true, false, true, false, false], 'allowOnly: *.x covers subdomains only, a name covers only itself');
+    const hosts = '127.0.0.1 localhost\r\n# mine\r\n';
+    const once = withBlockedHosts(hosts, ['Telemetry.Example.com', '*.bad']);
+    t.check(once.includes('0.0.0.0 telemetry.example.com') && once.includes('# mine') && !once.includes('*.bad'), 'blockHosts: names go to 0.0.0.0, your own lines stay, wildcards are skipped (a hosts file cannot do them)');
+    t.equal(withBlockedHosts(once, ['telemetry.example.com']), once, 'blockHosts: applying again changes nothing');
+    t.check(!withBlockedHosts(once, []).includes('telemetry'), 'blockHosts: an empty list removes the section');
   },
 };

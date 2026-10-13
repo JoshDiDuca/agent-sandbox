@@ -22,6 +22,8 @@ export const SandboxStatus = z.object({
   workspaceHost: Text(),
   guestWorkspace: Text(),
   headless: z.boolean(),
+  /** The sandbox's IPv4 addresses (for network.forwardPorts; the host only uses ones on its Hyper-V network). */
+  addresses: z.array(z.string().max(45)).max(8).optional(),
 });
 
 const Version = z.strictObject({ spec: Text(128), source: Text(256) });

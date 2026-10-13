@@ -9,7 +9,7 @@ import { provisionHarness, resolveLaunch } from './setup/agents.js';
 import { restoreClaudeMem, syncClaudeProfile } from './setup/claude.js';
 import { agentEnv, persistEnvironment } from './setup/environment.js';
 import { runHooks } from './setup/hooks.js';
-import { applyNetworkPolicy, type LanState } from './setup/network.js';
+import { applyAllowOnly, applyNetworkPolicy, proxyEnv, type LanState } from './setup/network.js';
 import { writeManagedSettings } from './setup/policy.js';
 import { applyPersonalization, setupGitConfig } from './setup/user.js';
 import { ensurePtyHost } from './ptyhost.js';
@@ -71,6 +71,9 @@ const main = async (): Promise<void> => {
     gitEnabled: session.provisioning.git.enabled, gitAccess, hostGit: session.hostTools.git, refresh: session.provisioning.refresh, databases: session.databases ?? [], apps: session.apps,
   });
   if (!dryRun) tools.prepend.push(writeDbCommand());
+  // network.allowOnly / network.proxy: everything started from now on uses the proxy.
+  Object.assign(tools.vars, proxyEnv());
+  await soft('Network: allow only some hosts', async () => { if (await applyAllowOnly()) tools.summary.push('network: only network.allowOnly hosts (refused: logs\\netproxy.log)'); });
   const vscode = session.toolchains.vscode;
   if (vscode.enabled && vscode.setup !== false) {
     const languages = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'].filter((t) => wanted((session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>)[t]?.enabled ?? false, t));

@@ -30,7 +30,12 @@
     "dataName": "default"
   },
   "network": {
-    "blockPrivateRanges": true
+    "blockPrivateRanges": true,
+    "allowOnly": [],
+    "blockHosts": [],
+    "forwardPorts": [],
+    "dns": [],
+    "proxy": ""
   },
   "provisioning": {
     "copyFromHost": true,

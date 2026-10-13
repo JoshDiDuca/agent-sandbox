@@ -163,7 +163,17 @@
       "type": "object",
       "properties": {
         "blockPrivateRanges": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox."
+        },
+        "blockHosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^([a-zA-Z0-9-]+\\.)*[a-zA-Z0-9-]+$"
+          },
+          "description": "Never reachable from the sandbox, e.g. production servers or telemetry (each exact name; the sandbox's hosts file sends them nowhere)."
         }
       },
       "additionalProperties": false

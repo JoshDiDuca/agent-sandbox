@@ -6,7 +6,7 @@ import { Name, SchemaRef, Strings, toggle } from './common.js';
 import { Databases } from './databases.js';
 import { Harness } from './harness.js';
 import { AgentCommands, Attach, ClaudeProfile, Secrets } from './profile.js';
-import { Downloads, Git, GuestWorkspace, Mapping, Provisioning, Sandbox, WorkspaceFilter } from './sandbox.js';
+import { Downloads, Git, GuestWorkspace, Mapping, Network, Provisioning, Sandbox, WorkspaceFilter } from './sandbox.js';
 import { Toolchains } from './toolchains.js';
 import { Apps } from './apps.js';
 import { Projects } from './projects.js';
@@ -24,7 +24,7 @@ export const Config = z.strictObject({
     persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),
     dataName: Name.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
   }),
-  network: z.strictObject({ blockPrivateRanges: z.boolean().describe('Block your LAN (10/8, 172.16/12, 192.168/16, SMB) from inside the sandbox.') }),
+  network: Network,
   provisioning: Provisioning,
   downloads: Downloads,
   toolchains: Toolchains,
@@ -54,7 +54,8 @@ export const LocalOverrides = z.strictObject({
   mappings: z.array(Mapping).describe('Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
   sandbox: Sandbox.omit({ cpuLimit: true }).partial(),
-  network: z.strictObject({ blockPrivateRanges: z.boolean() }).partial(),
+  // A project may block more (the LAN, hosts); it never opens hosts, ports, DNS or a proxy.
+  network: Network.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
   provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true }).extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() }).partial(),
   downloads: Downloads.partial(),
   // Every toolchain setting, each one optional (a project usually only switches languages on or pins a version).

@@ -67,6 +67,7 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   // A project adds catalogue apps to yours; it never removes the ones you chose.
   if (rest.apps?.install) next.apps.install = _.union(config.apps.install, rest.apps.install);
   // Its patterns keep more out on top of yours; yours stay.
+  if (rest.network?.blockHosts) next.network.blockHosts = _.union(config.network.blockHosts, rest.network.blockHosts);
   if (rest.workspaceFilter?.exclude) next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
   if (mappings) next.mappings = [..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())), ...mappings];
   return next;

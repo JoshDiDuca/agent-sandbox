@@ -11,6 +11,7 @@ import { hostClaudeDir } from '../host/claude-profile.js';
 import { checkRepo } from '../host/repo-guard.js';
 import { isSandboxRunning } from '../host/platform.js';
 import { readActiveViews, WorkspaceView } from '../host/workspace-view/index.js';
+import { readForwards, sandboxAddress, startPortForwards } from '../host/port-forward.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
 
@@ -103,6 +104,8 @@ export const watch = async (dataPath: string): Promise<void> => {
     } catch (e) { note('sync failed: ' + errMsg(e)); }
   };
   // workspaceFilter: each filtered project is kept in step with its view from now until the sandbox closes.
+  // network.forwardPorts: localhost on this PC reaches servers in the sandbox while it runs.
+  const stopForwards = startPortForwards(readForwards(storageOf(dataPath), dataPath), () => sandboxAddress(dataPath), (m) => note('port forward: ' + m));
   const views = readActiveViews(storageOf(dataPath), dataPath);
   const stops = views.flatMap((v) => {
     try { return [new WorkspaceView({ ...v, note: (m) => note('workspace ' + v.host + ': ' + m) }).watch()]; } catch (e) { note('workspace ' + v.host + ': could not watch: ' + errMsg(e)); return []; }
@@ -114,6 +117,7 @@ export const watch = async (dataPath: string): Promise<void> => {
     sync(true);
   } finally {
     stops.forEach((stop) => stop());
+    stopForwards();
     for (const v of views) {
       try { const s = new WorkspaceView(v).syncAll(); note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in'); } catch (e) { note('workspace ' + v.host + ': final sync failed: ' + errMsg(e)); }
     }
