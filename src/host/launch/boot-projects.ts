@@ -7,7 +7,7 @@ import { assertSafeMapping, assertSafeWorkspace } from '../../core/safe-paths.js
 import { dirExists, errMsg, fail } from '../../core/util/index.js';
 import { isWithin, planProjectMappings, type RootMapping } from '../../shared/paths/index.js';
 // Direct, not the barrel: host/projects/join.ts imports host/launch.
-import { allProjectsToMap, readKnown } from '../projects/known.js';
+import { allProjectsToMap, KnownProjects } from '../projects/known.js';
 
 /** More folders than this would make the .wsb (and every boot) unwieldy; the rest join with a restart later. */
 export const MAX_BOOT_PROJECTS = 48;
@@ -49,7 +49,7 @@ export const planBootProjects = (o: {
       );
     if (!roots.some((r) => isWithin(r, root))) roots.push(root);
   }
-  const known = o.knownProjects ?? readKnown(storageRoot).map((k) => k.host);
+  const known = o.knownProjects ?? new KnownProjects(storageRoot).list().map((k) => k.host);
   const wanted = [
     ...(o.extraProjects ?? []),
     ...(config.projects.all

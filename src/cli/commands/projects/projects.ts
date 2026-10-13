@@ -6,9 +6,9 @@ import { checkbox } from '@inquirer/prompts';
 import { assertSafeMapping, assertSafeWorkspace } from '../../../core/safe-paths.js';
 import { dirExists, expandPath, fail, isRootPath } from '../../../core/util/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { forgetProject, readKnown, rememberProject } from '../../../host/projects/index.js';
+import { KnownProjects } from '../../../host/projects/index.js';
 import { projectMapper } from '../../../host/projects/index.js';
-import { readRegistry } from '../../../host/projects/index.js';
+import { ProjectRegistry } from '../../../host/projects/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { c, pageSizeFor, shortenMiddle, termWidth } from '../../output/index.js';
 import { printJson, table } from '../../output/index.js';
@@ -35,9 +35,12 @@ const settings = (ctx: Context) => {
 /** Every project worth listing: known ones, the running sandbox's, and this folder. */
 export const projectRows = (ctx: Context): Row[] => {
   const s = settings(ctx);
-  const registry = isSandboxRunning() ? readRegistry(ctx.storageRoot) : null;
+  const registry = isSandboxRunning() ? new ProjectRegistry(ctx.storageRoot).read() : null;
   const here = hereDir(ctx);
-  const folders = [...readKnown(ctx.storageRoot).map((k) => k.host), ...(registry?.projects.map((p) => p.host) ?? [])];
+  const folders = [
+    ...new KnownProjects(ctx.storageRoot).list().map((k) => k.host),
+    ...(registry?.projects.map((p) => p.host) ?? []),
+  ];
   const unique = folders.filter((f, i) => folders.findIndex((g) => g.toLowerCase() === f.toLowerCase()) === i);
   return unique.map((folder) => {
     const root = s.roots.find((r) => isWithin(r, folder)) ?? null;
@@ -46,7 +49,7 @@ export const projectRows = (ctx: Context): Row[] => {
     return {
       folder,
       here: isWithin(folder, here),
-      known: readKnown(ctx.storageRoot).some((k) => k.host.toLowerCase() === folder.toLowerCase()),
+      known: new KnownProjects(ctx.storageRoot).list().some((k) => k.host.toLowerCase() === folder.toLowerCase()),
       root,
       excluded,
       mappedAtStart: root !== null || (s.all && !excluded && dirExists(folder)),
@@ -152,7 +155,7 @@ export const projects = async (ctx: Context): Promise<number> => {
       return choose(ctx);
     case 'add': {
       const dir = checkFolder(ctx, value, 'a project');
-      rememberProject(ctx.storageRoot, dir);
+      new KnownProjects(ctx.storageRoot).remember(dir);
       console.log(
         'Added ' +
           dir +
@@ -165,10 +168,12 @@ export const projects = async (ctx: Context): Promise<number> => {
     }
     case 'remove': {
       const dir = path.resolve(value);
-      const forgot = forgetProject(ctx.storageRoot, dir);
+      const forgot = new KnownProjects(ctx.storageRoot).forget(dir);
       // The running sandbox forgets it too (its folder stays visible until the sandbox stops, if it was mapped).
       const registered = isSandboxRunning()
-        ? readRegistry(ctx.storageRoot)?.projects.find((p) => !p.primary && p.host.toLowerCase() === dir.toLowerCase())
+        ? new ProjectRegistry(ctx.storageRoot)
+            .read()
+            ?.projects.find((p) => !p.primary && p.host.toLowerCase() === dir.toLowerCase())
         : undefined;
       if (registered)
         projectMapper({ storageRoot: ctx.storageRoot, packageRoot: ctx.packageRoot, wsbShare: false }).unregister(
@@ -188,7 +193,7 @@ export const projects = async (ctx: Context): Promise<number> => {
         action === 'exclude'
           ? addToList(ctx, ['projects', 'exclude'], dir)
           : removeFromList(ctx, ['projects', 'exclude'], dir);
-      if (action === 'include') rememberProject(ctx.storageRoot, dir);
+      if (action === 'include') new KnownProjects(ctx.storageRoot).remember(dir);
       console.log(
         (changed ? (action === 'exclude' ? 'Excluded ' : 'Included ') + dir + '. ' + NEXT_START : 'Nothing changed.') +
           (action === 'include' && !settings(ctx).all

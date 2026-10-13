@@ -14,16 +14,21 @@ import { RunDir } from '../../shared/channel/index.js';
 import { syncProjectIn } from '../../sync/index.js';
 import { planDatabases } from '../launch/index.js';
 import { decideProjectToolchains } from '../launch/index.js';
-import { projectHere, readRegistry, rootHere, type RegistryEntry } from './registry.js';
+import { ProjectRegistry, type RegistryEntry } from './registry.js';
 import { projectMapper, type ProjectMapper } from './mapper.js';
-import { rememberProject } from './known.js';
+import { KnownProjects } from './known.js';
 import { stageScripts } from '../launch/index.js';
 import { addRepoSnapshot } from '../guard/index.js';
 
 /** The launch folder of the running sandbox (host-only storage; its id comes from the guest, so it is checked). */
 export const runningLaunchPath = (storageRoot: string, dataPath: string): string | null => {
   const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
-  if (!launchId || !/^\d+-[0-9a-f]{6}$/.test(launchId) || readRegistry(storageRoot)?.launchId !== launchId) return null;
+  if (
+    !launchId ||
+    !/^\d+-[0-9a-f]{6}$/.test(launchId) ||
+    new ProjectRegistry(storageRoot).read()?.launchId !== launchId
+  )
+    return null;
   const launchPath = path.join(storageRoot, 'launches', launchId);
   assertNoLinks(storageRoot, launchPath);
   return fs.existsSync(path.join(launchPath, 'session.json')) ? launchPath : null;
@@ -68,10 +73,10 @@ export const joinRunning = async (o: {
   resolve: (projectRoot: string) => Promise<ResolvedRun>;
   mapper?: ProjectMapper;
 }): Promise<Joined> => {
-  const here = projectHere(o.storageRoot, o.hostDir);
+  const here = new ProjectRegistry(o.storageRoot).here(o.hostDir);
   if (here?.project.primary) return { ...here, spec: null, run: null, notes: [] };
   const registry =
-    readRegistry(o.storageRoot) ??
+    new ProjectRegistry(o.storageRoot).read() ??
     fail(
       'The running sandbox was started by an older version, so it cannot take another folder.',
       'Stop it (sandbox stop) and start it again.',
@@ -94,9 +99,11 @@ export const joinRunning = async (o: {
   // Guarded from now on. A folder the sandbox could already write (inside a root, or mapped at boot) and that has no
   // snapshot from the launch gets an empty one: what is there now may have been planted, so it counts as new.
   // Anything else is snapshotted before it becomes visible.
-  addRepoSnapshot(o.dataPath, root, { empty: Boolean(here) || Boolean(rootHere(o.storageRoot, root)) });
+  addRepoSnapshot(o.dataPath, root, {
+    empty: Boolean(here) || Boolean(new ProjectRegistry(o.storageRoot).rootHere(root)),
+  });
   const entry = mapper.register(root);
-  rememberProject(o.storageRoot, entry.host);
+  new KnownProjects(o.storageRoot).remember(entry.host);
   const launchPath = runningLaunchPath(o.storageRoot, o.dataPath);
   // Your hooks in ~/.agent-sandbox/hooks ran at boot (once per sandbox); the project's own scripts ("scripts" in its
   // .sandbox-config.json, --script) run before its first agent. The launch folder is read-only for the sandbox, but

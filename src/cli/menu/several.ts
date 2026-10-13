@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertSafeWorkspace } from '../../core/safe-paths.js';
 import { errMsg, expandPath } from '../../core/util/index.js';
-import { readKnown } from '../../host/projects/index.js';
+import { KnownProjects } from '../../host/projects/index.js';
 import { isWithin } from '../../shared/paths/index.js';
 import type { Context } from '../commands/context.js';
 import { commandLine } from '../history.js';
@@ -24,7 +24,7 @@ export const candidateFolders = (ctx: Context, cwd: string = process.cwd()): str
       return [];
     }
   });
-  const all = [path.resolve(cwd), ...readKnown(ctx.storageRoot).map((k) => k.host), ...inRoots];
+  const all = [path.resolve(cwd), ...new KnownProjects(ctx.storageRoot).list().map((k) => k.host), ...inRoots];
   return all.filter((f, i) => all.findIndex((g) => g.toLowerCase() === f.toLowerCase()) === i && fs.existsSync(f));
 };
 

@@ -7,7 +7,7 @@ import { askYesNo } from '../../../core/prompt.js';
 import { isInsideOrEqual } from '../../../core/util/index.js';
 import { resolveRun } from '../../../core/run/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
-import { projectHere, readRegistry, type RegistryEntry } from '../../../host/projects/index.js';
+import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { joinRunning } from '../../../host/projects/index.js';
 import type { ProjectSpecT } from '../../../shared/channel/index.js';
 import { working } from '../../output/index.js';
@@ -24,10 +24,10 @@ export interface Located {
 /** Where this folder is in the running sandbox, if it is in it at all (nothing is registered). */
 export const locateHere = (ctx: Context, status: SandboxStatus | null): Located => {
   const dir = hereDir(ctx);
-  const here = projectHere(ctx.storageRoot, dir);
+  const here = new ProjectRegistry(ctx.storageRoot).here(dir);
   if (here) return here;
   // A sandbox started before projects existed: only its launch folder.
-  if (!readRegistry(ctx.storageRoot) && status && isInsideOrEqual(status.workspaceHost, dir))
+  if (!new ProjectRegistry(ctx.storageRoot).read() && status && isInsideOrEqual(status.workspaceHost, dir))
     return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
   return { project: null, guestDir: null };
 };
@@ -49,7 +49,7 @@ export const joinHere = async (ctx: Context, status: SandboxStatus): Promise<Joi
   const { options, loaded, packageRoot, storageRoot, dataPath } = ctx;
   const dir = hereDir(ctx);
   // A sandbox started before projects existed: only its launch folder (guestPathFor explains why otherwise).
-  if (!readRegistry(storageRoot))
+  if (!new ProjectRegistry(storageRoot).read())
     return {
       project: null,
       guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace),

@@ -3,7 +3,7 @@ import { assertSafeWorkspace } from '../../core/safe-paths.js';
 import { dirExists, fail } from '../../core/util/index.js';
 import { guestDirFor, hubName, PROJECTS_GUEST, projectForHostDir, type Mechanism } from '../../shared/paths/index.js';
 import { detectWsb, runningSandboxId, shareFolder, type Wsb } from '../sandbox/index.js';
-import { type RegistryEntry, type ProjectRegistry, readRegistry, saveRegistry } from './registry.js';
+import { ProjectRegistry, type Registry, type RegistryEntry } from './registry.js';
 
 /** Why a folder cannot join the running sandbox without a restart (the caller offers one). */
 export class NeedsRestart extends Error {
@@ -33,19 +33,14 @@ export interface MapperOptions {
 
 /** Roots first (instant), then `wsb share` where the Windows Sandbox CLI exists, else NeedsRestart. */
 export const projectMapper = (o: MapperOptions): ProjectMapper => {
-  const registry = (): ProjectRegistry =>
-    readRegistry(o.storageRoot) ??
+  const store = new ProjectRegistry(o.storageRoot);
+  const registry = (): Registry =>
+    store.read() ??
     fail(
       'The running sandbox was started by an older version, so it cannot take another folder.',
       'Stop it (sandbox stop) and start it again.',
     );
-  const add = (
-    reg: ProjectRegistry,
-    host: string,
-    guest: string,
-    mechanism: Mechanism,
-    name: string,
-  ): RegistryEntry => {
+  const add = (reg: Registry, host: string, guest: string, mechanism: Mechanism, name: string): RegistryEntry => {
     const entry: RegistryEntry = {
       name,
       host,
@@ -55,14 +50,14 @@ export const projectMapper = (o: MapperOptions): ProjectMapper => {
       registeredAt: new Date().toISOString(),
     };
     // Re-read right before writing: another terminal may have registered something meanwhile.
-    const latest = readRegistry(o.storageRoot) ?? reg;
+    const latest = store.read() ?? reg;
     const same = latest.projects.find((p) => p.host.toLowerCase() === host.toLowerCase());
     if (same) return same;
-    saveRegistry(o.storageRoot, { ...latest, projects: [...latest.projects, entry] });
+    store.save({ ...latest, projects: [...latest.projects, entry] });
     return entry;
   };
   return {
-    list: () => readRegistry(o.storageRoot)?.projects ?? [],
+    list: () => store.read()?.projects ?? [],
     register: (hostDir) => {
       const host = path.resolve(hostDir);
       const reg = registry();
@@ -101,7 +96,7 @@ export const projectMapper = (o: MapperOptions): ProjectMapper => {
       if (!entry) fail('No project "' + name + '" in the running sandbox.', 'sandbox projects lists them.');
       if (entry.primary)
         fail(entry.host + ' is the folder the sandbox started from; it stays until the sandbox stops.');
-      saveRegistry(o.storageRoot, { ...reg, projects: reg.projects.filter((p) => p !== entry) });
+      store.save({ ...reg, projects: reg.projects.filter((p) => p !== entry) });
     },
   };
 };

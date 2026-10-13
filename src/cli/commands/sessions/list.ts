@@ -4,7 +4,7 @@ import { SandboxChannel } from '../../../host/channel/index.js';
 import { sessionViewers } from '../../../host/channel/index.js';
 import type { Viewers } from '../../../shared/pty/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { readRegistry, type RegistryEntry } from '../../../host/projects/index.js';
+import { ProjectRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { isWithin, projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import { safeText } from '../../../core/util/index.js';
@@ -31,7 +31,7 @@ export const listedSessions = async (ctx: Context): Promise<Listed[]> => {
   // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
   const ask = new Set(live ? new SandboxChannel(ctx.dataPath).currentSessions().map((s) => s.id) : []);
   const here = live ? locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus()) : { guestDir: null };
-  const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
+  const projects = new ProjectRegistry(ctx.storageRoot).read()?.projects ?? [];
   return Promise.all(
     new RunDir(ctx.dataPath).listSessions().map(async (s) => ({
       ...s,

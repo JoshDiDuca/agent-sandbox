@@ -10,7 +10,7 @@ import { askYesNo } from '../../../core/prompt.js';
 import { fail, safeText, sleep } from '../../../core/util/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { readRegistry, type ProjectRegistry } from '../../../host/projects/index.js';
+import { ProjectRegistry, type Registry } from '../../../host/projects/index.js';
 import { type NeedsRestart } from '../../../host/projects/index.js';
 import { hostDirFor, projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
@@ -38,10 +38,7 @@ const againWithYes = (ctx: Context): string =>
   ' --yes';
 
 /** Where each running session is on this PC, so it can be reopened after the restart. */
-const sessionsToReopen = (
-  registry: ProjectRegistry,
-  sessions: SessionStatus[],
-): { harness: string; hostDir: string }[] =>
+const sessionsToReopen = (registry: Registry, sessions: SessionStatus[]): { harness: string; hostDir: string }[] =>
   sessions.flatMap((s) => {
     const project = projectForGuestDir([...registry.projects, ...registry.roots.map((r) => ({ ...r }))], s.cwd);
     return project ? [{ harness: s.harness, hostDir: hostDirFor(project, s.cwd) }] : [];
@@ -69,7 +66,7 @@ export const offerRestart = async (
 ): Promise<number> => {
   const folders = needs.map((n) => n.hostDir);
   const registry =
-    readRegistry(ctx.storageRoot) ??
+    new ProjectRegistry(ctx.storageRoot).read() ??
     fail(
       'The running sandbox was started by an older version, so it cannot take another folder.',
       'Stop it (sandbox stop) and start it again from ' + folders[0] + '.',

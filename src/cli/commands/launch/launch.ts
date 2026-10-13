@@ -7,8 +7,7 @@ import { findSecretFiles } from '../../../host/profile/index.js';
 import { saveRepoSnapshot } from '../../../host/guard/index.js';
 import { assertCanLaunch, isSandboxRunning, spawnDetached, startSandbox } from '../../../host/sandbox/index.js';
 import { probeHost } from '../../../host/sandbox/index.js';
-import { rememberProject } from '../../../host/projects/index.js';
-import { startRegistry } from '../../../host/projects/index.js';
+import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
 import { hideSandboxWindow } from '../../../host/sandbox/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { watcherRunning } from '../../../sync/index.js';
@@ -199,14 +198,14 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
     projects.map((p) => p.host),
     roots.map((r) => r.host),
   );
-  startRegistry(storageRoot, {
+  new ProjectRegistry(storageRoot).start({
     launchId: generated.launchId,
     protections: protectionsOf(config),
     primary: { host: run.workspaceHost, guest: config.guestWorkspace },
     roots,
     boot: projects,
   });
-  rememberProject(storageRoot, run.workspaceHost);
+  new KnownProjects(storageRoot).remember(run.workspaceHost);
   startLife(storageRoot, dataPath, config.sandbox.keepAwake);
   startSandbox(generated.wsbPath);
   // Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently.

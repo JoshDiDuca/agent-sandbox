@@ -9,9 +9,9 @@ import { checkJoin, protectionsOf } from '../core/local-config/index.js';
 import { sessionsFirstIn } from '../host/channel/index.js';
 import { buildWsb } from '../host/launch/index.js';
 import { projectSpec, joinRunning } from '../host/projects/index.js';
-import { allProjectsToMap, forgetProject, readKnown, rememberProject } from '../host/projects/index.js';
+import { allProjectsToMap, KnownProjects } from '../host/projects/index.js';
 import { NeedsRestart, projectMapper } from '../host/projects/index.js';
-import { projectHere, readRegistry, startRegistry } from '../host/projects/index.js';
+import { ProjectRegistry } from '../host/projects/index.js';
 import { checkRepo, saveRepoSnapshot } from '../host/guard/index.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/sandbox/index.js';
 import { baseEnvFor } from '../guest/boot/project-env.js';
@@ -195,14 +195,14 @@ export const projectsSuite: Suite = {
     const root = t.at('proj-root');
     const inRoot = t.dir('proj-root', 'web');
     const outside = t.dir('proj-outside');
-    const primary = startRegistry(storage, {
+    const primary = new ProjectRegistry(storage).start({
       launchId: '1700000000000-abcdef',
       protections: base,
       primary: { host: f.workA, guest: 'C:\\Workspace\\work-a' },
       roots: [{ host: root, guest: 'C:\\Projects\\proj-root' }],
       boot: [{ host: f.workB, guest: 'C:\\Projects\\work-b' }],
     });
-    const registry = readRegistry(storage);
+    const registry = new ProjectRegistry(storage).read();
     t.check(primary.primary, 'at launch the launch folder is the primary project');
     t.equal(
       registry?.projects.length,
@@ -215,12 +215,16 @@ export const projectsSuite: Suite = {
       'a project mapped at boot is registered by its mechanism and name',
     );
     t.equal(
-      projectHere(storage, path.join(f.workA, 'src'))?.guestDir,
+      new ProjectRegistry(storage).here(path.join(f.workA, 'src'))?.guestDir,
       'C:\\Workspace\\work-a\\src',
       'projectHere: a folder inside the launch folder',
     );
-    t.equal(projectHere(storage, f.workB)?.project.mechanism, 'boot', 'projectHere: a project mapped at boot');
-    t.equal(projectHere(storage, outside), null, 'projectHere: a folder in no project');
+    t.equal(
+      new ProjectRegistry(storage).here(f.workB)?.project.mechanism,
+      'boot',
+      'projectHere: a project mapped at boot',
+    );
+    t.equal(new ProjectRegistry(storage).here(outside), null, 'projectHere: a folder in no project');
     const noWsb = projectMapper({ storageRoot: storage, packageRoot: f.install, wsbShare: true, detect: () => null });
     const web = noWsb.register(inRoot);
     t.equal(
@@ -229,7 +233,11 @@ export const projectsSuite: Suite = {
       'a folder inside a root joins at once (also one created after boot)',
     );
     t.equal(noWsb.register(inRoot).name, web.name, 'registering the same folder again gives the same project');
-    t.equal(readRegistry(storage)?.projects.filter((p) => p.host === inRoot).length, 1, 'a folder is registered once');
+    t.equal(
+      new ProjectRegistry(storage).read()?.projects.filter((p) => p.host === inRoot).length,
+      1,
+      'a folder is registered once',
+    );
     const needs = caught(() => noWsb.register(outside));
     t.check(
       needs instanceof NeedsRestart && needs.reason.includes('wsb share needs Windows 11 24H2'),
@@ -289,7 +297,7 @@ export const projectsSuite: Suite = {
       '... that is valid and carries the agent',
     );
     t.check(
-      readKnown(storage).some((k) => k.host === inRoot),
+      new KnownProjects(storage).list().some((k) => k.host === inRoot),
       'joined projects are remembered (projects.all, sandbox projects)',
     );
     const launchFolder = await join(path.join(f.workA, 'sub'), () => Promise.reject(new Error('must not resolve')));
@@ -304,7 +312,7 @@ export const projectsSuite: Suite = {
       'a project whose .sandbox-config.json tightens git access beyond the running sandbox is refused, with the reason',
     );
     t.check(
-      readRegistry(storage)?.projects.every((p) => p.host !== tightDir) === true,
+      new ProjectRegistry(storage).read()?.projects.every((p) => p.host !== tightDir) === true,
       'a refused project is not registered',
     );
     const outsideRun = await f.run({ cwd: outside });
@@ -380,7 +388,7 @@ export const projectsSuite: Suite = {
     );
     const rootConfig = structuredClone(f.baseConfig);
     rootConfig.projects = { ...rootConfig.projects, roots: [root, t.at('no-such-root')], all: true };
-    rememberProject(f.baseConfig.storage.root, outside);
+    new KnownProjects(f.baseConfig.storage.root).remember(outside);
     const gen = f.generate(await f.run({}, rootConfig));
     const session = f.readJson(gen.sessionPath);
     const wsb = fs.readFileSync(gen.wsbPath, 'utf8');
@@ -417,9 +425,12 @@ export const projectsSuite: Suite = {
       'projects.roots',
       'a root that would expose the storage folder is refused',
     );
-    t.check(forgetProject(f.baseConfig.storage.root, outside), '`sandbox projects remove` forgets a project...');
     t.check(
-      !readKnown(f.baseConfig.storage.root).some((k) => k.host === outside),
+      new KnownProjects(f.baseConfig.storage.root).forget(outside),
+      '`sandbox projects remove` forgets a project...',
+    );
+    t.check(
+      !new KnownProjects(f.baseConfig.storage.root).list().some((k) => k.host === outside),
       '... so it is no longer known (its folder is untouched)',
     );
     t.includes(

@@ -1,6 +1,5 @@
 import { expandPath } from '../../../core/util/index.js';
-import { readKnown } from '../../../host/projects/index.js';
-import { readRegistry } from '../../../host/projects/index.js';
+import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
 import { detectWsb } from '../../../host/sandbox/index.js';
 import { doctorRows } from '../../../host/sandbox/index.js';
 import { insideSandbox, isSandboxRunning } from '../../../host/sandbox/index.js';
@@ -24,7 +23,7 @@ export const doctor = (ctx: Context): number => {
   }
   // Several projects: the roots mapped at every start, what the running sandbox has, and whether wsb share is there.
   const p = ctx.loaded.config.projects;
-  const registry = isSandboxRunning() ? readRegistry(ctx.storageRoot) : null;
+  const registry = isSandboxRunning() ? new ProjectRegistry(ctx.storageRoot).read() : null;
   const wsb = p.wsbShare ? detectWsb() : null;
   table([
     ...rows,
@@ -38,7 +37,7 @@ export const doctor = (ctx: Context): number => {
       'All projects',
       p.all
         ? 'on: ' +
-          readKnown(ctx.storageRoot).length +
+          new KnownProjects(ctx.storageRoot).list().length +
           ' known project(s) mapped at every start (' +
           p.exclude.length +
           ' excluded)'

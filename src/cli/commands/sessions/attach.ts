@@ -1,6 +1,6 @@
 import { select } from '@inquirer/prompts';
 import { SandboxChannel, sessionsFirstIn } from '../../../host/channel/index.js';
-import { readRegistry } from '../../../host/projects/index.js';
+import { ProjectRegistry } from '../../../host/projects/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { safeText, sleep } from '../../../core/util/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
@@ -20,7 +20,7 @@ export const attach = async (ctx: Context): Promise<number> => {
   // Several sessions: choose, this folder's project first (the newest is the default).
   const running = sessionsFirstIn(new SandboxChannel(ctx.dataPath).runningSessions(), here.guestDir);
   if (running.length > 1 && process.stdin.isTTY && process.stdout.isTTY) {
-    const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
+    const projects = new ProjectRegistry(ctx.storageRoot).read()?.projects ?? [];
     const chosen = await select({
       message: 'Which session?' + (here.project ? ' (' + here.project.name + ' first)' : ''),
       choices: running.map((s) => ({

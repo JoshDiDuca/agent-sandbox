@@ -2,7 +2,7 @@ import _ from 'lodash';
 import { activeAccount } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { readRegistry } from '../../../host/projects/index.js';
+import { ProjectRegistry } from '../../../host/projects/index.js';
 import { guardedProjects, repoFindings } from '../../../host/guard/index.js';
 import { projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
@@ -33,7 +33,7 @@ const runningPorts = async (ctx: Context, cwd: string): Promise<Set<number> | nu
 export const status = async (ctx: Context): Promise<number> => {
   const running = isSandboxRunning();
   const sandbox = new RunDir(ctx.dataPath).readSandboxStatus();
-  const registry = running ? readRegistry(ctx.storageRoot) : null;
+  const registry = running ? new ProjectRegistry(ctx.storageRoot).read() : null;
   const ready = running && sandbox?.phase === 'ready';
   const daemon = ready
     ? await new SandboxChannel(ctx.dataPath).ping().then(
