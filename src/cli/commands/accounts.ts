@@ -1,21 +1,22 @@
 // `account list | save | use | default | remove`
-import { AccountStore, type Account } from '../../host/profile/index.js';
+import { AccountStore, type Account, hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
-import { hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { fail, safeText } from '../../core/util/index.js';
 import { printJson, table } from '../output/index.js';
 import { type Context } from './context.js';
 
-const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
+function label(a: Account): string {
+  return '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
+}
 
 /** This PC's Claude login location (config folder + global state file). */
-const hostLogin = (ctx: Context): { claudeDir: string; globalStateFile: string } => {
+function hostLogin(ctx: Context): { claudeDir: string; globalStateFile: string } {
   const profile = ctx.loaded.config.claudeProfile;
   return { claudeDir: hostClaudeDir(profile), globalStateFile: hostGlobalStateFile(profile) };
-};
+}
 
-const list = (ctx: Context): number => {
+function list(ctx: Context): number {
   const rows = new AccountStore(ctx.storageRoot).list(ctx.dataPath);
   if (printJson(ctx, rows)) return 0;
   if (rows.length === 0) {
@@ -35,9 +36,9 @@ const list = (ctx: Context): number => {
   ]);
   console.log('\n* = active in the sandbox   D = default for new launches');
   return 0;
-};
+}
 
-const use = async (ctx: Context, name: string): Promise<number> => {
+async function use(ctx: Context, name: string): Promise<number> {
   console.log('Sandbox now uses ' + label(new AccountStore(ctx.storageRoot).activate(ctx.dataPath, name)) + '.');
   const claudeRunning =
     isSandboxRunning() && new SandboxChannel(ctx.dataPath).runningSessions().some((s) => s.harness === 'claude');
@@ -47,9 +48,9 @@ const use = async (ctx: Context, name: string): Promise<number> => {
         ' with --continue; the conversation carries on under the new account.',
     );
   return 0;
-};
+}
 
-export const account = async (ctx: Context): Promise<number> => {
+export async function account(ctx: Context): Promise<number> {
   const [action = 'list', name] = ctx.options.positionals;
   const needName = (): string => name ?? fail('Missing account name.', 'Usage: sandbox account ' + action + ' <name>');
   switch (action) {
@@ -84,4 +85,4 @@ export const account = async (ctx: Context): Promise<number> => {
         'Use one of: sandbox account list | save <name> | use <name> | default <name> | remove <name>',
       );
   }
-};
+}

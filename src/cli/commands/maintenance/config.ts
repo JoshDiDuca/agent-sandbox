@@ -14,7 +14,7 @@ import { fail, safeText, writeJson } from '../../../core/util/index.js';
 import { table } from '../../output/index.js';
 import { type Context } from '../context.js';
 
-const initConfig = (): number => {
+function initConfig(): number {
   const file = userConfigPath();
   if (fs.existsSync(file)) fail(file + ' already exists.');
   fs.mkdirSync(path.join(userDir(), 'hooks', 'pre-agent'), { recursive: true });
@@ -26,13 +26,13 @@ const initConfig = (): number => {
   );
   console.log("For editor help in every project's .sandbox-config.json, run: sandbox config schema");
   return 0;
-};
+}
 
 /**
  * VS Code setting that maps every .sandbox-config.json (and the user config) to the local schema files, so project
  * files need no "$schema" line and nothing is fetched from the internet (remote schemas need trusting).
  */
-const printSchemaSettings = (): number => {
+function printSchemaSettings(): number {
   const url = (name: string): string => pathToFileURL(path.join(userDir(), name)).href;
   const setting = {
     'json.schemas': [
@@ -44,13 +44,13 @@ const printSchemaSettings = (): number => {
   console.log(JSON.stringify(setting, null, 2).slice(2, -2));
   console.log('\nThe schema files live in ' + userDir() + ' and are refreshed whenever the sandbox command runs.');
   return 0;
-};
+}
 
 /**
  * `sandbox config check`: the folder's .sandbox-config.json validated and described (risky settings flagged, approval
  * state), without launching. Fails with the same message a launch would give when the file is not valid.
  */
-const checkLocalConfig = (ctx: Context): number => {
+function checkLocalConfig(ctx: Context): number {
   const dir = path.resolve(ctx.options.workspace ?? process.cwd());
   const file = readLocalConfig(dir);
   if (!file) {
@@ -67,9 +67,9 @@ const checkLocalConfig = (ctx: Context): number => {
   );
   for (const line of describeOverrides(overrides)) console.log('  ' + safeText(line));
   return 0;
-};
+}
 
-export const config = (ctx: Context): number => {
+export function config(ctx: Context): number {
   const [action = 'summary'] = ctx.options.positionals;
   switch (action) {
     case 'summary':
@@ -102,4 +102,4 @@ export const config = (ctx: Context): number => {
     default:
       fail('Unknown config action "' + action + '".', 'Use one of: sandbox config show | path | init | schema | check');
   }
-};
+}

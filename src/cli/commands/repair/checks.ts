@@ -23,10 +23,14 @@ import { ok, whileRunning, type RepairCheck, type RepairEnv, type RepairResult }
 
 type Outcome = Omit<RepairResult, 'name'>;
 
-const rel = (root: string, p: string): string => path.relative(root, p) || '.';
+function rel(root: string, p: string): string {
+  return path.relative(root, p) || '.';
+}
 
 /** Fails (throws) unless every folder from the data folder to `p` is real. */
-const guard = (env: RepairEnv, p: string): void => assertNoLinks(path.dirname(env.dataPath), p);
+function guard(env: RepairEnv, p: string): void {
+  assertNoLinks(path.dirname(env.dataPath), p);
+}
 
 export const CHECKS: RepairCheck[] = [
   {

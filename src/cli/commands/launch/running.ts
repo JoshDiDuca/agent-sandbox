@@ -1,33 +1,54 @@
-import { attachTerminal, findUnwatchedSession } from '../../../host/channel/index.js';
-import { SandboxChannel } from '../../../host/channel/index.js';
-import { insideSandbox } from '../../../host/sandbox/index.js';
+// A sandbox that is already running: wait for it, open sessions in it, attach this terminal to one.
+import _ from 'lodash';
+import { attachTerminal, findUnwatchedSession, SandboxChannel } from '../../../host/channel/index.js';
+import { insideSandbox, hideSandboxWindow, showSandboxWindow } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
-import { hideSandboxWindow, showSandboxWindow } from '../../../host/sandbox/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import type { SandboxStatus, SessionStatus } from '../../../core/types.js';
 import { errMsg, fail, sleep } from '../../../core/util/index.js';
-import { c } from '../../output/index.js';
-import { working } from '../../output/index.js';
-import { type Context } from '../context.js';
-import { table } from '../../output/index.js';
-import _ from 'lodash';
-import { hereDir, joinHere, readyHere, type Joined } from '../projects/index.js';
-import { offerRestart } from '../projects/index.js';
+import { c, working, table } from '../../output/index.js';
+import type { Context } from '../context.js';
+import { hereDir, joinHere, readyHere, offerRestart, type Joined, type Relauncher } from '../projects/index.js';
+
+/** How long a session may take to start (its project's setup, the agent's install). */
+const SESSION_START_MS = 60 * 60 * 1000;
+
+/** How openSession starts a session; restart.ts reopens sessions with reuse off and the agent's resume arguments. */
+export interface OpenSessionOptions {
+  readonly attach: boolean;
+  readonly harness?: string;
+  readonly args?: string[];
+  readonly reuse?: boolean;
+}
+
+/** A session to open: an agent (the default one when not given), a folder, arguments of its own. */
+interface Want {
+  readonly harness?: string;
+  readonly folder: string;
+  readonly args?: string[];
+}
+
+/** A session requested in a folder that joined the running sandbox. */
+interface JoinedSession {
+  readonly ctx: Context;
+  readonly joined: Joined;
+}
 
 /**
  * Attaches this terminal; with attach.autoHide the sandbox window hides meanwhile (best effort, never fails the
  * attach).
  */
-export const attachHere = (ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> => {
+export function attachHere(ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> {
   if (ctx.loaded.config.attach.autoHide && !insideSandbox())
     void hideSandboxWindow(ctx.storageRoot, 120).catch(() => false);
   return attachTerminal(session);
-};
+}
 
 /** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
-export const runningSandboxStatus = async (dataPath: string): Promise<SandboxStatus> => {
+export async function runningSandboxStatus(dataPath: string): Promise<SandboxStatus> {
+  const run = new RunDir(dataPath);
   for (let i = 0; i < 60; i++) {
-    const status = new RunDir(dataPath).readSandboxStatus();
+    const status = run.readSandboxStatus();
     if (status) return status;
     await sleep(1000);
   }
@@ -35,10 +56,10 @@ export const runningSandboxStatus = async (dataPath: string): Promise<SandboxSta
     'A Windows Sandbox is running that this tool did not start (or that uses another storage.dataName).',
     'Close that sandbox window first, then run sandbox claude again.',
   );
-};
+}
 
 /** Waits for the boot with its current step on a spinner (plain lines without a terminal). */
-export const waitForBoot = (dataPath: string, launchId: string | null): Promise<SandboxStatus> => {
+export function waitForBoot(dataPath: string, launchId: string | null): Promise<SandboxStatus> {
   let step = 'starting Windows Sandbox';
   return working(
     () => 'Waiting for the sandbox: ' + step,
@@ -47,36 +68,51 @@ export const waitForBoot = (dataPath: string, launchId: string | null): Promise<
         step = m;
       }),
   );
-};
+}
 
 /** The running sandbox, once it is ready. */
-export const readySandbox = async (dataPath: string): Promise<SandboxStatus> => {
+export async function readySandbox(dataPath: string): Promise<SandboxStatus> {
   const status = await runningSandboxStatus(dataPath);
   return status.phase === 'ready' ? status : waitForBoot(dataPath, status.launchId);
-};
+}
 
 /** Waits for a session to start (its project's setup, the agent's install) with its progress on a spinner. */
-export const waitForStart = (ctx: Context, requestId: string, what: string): Promise<SessionStatus> => {
+export function waitForStart(ctx: Context, requestId: string, what: string): Promise<SessionStatus> {
   let step = 'starting';
   return working(
     () => what + ': ' + step,
     () =>
-      new SandboxChannel(ctx.dataPath).waitForSession(requestId, 60 * 60 * 1000, (m) => {
+      new SandboxChannel(ctx.dataPath).waitForSession(requestId, SESSION_START_MS, (m) => {
         step = m;
       }),
   );
-};
+}
+
+/** Asks the sandbox for a session; the agent's definition goes along (the sandbox may have booted with another). */
+function requestSession(
+  ctx: Context,
+  channel: SandboxChannel,
+  harness: string,
+  args: string[],
+  joined: Joined,
+): string {
+  const harnessSpec = ctx.loaded.config.harnesses[harness];
+  return channel.requestSession(harness, args, joined.guestDir, {
+    ...(joined.spec ? { project: joined.spec } : {}),
+    ...(harnessSpec ? { harnessSpec } : {}),
+  });
+}
 
 /**
  * Starts (or picks back up) a session in the folder `joined` describes. attach: show it in this terminal.
  * Exported for restart.ts, which reopens the sessions a restart ended.
  */
-export const openSession = async (
+export async function openSession(
   ctx: Context,
   ready: SandboxStatus,
   joined: Joined,
-  o: { attach: boolean; harness?: string; args?: string[]; reuse?: boolean },
-): Promise<number> => {
+  o: OpenSessionOptions,
+): Promise<number> {
   const { options, loaded, dataPath } = ctx;
   const cwd = joined.guestDir;
   const harness = o.harness ?? options.harness ?? joined.harness ?? loaded.config.defaultHarness;
@@ -109,12 +145,7 @@ export const openSession = async (
           '; the first time sets up what it needs).'
       : 'Sandbox already running: starting another ' + harness + ' session in ' + cwd,
   );
-  // The agent's definition goes along: the sandbox may have booted with another agent.
-  const harnessSpec = loaded.config.harnesses[harness];
-  const requestId = new SandboxChannel(dataPath).requestSession(harness, args, cwd, {
-    ...(joined.spec ? { project: joined.spec } : {}),
-    ...(harnessSpec ? { harnessSpec } : {}),
-  });
+  const requestId = requestSession(ctx, new SandboxChannel(dataPath), harness, args, joined);
   const session = await waitForStart(ctx, requestId, 'Starting ' + harness + ' in ' + cwd);
   if (o.attach) return attachHere(ctx, session);
   console.log(
@@ -125,40 +156,36 @@ export const openSession = async (
       (ready.headless ? '   (headless: sbx-show opens the window)' : ''),
   );
   return 0;
-};
+}
 
 /** The sessions a launch asks for: each --session, else one (the agent, in this folder). */
-const wantedSessions = (ctx: Context): { harness?: string; folder: string; args?: string[] }[] =>
-  ctx.options.sessions.length ? ctx.options.sessions : [{ harness: ctx.options.harness, folder: hereDir(ctx) }];
+function wantedSessions(ctx: Context): Want[] {
+  return ctx.options.sessions.length ? ctx.options.sessions : [{ harness: ctx.options.harness, folder: hereDir(ctx) }];
+}
 
 /** The same command, for one of its sessions (its folder, agent, and the arguments after -- plus its own). */
-export const contextFor = (ctx: Context, want: { harness?: string; folder: string; args?: string[] }): Context => ({
-  ...ctx,
-  options: {
-    ...ctx.options,
-    workspace: want.folder,
-    harness: want.harness,
-    sessions: [],
-    passthrough: [...ctx.options.passthrough, ...(want.args ?? [])],
-  },
-});
+export function contextFor(ctx: Context, want: Want): Context {
+  return {
+    ...ctx,
+    options: {
+      ...ctx.options,
+      workspace: want.folder,
+      harness: want.harness,
+      sessions: [],
+      passthrough: [...ctx.options.passthrough, ...(want.args ?? [])],
+    },
+  };
+}
 
 /**
  * Several sessions at once: all requested together (projects set up in parallel), then listed; -t attaches the first.
  */
-const openSessions = async (
-  ctx: Context,
-  ready: SandboxStatus,
-  list: { ctx: Context; joined: Joined }[],
-): Promise<number> => {
-  const { dataPath, loaded, options } = ctx;
+async function openSessions(ctx: Context, ready: SandboxStatus, list: readonly JoinedSession[]): Promise<number> {
+  const { loaded, options } = ctx;
+  const channel = new SandboxChannel(ctx.dataPath);
   const requests = list.map(({ ctx: at, joined }) => {
     const harness = at.options.harness ?? joined.harness ?? loaded.config.defaultHarness;
-    const harnessSpec = loaded.config.harnesses[harness];
-    const id = new SandboxChannel(dataPath).requestSession(harness, at.options.passthrough, joined.guestDir, {
-      ...(joined.spec ? { project: joined.spec } : {}),
-      ...(harnessSpec ? { harnessSpec } : {}),
-    });
+    const id = requestSession(ctx, channel, harness, at.options.passthrough, joined);
     return { id, harness, folder: at.options.workspace ?? joined.guestDir, cwd: joined.guestDir };
   });
   let started = 0;
@@ -167,7 +194,7 @@ const openSessions = async (
     () =>
       Promise.allSettled(
         requests.map(async (r) => {
-          const s = await new SandboxChannel(dataPath).waitForSession(r.id, 60 * 60 * 1000, () => undefined);
+          const s = await channel.waitForSession(r.id, SESSION_START_MS, () => undefined);
           started++;
           return s;
         }),
@@ -194,16 +221,15 @@ const openSessions = async (
       '. Attach to any of them, from any terminal: sandbox attach',
   );
   return results.every((r) => r.status === 'fulfilled') ? 0 : 1;
-};
+}
 
 /** A sandbox is already running: open the sessions in it (new tabs inside; optionally attach here). */
-export const launchIntoRunning = async (ctx: Context): Promise<number> => {
+export async function launchIntoRunning(ctx: Context, relauncher: Relauncher): Promise<number> {
   const ready = await readySandbox(ctx.dataPath);
-  const wants = wantedSessions(ctx);
   // Every folder joins first: when one needs a restart, nothing has been started that the restart would end.
-  const joined: { ctx: Context; joined: Joined }[] = [];
+  const joined: JoinedSession[] = [];
   const needs: NeedsRestart[] = [];
-  for (const want of wants) {
+  for (const want of wantedSessions(ctx)) {
     const at = ctx.options.sessions.length ? contextFor(ctx, want) : ctx;
     try {
       joined.push({ ctx: at, joined: await joinHere(at, ready) });
@@ -212,20 +238,20 @@ export const launchIntoRunning = async (ctx: Context): Promise<number> => {
       if (!needs.some((n) => n.hostDir.toLowerCase() === e.hostDir.toLowerCase())) needs.push(e);
     }
   }
-  if (needs.length) return offerRestart(ctx, needs, () => launchIntoRunning(ctx));
+  if (needs.length) return offerRestart(ctx, needs, () => launchIntoRunning(ctx, relauncher), relauncher);
   for (const note of _.uniq(joined.flatMap((j) => j.joined.notes))) console.log(note);
   if (joined.length === 1) return openSession(joined[0].ctx, ready, joined[0].joined, { attach: ctx.options.terminal });
   return openSessions(ctx, ready, joined);
-};
+}
 
 /** `sandbox start` while one runs: this folder joins it (set up, no agent), or a restart that adds it is offered. */
-export const startIntoRunning = async (ctx: Context): Promise<number> => {
+export async function startIntoRunning(ctx: Context, relauncher: Relauncher): Promise<number> {
   const ready = await readySandbox(ctx.dataPath);
   let joined: Joined;
   try {
     joined = await readyHere(ctx, ready);
   } catch (e) {
-    if (e instanceof NeedsRestart) return offerRestart(ctx, [e], () => startIntoRunning(ctx));
+    if (e instanceof NeedsRestart) return offerRestart(ctx, [e], () => startIntoRunning(ctx, relauncher), relauncher);
     throw e;
   }
   const where = joined.spec
@@ -242,4 +268,4 @@ export const startIntoRunning = async (ctx: Context): Promise<number> => {
       ' Start an agent in it with sandbox claude (or sandbox <agent>); stop it with sandbox stop.',
   );
   return 0;
-};
+}

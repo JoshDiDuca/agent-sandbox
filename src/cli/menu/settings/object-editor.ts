@@ -1,6 +1,6 @@
 import _ from 'lodash';
-import { App, Text, Theme } from '../../tui/index.js';
-import { SchemaNode } from './schema-node.js';
+import { type App, Text, Theme } from '../../tui/index.js';
+import { type SchemaNode } from './schema-node.js';
 import type { ValueEditor, Edited } from './value-editor.js';
 import { SAVE } from './editor-actions.js';
 import { formatValue } from './format.js';

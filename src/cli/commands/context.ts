@@ -17,7 +17,7 @@ export interface Context {
 }
 
 /** Keeps ~/.agent-sandbox/*.schema.json in step with the installed version (local schema paths editors trust). */
-const refreshSchemas = (packageRoot: string): void => {
+function refreshSchemas(packageRoot: string): void {
   const source = path.join(packageRoot, 'schemas');
   if (!fs.existsSync(source)) return;
   try {
@@ -30,9 +30,9 @@ const refreshSchemas = (packageRoot: string): void => {
   } catch {
     /* editor help only; never block a command over it */
   }
-};
+}
 
-export const createContext = (packageRoot: string, entry: string, options: CliOptions): Context => {
+export function createContext(packageRoot: string, entry: string, options: CliOptions): Context {
   refreshSchemas(packageRoot);
   const loaded = loadConfig(options.config);
   const storageRoot = expandPath(loaded.config.storage.root, loaded.base);
@@ -45,26 +45,26 @@ export const createContext = (packageRoot: string, entry: string, options: CliOp
     storageRoot,
     dataPath: insideSandbox() ? GUEST_DATA_DIR : path.join(storageRoot, 'data', loaded.config.storage.dataName),
   };
-};
+}
 
 /** For commands that control the sandbox from your PC: inside the sandbox they make no sense. */
-export const requireOnPc = (what: string): void => {
+export function requireOnPc(what: string): void {
   if (insideSandbox())
     fail(
       'You are inside the sandbox already, so "sandbox ' + what + '" has nothing to control.',
       'Run it from a terminal on your PC.',
     );
-};
+}
 
-export const requireRunning = (hint = ''): void => {
+export function requireRunning(hint = ''): void {
   if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with sandbox claude.');
-};
+}
 
 /**
  * Maps a folder on this PC to its path inside the running sandbox (only folders inside the mapped workspace exist
  * there).
  */
-export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorkspace: string): string => {
+export function guestPathFor(hostDir: string, workspaceHost: string, guestWorkspace: string): string {
   if (!isInsideOrEqual(workspaceHost, hostDir))
     fail(
       'The running sandbox works on ' + workspaceHost + ', and Windows Sandbox cannot add folders while it runs.',
@@ -72,8 +72,9 @@ export const guestPathFor = (hostDir: string, workspaceHost: string, guestWorksp
     );
   const rel = path.relative(workspaceHost, hostDir);
   return rel ? path.win32.join(guestWorkspace, rel) : guestWorkspace;
-};
+}
 
 /** The guest folder for the current directory (or --workspace) in the running sandbox. */
-export const currentGuestDir = (ctx: Context, workspaceHost: string, guestWorkspace: string): string =>
-  guestPathFor(path.resolve(ctx.options.workspace ?? process.cwd()), workspaceHost, guestWorkspace);
+export function currentGuestDir(ctx: Context, workspaceHost: string, guestWorkspace: string): string {
+  return guestPathFor(path.resolve(ctx.options.workspace ?? process.cwd()), workspaceHost, guestWorkspace);
+}

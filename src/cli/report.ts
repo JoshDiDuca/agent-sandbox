@@ -3,7 +3,7 @@ import { c } from './output/index.js';
 import { UserError, errMsg, plainText } from '../core/util/index.js';
 
 /** Prints a problem the way a user can act on it: what happened, how to fix it; stack traces only for real bugs. */
-export const report = (e: unknown): number => {
+export function report(e: unknown): number {
   if (e instanceof CommanderError)
     return ['commander.helpDisplayed', 'commander.help', 'commander.version'].includes(e.code) ? 0 : e.exitCode || 1;
   if (e instanceof UserError) {
@@ -21,4 +21,4 @@ export const report = (e: unknown): number => {
   );
   console.error('  Please report it with the output of: sandbox doctor');
   return 1;
-};
+}

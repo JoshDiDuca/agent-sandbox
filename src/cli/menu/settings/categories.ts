@@ -137,7 +137,10 @@ const NAMES: Record<string, string> = {
   audit: 'Audit log',
 };
 
-export const nameOf = (key: string): string => NAMES[key] ?? Text.humanize(key);
+export function nameOf(key: string): string {
+  return NAMES[key] ?? Text.humanize(key);
+}
 
-export const categoryOf = (topKey: string): SettingsCategory | undefined =>
-  CATEGORIES.find((c) => c.keys.includes(topKey));
+export function categoryOf(topKey: string): SettingsCategory | undefined {
+  return CATEGORIES.find((c) => c.keys.includes(topKey));
+}

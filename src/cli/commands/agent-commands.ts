@@ -4,19 +4,24 @@ import path from 'node:path';
 import { loadConfig, userConfigPath } from '../../core/config/index.js';
 import type { Config } from '../../core/types.js';
 import { fail } from '../../core/util/index.js';
-import { agentCommands, commandsDir } from '../../host/agent-commands/index.js';
-import { reconcileAgentCommands, type Reconciled } from '../../host/agent-commands/index.js';
+import {
+  agentCommands,
+  commandsDir,
+  reconcileAgentCommands,
+  type Reconciled,
+} from '../../host/agent-commands/index.js';
 import { insideSandbox } from '../../host/sandbox/index.js';
 import { writeFileAtomic } from '../../shared/io/index.js';
-import { c } from '../output/index.js';
+import { c, table } from '../output/index.js';
 import { editConfigText } from '../menu/settings/index.js';
-import { table } from '../output/index.js';
 import { type Context } from './context.js';
 
-const entryOf = (ctx: Context): string => path.join(ctx.packageRoot, 'dist', 'bin', 'sandbox.js');
+function entryOf(ctx: Context): string {
+  return path.join(ctx.packageRoot, 'dist', 'bin', 'sandbox.js');
+}
 
 /** Brings this PC in line with agentCommands and says what changed (used after on/off, settings and launch). */
-export const syncAgentCommands = (ctx: Context, config: Config, quiet = false): Reconciled | null => {
+export function syncAgentCommands(ctx: Context, config: Config, quiet = false): Reconciled | null {
   if (insideSandbox()) return null;
   const result = reconcileAgentCommands(config, ctx.storageRoot, process.execPath, entryOf(ctx));
   if (!result.changed || quiet) return result;
@@ -32,9 +37,9 @@ export const syncAgentCommands = (ctx: Context, config: Config, quiet = false): 
     );
   } else console.log('Agent commands are off: claude, codex ... run on this PC again (open a new terminal).');
   return result;
-};
+}
 
-export const agentCommandsCommand = (ctx: Context): number => {
+export function agentCommandsCommand(ctx: Context): number {
   if (insideSandbox())
     fail(
       "Agent commands change your PC's PATH, so they are set up from your PC, not inside the sandbox.",
@@ -90,4 +95,4 @@ export const agentCommandsCommand = (ctx: Context): number => {
     );
   } else console.log('Agent commands are off: claude, codex ... run on this PC again. Open a new terminal.');
   return 0;
-};
+}

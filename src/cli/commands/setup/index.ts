@@ -4,8 +4,7 @@ import { askYesNo } from '../../../core/prompt.js';
 import { fail, isWin } from '../../../core/util/index.js';
 import { refuseInSelfTest } from '../../../host/test-guard.js';
 import { SYSTEM } from '../../../shared/system.js';
-import { c } from '../../output/index.js';
-import { table } from '../../output/index.js';
+import { c, table } from '../../output/index.js';
 import { type Context } from '../context.js';
 import { buildChecks, canEnableFeature, type Check, type CheckStatus } from './checks.js';
 import { ENABLE_COMMAND, gatherFacts } from './facts.js';
@@ -15,10 +14,12 @@ const LABEL: Record<CheckStatus, string> = {
   warn: c.yellow('WARNING'),
   action: c.red('ACTION NEEDED'),
 };
-const print = (checks: Check[]): void => table(checks.map((check) => [LABEL[check.status], check.name, check.detail]));
+function print(checks: Check[]): void {
+  table(checks.map((check) => [LABEL[check.status], check.name, check.detail]));
+}
 
 /** Runs the enable command in an elevated PowerShell (Windows asks for permission); true if it worked. */
-const enableFeature = (): boolean => {
+function enableFeature(): boolean {
   refuseInSelfTest('turn on Windows features');
   const inner = "'-NoProfile','-Command','" + ENABLE_COMMAND + " | Out-Null'";
   const outer =
@@ -31,9 +32,9 @@ const enableFeature = (): boolean => {
     spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', outer], { stdio: 'inherit' })
       .status === 0
   );
-};
+}
 
-export const setup = async (ctx: Context): Promise<number> => {
+export async function setup(ctx: Context): Promise<number> {
   if (!isWin)
     fail(
       'Windows Sandbox only runs on Windows.',
@@ -66,4 +67,4 @@ export const setup = async (ctx: Context): Promise<number> => {
         : 'This PC is ready. cd into a project and run sandbox claude (or sandbox for no agent).'),
   );
   return todo ? 1 : 0;
-};
+}

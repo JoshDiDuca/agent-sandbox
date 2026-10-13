@@ -2,9 +2,8 @@ import path from 'node:path';
 import { fail, plainText } from '../../../core/util/index.js';
 import { humanBytes } from '../../../core/disk.js';
 import { AuditLog } from '../../../host/audit/log.js';
-import { printJson } from '../../output/index.js';
+import { printJson, c } from '../../output/index.js';
 import { type Context } from '../context.js';
-import { c } from '../../output/index.js';
 
 const KINDS = ['proc', 'file', 'session', 'guard', 'note'] as const;
 const KIND_LABEL: Record<string, string> = {
@@ -16,7 +15,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /** `sandbox audit`: the audit log of the last days (audit.enabled), newest last. */
-export const audit = async (ctx: Context): Promise<number> => {
+export async function audit(ctx: Context): Promise<number> {
   const settings = ctx.loaded.config.audit;
   const kind = ctx.options.kind;
   if (kind && !(KINDS as readonly string[]).includes(kind))
@@ -67,4 +66,4 @@ export const audit = async (ctx: Context): Promise<number> => {
     ),
   );
   return 0;
-};
+}

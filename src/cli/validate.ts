@@ -9,7 +9,7 @@ import type { CliOptions } from './args.js';
 import type { Context } from './commands/context.js';
 
 /** Edit distance, for "did you mean". */
-export const distance = (a: string, b: string): number => {
+export function distance(a: string, b: string): number {
   let row = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     const next = [i];
@@ -18,35 +18,38 @@ export const distance = (a: string, b: string): number => {
     row = next;
   }
   return row[b.length];
-};
+}
 
 /** The closest of `choices` to `input`, when it is close enough to be a typo. */
-export const closest = (input: string, choices: readonly string[]): string | undefined => {
+export function closest(input: string, choices: readonly string[]): string | undefined {
   const best = choices
     .map((c) => ({ c, d: distance(input.toLowerCase(), c.toLowerCase()) }))
     .sort((x, y) => x.d - y.d)[0];
   return best && best.d <= Math.max(2, Math.floor(input.length / 3)) ? best.c : undefined;
-};
+}
 
 /** "Unknown agent "cluade". Did you mean claude?" with the valid values as the fix. */
-export const unknownValue = (what: string, input: string, choices: readonly string[], howToList: string): never => {
+export function unknownValue(what: string, input: string, choices: readonly string[], howToList: string): never {
   const hint = closest(input, choices);
   return fail(
     'Unknown ' + what + ' "' + input + '".' + (hint ? ' Did you mean ' + hint + '?' : ''),
     (choices.length ? 'Choose one of: ' + choices.join(', ') + '. ' : '') + howToList,
   );
-};
+}
 
 /** Node: 22, 22.1, v22.1.0, lts, lts/*, lts/iron, latest, current, node. */
-export const validNodeSpec = (spec: string): boolean =>
-  /^(v?\d+(\.\d+){0,2}|node|latest|current|stable|lts(\/(\*|[a-z]+))?)$/i.test(spec.trim());
+export function validNodeSpec(spec: string): boolean {
+  return /^(v?\d+(\.\d+){0,2}|node|latest|current|stable|lts(\/(\*|[a-z]+))?)$/i.test(spec.trim());
+}
 /** Python 3: 3, 3.12, 3.12.4. */
-export const validPythonSpec = (spec: string): boolean => /^v?3(\.\d+){0,2}$/.test(spec.trim());
+export function validPythonSpec(spec: string): boolean {
+  return /^v?3(\.\d+){0,2}$/.test(spec.trim());
+}
 
-export const checkHarness = (name: string | undefined, harnesses: string[]): void => {
+export function checkHarness(name: string | undefined, harnesses: string[]): void {
   if (name !== undefined && !harnesses.includes(name))
     unknownValue('agent', name, harnesses, 'Add your own under "harnesses" in your settings (sandbox config).');
-};
+}
 
 /** Commands that read these options; checked only for them (restart/doctor take --harness too). */
 const LAUNCHING = new Set(['launch', 'generate', 'host-claude']);
@@ -54,7 +57,7 @@ const LAUNCHING = new Set(['launch', 'generate', 'host-claude']);
 export const PROJECT_ACTIONS = ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'] as const;
 
 /** `sandbox projects <action> [value] [folder]`: the action, then what it needs. Pure (no file checks). */
-export const validateProjectsArgs = (args: string[]): void => {
+export function validateProjectsArgs(args: string[]): void {
   const [action = 'list', value, folder] = args;
   if (!(PROJECT_ACTIONS as readonly string[]).includes(action))
     unknownValue('projects action', action, PROJECT_ACTIONS, 'sandbox projects with no action lists your projects.');
@@ -71,10 +74,10 @@ export const validateProjectsArgs = (args: string[]): void => {
     );
   if (action === 'roots' && (value === 'add' || value === 'remove') && !folder)
     fail('Which folder?', 'Usage: sandbox projects roots ' + value + ' <folder>');
-};
+}
 
 /** Fails with what is wrong and what is valid, before anything is started. */
-export const validateOptions = (ctx: Context): void => {
+export function validateOptions(ctx: Context): void {
   const o: CliOptions = ctx.options;
   const harnesses = Object.keys(ctx.loaded.config.harnesses);
   if (['launch', 'generate', 'restart', 'doctor'].includes(o.command)) checkHarness(o.harness, harnesses);
@@ -124,4 +127,4 @@ export const validateOptions = (ctx: Context): void => {
   for (const script of o.scripts)
     if (!fs.existsSync(path.resolve(script)))
       fail('The script ' + path.resolve(script) + ' does not exist.', 'Check the --script path.');
-};
+}

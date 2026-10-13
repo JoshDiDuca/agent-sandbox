@@ -18,10 +18,13 @@ const AREA_ORDER: DataArea[] = ['tools', 'databases', 'state', 'logs', 'data', '
 const PER_CHILD: DataArea[] = ['tools', 'databases', 'state'];
 
 /** Real (non-link) children of a real folder; a link in place of the folder yields nothing. */
-const entriesOf = (dir: string): fs.Dirent[] =>
-  dirExists(dir) && !isLink(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => !d.isSymbolicLink()) : [];
+function entriesOf(dir: string): fs.Dirent[] {
+  return dirExists(dir) && !isLink(dir)
+    ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => !d.isSymbolicLink())
+    : [];
+}
 
-const toolRows = (toolsDir: string): DataEntry[] => {
+function toolRows(toolsDir: string): DataEntry[] {
   const entries = entriesOf(toolsDir);
   const folders = entries.filter((d) => d.isDirectory());
   const files = entries.filter((d) => !d.isDirectory());
@@ -45,10 +48,10 @@ const toolRows = (toolsDir: string): DataEntry[] => {
         ]
       : []),
   ];
-};
+}
 
 /** Every row of `sandbox data`: the sandbox's data folder by area, then what this PC keeps for it. */
-export const collectDataEntries = (dataPath: string, storageRoot: string): DataEntry[] => {
+export function collectDataEntries(dataPath: string, storageRoot: string): DataEntry[] {
   const inData = entriesOf(dataPath);
   const rows: DataEntry[] = inData.flatMap((d): DataEntry[] => {
     const p = path.join(dataPath, d.name);
@@ -87,13 +90,16 @@ export const collectDataEntries = (dataPath: string, storageRoot: string): DataE
     (r) => -r.bytes,
     (r) => r.name.toLowerCase(),
   );
-};
+}
 
-/** The `sandbox data clean` target for a listed row, or null when that row is not removable (kept on this PC on purpose). */
-export const cleanTargetOf = (entry: DataEntry): string | null => {
+/**
+ * The `sandbox data clean` target for a listed row, or null when that row is not removable (kept on this PC on
+ * purpose).
+ */
+export function cleanTargetOf(entry: DataEntry): string | null {
   if (entry.area === 'tools') return entry.name.startsWith('(') ? null : 'tools/' + entry.name;
   if (entry.area === 'databases' || entry.area === 'state') return entry.name;
   if (entry.area === 'logs') return 'logs';
   if (entry.area === 'host' && (entry.name === 'launches' || entry.name === 'views')) return entry.name;
   return null;
-};
+}

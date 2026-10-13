@@ -15,18 +15,20 @@ import { SchemaNode } from './schema-node.js';
 export type SettingsTarget = 'user' | 'project';
 
 /** What the value is in this JSON text (undefined when it is not set there). */
-export const fileValue = (text: string, key: string[]): unknown => _.get(parse(text) ?? {}, key);
+export function fileValue(text: string, key: string[]): unknown {
+  return _.get(parse(text) ?? {}, key);
+}
 
 /**
  * Applies one change (undefined = remove the line, back to the default) to config text and returns the new text, or
  * the problems that make the result invalid. Pure; ConfigFile writes it.
  */
-export const editConfigText = (
+export function editConfigText(
   text: string,
   key: string[],
   value: unknown,
   target: SettingsTarget = 'user',
-): { text: string } | { problems: string[] } => {
+): { text: string } | { problems: string[] } {
   // Removing a setting the file does not have changes nothing (jsonc-parser throws on it).
   const edits =
     value === undefined && fileValue(text || '{}', key) === undefined
@@ -40,7 +42,7 @@ export const editConfigText = (
   return parsed.success
     ? { text: next.endsWith('\n') ? next : next + '\n' }
     : { problems: describeIssues(parsed.error) };
-};
+}
 
 export class ConfigFile {
   readonly schema: SchemaNode;

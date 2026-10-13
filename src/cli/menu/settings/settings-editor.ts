@@ -6,10 +6,10 @@
 import _ from 'lodash';
 import { NEVER_LOOSER } from '../../../core/local-config/index.js';
 import type { Config } from '../../../core/types.js';
-import { App, Text, Theme, type Category, type ListItem, type Tab } from '../../tui/index.js';
+import { type App, Text, Theme, type Category, type ListItem, type Tab } from '../../tui/index.js';
 import { AppsCatalogue } from '../apps.js';
 import { CATEGORIES, categoryOf, nameOf } from './categories.js';
-import { ConfigFile } from './config-file.js';
+import { type ConfigFile } from './config-file.js';
 import { formatValue } from './format.js';
 import { ValueEditor } from './value-editor.js';
 import type { SchemaNode } from './schema-node.js';

@@ -11,7 +11,7 @@ import { commandLine } from '../history.js';
 import { Text, Theme, type App } from '../tui/index.js';
 
 /** Folders worth offering: this one, the projects started before, and the folders inside your roots. */
-export const candidateFolders = (ctx: Context, cwd: string = process.cwd()): string[] => {
+export function candidateFolders(ctx: Context, cwd: string = process.cwd()): string[] {
   const roots = ctx.loaded.config.projects.roots.map((r) => expandPath(r, ctx.loaded.base));
   const inRoots = roots.flatMap((r) => {
     try {
@@ -26,18 +26,20 @@ export const candidateFolders = (ctx: Context, cwd: string = process.cwd()): str
   });
   const all = [path.resolve(cwd), ...new KnownProjects(ctx.storageRoot).list().map((k) => k.host), ...inRoots];
   return all.filter((f, i) => all.findIndex((g) => g.toLowerCase() === f.toLowerCase()) === i && fs.existsSync(f));
-};
+}
 
 /** The command line for several sessions: one --session per (agent, folder), with the shared options. */
-export const severalAgentsArgv = (
+export function severalAgentsArgv(
   sessions: { harness: string; folder: string }[],
   o: { headless: boolean; attachFirst: boolean },
-): string[] => [
-  'launch',
-  ...sessions.flatMap((s) => ['--session', s.harness + '@' + s.folder]),
-  ...(o.headless ? ['--headless'] : []),
-  ...(o.attachFirst ? ['-t'] : []),
-];
+): string[] {
+  return [
+    'launch',
+    ...sessions.flatMap((s) => ['--session', s.harness + '@' + s.folder]),
+    ...(o.headless ? ['--headless'] : []),
+    ...(o.attachFirst ? ['-t'] : []),
+  ];
+}
 
 const ADD = '@add';
 

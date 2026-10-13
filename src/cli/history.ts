@@ -6,13 +6,17 @@ import { JsonFile } from '../shared/io/index.js';
 
 const HistorySchema = z.array(z.strictObject({ argv: z.array(z.string()).max(200), at: z.string() })).max(20);
 type History = z.output<typeof HistorySchema>;
-const historyFile = (): JsonFile<History> => new JsonFile(HistorySchema, path.join(userDir(), 'history.json'));
+function historyFile(): JsonFile<History> {
+  return new JsonFile(HistorySchema, path.join(userDir(), 'history.json'));
+}
 const HIDDEN = new Set(['menu', '_watch', 'self-test']);
 
-export const readHistory = (): History => historyFile().read() ?? [];
+export function readHistory(): History {
+  return historyFile().read() ?? [];
+}
 
 /** Remembers a command (menu or typed) so the menu can offer it again. Never fails the command itself. */
-export const recordHistory = (argv: string[]): void => {
+export function recordHistory(argv: string[]): void {
   if (!argv.length || HIDDEN.has(argv[0]) || argv.includes('--help')) return;
   try {
     historyFile().write(
@@ -24,8 +28,11 @@ export const recordHistory = (argv: string[]): void => {
   } catch {
     /* history is a convenience */
   }
-};
+}
 
 /** argv as you would type it (quoted where needed). */
-export const commandLine = (argv: string[]): string =>
-  ['sandbox', ...argv].map((a) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)).join(' ');
+export function commandLine(argv: string[]): string {
+  return ['sandbox', ...argv]
+    .map((a) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a))
+    .join(' ');
+}
