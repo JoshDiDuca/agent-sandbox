@@ -201,6 +201,13 @@
       return
     }
   }
+  # A background watcher left by an older version (it outlived its sandbox) holds files npm must replace. Stopped only
+  # when no Windows Sandbox runs: while one does, its watcher is still needed.
+  if (-not (Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue)) {
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandLine -match '(windows-development-sandbox|agent-sandbox).*\s_watch(\s|$)' } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Ok "stopped a leftover background watcher (process $($_.ProcessId))" }
+  }
   Write-Host "   npm install -g $installFrom"
   # npm.cmd, not npm: the npm.ps1 shim is blocked when scripts are disabled on this PC.
   # The old agent-sandbox package ships the same commands; npm will not install over it.

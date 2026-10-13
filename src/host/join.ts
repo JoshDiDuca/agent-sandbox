@@ -61,6 +61,8 @@ export const joinRunning = async (o: {
   resolve: (projectRoot: string) => Promise<ResolvedRun>; mapper?: ProjectMapper;
   /** Asked before anything is registered when something is missing (default: continue without it). */
   decide?: (name: string, missing: Missing) => Promise<MissingChoice>;
+  /** Asked when the project's own settings are stricter than the running sandbox's (default: refuse). */
+  acceptStricter?: (name: string, stricter: string[]) => Promise<boolean>;
 }): Promise<Joined> => {
   const here = projectHere(o.storageRoot, o.hostDir);
   if (here?.project.primary) return { ...here, spec: null, run: null, notes: [], missing: null };
@@ -69,9 +71,12 @@ export const joinRunning = async (o: {
   const root = here?.project.host ?? path.resolve(o.hostDir);
   const run = await o.resolve(root);
   const check = checkJoin(registry.protections, protectionsOf(run.config), Object.keys(registry.atBoot?.widened ?? {}));
-  if (check.stricter.length) {
-    fail('This project needs stricter protection than the running sandbox has, and those settings are machine-wide:\n  ' + check.stricter.join('\n  '),
-      'Its sessions cannot get them without changing them for the sessions already running. Stop the sandbox (sandbox stop) and start it from ' + root + '.');
+  // Machine-wide settings cannot change for one project, so it either runs with the sandbox's (your consent) or not at all.
+  const name = here?.project.name ?? path.basename(root);
+  const accepted = check.stricter.length > 0 && (await o.acceptStricter?.(name, check.stricter)) === true;
+  if (check.stricter.length && !accepted) {
+    fail('This project\'s settings are stricter than the running sandbox\'s, and those settings are machine-wide:\n  ' + check.stricter.join('\n  '),
+      'Join with the sandbox\'s settings: answer yes in a terminal, or add --yes. Or stop the sandbox (sandbox stop) and start it from ' + root + '.');
   }
   // Boot-only wishes (a .wsb device you allowed for it, more memory, its mappings) the running sandbox lacks.
   const launchPath = runningLaunchPath(o.storageRoot, o.dataPath);
@@ -79,7 +84,7 @@ export const joinRunning = async (o: {
   const found = boot ? missingAtBoot(registry.protections, boot, run.config, dirExists) : null;
   const missing = found && !nothingMissing(found) ? found : null;
   if (missing) {
-    const choice = o.decide ? await o.decide(here?.project.name ?? path.basename(root), missing) : 'continue';
+    const choice = o.decide ? await o.decide(name, missing) : 'continue';
     if (choice === 'cancel') fail('Cancelled: nothing changed.');
     if (choice === 'restart') throw new NeedsRestart(root, 'it wants what the sandbox only gets at its start', missing);
   }
@@ -97,6 +102,7 @@ export const joinRunning = async (o: {
   if (launchPath && hooks) stageScripts(path.join(launchPath, 'projects', entry.name, 'hooks', 'pre-agent'), run.scripts);
   try { syncProjectIn(o.dataPath, { hostWorkspace: entry.host, guestWorkspace: entry.guest }); } catch { /* history is a convenience; never block the session */ }
   const notes = [...run.notes, ...check.looser.map((l) => 'The running sandbox is stricter: ' + l + '.'),
+    ...(accepted ? ['Runs with the sandbox\'s settings (you agreed): ' + check.stricter.join('; ') + '.'] : []),
     ...check.shared.map((s) => s + ' is on in this sandbox for another of its projects (you allowed it there); this project shares it.')];
   return { project: entry, guestDir: here ? here.guestDir : entry.guest, spec: projectSpec(run, entry, hooks), run, notes, missing };
 };

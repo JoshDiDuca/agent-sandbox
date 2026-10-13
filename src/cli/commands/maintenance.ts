@@ -174,7 +174,8 @@ export const doctor = (ctx: Context): number => {
 
 export const claudeHost = (ctx: Context): number => hostClaude(ctx.storageRoot, ctx.options.personal, ctx.options.passthrough);
 
-export const watcher = (ctx: Context): Promise<void> => watch(ctx.dataPath);
+// The watcher process exits as soon as its work is done: nothing it opened may keep it running after the sandbox.
+export const watcher = async (ctx: Context): Promise<void> => { await watch(ctx.dataPath); process.exit(0); };
 
 const KINDS = ['proc', 'file', 'session', 'guard', 'note'] as const;
 const KIND_LABEL: Record<string, string> = { proc: 'program', file: 'file', session: 'session', guard: 'GUARD', note: 'note' };

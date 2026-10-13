@@ -99,7 +99,7 @@
             "description": "Folder on this PC (relative paths are relative to the config file)."
           },
           "guest": {
-            "description": "Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game (shown as F: at boot). Leave it out to use the same path as on this PC (a folder inside the project stays where it is in the project). A path the sandbox cannot use (C:\\Windows\\..., C:\\Users\\..., one already in use) goes to C:\\Mapped\\<drive>\\<path> instead, and the launch says so.",
+            "description": "Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game (shown as F: at boot). Leave it out to use the same path as on this PC (a folder inside the project stays where it is in the project). A full path only; one the sandbox cannot use (C:\\Windows\\..., C:\\Users\\..., one already in use) stops the launch with the fix.",
             "type": "string",
             "minLength": 1,
             "maxLength": 1024

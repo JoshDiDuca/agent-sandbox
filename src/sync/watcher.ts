@@ -14,7 +14,7 @@ import { readActiveViews, WorkspaceView } from '../host/workspace-view/index.js'
 import { readForwards, sandboxAddress, startPortForwards } from '../host/port-forward.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/motw.js';
-import { sizeOf } from '../core/disk.js';
+import { sizeWithin } from '../core/disk.js';
 import { beatLife, causeSince, endLife, keepAwake, readLife } from '../host/stops.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, syncHistoryIn, syncHistoryOut, writeSyncState, type SyncPaths, type SyncState } from './history.js';
@@ -133,6 +133,8 @@ export const watch = async (dataPath: string): Promise<void> => {
       if (cause) note('sandbox ended: ' + cause.text);
     } catch (e) { note('could not record how the sandbox ended: ' + errMsg(e)); }
     await sleep(3000);
+    // The sandbox is gone: this process ends within minutes whatever happens below (it must never outlive the sandbox).
+    setTimeout(() => { note('final work took too long; stopped.'); fs.rmSync(watcherPidFile(dataPath), { force: true }); process.exit(0); }, END_DEADLINE_MS).unref();
     sync(true);
   } finally {
     awake?.kill();
@@ -144,8 +146,11 @@ export const watch = async (dataPath: string): Promise<void> => {
     for (const v of views) {
       try { const s = new WorkspaceView(v).syncAll(); note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in'); } catch (e) { note('workspace ' + v.host + ': final sync failed: ' + errMsg(e)); }
     }
-    // For the next launch's storage.warnDataGb (measuring then would be slow).
-    try { saveDataSize(storageOf(dataPath), dataPath, sizeOf(dataPath)); } catch { /* best effort */ }
+    // For the next launch's storage.warnDataGb, only when it can be measured quickly (a big data folder takes minutes).
+    try { const bytes = sizeWithin(dataPath, 20000); if (bytes !== null) saveDataSize(storageOf(dataPath), dataPath, bytes); } catch { /* best effort */ }
     fs.rmSync(watcherPidFile(dataPath), { force: true });
   }
 };
+
+/** The longest the watcher may take after the sandbox closed (final syncs) before it stops anyway. */
+const END_DEADLINE_MS = 3 * 60 * 1000;

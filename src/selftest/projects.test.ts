@@ -135,8 +135,12 @@ export const projectsSuite: Suite = {
     t.check(readKnown(storage).some((k) => k.host === inRoot), 'joined projects are remembered (projects.all, sandbox projects)');
     const launchFolder = await join(path.join(f.workA, 'sub'), () => Promise.reject(new Error('must not resolve')));
     t.equal(launchFolder.spec, null, 'the launch folder (and below) needs no spec: its sessions use the boot environment');
-    await t.throws(() => join(tightDir, resolveFor(tight)), 'stricter protection than the running sandbox', 'a project whose .sandbox-config.json tightens git access beyond the running sandbox is refused, with the reason');
+    await t.throws(() => join(tightDir, resolveFor(tight)), 'stricter than the running sandbox', 'a project whose .sandbox-config.json tightens git access beyond the running sandbox is refused without your consent, with the reason');
     t.check(readRegistry(storage)?.projects.every((p) => p.host !== tightDir) === true, 'a refused project is not registered');
+    let asked: string[] = [];
+    const agreed = await t.thrownMessage(() => joinRunning({ storageRoot: storage, dataPath: data, packageRoot: f.install, hostDir: tightDir, wsbShare: false, resolve: resolveFor(tight),
+      acceptStricter: async (_name, stricter) => { asked = stricter; return true; } }));
+    t.check(asked.some((s) => s.startsWith('provisioning.git.access')) && !agreed.includes('stricter than the running sandbox'), 'with your consent it is not refused for its stricter settings (it goes on to joining: here a restart, as its folder is outside every root)', agreed);
     const outsideRun = await f.run({ cwd: outside });
     await t.throws(() => join(outside, resolveFor(outsideRun)), 'projects.wsbShare', 'a folder that cannot be shown lets NeedsRestart reach the caller');
 

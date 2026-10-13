@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { Config, Mapping, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
-import { deriveGuest, placeGuest, planMirrorWorkspace } from '../shared/guest-paths.js';
+import { deriveGuest, guestConflict, guestFix, planMirrorWorkspace, tidyGuestPath } from '../shared/guest-paths.js';
 import { autoGuestFolder, PROJECTS_GUEST, rootGuestDir, usableRoots } from '../shared/projects.js';
 import { DATABASES, type Database } from './detect-databases.js';
 import { allowedAnswer, allowRequests, allowStorePath, applyOverrides, describeOverrides, isTrusted, LOCAL_CONFIG_NAME, loosenedRequests, normalizeOverrides, OUTSIDE_FOLDER, outsideKey, outsideMappings, readLocalConfig, saveAllowed, saveTrust, trustStorePath } from './local-config.js';
@@ -181,8 +181,11 @@ export const guestWorkspaceOf = (config: Pick<Config, 'guestWorkspace'>, workspa
  * Where a mapping will most likely appear, before the launch knows every other folder (the prompt and config check
  * show it; the launch places it for real in host/launch/mappings.ts with the same rules).
  */
-export const previewGuest = (m: Pick<Mapping, 'host' | 'guest'>, workspaceHost: string, workspaceGuest: string): { guest: string; note: string | null } =>
-  placeGuest(m.host, m.guest ?? deriveGuest(m.host, workspaceHost, workspaceGuest), [
+export const previewGuest = (m: Pick<Mapping, 'host' | 'guest'>, workspaceHost: string, workspaceGuest: string): { guest: string; note: string | null } => {
+  const guest = tidyGuestPath(m.guest ?? deriveGuest(m.host, workspaceHost, workspaceGuest));
+  const conflict = guestConflict(guest, [
     ...(m.guest || !isInsideOrEqual(workspaceHost, m.host) ? [{ guest: workspaceGuest, what: 'the project' }] : []),
     { guest: PROJECTS_GUEST, what: 'other projects' },
   ]);
+  return { guest, note: conflict ? m.host + ': ' + conflict + '. Fix: ' + guestFix(m.guest) : null };
+};

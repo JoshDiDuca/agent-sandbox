@@ -50,15 +50,17 @@ Commonly changed:
 
 Where a mapped folder appears:
 
-- No `guest`: at the same path as on your PC (`C:\Steam\Game` stays `C:\Steam\Game`, `F:\SteamLibrary\...` stays
-  `F:\SteamLibrary\...`). A folder inside the project is already in the sandbox with the project, so it needs no mapping (with `workspaceFilter`
-  on it is mapped on its own, at `C:\Mapped\...`, so a git-ignored folder can still come in).
-- `guest` given: there. Any `C:\` folder works, and any path on D: to Z:.
-- A path the sandbox cannot use goes to `C:\Mapped\<drive>\<path>` instead, and the launch says where and why: the
-  folders it keeps for itself (`C:\Windows`, `C:\Program Files*`, `C:\ProgramData`, `C:\Users`, `C:\AgentData`,
-  `C:\AgentLaunch`, `C:\HostTools`, `C:\nvm`, `C:\Mirror`), a path already used by the project, `C:\Projects` or another
-  mapping (the same folder or one inside the other), a drive root, `A:`/`B:`, or a path Windows cannot have. A mapping is
-  never refused for its guest path. `sandbox config check` shows where each folder will appear before you launch.
+- No `guest`: at the same path as on your PC (`C:SteamGame` stays `C:SteamGame`, `F:SteamLibrary...` stays
+  `F:SteamLibrary...`). A folder inside the project is already in the sandbox with the project, so it needs no
+  mapping (with `workspaceFilter` on, give it a `guest` path outside the project to bring a git-ignored folder in).
+- `guest` given: exactly there. A full path: any `C:` folder, or any path on D: to Z:.
+- A folder that cannot appear at its path stops the launch, and the message names each such folder, why, and the fix:
+  a relative path, the folders the sandbox keeps for itself (`C:Windows`, `C:Program Files*`, `C:ProgramData`,
+  `C:Users`, `C:AgentData`, `C:AgentLaunch`, `C:HostTools`, `C:
+vm`, `C:Mirror`), a path already used by the
+  project, `C:Projects` or another mapping (the same folder or one inside the other), a drive root, `A:`/`B:`, or a
+  path Windows cannot have. Folders are never moved somewhere else. `sandbox config check` shows where each folder will
+  appear, and any problem, before you launch.
 
 Windows Sandbox can only map onto C:, so a guest path on F: is mapped to `C:\Mirror\F\...` and `subst F: C:\Mirror\F` runs at
 boot. Tools that resolve real paths may print the `C:\Mirror` form; history sync understands both. A letter that already

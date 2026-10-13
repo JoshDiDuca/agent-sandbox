@@ -82,24 +82,25 @@ export const mirrorSuite: Suite = {
       const g = f.generate({ ...run, config: { ...run.config, mappings } });
       return { guests: g.mappings.filter((m) => m.host === game || m.host === other).map((m) => m.guest), notes: g.mappingNotes, wsb: fs.readFileSync(g.wsbPath, 'utf8') };
     };
-    const awkward = placed([
-      { host: game, guest: 'C:\\Windows\\foo', readOnly: true },
-      { host: game, guest: 'C:\\Users\\x', readOnly: true },
-      { host: game, guest: 'C:\\AgentData\\y', readOnly: true },
-      { host: game, guest: 'C:\\Mirror\\F\\x', readOnly: true },
+    const usable = placed([
       { host: game, guest: 'D:\\Games', readOnly: true },
-      { host: game, guest: 'G:\\Projects\\work-a', readOnly: true },
       { host: game, guest: 'c:/assets/', readOnly: true },
-      { host: other, guest: 'C:\\Assets', readOnly: true },
-      { host: game, guest: 'C:\\Assets', readOnly: true },
+      { host: game, guest: 'C:\\assets', readOnly: true },
     ]);
-    t.equal(awkward.guests, ['C:\\Mapped\\C\\Windows\\foo', 'C:\\Mapped\\C\\Users\\x', 'C:\\Mapped\\C\\AgentData\\y', 'C:\\Mapped\\C\\Mirror\\F\\x', 'D:\\Games', 'C:\\Mapped\\G\\Projects\\work-a', 'C:\\assets', 'C:\\Mapped\\C\\Assets'],
-      'reserved paths, C:\\Mirror and the workspace itself go to C:\\Mapped\\<drive>\\<path>; D:\\Games and a tidied c:/assets/ are used as they are; a repeat is mapped once; a second folder on the same path moves');
-    t.check(awkward.notes.some((n) => n.includes('C:\\Windows\\foo') && n.includes('keeps for itself') && n.includes('C:\\Mapped\\C\\Windows\\foo')), 'a note says where a reserved path went and why', awkward.notes.join('\n'));
-    t.check(awkward.notes.some((n) => n.startsWith(other) && n.includes('already used by') && n.includes(game)), 'a conflict note names both folders', awkward.notes.join('\n'));
-    t.check(!/<SandboxFolder>C:\\(Windows|Users|AgentData\\y|Mirror\\F\\x)/i.test(awkward.wsb), 'a reserved guest path never reaches the .wsb');
-    const derived = placed([{ host: game, readOnly: true }]);
-    t.check(derived.guests.length === 1 && (/^C:\\Mapped\\C\\Users\\/i.test(derived.guests[0]) || derived.guests[0].toLowerCase() === game.toLowerCase()), 'no guest, outside the project: the PC path, or C:\\Mapped\\... when that path is reserved (the temp folder is under C:\\Users)', JSON.stringify(derived));
+    t.equal(usable.guests, ['D:\\Games', 'C:\\assets'], 'a usable guest path is used exactly as asked (c:/assets/ tidied); the same folder at the same place is mapped once');
+    const refused = await t.thrownMessage(() => placed([
+      { host: game, guest: 'C:\\Windows\\foo', readOnly: true },
+      { host: game, guest: 'steamapps\\Game', readOnly: true },
+      { host: game, guest: 'G:\\Projects\\work-a', readOnly: true },
+      { host: game, guest: 'C:\\Assets', readOnly: true },
+      { host: other, guest: 'C:\\Assets', readOnly: true },
+    ]));
+    t.check(refused.includes('4 mapped folders cannot be used'),'unusable guest paths stop the launch, all named in one message (never moved elsewhere)', refused);
+    t.check(refused.includes('C:\\Windows\\foo is a folder the sandbox keeps for itself') && refused.includes('steamapps\\Game is not a full path') && refused.includes('already used by'), '... each with why: reserved, relative, overlapping', refused);
+    t.check(refused.includes('Fix: set "guest" to a full path'), '... and the fix', refused);
+    t.excludes(refused, 'C:\\Mapped', 'no folder is ever placed under C:\\Mapped');
+    const derived = await t.thrownMessage(() => placed([{ host: game, readOnly: true }]));
+    t.check(derived === '' || derived.includes('give it a "guest" path'), 'no guest, outside the project: the PC path, or (under C:\\Users, like the temp folder) a message asking for a guest path', derived);
     const inside = t.dir('work-a', 'data');
     const insideRun = await f.run();
     const insideGen = f.generate({ ...insideRun, config: { ...insideRun.config, mappings: [{ host: inside, readOnly: true }] } });
