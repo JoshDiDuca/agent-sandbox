@@ -1,4 +1,4 @@
-// What every database module shares: where data lives, starting a server detached, and safe first-time creation.
+// What the database servers share: where data lives, starting a server detached, and safe first-time creation.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -10,7 +10,7 @@ import { portOpen, waitForPort } from '../runtime/ports.js';
 /** C:\AgentData\databases\<name>: the data survives the sandbox. */
 export const dataFor = (name: string): string => path.join(dataDir, 'databases', name);
 
-/** Starts a server detached (it outlives the boot script) with its output in logs\<name>.log, and waits for its port. */
+/** Starts a server detached (it outlives the boot script), output in logs\<name>.log, and waits for its port. */
 export const startServer = async (name: string, exe: string, args: string[], port: number): Promise<void> => {
   if (await portOpen(port)) throw new Error('port ' + port + ' is already in use (change databases.' + name + '.port)');
   const logFile = path.join(logsDir, name + '.log');

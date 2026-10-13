@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import { ProjectSpecSchema } from '../../shared/channel/schema.js';
 import { portOpen } from '../runtime/ports.js';
-import { DATABASE_NAMES, setupDatabase, stopDatabase } from './index.js';
+import { DATABASE_NAMES } from './names.js';
+import { setupDatabase, stopDatabase } from './registry.js';
 import { emptyEnv } from '../toolchains/tool-env.js';
 import { addMachineEnvironment } from '../setup/environment.js';
 import { session } from '../runtime/session.js';
