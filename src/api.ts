@@ -2,16 +2,7 @@
 // request kinds the guest daemon accepts, and everything coming back is validated data.
 import path from 'node:path';
 import type { GuestResponse, SandboxStatus, SessionStatus } from './core/types.js';
-import { attachTerminal } from './host/channel/index.js';
-import {
-  execInSandbox,
-  pickSession,
-  pingSandbox,
-  requestSession,
-  restartSessions,
-  waitForReady,
-  waitForSession,
-} from './host/channel/index.js';
+import { attachTerminal, SandboxChannel } from './host/channel/index.js';
 import { loadConfig } from './core/config/index.js';
 import { RunDir } from './shared/channel/index.js';
 import { isSandboxRunning } from './host/sandbox/index.js';
@@ -44,10 +35,11 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
     loaded.config.storage.dataName,
   );
   const alive = isSandboxRunning;
+  const channel = new SandboxChannel(dataPath, alive);
   // async: no sandbox is a rejected promise like every other failure, not a synchronous throw.
   const ready = async (): Promise<SandboxStatus> =>
     alive()
-      ? waitForReady(dataPath, null, alive)
+      ? channel.waitForReady(null)
       : fail('No Windows Sandbox is running.', 'Start one first, e.g. sandbox claude --headless.');
   return {
     isRunning: alive,
@@ -55,31 +47,24 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
     ready,
     sessions: () => new RunDir(dataPath).listSessions(),
     exec: async (command, o = {}) =>
-      execInSandbox(dataPath, command, o.cwd ?? (await ready()).guestWorkspace, o.timeoutSeconds ?? 600, alive),
+      channel.exec(command, o.cwd ?? (await ready()).guestWorkspace, o.timeoutSeconds ?? 600),
     startSession: async (o = {}) => {
       const status = await ready();
-      return waitForSession(
-        dataPath,
-        requestSession(
-          dataPath,
-          o.harness ?? loaded.config.defaultHarness,
-          o.args ?? [],
-          o.cwd ?? status.guestWorkspace,
-        ),
-        alive,
+      return channel.waitForSession(
+        channel.requestSession(o.harness ?? loaded.config.defaultHarness, o.args ?? [], o.cwd ?? status.guestWorkspace),
       );
     },
     restart: async (harness) => {
       await ready();
-      return restartSessions(dataPath, harness ?? null, alive);
+      return channel.restart(harness ?? null);
     },
     ping: async () => {
       await ready();
-      return pingSandbox(dataPath, alive);
+      return channel.ping();
     },
     attach: async (sessionId) => {
       await ready();
-      return attachTerminal(pickSession(dataPath, sessionId));
+      return attachTerminal(channel.pickSession(sessionId));
     },
   };
 };

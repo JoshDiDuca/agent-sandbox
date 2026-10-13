@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { GuestResponse } from '../../../core/types.js';
-import { execInSandbox } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
 import { printJson } from '../../output/index.js';
-import { requireOnPc, requireRunning, sandboxAlive, type Context } from '../context.js';
+import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { readySandbox } from '../launch/index.js';
 import { hereDir, joinHere, provisionJoined } from '../projects/index.js';
 import { working } from '../../output/index.js';
@@ -43,7 +43,7 @@ export const exec = async (ctx: Context): Promise<number> => {
   requireOnPc('exec');
   requireRunning();
   const cwd = await guestFolderHere(ctx, 'exec');
-  const result = await execInSandbox(ctx.dataPath, command, cwd, ctx.options.timeout, sandboxAlive);
+  const result = await new SandboxChannel(ctx.dataPath).exec(command, cwd, ctx.options.timeout);
   if (!printJson(ctx, result)) printExecResult(result);
   return result.exitCode ?? 1;
 };
@@ -75,7 +75,7 @@ export const db = async (ctx: Context): Promise<number> => {
       ' the database' +
       (name ? ' ' + name : 's') +
       ' in the sandbox',
-    () => execInSandbox(ctx.dataPath, ['sbx-db', action, ...(name ? [name] : [])], cwd, 1800, sandboxAlive),
+    () => new SandboxChannel(ctx.dataPath).exec(['sbx-db', action, ...(name ? [name] : [])], cwd, 1800),
   );
   printExecResult(result);
   return result.exitCode ?? 1;

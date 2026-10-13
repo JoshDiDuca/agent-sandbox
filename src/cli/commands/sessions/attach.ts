@@ -1,5 +1,5 @@
 import { select } from '@inquirer/prompts';
-import { pickSession, runningSessions, sessionsFirstIn } from '../../../host/channel/index.js';
+import { SandboxChannel, sessionsFirstIn } from '../../../host/channel/index.js';
 import { readRegistry } from '../../../host/projects/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { safeText, sleep } from '../../../core/util/index.js';
@@ -14,11 +14,11 @@ export const attach = async (ctx: Context): Promise<number> => {
   requireRunning('Start one with: sandbox claude --terminal');
   const ready = await readySandbox(ctx.dataPath);
   const id = ctx.options.positionals[0];
-  if (!id && runningSessions(ctx.dataPath).length === 0) await sleep(1500);
+  if (!id && new SandboxChannel(ctx.dataPath).runningSessions().length === 0) await sleep(1500);
   const here = locateHere(ctx, ready);
-  if (id) return attachHere(ctx, pickSession(ctx.dataPath, id));
+  if (id) return attachHere(ctx, new SandboxChannel(ctx.dataPath).pickSession(id));
   // Several sessions: choose, this folder's project first (the newest is the default).
-  const running = sessionsFirstIn(runningSessions(ctx.dataPath), here.guestDir);
+  const running = sessionsFirstIn(new SandboxChannel(ctx.dataPath).runningSessions(), here.guestDir);
   if (running.length > 1 && process.stdin.isTTY && process.stdout.isTTY) {
     const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
     const chosen = await select({
@@ -36,7 +36,7 @@ export const attach = async (ctx: Context): Promise<number> => {
           s.id,
       })),
     });
-    return attachHere(ctx, pickSession(ctx.dataPath, chosen));
+    return attachHere(ctx, new SandboxChannel(ctx.dataPath).pickSession(chosen));
   }
-  return attachHere(ctx, pickSession(ctx.dataPath, undefined, here.guestDir));
+  return attachHere(ctx, new SandboxChannel(ctx.dataPath).pickSession(undefined, here.guestDir));
 };

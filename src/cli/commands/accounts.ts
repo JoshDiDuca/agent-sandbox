@@ -7,12 +7,12 @@ import {
   setDefaultAccount,
   type Account,
 } from '../../host/profile/index.js';
-import { restartSessions, runningSessions } from '../../host/channel/index.js';
+import { SandboxChannel } from '../../host/channel/index.js';
 import { hostClaudeDir, hostGlobalStateFile } from '../../host/profile/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { fail, safeText } from '../../core/util/index.js';
 import { printJson, table } from '../output/index.js';
-import { sandboxAlive, type Context } from './context.js';
+import { type Context } from './context.js';
 
 const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
 
@@ -46,10 +46,11 @@ const list = (ctx: Context): number => {
 
 const use = async (ctx: Context, name: string): Promise<number> => {
   console.log('Sandbox now uses ' + label(activateAccount(ctx.storageRoot, ctx.dataPath, name)) + '.');
-  const claudeRunning = isSandboxRunning() && runningSessions(ctx.dataPath).some((s) => s.harness === 'claude');
+  const claudeRunning =
+    isSandboxRunning() && new SandboxChannel(ctx.dataPath).runningSessions().some((s) => s.harness === 'claude');
   if (claudeRunning && !ctx.options.noRestart)
     console.log(
-      safeText((await restartSessions(ctx.dataPath, 'claude', sandboxAlive)).message) +
+      safeText((await new SandboxChannel(ctx.dataPath).restart('claude')).message) +
         ' with --continue; the conversation carries on under the new account.',
     );
   return 0;

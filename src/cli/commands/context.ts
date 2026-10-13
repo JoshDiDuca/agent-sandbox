@@ -47,8 +47,6 @@ export const createContext = (packageRoot: string, entry: string, options: CliOp
   };
 };
 
-export const sandboxAlive = (): boolean => isSandboxRunning();
-
 /** For commands that control the sandbox from your PC: inside the sandbox they make no sense. */
 export const requireOnPc = (what: string): void => {
   if (insideSandbox())

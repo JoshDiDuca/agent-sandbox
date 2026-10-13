@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { activateAccount, activeAccount, defaultAccount } from '../../../host/profile/index.js';
-import { resetRunDir } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { describePrune, pruneStorage } from '../../../host/storage/index.js';
 import { checkRepo } from '../../../host/guard/index.js';
 import { ensureConpty } from '../../../host/tools/index.js';
@@ -109,7 +109,7 @@ export const prepare = async (ctx: Context, run: ResolvedRun) => {
   const stopped = lastStopWarning(storageRoot, dataPath, watcherRunning(dataPath));
   if (stopped) console.warn(c.yellow(stopped));
   if (updateRestartPending()) console.warn(c.yellow(UPDATE_RESTART_WARNING));
-  resetRunDir(dataPath);
+  new SandboxChannel(dataPath).reset();
   const filter = await prepareWorkspaceView(ctx, run);
   return {
     account,

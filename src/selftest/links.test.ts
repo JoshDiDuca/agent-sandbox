@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { activateAccount, saveAccount } from '../host/profile/index.js';
-import { resetRunDir, sendRequest } from '../host/channel/index.js';
+import { SandboxChannel } from '../host/channel/index.js';
 import { pruneStorage } from '../host/storage/index.js';
 import { assertNoLinks } from '../core/util/index.js';
 import { syncHistoryIn } from '../sync/index.js';
@@ -65,13 +65,13 @@ export const linksSuite: Suite = {
     t.dir('evil-storage', 'data', 'd', 'run');
     fs.symlinkSync(victim, path.join(data, 'run', 'requests'), 'junction');
     await t.throws(
-      () => sendRequest(data, { kind: 'ping', id: 'p1', createdAt: '' }),
+      () => new SandboxChannel(data).send({ kind: 'ping', id: 'p1', createdAt: '' }),
       'is a link',
       'requests are never written through a junction',
     );
     t.check(!fs.existsSync(path.join(victim, 'p1.json')), "nothing was written into the junction's target");
     fs.symlinkSync(victim, path.join(data, 'run', 'sessions'), 'junction');
-    resetRunDir(data);
+    new SandboxChannel(data).reset();
     t.check(
       !fs.existsSync(path.join(data, 'run', 'sessions')),
       'resetting the run folder removes a junction itself...',

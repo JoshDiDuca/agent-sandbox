@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import type { SessionStatus } from '../../../core/types.js';
-import { currentSessions } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { sessionViewers } from '../../../host/channel/index.js';
 import type { Viewers } from '../../../shared/pty/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
@@ -29,7 +29,7 @@ export const listedSessions = async (ctx: Context): Promise<Listed[]> => {
   // Who is attached comes from each session itself, so a terminal that was closed is never counted.
   const live = isSandboxRunning();
   // Only this sandbox's sessions are asked (and at most MAX_QUERIED_SESSIONS): the sandbox writes these files.
-  const ask = new Set(live ? currentSessions(ctx.dataPath).map((s) => s.id) : []);
+  const ask = new Set(live ? new SandboxChannel(ctx.dataPath).currentSessions().map((s) => s.id) : []);
   const here = live ? locateHere(ctx, new RunDir(ctx.dataPath).readSandboxStatus()) : { guestDir: null };
   const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
   return Promise.all(

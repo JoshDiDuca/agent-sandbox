@@ -8,7 +8,7 @@ import _ from 'lodash';
 import type { SessionStatus } from '../../../core/types.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { fail, safeText, sleep } from '../../../core/util/index.js';
-import { currentSessions, execInSandbox } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { readRegistry, type ProjectRegistry } from '../../../host/projects/index.js';
 import { type NeedsRestart } from '../../../host/projects/index.js';
@@ -17,7 +17,7 @@ import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { c } from '../../output/index.js';
 import { working } from '../../output/index.js';
-import { sandboxAlive, type Context } from '../context.js';
+import { type Context } from '../context.js';
 
 /** "2 sessions (claude in api, codex in web)". */
 export const describeSessions = (sessions: Pick<SessionStatus, 'harness' | 'cwd' | 'project'>[]): string =>
@@ -51,13 +51,9 @@ const sessionsToReopen = (
 const stopAndWait = async (ctx: Context): Promise<void> => {
   const status = new RunDir(ctx.dataPath).readSandboxStatus();
   await working('Stopping the sandbox (history syncs back)', async () => {
-    await execInSandbox(
-      ctx.dataPath,
-      ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '0'],
-      status?.guestWorkspace ?? 'C:\\',
-      30,
-      sandboxAlive,
-    ).catch(() => null);
+    await new SandboxChannel(ctx.dataPath)
+      .exec(['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '0'], status?.guestWorkspace ?? 'C:\\', 30)
+      .catch(() => null);
     for (let i = 0; i < 180 && isSandboxRunning(); i++) await sleep(1000);
     if (isSandboxRunning())
       fail('The sandbox did not shut down within 3 minutes.', 'Close its window yourself, then run the command again.');
@@ -81,7 +77,7 @@ export const offerRestart = async (
   const primary =
     registry.projects.find((p) => p.primary) ??
     fail('The running sandbox has no launch folder on record.', 'Stop it (sandbox stop) and start it again.');
-  const sessions = currentSessions(ctx.dataPath);
+  const sessions = new SandboxChannel(ctx.dataPath).currentSessions();
   for (const need of needs)
     console.log(c.yellow('Windows Sandbox cannot add ' + need.hostDir + ' while it runs: ' + need.reason + '.'));
   console.log(

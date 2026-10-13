@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { saveAccount } from '../host/profile/index.js';
-import { sendRequest } from '../host/channel/index.js';
+import { SandboxChannel } from '../host/channel/index.js';
 import { hostClaude } from '../host/sandbox/index.js';
 import { spawnDetached, startSandbox } from '../host/sandbox/index.js';
 import { hideSandboxWindow, showSandboxWindow } from '../host/sandbox/index.js';
@@ -44,7 +44,7 @@ export const testGuardSuite: Suite = {
       [
         'shut down Windows Sandbox',
         () =>
-          sendRequest(guardData, {
+          new SandboxChannel(guardData).send({
             kind: 'exec',
             id: 'sd',
             command: ['C:\\Windows\\System32\\shutdown.exe', '/s'],

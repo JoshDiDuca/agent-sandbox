@@ -6,12 +6,12 @@ import type { SandboxStatus } from '../../../core/types.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { isInsideOrEqual } from '../../../core/util/index.js';
 import { resolveRun } from '../../../core/run/index.js';
-import { prepareProject } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { projectHere, readRegistry, type RegistryEntry } from '../../../host/projects/index.js';
 import { joinRunning } from '../../../host/projects/index.js';
 import type { ProjectSpecT } from '../../../shared/channel/index.js';
 import { working } from '../../output/index.js';
-import { guestPathFor, sandboxAlive, type Context } from '../context.js';
+import { guestPathFor, type Context } from '../context.js';
 
 /** The folder the command is about: --workspace, else the current one. */
 export const hereDir = (ctx: Context): string => path.resolve(ctx.options.workspace ?? process.cwd());
@@ -92,7 +92,7 @@ export const provisionJoined = async (ctx: Context, joined: Joined): Promise<voi
   await working(
     () => 'Setting up ' + spec.name + ' in the running sandbox: ' + step,
     () =>
-      prepareProject(ctx.dataPath, spec, sandboxAlive, (m) => {
+      new SandboxChannel(ctx.dataPath).prepareProject(spec, (m) => {
         step = m;
       }),
   );

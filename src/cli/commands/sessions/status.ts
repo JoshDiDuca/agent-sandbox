@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import { activeAccount } from '../../../host/profile/index.js';
-import { execInSandbox, pingSandbox } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { readRegistry } from '../../../host/projects/index.js';
 import { guardedProjects, repoFindings } from '../../../host/guard/index.js';
@@ -9,7 +9,7 @@ import { RunDir } from '../../../shared/channel/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { errMsg, safeText } from '../../../core/util/index.js';
 import { printJson, table } from '../../output/index.js';
-import { sandboxAlive, type Context } from '../context.js';
+import { type Context } from '../context.js';
 import { hereDir, locateHere } from '../projects/index.js';
 import { ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { listedSessions, viewerText } from './list.js';
@@ -17,7 +17,7 @@ import { listedSessions, viewerText } from './list.js';
 /** Running databases by port, from the sandbox's own `sbx-db list` (best effort: unknown when it does not answer). */
 const runningPorts = async (ctx: Context, cwd: string): Promise<Set<number> | null> => {
   try {
-    const r = await execInSandbox(ctx.dataPath, ['sbx-db', 'list'], cwd, 30, sandboxAlive);
+    const r = await new SandboxChannel(ctx.dataPath).exec(['sbx-db', 'list'], cwd, 30);
     return new Set(
       (r.stdout ?? '')
         .split(/\r?\n/)
@@ -36,7 +36,7 @@ export const status = async (ctx: Context): Promise<number> => {
   const registry = running ? readRegistry(ctx.storageRoot) : null;
   const ready = running && sandbox?.phase === 'ready';
   const daemon = ready
-    ? await pingSandbox(ctx.dataPath, sandboxAlive).then(
+    ? await new SandboxChannel(ctx.dataPath).ping().then(
         (r) => r.message,
         (e: unknown) => 'no answer (' + errMsg(e) + ')',
       )

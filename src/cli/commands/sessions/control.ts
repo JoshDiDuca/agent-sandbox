@@ -1,11 +1,11 @@
 import path from 'node:path';
 import { askYesNo } from '../../../core/prompt.js';
-import { execInSandbox, restartSessions, currentSessions } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
-import { requireOnPc, requireRunning, sandboxAlive, type Context } from '../context.js';
+import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { hereDir, locateHere } from '../projects/index.js';
 import { working } from '../../output/index.js';
 import { c } from '../../output/index.js';
@@ -22,7 +22,7 @@ export const restart = async (ctx: Context): Promise<number> => {
     safeText(
       (
         await working('Restarting the agents' + (scope ? ' of ' + here.project?.name : ''), () =>
-          restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive, scope),
+          new SandboxChannel(ctx.dataPath).restart(ctx.options.harness ?? null, scope),
         )
       ).message,
     ),
@@ -37,10 +37,11 @@ export const stop = async (ctx: Context): Promise<number> => {
     return 0;
   }
   const sandbox =
-    new RunDir(ctx.dataPath).readSandboxStatus() ?? fail('This sandbox was not started by this tool.', 'Close its window instead.');
+    new RunDir(ctx.dataPath).readSandboxStatus() ??
+    fail('This sandbox was not started by this tool.', 'Close its window instead.');
   // Stopping ends every project's sessions, not just this folder's: say which, and ask when others would end too.
   const here = locateHere(ctx, sandbox);
-  const running = currentSessions(ctx.dataPath);
+  const running = new SandboxChannel(ctx.dataPath).currentSessions();
   const others = running.filter((s) => !(here.guestDir && isWithin(here.project?.guest ?? here.guestDir, s.cwd)));
   if (running.length)
     console.log(
@@ -66,12 +67,10 @@ export const stop = async (ctx: Context): Promise<number> => {
     }
   }
   await working('Asking the sandbox to shut down', () =>
-    execInSandbox(
-      ctx.dataPath,
+    new SandboxChannel(ctx.dataPath).exec(
       ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'],
       sandbox.guestWorkspace,
       30,
-      sandboxAlive,
     ),
   );
   console.log('Sandbox is shutting down; history and claude-mem sync back when it closes.');

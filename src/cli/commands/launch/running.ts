@@ -1,5 +1,5 @@
 import { attachTerminal, findUnwatchedSession } from '../../../host/channel/index.js';
-import { requestSession, waitForReady, waitForSession } from '../../../host/channel/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
 import { hideSandboxWindow, showSandboxWindow } from '../../../host/sandbox/index.js';
@@ -8,7 +8,7 @@ import type { SandboxStatus, SessionStatus } from '../../../core/types.js';
 import { errMsg, fail, sleep } from '../../../core/util/index.js';
 import { c } from '../../output/index.js';
 import { working } from '../../output/index.js';
-import { sandboxAlive, type Context } from '../context.js';
+import { type Context } from '../context.js';
 import { table } from '../../output/index.js';
 import _ from 'lodash';
 import { hereDir, joinHere, readyHere, type Joined } from '../projects/index.js';
@@ -40,7 +40,7 @@ export const waitForBoot = (dataPath: string, launchId: string | null): Promise<
   return working(
     () => 'Waiting for the sandbox: ' + step,
     () =>
-      waitForReady(dataPath, launchId, sandboxAlive, (m) => {
+      new SandboxChannel(dataPath).waitForReady(launchId, (m) => {
         step = m;
       }),
   );
@@ -58,7 +58,7 @@ export const waitForStart = (ctx: Context, requestId: string, what: string): Pro
   return working(
     () => what + ': ' + step,
     () =>
-      waitForSession(ctx.dataPath, requestId, sandboxAlive, 60 * 60 * 1000, (m) => {
+      new SandboxChannel(ctx.dataPath).waitForSession(requestId, 60 * 60 * 1000, (m) => {
         step = m;
       }),
   );
@@ -108,7 +108,7 @@ export const openSession = async (
   );
   // The agent's definition goes along: the sandbox may have booted with another agent.
   const harnessSpec = loaded.config.harnesses[harness];
-  const requestId = requestSession(dataPath, harness, args, cwd, {
+  const requestId = new SandboxChannel(dataPath).requestSession(harness, args, cwd, {
     ...(joined.spec ? { project: joined.spec } : {}),
     ...(harnessSpec ? { harnessSpec } : {}),
   });
@@ -150,7 +150,7 @@ const openSessions = async (
   const requests = list.map(({ ctx: at, joined }) => {
     const harness = at.options.harness ?? joined.harness ?? loaded.config.defaultHarness;
     const harnessSpec = loaded.config.harnesses[harness];
-    const id = requestSession(dataPath, harness, at.options.passthrough, joined.guestDir, {
+    const id = new SandboxChannel(dataPath).requestSession(harness, at.options.passthrough, joined.guestDir, {
       ...(joined.spec ? { project: joined.spec } : {}),
       ...(harnessSpec ? { harnessSpec } : {}),
     });
@@ -162,7 +162,7 @@ const openSessions = async (
     () =>
       Promise.allSettled(
         requests.map(async (r) => {
-          const s = await waitForSession(dataPath, r.id, sandboxAlive, 60 * 60 * 1000, () => undefined);
+          const s = await new SandboxChannel(dataPath).waitForSession(r.id, 60 * 60 * 1000, () => undefined);
           started++;
           return s;
         }),

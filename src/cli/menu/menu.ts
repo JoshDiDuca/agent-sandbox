@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { errMsg, plainText } from '../../core/util/index.js';
 import { loadConfig } from '../../core/config/index.js';
-import { runningSessions } from '../../host/channel/index.js';
+import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { syncAgentCommands } from '../commands/agent-commands.js';
 import type { Context } from '../commands/context.js';
@@ -42,7 +42,7 @@ export class Menu {
   private status(): string {
     const folder = Theme.muted(Text.middle(process.cwd(), 70));
     if (!isSandboxRunning()) return Theme.muted(Theme.glyph.off + ' No sandbox running') + '   ' + folder;
-    const n = runningSessions(this.ctx.dataPath).length;
+    const n = new SandboxChannel(this.ctx.dataPath).runningSessions().length;
     return (
       Theme.ok(Theme.glyph.on + ' Sandbox running') +
       Theme.muted(' · ' + n + ' session' + (n === 1 ? '' : 's')) +
@@ -121,7 +121,7 @@ export class Menu {
       );
 
     if (isSandboxRunning()) {
-      for (const s of runningSessions(this.ctx.dataPath).slice(-12)) {
+      for (const s of new SandboxChannel(this.ctx.dataPath).runningSessions().slice(-12)) {
         add(
           'sessions',
           'Running now',

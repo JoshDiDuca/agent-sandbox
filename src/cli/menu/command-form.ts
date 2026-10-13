@@ -4,7 +4,7 @@
 import { humanBytes } from '../../core/disk.js';
 import { fail, plainText } from '../../core/util/index.js';
 import { listAccounts } from '../../host/profile/index.js';
-import { runningSessions } from '../../host/channel/index.js';
+import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { splitArgs } from '../args.js';
 import type { Context } from '../commands/context.js';
@@ -43,7 +43,9 @@ export class CommandForm {
     if (choices === 'harnesses') return Object.keys(this.ctx.loaded.config.harnesses);
     if (choices === 'accounts') return listAccounts(this.ctx.storageRoot, this.ctx.dataPath).map((a) => a.name);
     if (choices === 'sessions')
-      return isSandboxRunning() ? runningSessions(this.ctx.dataPath).map((s) => plainText(s.id)) : [];
+      return isSandboxRunning()
+        ? new SandboxChannel(this.ctx.dataPath).runningSessions().map((s) => plainText(s.id))
+        : [];
     return [];
   }
 

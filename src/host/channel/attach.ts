@@ -12,7 +12,7 @@ import {
   type Endpoint,
   type Viewers,
 } from '../../shared/pty/index.js';
-import { currentSessions } from './channel.js';
+import { SandboxChannel } from './channel.js';
 import { insideSandbox } from '../sandbox/index.js';
 
 const ipToInt = (ip: string): number => ip.split('.').reduce((n: number, part: string) => n * 256 + Number(part), 0);
@@ -60,7 +60,8 @@ export const findUnwatchedSession = async (
   harness: string,
   cwd: string,
 ): Promise<SessionStatus | null> => {
-  const candidates = currentSessions(dataPath)
+  const candidates = new SandboxChannel(dataPath)
+    .currentSessions()
     .filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase())
     .reverse()
     .slice(0, 8);
