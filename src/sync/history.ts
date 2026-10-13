@@ -7,8 +7,11 @@
 //
 // Safety (the sandbox side is untrusted):
 //  - links are never followed or written through, on either side;
-//  - what comes BACK is limited to transcripts (.jsonl), prompt history and to-do lists (.json), each capped in
-//    size, and never Claude's memory folders. Nothing executable or instruction-like flows to this PC.
+//  - what comes BACK is limited to the sandbox's own projects: their transcripts (.jsonl) and prompt-history lines,
+//    plus to-do lists (.json), each capped in size, and never Claude's memory folders. A sandbox cannot plant a
+//    conversation for another project on this PC (claude --resume there would load it);
+//  - what goes IN is, by default (historyScope "project"), only the sandbox's own projects: other projects'
+//    conversations, file backups and prompts are not the agent's business.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
@@ -28,7 +31,7 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const AbsolutePath = z.string().max(1024).refine((p) => path.isAbsolute(p), 'must be an absolute path');
 const SyncStateSchema = z.object({
   hostClaudeDir: AbsolutePath, hostWorkspace: AbsolutePath, guestWorkspace: z.string().max(1024),
-  syncHistory: z.boolean().optional(), syncClaudeMem: z.boolean().optional(),
+  syncHistory: z.boolean().optional(), syncClaudeMem: z.boolean().optional(), syncClaudeMemBack: z.boolean().optional(), historyScope: z.enum(['project', 'all']).optional(),
   /** Newest claude-mem database time on each side right after the last sync (detects edits on both sides). */
   memHostStamp: z.number().optional(), memGuestStamp: z.number().optional(),
   /** Projects registered while the sandbox ran (their history goes back to their own folders). */
@@ -85,30 +88,39 @@ const copyNewer = (from: string, to: string, options: CopyOptions = {}): number 
 const readLines = (file: string): string[] =>
   fileExists(file) && !isLink(file) && fs.statSync(file).size <= MAX_FILE_BYTES ? fs.readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => l.trim() !== '') : [];
 const isJsonObject = (line: string): boolean => { try { const v: unknown = JSON.parse(line); return typeof v === 'object' && v !== null && !Array.isArray(v); } catch { return false; } };
-const lineTime = (line: string): number => { try { return Number((JSON.parse(line) as { timestamp?: number }).timestamp) || 0; } catch { return 0; } };
+/** A prompt-history line whose project is one of `workspaces` (on this PC's side). */
+const inProjects = (line: string, workspaces: string[]): boolean => {
+  try {
+    const project = (JSON.parse(line) as { project?: unknown }).project;
+    return typeof project === 'string' && workspaces.some((w) => path.resolve(w).toLowerCase() === path.resolve(project).toLowerCase());
+  } catch { return false; }
+};
+const lineTime =(line: string): number => { try { return Number((JSON.parse(line) as { timestamp?: number }).timestamp) || 0; } catch { return 0; } };
 
 /** Every workspace pair of the sandbox: the launch folder's, then the projects registered later (most specific first). */
 const pairsOf = (p: SyncPaths): WorkspacePair[] => _.sortBy([{ hostWorkspace: p.hostWorkspace, guestWorkspace: p.guestWorkspace }, ...(p.extra ?? [])], (x) => -x.hostWorkspace.length);
 const translateAll = (text: string, pairs: [string, string][]): string => pairs.reduce((out, [from, to]) => translatePaths(out, from, to), text);
 
 /** Brings this PC's history into the sandbox state (run before the sandbox starts). Returns files copied. */
-export const syncHistoryIn = (p: SyncPaths, options: { promptHistory?: boolean } = {}): number => {
+export const syncHistoryIn = (p: SyncPaths, options: { promptHistory?: boolean; scope?: 'project' | 'all' } = {}): number => {
+  const all = options.scope === 'all';
   assertTestWritable(p.guestClaudeDir);
   const pairs = pairsOf(p);
   const byHost = new Map(pairs.map((x) => [projectFolderName(x.hostWorkspace), projectFolderName(x.guestWorkspace)]));
   const guestNames = new Set(pairs.map((x) => projectFolderName(x.guestWorkspace)));
   const transform = (t: string): string => translateAll(t, pairs.map((x) => [x.hostWorkspace, x.guestWorkspace]));
   const hostProjects = path.join(p.hostClaudeDir, 'projects');
-  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => isSafeFileName(name) && (!guestNames.has(name) || byHost.has(name))) : [];
+  const names = dirExists(hostProjects) ? fs.readdirSync(hostProjects).filter((name) => isSafeFileName(name) && (all ? !guestNames.has(name) || byHost.has(name) : byHost.has(name))) : [];
   const projects = _.sumBy(names, (name) => byHost.has(name)
     ? copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', byHost.get(name)!), { transform })
     : copyNewer(path.join(hostProjects, name), path.join(p.guestClaudeDir, 'projects', name)));
-  const sessions = _.sumBy(SESSION_DIRS, (dir) => copyNewer(path.join(p.hostClaudeDir, dir), path.join(p.guestClaudeDir, dir)));
+  // To-do lists, plans and file backups are kept by session, not by project: only with historyScope "all".
+  const sessions = all ? _.sumBy(SESSION_DIRS, (dir) => copyNewer(path.join(p.hostClaudeDir, dir), path.join(p.guestClaudeDir, dir))) : 0;
 
   if (options.promptHistory === false) return projects + sessions;
   // Prompt history: rebuild the sandbox copy from this PC's file plus anything only the sandbox has.
   const target = path.join(p.guestClaudeDir, 'history.jsonl');
-  const hostLines = readLines(path.join(p.hostClaudeDir, 'history.jsonl')).map(transform);
+  const hostLines = readLines(path.join(p.hostClaudeDir, 'history.jsonl')).filter((l) => all || inProjects(l, pairs.map((x) => x.hostWorkspace))).map(transform);
   const known = new Set(hostLines);
   const merged = _.sortBy([...hostLines, ...readLines(target).filter((l) => !known.has(l))], lineTime);
   if (merged.length) { ensureDir(p.guestClaudeDir); writeSafely(target, () => fs.writeFileSync(target, merged.join('\n') + '\n', 'utf8')); }
@@ -125,16 +137,16 @@ export const syncHistoryOut = (p: SyncPaths): number => {
   const transform = (t: string): string => translateAll(t, pairs);
   const guestProjectsDir = path.join(p.guestClaudeDir, 'projects');
   const names = dirExists(guestProjectsDir) && !isLink(guestProjectsDir) ? fs.readdirSync(guestProjectsDir).filter(isSafeFileName) : [];
-  const projects = _.sumBy(names, (name) => byGuest.has(name)
-    ? copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', byGuest.get(name)!), { accept: transcript, skipDirs: NO_MEMORY, transform })
-    : copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', name), { accept: transcript, skipDirs: NO_MEMORY }));
+  // Only this sandbox's projects: a transcript under any other folder name would be planted into that project on this PC.
+  const projects = _.sumBy(names.filter((name) => byGuest.has(name)), (name) => copyNewer(path.join(guestProjectsDir, name), path.join(p.hostClaudeDir, 'projects', byGuest.get(name)!), { accept: transcript, skipDirs: NO_MEMORY, transform }));
   // Only to-do lists come back besides transcripts; plans and file backups stay in the sandbox.
   const sessions = copyNewer(path.join(p.guestClaudeDir, 'todos'), path.join(p.hostClaudeDir, 'todos'), { accept: json });
 
   const hostFile = path.join(p.hostClaudeDir, 'history.jsonl');
   const known = new Set(readLines(hostFile));
-  // Only prompt-history entries (one JSON object per line) come back, whatever else the sandbox wrote in that file.
-  const missing = readLines(path.join(p.guestClaudeDir, 'history.jsonl')).filter(isJsonObject).map(transform).filter((l) => !known.has(l));
+  // Only prompt-history entries (one JSON object per line) of this sandbox's projects come back.
+  const hostWorkspaces = pairsOf(p).map((x) => x.hostWorkspace);
+  const missing = readLines(path.join(p.guestClaudeDir, 'history.jsonl')).filter(isJsonObject).map(transform).filter((l) => inProjects(l, hostWorkspaces) && !known.has(l));
   if (missing.length) { ensureDir(p.hostClaudeDir); fs.appendFileSync(hostFile, missing.join('\n') + '\n', 'utf8'); }
   return projects + sessions + missing.length;
 };

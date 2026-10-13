@@ -25,6 +25,8 @@ export const ClaudeProfile = z.strictObject({
   globalStateFile: z.string().describe('Your .claude.json, or "auto". Empty string = do not copy.'),
   copyCredentials: z.boolean().describe('Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead.'),
   overwrite: z.boolean().describe('Refresh these settings from this PC on every launch.'),
-  syncHistory: z.boolean().describe('Bring all conversation history in, and sync new history back (path-translated).'),
-  syncClaudeMem: z.boolean().describe('Bring claude-mem data in, and its database back when the sandbox closes.'),
+  syncHistory: z.boolean().describe('Bring conversation history in, and sync new history back (path-translated).'),
+  historyScope: z.enum(['project', 'all']).describe('Which history comes in: "project" = only the projects in this sandbox (other projects\' conversations, file backups and prompts stay on this PC), "all" = everything. Only this sandbox\'s projects ever sync back.'),
+  syncClaudeMem: z.boolean().describe('Bring claude-mem data into the sandbox (its settings and backups stay on this PC).'),
+  syncClaudeMemBack: z.boolean().describe('Also copy claude-mem\'s database back to this PC when the sandbox closes. Off by default: what is in it is loaded into every Claude session on this PC, so a compromised agent could plant instructions there.'),
 });

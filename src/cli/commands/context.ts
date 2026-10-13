@@ -40,7 +40,8 @@ export const table = (rows: string[][]): void => {
 
 /** Prints `value` as JSON when --json was given; returns whether it did. */
 export const printJson = (ctx: Context, value: unknown): boolean => {
-  if (ctx.options.json) console.log(JSON.stringify(value, null, 2));
+  // JSON.stringify leaves C1 controls (U+0080-U+009F) as they are; text from the sandbox must not reach a terminal raw.
+  if (ctx.options.json) console.log(JSON.stringify(value, null, 2).replace(/[\u0080-\u009f]/g, (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')));
   return ctx.options.json;
 };
 

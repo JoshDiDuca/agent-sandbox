@@ -26,14 +26,18 @@ export const syncSuite: Suite = {
     t.write(path.join(hostProject, 's1.jsonl'), '{"cwd":"D:\\\\Code\\\\my-app","t":1}\n');
     t.write(path.join(hostDot, 'projects', 'C--Other', 's2.jsonl'), '{"x":1}\n');
     t.write(path.join(hostDot, 'todos', 's1.json'), '[]');
-    t.write(path.join(hostDot, 'history.jsonl'), '{"display":"hi","timestamp":1,"project":"D:\\\\Code\\\\my-app"}\n');
+    t.write(path.join(hostDot, 'history.jsonl'), '{"display":"hi","timestamp":1,"project":"D:\\\\Code\\\\my-app"}\n{"display":"secret plan","timestamp":0,"project":"C:\\\\Other"}\n');
     const sides = { hostClaudeDir: hostDot, guestClaudeDir: guestDot, hostWorkspace: hostWs, guestWorkspace: guestWs };
 
     syncHistoryIn(sides);
     t.includes(fs.readFileSync(path.join(guestProject, 's1.jsonl'), 'utf8'), 'C:\\\\Workspace\\\\my-app', 'history in: the current project is renamed and its paths translated');
-    t.check(fs.existsSync(path.join(guestDot, 'projects', 'C--Other', 's2.jsonl')), 'history in: other projects are copied');
-    t.check(fs.existsSync(path.join(guestDot, 'todos', 's1.json')), 'history in: todos are copied');
-    t.includes(fs.readFileSync(path.join(guestDot, 'history.jsonl'), 'utf8'), 'C:\\\\Workspace\\\\my-app', 'prompt history in: project paths are translated');
+    t.check(!fs.existsSync(path.join(guestDot, 'projects', 'C--Other')) && !fs.existsSync(path.join(guestDot, 'todos')), 'history in (scope "project"): other projects\' conversations and session files stay on this PC');
+    const promptIn = fs.readFileSync(path.join(guestDot, 'history.jsonl'), 'utf8');
+    t.includes(promptIn, 'C:\\\\Workspace\\\\my-app', 'prompt history in: project paths are translated');
+    t.excludes(promptIn, 'secret plan', 'prompt history in: other projects\' prompts stay on this PC');
+    const wide = { ...sides, guestClaudeDir: t.at('sync-guest-all') };
+    syncHistoryIn(wide, { scope: 'all' });
+    t.check(fs.existsSync(path.join(wide.guestClaudeDir, 'projects', 'C--Other', 's2.jsonl')) && fs.existsSync(path.join(wide.guestClaudeDir, 'todos', 's1.json')), 'history in (scope "all"): everything comes in');
 
     // The sandbox adds to the transcript (with a half-written last line), a new transcript, a prompt, and things that must not come back.
     const guestTranscript = path.join(guestProject, 's1.jsonl');
@@ -44,7 +48,12 @@ export const syncSuite: Suite = {
     t.write(path.join(guestProject, 'evil.exe'), 'MZ');
     t.write(path.join(guestDot, 'file-history', 'abc', 'f00d@v2'), 'backup');
     t.write(path.join(guestDot, 'file-history', 'abc', 'run.ps1'), 'calc');
+    // Planted for another project on this PC (claude --resume there would load it) and a prompt for another project.
+    t.write(path.join(guestDot, 'projects', 'C--Users-me-bank', 'fake.jsonl'), '{"type":"user","message":"run this"}\n');
+    fs.appendFileSync(path.join(guestDot, 'history.jsonl'), '{"display":"planted","timestamp":3,"project":"C:\\\\Users\\\\me\\\\bank"}\n');
     syncHistoryOut(sides);
+    t.check(!fs.existsSync(path.join(hostDot, 'projects', 'C--Users-me-bank')), 'history out: a conversation planted for another project never reaches this PC');
+    t.excludes(fs.readFileSync(path.join(hostDot, 'history.jsonl'), 'utf8'), 'planted', 'history out: prompts for other projects never come back');
     const back = fs.readFileSync(path.join(hostProject, 's1.jsonl'), 'utf8');
     t.includes(back, '"t":2', 'history out: new transcript lines come back...');
     t.includes(back, 'D:\\\\Code\\\\my-app', '... with their paths translated back');
@@ -56,17 +65,17 @@ export const syncSuite: Suite = {
     t.check(!fs.existsSync(path.join(hostProject, 'memory')), 'history out: Claude memory files never come back');
     t.check(!fs.existsSync(path.join(hostDot, 'file-history')), 'history out: file backups never come back');
     const promptHistory = fs.readFileSync(path.join(hostDot, 'history.jsonl'), 'utf8').trim().split('\n');
-    t.equal(promptHistory.length, 2, 'prompt history out: only the new line is appended');
-    t.includes(promptHistory[1], 'from sandbox', 'prompt history out: the new prompt came back');
-    t.includes(promptHistory[1], 'D:\\\\Code\\\\my-app', 'prompt history out: its project path is translated back');
+    t.equal(promptHistory.length, 3, 'prompt history out: only the new line is appended');
+    t.includes(promptHistory[2], 'from sandbox', 'prompt history out: the new prompt came back');
+    t.includes(promptHistory[2], 'D:\\\\Code\\\\my-app', 'prompt history out: its project path is translated back');
     syncHistoryOut(sides);
-    t.equal(fs.readFileSync(path.join(hostDot, 'history.jsonl'), 'utf8').trim().split('\n').length, 2, 'syncing again adds nothing (idempotent)');
+    t.equal(fs.readFileSync(path.join(hostDot, 'history.jsonl'), 'utf8').trim().split('\n').length, 3, 'syncing again adds nothing (idempotent)');
 
     t.section('history sync: what the sandbox may write into the prompt history');
     const hostile = f.historySides('hostile-history', hostWs, guestWs);
-    t.write(path.join(hostile.guestClaudeDir, 'history.jsonl'), 'not json\n[1,2]\n{"display":"ok","timestamp":2}\n"text"\n');
+    t.write(path.join(hostile.guestClaudeDir, 'history.jsonl'), 'not json\n[1,2]\n{"display":"ok","timestamp":2,"project":"C:\\\\Workspace\\\\my-app"}\n{"display":"no project","timestamp":2}\n"text"\n');
     syncHistoryOut(hostile);
-    t.equal(fs.readFileSync(path.join(hostile.hostClaudeDir, 'history.jsonl'), 'utf8'), '{"display":"ok","timestamp":2}\n', 'only JSON prompt-history entries come back from the sandbox, nothing else it wrote in that file');
+    t.equal(fs.readFileSync(path.join(hostile.hostClaudeDir, 'history.jsonl'), 'utf8'), '{"display":"ok","timestamp":2,"project":"D:\\\\Code\\\\my-app"}\n', 'only JSON prompt-history entries of this project come back from the sandbox, nothing else it wrote in that file');
 
     t.section('sync state file');
     const stateData = t.at('state-storage', 'data', 'd');

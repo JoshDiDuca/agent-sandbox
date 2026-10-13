@@ -51,7 +51,7 @@ export const DEFAULTS: Config = {
   secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
   apps: { install: [], custom: {} },
-  claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, syncClaudeMem: true },
+  claudeProfile: { enabled: true, hostDir: 'auto', include: ['settings.json', 'CLAUDE.md', 'commands', 'agents', 'skills', 'plugins'], globalStateFile: 'auto', copyCredentials: false, overwrite: true, syncHistory: true, historyScope: 'project', syncClaudeMem: true, syncClaudeMemBack: false },
   harnesses: {
     claude: { hostExecutable: 'claude.exe', hostDir: 'auto', npmPackage: '@anthropic-ai/claude-code@latest', npmBin: 'claude', arguments: [], environment: { DISABLE_AUTOUPDATER: '1' }, resumeArguments: ['--continue'] },
     codex: { npmPackage: '@openai/codex@latest', npmBin: 'codex', arguments: [], environment: {}, resumeArguments: ['resume', '--last'] },

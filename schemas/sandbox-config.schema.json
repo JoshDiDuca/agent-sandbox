@@ -1027,11 +1027,11 @@
         },
         "syncHistory": {
           "type": "boolean",
-          "description": "Bring all conversation history in, and sync new history back (path-translated)."
+          "description": "Bring conversation history in, and sync new history back (path-translated)."
         },
         "syncClaudeMem": {
           "type": "boolean",
-          "description": "Bring claude-mem data in, and its database back when the sandbox closes."
+          "description": "Bring claude-mem data into the sandbox (its settings and backups stay on this PC)."
         }
       },
       "additionalProperties": false

@@ -36,7 +36,7 @@ export const syncProjectIn = (dataPath: string, project: { hostWorkspace: string
   const next: SyncState = { ...state, projects };
   writeSyncState(dataPath, next);
   // Prompt history is left alone: sessions are appending to the sandbox's copy right now.
-  return state.syncHistory ? syncHistoryIn(toPaths(next, dataPath), { promptHistory: false }) : 0;
+  return state.syncHistory ? syncHistoryIn(toPaths(next, dataPath), { promptHistory: false, scope: state.historyScope }) : 0;
 };
 
 const memSync = (dataPath: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
@@ -53,10 +53,10 @@ export const syncBeforeLaunch = (config: Config, dataPath: string, hostWorkspace
   if (!config.storage.persistAgentState) return summary;
   const previous = readSyncState(dataPath);
   if (previous?.syncHistory) syncHistoryOut(toPaths(previous, dataPath));
-  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace, syncHistory: profile.syncHistory, syncClaudeMem: profile.syncClaudeMem, projects: [] };
-  if (profile.syncHistory) summary.history = syncHistoryIn(toPaths(state, dataPath));
+  const state: SyncState = { ...previous, hostClaudeDir: hostClaudeDir(profile), hostWorkspace, guestWorkspace: config.guestWorkspace, syncHistory: profile.syncHistory, historyScope: profile.historyScope, syncClaudeMem: profile.syncClaudeMem, syncClaudeMemBack: profile.syncClaudeMemBack, projects: [] };
+  if (profile.syncHistory) summary.history = syncHistoryIn(toPaths(state, dataPath), { scope: profile.historyScope });
   if (profile.syncClaudeMem) {
-    if (previous?.syncClaudeMem) memSync(dataPath, state, 'out');
+    if (previous?.syncClaudeMem && previous.syncClaudeMemBack) memSync(dataPath, state, 'out');
     summary.claudeMem = memSync(dataPath, state, 'in');
   }
   writeSyncState(dataPath, state);
@@ -69,7 +69,7 @@ export const syncBack = (dataPath: string, final: boolean): SyncSummary => {
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!state) return summary;
   if (state.syncHistory) summary.history = syncHistoryOut(toPaths(state, dataPath));
-  if (final && state.syncClaudeMem) summary.claudeMem = memSync(dataPath, state, 'out');
+  if (final && state.syncClaudeMem && state.syncClaudeMemBack) summary.claudeMem = memSync(dataPath, state, 'out');
   writeSyncState(dataPath, state);
   return summary;
 };

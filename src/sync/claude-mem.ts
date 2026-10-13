@@ -1,7 +1,7 @@
 // claude-mem data (~/.claude-mem) between this PC and the sandbox's persistent store.
 //
 // IN (this PC -> sandbox): the whole folder is mirrored; nothing flows to your PC in that direction.
-// OUT (sandbox -> this PC): ONLY the SQLite database files come back. Never settings, never the Chroma vector store:
+// OUT (sandbox -> this PC), only with claudeProfile.syncClaudeMemBack: ONLY the SQLite database files come back. Never settings, never the Chroma vector store:
 // Chroma keeps Python pickle files, and a crafted pickle runs code when loaded, so copying it back would let a
 // compromised sandbox execute code on your PC. claude-mem rebuilds its vector index from the database by itself.
 import fs from 'node:fs';
@@ -12,7 +12,8 @@ import { safeRemove } from '../shared/safe-remove.js';
 import { assertTestWritable } from '../host/test-guard.js';
 import type { SyncState } from './history.js';
 
-const SKIP_IN = /(^logs$|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
+// Never in: its settings (provider API keys), .env files and backups; nor run-time files that mean nothing elsewhere.
+const SKIP_IN = /(^logs$|^backups?$|^settings\.json$|^\.env|\.pid$|\.port$|\.lock$|^worker.*\.json$|\.incoming$|\.conflict-\d+$)/i;
 /** The only files that may come back from the sandbox. */
 const DATABASE = /^claude-mem\.db(-wal|-shm)?$/i;
 const MAX_DB_BYTES = 2 * 1024 * 1024 * 1024;

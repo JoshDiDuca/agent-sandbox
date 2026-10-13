@@ -16,7 +16,8 @@ const ipToInt = (ip: string): number => ip.split('.').reduce((n: number, part: s
  */
 export const isSandboxAddress = (ip: string, interfaces = os.networkInterfaces()): boolean => {
   if (!net.isIPv4(ip)) return false;
-  return Object.entries(interfaces).some(([name, list]) => /^vEthernet/i.test(name) && (list ?? []).some((i) => {
+  // WSL's adapter is a Hyper-V adapter too, but no sandbox lives there: keystrokes must never go to a WSL VM.
+  return Object.entries(interfaces).some(([name, list]) => /^vEthernet/i.test(name) && !/WSL/i.test(name) && (list ?? []).some((i) => {
     if (i.family !== 'IPv4' || i.internal) return false;
     const mask = ipToInt(i.netmask);
     return mask !== 0 && (ipToInt(i.address) & mask) === (ipToInt(ip) & mask) && i.address !== ip;

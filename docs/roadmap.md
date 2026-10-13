@@ -29,7 +29,7 @@ design decision first).
 | claude-mem: keep a few dated backups instead of replacing the only copy | planned |
 | `py` launcher next to `python` | planned |
 | Network category: offline, allow only these hosts, blocked hosts, LAN rules, firewall rules, port forwarding between the PC and the sandbox | planned |
-| Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | planned |
+| Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | done |
 
 ## 1.4 — Accountability and containment
 

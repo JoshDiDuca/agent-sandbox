@@ -213,7 +213,9 @@
     "copyCredentials": false,
     "overwrite": true,
     "syncHistory": true,
-    "syncClaudeMem": true
+    "historyScope": "project",
+    "syncClaudeMem": true,
+    "syncClaudeMemBack": false
   },
   "harnesses": {
     "claude": {

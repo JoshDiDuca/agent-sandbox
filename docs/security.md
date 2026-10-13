@@ -53,7 +53,13 @@ installer (`install.ps1`) similarly refuses a release package with no listed SHA
 
 ## Coming back
 
-- Only data files return with history. claude-mem returns its database only.
+- Only data files return with history, and only for the projects in the sandbox: a conversation or prompt the sandbox
+  writes for any other project never reaches your PC (`claude --resume` there would load it).
+- Going in, only the sandbox's own projects' history is copied by default (`claudeProfile.historyScope: "project"`);
+  other projects' conversations, file backups and prompts stay on your PC. `"all"` copies everything.
+- claude-mem's database does **not** come back by default: whatever is in it is loaded into every Claude session on
+  your PC, so a compromised agent could plant instructions there. `claudeProfile.syncClaudeMemBack: true` brings it
+  back (the database files only). Its settings (API keys), `.env` files and backups are never copied in.
 - Git hooks and dangerous git config added inside the sandbox are quarantined before your own git can run them.
 - So are executables planted in the project under names you type there (`node.exe`, `sandbox.cmd` ...).
 - `sandbox status` lists anything that was quarantined.

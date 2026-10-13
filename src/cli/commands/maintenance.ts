@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import _ from 'lodash';
 import { DEFAULTS, userConfigPath, userDir } from '../../core/config.js';
 import { describeOverrides, isTrusted, LOCAL_CONFIG_NAME, normalizeOverrides, readLocalConfig, trustStorePath } from '../../core/local-config.js';
-import { expandPath, fail, safeText, sleep, writeJson } from '../../core/util.js';
+import { assertNoLinks, expandPath, fail, safeText, sleep, writeJson } from '../../core/util.js';
 import { readKnown, readRegistry } from '../../host/projects.js';
 import { detectWsb } from '../../host/wsb.js';
 import { describePrune, pruneStorage } from '../../host/cleanup.js';
@@ -30,6 +30,8 @@ const newestLog = (dir: string): string | null => {
 
 export const logs = async (ctx: Context): Promise<number> => {
   const dir = path.join(ctx.dataPath, 'logs');
+  // The sandbox writes this folder: never read through a link it planted there.
+  assertNoLinks(ctx.dataPath, dir);
   const file = newestLog(dir) ?? fail('No sandbox logs yet in ' + dir + '.', 'Logs appear after the first start (sandbox claude).');
   console.log('== ' + file + ' ==');
   let printed = 0;

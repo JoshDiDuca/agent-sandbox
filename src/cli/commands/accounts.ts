@@ -3,7 +3,7 @@ import { activateAccount, listAccounts, removeAccount, saveAccount, setDefaultAc
 import { restartSessions, runningSessions } from '../../host/channel.js';
 import { hostClaudeDir, hostGlobalStateFile } from '../../host/claude-profile.js';
 import { isSandboxRunning } from '../../host/platform.js';
-import { fail } from '../../core/util.js';
+import { fail, safeText } from '../../core/util.js';
 import { printJson, sandboxAlive, table, type Context } from './context.js';
 
 const label = (a: Account): string => '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
@@ -26,7 +26,7 @@ const list = (ctx: Context): number => {
 const use = async (ctx: Context, name: string): Promise<number> => {
   console.log('Sandbox now uses ' + label(activateAccount(ctx.storageRoot, ctx.dataPath, name)) + '.');
   const claudeRunning = isSandboxRunning() && runningSessions(ctx.dataPath).some((s) => s.harness === 'claude');
-  if (claudeRunning && !ctx.options.noRestart) console.log((await restartSessions(ctx.dataPath, 'claude', sandboxAlive)).message + ' with --continue; the conversation carries on under the new account.');
+  if (claudeRunning && !ctx.options.noRestart) console.log(safeText((await restartSessions(ctx.dataPath, 'claude', sandboxAlive)).message) + ' with --continue; the conversation carries on under the new account.');
   return 0;
 };
 

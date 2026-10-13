@@ -42,7 +42,7 @@ export const attach = async (ctx: Context): Promise<number> => {
     const projects = readRegistry(ctx.storageRoot)?.projects ?? [];
     const chosen = await select({
       message: 'Which session?' + (here.project ? ' (' + here.project.name + ' first)' : ''),
-      choices: running.map((s) => ({ value: s.id, name: (here.guestDir && isWithin(here.guestDir, s.cwd) ? '* ' : '  ') + safeText(s.harness).padEnd(9) + ' ' + projectOf(projects, s).padEnd(16) + ' ' + ago(s.startedAt).padEnd(11) + ' ' + s.id })),
+      choices: running.map((s) => ({ value: s.id, name: (here.guestDir && isWithin(here.guestDir, s.cwd) ? '* ' : '  ') + safeText(s.harness).padEnd(9) + ' ' + safeText(projectOf(projects, s)).padEnd(16) + ' ' + ago(s.startedAt).padEnd(11) + ' ' + s.id })),
     });
     return attachHere(ctx, pickSession(ctx.dataPath, chosen));
   }
@@ -145,7 +145,7 @@ export const status = async (ctx: Context): Promise<number> => {
 const printExecResult = (result: GuestResponse): void => {
   if (result.stdout) process.stdout.write(safeText(result.stdout));
   if (result.stderr) process.stderr.write(safeText(result.stderr));
-  if (!result.ok && !result.stdout && !result.stderr) console.error(result.message);
+  if (!result.ok && !result.stdout && !result.stderr) console.error(safeText(result.message));
 };
 
 /** The guest folder for this folder, joining the running sandbox (and setting the project up) when needed. */
@@ -196,7 +196,7 @@ export const restart = async (ctx: Context): Promise<number> => {
   const here = locateHere(ctx, readSandboxStatus(ctx.dataPath));
   const scope = ctx.options.all || !here.project ? undefined : here.project.guest;
   if (!scope && !ctx.options.all) console.log(c.dim(hereDir(ctx) + ' is not a project of the running sandbox: restarting every session.'));
-  console.log((await working('Restarting the agents' + (scope ? ' of ' + here.project?.name : ''), () => restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive, scope))).message);
+  console.log(safeText((await working('Restarting the agents' + (scope ? ' of ' + here.project?.name : ''), () => restartSessions(ctx.dataPath, ctx.options.harness ?? null, sandboxAlive, scope))).message));
   return 0;
 };
 

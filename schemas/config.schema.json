@@ -1193,11 +1193,23 @@
         },
         "syncHistory": {
           "type": "boolean",
-          "description": "Bring all conversation history in, and sync new history back (path-translated)."
+          "description": "Bring conversation history in, and sync new history back (path-translated)."
+        },
+        "historyScope": {
+          "type": "string",
+          "enum": [
+            "project",
+            "all"
+          ],
+          "description": "Which history comes in: \"project\" = only the projects in this sandbox (other projects' conversations, file backups and prompts stay on this PC), \"all\" = everything. Only this sandbox's projects ever sync back."
         },
         "syncClaudeMem": {
           "type": "boolean",
-          "description": "Bring claude-mem data in, and its database back when the sandbox closes."
+          "description": "Bring claude-mem data into the sandbox (its settings and backups stay on this PC)."
+        },
+        "syncClaudeMemBack": {
+          "type": "boolean",
+          "description": "Also copy claude-mem's database back to this PC when the sandbox closes. Off by default: what is in it is loaded into every Claude session on this PC, so a compromised agent could plant instructions there."
         }
       },
       "additionalProperties": false
