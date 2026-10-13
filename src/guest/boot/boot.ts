@@ -1,9 +1,10 @@
+// The boot inside the sandbox: network, hooks, developer tools, Git, Claude, the agent, then its first session.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { writeGuides } from './guide.js';
-import { setupToolchains } from '../toolchains/index.js';
-import { provisionHarness, resolveLaunch } from '../agents/agent-installer.js';
+import { setupToolchains, type ToolchainResult } from '../toolchains/index.js';
+import { agents } from '../agents/agent-installer.js';
 import { restoreClaudeMem } from '../setup/claude-mem.js';
 import { syncClaudeProfile } from '../setup/claude-profile.js';
 import { agentEnv, persistEnvironment } from '../setup/environment.js';
@@ -31,9 +32,13 @@ import { setSandboxStatus } from '../runtime/status.js';
 import { errMsg } from '../../core/util/errors.js';
 
 const STEPS = 8;
-const step = (n: number, title: string): void => {
+const PRIMARY_POLLS = 600;
+const POLL_MS = 500;
+const VSCODE_LANGUAGES = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'];
+
+/** Step n of STEPS: a line in the window and the host's progress (the short title, with what is set up in it). */
+function step(n: number, title: string): void {
   log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m');
-  // The host shows the short title ("Developer tools") with what is being set up in it.
   setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title, {
     step: n,
     steps: STEPS,
@@ -42,29 +47,31 @@ const step = (n: number, title: string): void => {
     done: 0,
     total: 0,
   });
-};
-const soft = async (what: string, work: () => unknown): Promise<void> => {
+}
+
+/** Runs work that may fail without stopping the boot (a warning says what failed). */
+async function soft(what: string, work: () => unknown): Promise<void> {
   try {
     await work();
   } catch (e) {
     warn(what + ' failed (continuing): ' + errMsg(e));
   }
-};
+}
 
-const startDaemon = (env: NodeJS.ProcessEnv): void => {
+function startDaemon(env: NodeJS.ProcessEnv): void {
   spawn(process.execPath, [path.join(path.dirname(process.argv[1]), 'daemon.js')], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
     env: { ...env, AGENT_LOG_PREFIX: 'daemon' },
   }).unref();
-};
+}
 
 /**
  * `sbx-db` for terminals and `sandbox db`: this boot's Node running runtime\db.js (on the sandbox's disk, rewritten
  * each boot).
  */
-const writeDbCommand = (): string => {
+function writeDbCommand(): string {
   const dir = mkdirp(path.join(localDir, 'bin'));
   const db = path.join(path.dirname(process.argv[1]), 'db.js');
   fs.writeFileSync(
@@ -72,141 +79,180 @@ const writeDbCommand = (): string => {
     '@setlocal\r\n@set AGENT_LOG_PREFIX=db\r\n@"' + process.execPath + '" "' + db + '" %*\r\n',
   );
   return dir;
-};
+}
 
-const waitForPrimary = async (): Promise<boolean> => {
-  for (let i = 0; i < 600; i++) {
+async function waitForPrimary(): Promise<boolean> {
+  for (let i = 0; i < PRIMARY_POLLS; i++) {
     const s = run.readSession(session.launchId);
     if (s?.phase === 'running') return true;
     if (s?.phase === 'failed' || s?.phase === 'exited') {
       warn(s.message);
       return false;
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, POLL_MS));
   }
   return false;
-};
+}
 
-export const runBoot = async (): Promise<void> => {
-  log(
-    'Agent sandbox: ' +
-      session.project +
-      ' | workspace ' +
-      workspace +
-      ' | agent ' +
-      session.harnessName +
-      ' | log ' +
-      logPath,
-  );
-  if (!fs.statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
-    throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
-  mkdirp(toolsDir);
-  mkdirp(run.root);
+/** The languages VS Code gets extensions for: every language toolchain this project uses. */
+function vscodeLanguages(): string[] {
+  const toolchains = session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>;
+  return VSCODE_LANGUAGES.filter((t) => wanted(toolchains[t]?.enabled ?? false, t));
+}
 
-  step(1, 'Network and session host');
-  let ptyHost: string | null = null;
-  if (isWin && !dryRun && session.attach.enabled)
-    await soft('Building the session host', () => {
-      ptyHost = ensurePtyHost();
-    });
-  let lan: LanState = session.networking ? 'open' : 'offline';
-  await soft('Private-network blocking', async () => {
-    lan = await applyNetworkPolicy(ptyHost);
-  });
-  await soft('Audit', enableProcessAudit);
+/** One boot of the sandbox, step by step: each step is a method, in the order they run. */
+export class Boot {
+  private ptyHost: string | null = null;
+  private lan: LanState = session.networking ? 'open' : 'offline';
+  private readonly gitAccess = session.provisioning.git.access ?? 'full';
 
-  step(2, 'Pre-provision hooks and desktop');
-  runHooks('pre-provision', process.env);
-  await soft('Personalisation', applyPersonalization);
-
-  const gitAccess = session.provisioning.git.access ?? 'full';
-  step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
-  const basePath = process.env.PATH ?? '';
-  const tools = await setupToolchains(session.toolchains, session.versions, {
-    gitEnabled: session.provisioning.git.enabled,
-    gitAccess,
-    hostGit: session.hostTools.git,
-    refresh: session.provisioning.refresh,
-    databases: session.databases ?? [],
-    apps: session.apps,
-  });
-  if (!dryRun) tools.prepend.push(writeDbCommand());
-  // network.allowOnly / network.proxy: everything started from now on uses the proxy.
-  Object.assign(tools.vars, proxyEnv());
-  await soft('Network: allow only some hosts', async () => {
-    if (await applyAllowOnly())
-      tools.summary.push('network: only network.allowOnly hosts (refused: logs\\netproxy.log)');
-  });
-  const vscode = session.toolchains.vscode;
-  if (vscode.enabled && vscode.setup !== false) {
-    const languages = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'].filter(
-      (t) =>
-        wanted(
-          (session.toolchains as unknown as Record<string, { enabled: boolean | 'auto' }>)[t]?.enabled ?? false,
-          t,
-        ),
-    );
-    await soft('VS Code setup', () =>
-      configureVscode(tools, {
-        toolchains: ['node', ...languages],
-        databases: (session.databases ?? []).map((d) => d.database),
-        config: vscode,
-        workspace,
-      }),
-    );
-  }
-  const env = agentEnv(tools);
-  persistEnvironment(env, Object.keys(tools.vars));
-  saveBootEnv({ basePath, toolVars: Object.keys(tools.vars), steps: tools.steps, summary: tools.summary, lan });
-  saveProjectStatus(primaryProject(), workspace, 'ready', 'Ready', session.databases ?? [], tools.summary);
-  for (const line of tools.summary) log('  ' + line);
-  await soft('Cleaning old tool builds', () => pruneToolLeftovers());
-
-  step(4, 'Git identity');
-  await soft('Git config', () => setupGitConfig(env));
-
-  step(5, 'Claude settings, history and claude-mem');
-  if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
-  await soft('claude-mem restore', restoreClaudeMem);
-  await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, lan));
-  await soft('Claude managed settings', () => writeManagedSettings(gitAccess));
-
-  step(6, 'Agent: ' + session.harnessName);
-  if (session.harness) await provisionHarness(session.harnessName, session.harness, env);
-
-  step(7, 'Pre-agent hooks');
-  runHooks('pre-agent', env);
-
-  step(8, 'Starting ' + session.harnessName);
-  setSandboxStatus('ready', 'Ready');
-  // No agent, or a restart that adds a project (the host opens its sessions itself once the sandbox is ready).
-  if (!session.harness || session.autoSession === false) {
-    if (!dryRun) startDaemon(env);
-    log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace);
-    return;
-  }
-  if (dryRun) {
-    const launch = resolveLaunch(session.harnessName, session.harness);
+  async run(): Promise<void> {
     log(
-      '(dry run) would run: ' +
-        [launch.file, ...launch.args, ...session.harness.arguments, ...session.harnessArguments].join(' ') +
-        ' | cwd=' +
-        workspace,
+      'Agent sandbox: ' +
+        session.project +
+        ' | workspace ' +
+        workspace +
+        ' | agent ' +
+        session.harnessName +
+        ' | log ' +
+        logPath,
     );
-    runHooks('post-agent', env);
-    return;
+    if (!fs.statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
+      throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
+    mkdirp(toolsDir);
+    mkdirp(run.root);
+    await this.networkAndSessionHost();
+    await this.hooksAndDesktop();
+    const { tools, env } = await this.developerTools();
+    await this.gitIdentity(env);
+    await this.claude(tools);
+    await this.agent(env);
+    this.preAgentHooks(env);
+    await this.start(env);
   }
-  startDaemon(env);
-  writeJsonAtomic(run.requestFile(session.launchId), {
-    kind: 'session',
-    id: session.launchId,
-    harness: session.harnessName,
-    args: session.harnessArguments,
-    cwd: workspace,
-    createdAt: now(),
-  });
-  if (!(await waitForPrimary())) throw new Error('The agent session did not start. Logs: ' + logsDir);
-  log('If Claude asks you to sign in, do it once; the login is saved in persistent storage.');
-  if (process.stdin.isTTY) await viewSession(session.launchId);
-  log('\nThis window stays open in ' + workspace + '. Other sessions keep running in their own tabs.');
-};
+
+  private async networkAndSessionHost(): Promise<void> {
+    step(1, 'Network and session host');
+    if (isWin && !dryRun && session.attach.enabled)
+      await soft('Building the session host', () => {
+        this.ptyHost = ensurePtyHost();
+      });
+    await soft('Private-network blocking', async () => {
+      this.lan = await applyNetworkPolicy(this.ptyHost);
+    });
+    await soft('Audit', enableProcessAudit);
+  }
+
+  private async hooksAndDesktop(): Promise<void> {
+    step(2, 'Pre-provision hooks and desktop');
+    runHooks('pre-provision', process.env);
+    await soft('Personalisation', applyPersonalization);
+  }
+
+  /** Toolchains, databases, apps, the network proxy and VS Code; then the agent environment, saved machine-wide. */
+  private async developerTools(): Promise<{ tools: ToolchainResult; env: NodeJS.ProcessEnv }> {
+    step(3, 'Developer tools (the first start downloads them once; later starts are quick)');
+    const basePath = process.env.PATH ?? '';
+    const tools = await setupToolchains(session.toolchains, session.versions, {
+      gitEnabled: session.provisioning.git.enabled,
+      gitAccess: this.gitAccess,
+      hostGit: session.hostTools.git,
+      refresh: session.provisioning.refresh,
+      databases: session.databases ?? [],
+      apps: session.apps,
+    });
+    if (!dryRun) tools.prepend.push(writeDbCommand());
+    // network.allowOnly / network.proxy: everything started from now on uses the proxy.
+    Object.assign(tools.vars, proxyEnv());
+    await soft('Network: allow only some hosts', async () => {
+      if (await applyAllowOnly())
+        tools.summary.push('network: only network.allowOnly hosts (refused: logs\\netproxy.log)');
+    });
+    const vscode = session.toolchains.vscode;
+    if (vscode.enabled && vscode.setup !== false)
+      await soft('VS Code setup', () =>
+        configureVscode(tools, {
+          toolchains: ['node', ...vscodeLanguages()],
+          databases: (session.databases ?? []).map((d) => d.database),
+          config: vscode,
+          workspace,
+        }),
+      );
+    const env = agentEnv(tools);
+    persistEnvironment(env, Object.keys(tools.vars));
+    saveBootEnv({
+      basePath,
+      toolVars: Object.keys(tools.vars),
+      steps: tools.steps,
+      summary: tools.summary,
+      lan: this.lan,
+    });
+    saveProjectStatus(primaryProject(), workspace, 'ready', 'Ready', session.databases ?? [], tools.summary);
+    for (const line of tools.summary) log('  ' + line);
+    await soft('Cleaning old tool builds', () => pruneToolLeftovers());
+    return { tools, env };
+  }
+
+  private async gitIdentity(env: NodeJS.ProcessEnv): Promise<void> {
+    step(4, 'Git identity');
+    await soft('Git config', () => setupGitConfig(env));
+  }
+
+  private async claude(tools: ToolchainResult): Promise<void> {
+    step(5, 'Claude settings, history and claude-mem');
+    if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
+    await soft('claude-mem restore', restoreClaudeMem);
+    await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, this.lan));
+    await soft('Claude managed settings', () => writeManagedSettings(this.gitAccess));
+  }
+
+  private async agent(env: NodeJS.ProcessEnv): Promise<void> {
+    step(6, 'Agent: ' + session.harnessName);
+    if (session.harness) await agents.provision(session.harnessName, session.harness, env);
+  }
+
+  private preAgentHooks(env: NodeJS.ProcessEnv): void {
+    step(7, 'Pre-agent hooks');
+    runHooks('pre-agent', env);
+  }
+
+  /** Ready: starts the session daemon and, with an agent, its first session, shown in this window. */
+  private async start(env: NodeJS.ProcessEnv): Promise<void> {
+    step(8, 'Starting ' + session.harnessName);
+    setSandboxStatus('ready', 'Ready');
+    // No agent, or a restart that adds a project (the host opens its sessions itself once the sandbox is ready).
+    if (!session.harness || session.autoSession === false) {
+      if (!dryRun) startDaemon(env);
+      log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace);
+      return;
+    }
+    if (dryRun) {
+      const launch = agents.resolveLaunch(session.harnessName, session.harness);
+      log(
+        '(dry run) would run: ' +
+          [launch.file, ...launch.args, ...session.harness.arguments, ...session.harnessArguments].join(' ') +
+          ' | cwd=' +
+          workspace,
+      );
+      runHooks('post-agent', env);
+      return;
+    }
+    startDaemon(env);
+    writeJsonAtomic(run.requestFile(session.launchId), {
+      kind: 'session',
+      id: session.launchId,
+      harness: session.harnessName,
+      args: session.harnessArguments,
+      cwd: workspace,
+      createdAt: now(),
+    });
+    if (!(await waitForPrimary())) throw new Error('The agent session did not start. Logs: ' + logsDir);
+    log('If Claude asks you to sign in, do it once; the login is saved in persistent storage.');
+    if (process.stdin.isTTY) await viewSession(session.launchId);
+    log('\nThis window stays open in ' + workspace + '. Other sessions keep running in their own tabs.');
+  }
+}
+
+export function runBoot(): Promise<void> {
+  return new Boot().run();
+}

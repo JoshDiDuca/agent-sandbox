@@ -4,23 +4,28 @@ import type { GuestRequest } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
 import { exists } from '../runtime/fs.js';
 import { errMsg } from '../../core/util/errors.js';
-import { provisionedFor } from './project-provisioner.js';
+import { provisioner } from './project-provisioner.js';
 import { insideWorkspace, respond } from './state.js';
 
 const MAX_OUTPUT = 1024 * 1024;
 
-const quoteForCmd = (a: string): string => (/[\s"&|<>^]/.test(a) ? '"' + a.replace(/"/g, '""') + '"' : a);
-const cap = (s: string): string => (s.length > MAX_OUTPUT ? s.slice(0, MAX_OUTPUT) + '\n[output truncated]' : s);
+function quoteForCmd(a: string): string {
+  return /[\s"&|<>^]/.test(a) ? '"' + a.replace(/"/g, '""') + '"' : a;
+}
+
+function cap(s: string): string {
+  return s.length > MAX_OUTPUT ? s.slice(0, MAX_OUTPUT) + '\n[output truncated]' : s;
+}
 
 /** Runs a command for the host without blocking the daemon (other requests and pings keep being answered). */
-export const execCommand = (req: Extract<GuestRequest, { kind: 'exec' }>): void => {
+export function execCommand(req: Extract<GuestRequest, { kind: 'exec' }>): void {
   if (!insideWorkspace(req.cwd) || !exists(req.cwd)) {
     respond(req.id, { ok: false, message: 'Folder is not inside the sandbox workspace: ' + req.cwd });
     return;
   }
   // chcp 65001 first: console programs then write UTF-8 (not the OEM code page) into the pipes.
   // In a project registered after boot, its own environment (its Node, Python, database variables).
-  const env = provisionedFor(req.cwd)?.env ?? process.env;
+  const env = provisioner.provisionedFor(req.cwd)?.env ?? process.env;
   const child = spawn(
     SYSTEM.cmd(),
     ['/d', '/s', '/c', '"chcp 65001>nul & ' + req.command.map(quoteForCmd).join(' ') + '"'],
@@ -50,4 +55,4 @@ export const execCommand = (req: Extract<GuestRequest, { kind: 'exec' }>): void 
       stderr: cap(output.stderr),
     });
   });
-};
+}

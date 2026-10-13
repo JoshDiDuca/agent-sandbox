@@ -12,7 +12,7 @@ import { commandLine } from '../sessions/cmdline.js';
 import { freePort } from '../runtime/ports.js';
 import { primaryProject } from '../boot/project-status.js';
 import { ensurePtyHost, ptyHostLogTail, startPtyHost, waitForPtyHost } from '../sessions/pty-host.js';
-import { provisionHarness, resolveLaunch } from '../agents/agent-installer.js';
+import { agents } from '../agents/agent-installer.js';
 import { saveClaudeMem } from '../setup/claude-mem.js';
 import { projectHooks, runHooks, runHooksAsync, type HookTarget } from '../setup/hooks.js';
 import { guestAddresses } from '../network/addresses.js';
@@ -21,19 +21,19 @@ import { exists } from '../runtime/fs.js';
 import { log, warn } from '../runtime/log.js';
 import { session, workspace } from '../runtime/session.js';
 import { errMsg } from '../../core/util/errors.js';
-import { provisionProject } from './project-provisioner.js';
-import { maybeShutdown } from './idle-shutdown.js';
-import { insidePrimary, live, pending, respond, safely, saveStatus } from './state.js';
+import { provisioner } from './project-provisioner.js';
+import { IdleShutdown } from './idle-shutdown.js';
+import { insidePrimary, respond, safely, saveStatus } from './state.js';
 
 type SessionRequest = Extract<GuestRequest, { kind: 'session' }>;
 
-const terminalTab = (id: string, title: string, cwd: string): void => {
+function terminalTab(id: string, title: string, cwd: string): void {
   const view = [process.execPath, path.join(path.dirname(process.argv[1]), 'view.js'), id];
   const wt = path.join(toolsDir, 'terminal', 'wt.exe');
   if (exists(wt))
     spawn(wt, ['-w', '0', 'nt', '--title', title, '-d', cwd, ...view], { detached: true, stdio: 'ignore' }).unref();
   else spawn(SYSTEM.cmd(), ['/d', '/c', 'start', title, ...view], { detached: true, stdio: 'ignore', cwd }).unref();
-};
+}
 
 /** Where a session runs: its environment and hooks (the boot's, or its project's). */
 interface Place {
@@ -41,28 +41,6 @@ interface Place {
   hooks: HookTarget | null;
   project: string;
 }
-
-const onExit =
-  (running: SessionStatus, place: Place) =>
-  (code: number | null): void => {
-    live.delete(running.id);
-    const tail = code === 0 ? '' : ptyHostLogTail(running.id, 6);
-    saveStatus({
-      ...running,
-      phase: 'exited',
-      message: running.harness + ' exited with code ' + code + (tail ? '. Last output:\n' + tail : ''),
-      exitCode: code ?? 1,
-      attach: undefined,
-    });
-    log('Session ' + running.id + ' ended (exit ' + code + ')');
-    if (place.hooks)
-      void runHooksAsync('post-agent', place.env, place.hooks).catch((e: unknown) =>
-        warn('post-agent hooks failed: ' + errMsg(e)),
-      );
-    else safely('post-agent hooks', () => runHooks('post-agent', process.env));
-    safely('claude-mem save', saveClaudeMem);
-    maybeShutdown();
-  };
 
 /**
  * The agent's definition: the one the sandbox booted with, the one the host sent along (another agent, e.g.
@@ -87,8 +65,8 @@ const launchPtyHost = async (
   const harness = harnessFor(req);
   // Never refresh here: main already did, and replacing a running agent's executable would fail.
   say('Preparing ' + req.harness);
-  await provisionHarness(req.harness, harness, env, false);
-  const launch = resolveLaunch(req.harness, harness);
+  await agents.provision(req.harness, harness, env, false);
+  const launch = agents.resolveLaunch(req.harness, harness);
   const base = [...launch.args, ...harness.arguments];
   const port = await freePort();
   const token = crypto.randomBytes(24).toString('base64url');
@@ -130,7 +108,7 @@ const placeFor = async (req: SessionRequest, say: (m: string) => void): Promise<
     throw new Error(
       'Folder ' + req.cwd + ' is not inside project ' + req.project.name + ' (' + req.project.workspace + ').',
     );
-  const ready = await provisionProject(req.project, say);
+  const ready = await provisioner.provision(req.project, say);
   if (!exists(req.cwd)) throw new Error('Folder does not exist in the sandbox: ' + req.cwd);
   return {
     env: ready.env,
@@ -139,93 +117,131 @@ const placeFor = async (req: SessionRequest, say: (m: string) => void): Promise<
   };
 };
 
-export const startSession = async (req: SessionRequest): Promise<void> => {
-  let status: SessionStatus = {
-    id: req.id,
-    launchId: session.launchId,
-    harness: req.harness,
-    cwd: req.cwd,
-    ...(req.project ? { project: req.project.name } : {}),
-    phase: 'starting',
-    message: 'Starting ' + req.harness,
-    updatedAt: now(),
-    startedAt: now(),
-  };
-  saveStatus(status);
-  // Progress goes into the session's status: the host prints it while it waits, and the tab inside shows it.
-  const say = (message: string): void => {
-    status = { ...status, message };
-    saveStatus(status);
-  };
-  pending.starting++;
-  // Sessions after the first get their own tab right away (it shows the setup progress until the agent starts).
-  if (req.id !== session.launchId && process.env.AGENT_NO_TABS !== '1')
-    safely('terminal tab', () => terminalTab(req.id, req.harness + ' ' + path.basename(req.cwd), req.cwd));
-  try {
-    const place = await placeFor(req, say);
-    const remote = session.networking && session.attach.enabled;
-    const { child, port, token } = await launchPtyHost(req, remote, place.env, say);
-    const running: SessionStatus = {
-      ...status,
-      project: place.project,
-      phase: 'running',
-      message: req.harness + ' is running',
-      attach: { addresses: remote ? guestAddresses() : [], port, token },
+/** The agent sessions of this sandbox: the running ones, the ones starting, and what happens when one ends. */
+export class SessionManager {
+  private readonly live = new Map<string, { status: SessionStatus; child: ChildProcess }>();
+  /** Sessions and projects being set up right now (a headless sandbox must not shut down under them). */
+  private starting = 0;
+  private readonly idle = new IdleShutdown(() => this.live.size > 0 || this.starting > 0);
+
+  /** How many sessions are running. */
+  get count(): number {
+    return this.live.size;
+  }
+
+  /** `session` requests: an agent in its own ptyhost, in the launch folder's project or a registered one. */
+  async start(req: SessionRequest): Promise<void> {
+    let status: SessionStatus = {
+      id: req.id,
+      launchId: session.launchId,
+      harness: req.harness,
+      cwd: req.cwd,
+      ...(req.project ? { project: req.project.name } : {}),
+      phase: 'starting',
+      message: 'Starting ' + req.harness,
+      updatedAt: now(),
+      startedAt: now(),
     };
-    live.set(req.id, { status: running, child });
-    child.once('exit', onExit(running, place));
-    saveStatus(running);
-    log(
-      'Session ' +
-        req.id +
-        ' started (' +
-        req.harness +
-        ' in ' +
-        req.cwd +
-        ', project ' +
-        place.project +
-        ', port ' +
-        port +
-        ')',
-    );
-  } catch (e) {
-    saveStatus({ ...status, phase: 'failed', message: errMsg(e) });
-    warn('Session ' + req.id + ' failed: ' + errMsg(e));
-    maybeShutdown();
-  } finally {
-    pending.starting--;
+    saveStatus(status);
+    // Progress goes into the session's status: the host prints it while it waits, and the tab inside shows it.
+    const say = (message: string): void => {
+      status = { ...status, message };
+      saveStatus(status);
+    };
+    this.starting++;
+    // Sessions after the first get their own tab right away (it shows the setup progress until the agent starts).
+    if (req.id !== session.launchId && process.env.AGENT_NO_TABS !== '1')
+      safely('terminal tab', () => terminalTab(req.id, req.harness + ' ' + path.basename(req.cwd), req.cwd));
+    try {
+      const place = await placeFor(req, say);
+      const remote = session.networking && session.attach.enabled;
+      const { child, port, token } = await launchPtyHost(req, remote, place.env, say);
+      const running: SessionStatus = {
+        ...status,
+        project: place.project,
+        phase: 'running',
+        message: req.harness + ' is running',
+        attach: { addresses: remote ? guestAddresses() : [], port, token },
+      };
+      this.live.set(req.id, { status: running, child });
+      child.once('exit', (code: number | null) => this.onExit(running, place, code));
+      saveStatus(running);
+      log(
+        'Session ' +
+          req.id +
+          ' started (' +
+          req.harness +
+          ' in ' +
+          req.cwd +
+          ', project ' +
+          place.project +
+          ', port ' +
+          port +
+          ')',
+      );
+    } catch (e) {
+      saveStatus({ ...status, phase: 'failed', message: errMsg(e) });
+      warn('Session ' + req.id + ' failed: ' + errMsg(e));
+      this.idle.check();
+    } finally {
+      this.starting--;
+    }
   }
-};
 
-/** `project` requests: provision a registered project without an agent (sandbox start / exec / db from its folder). */
-export const prepareProject = async (req: Extract<GuestRequest, { kind: 'project' }>): Promise<void> => {
-  pending.starting++;
-  try {
-    const ready = await provisionProject(req.project, () => undefined);
-    respond(req.id, {
-      ok: true,
-      message:
-        'Project ' + req.project.name + ' is ready in ' + req.project.workspace + '\n' + ready.summary.join('\n'),
+  /** `project` requests: provision a registered project without an agent (sandbox start / exec / db from its folder). */
+  async prepare(req: Extract<GuestRequest, { kind: 'project' }>): Promise<void> {
+    this.starting++;
+    try {
+      const ready = await provisioner.provision(req.project, () => undefined);
+      respond(req.id, {
+        ok: true,
+        message:
+          'Project ' + req.project.name + ' is ready in ' + req.project.workspace + '\n' + ready.summary.join('\n'),
+      });
+    } catch (e) {
+      respond(req.id, { ok: false, message: 'Project ' + req.project.name + ' could not be set up: ' + errMsg(e) });
+    } finally {
+      this.starting--;
+      this.idle.check();
+    }
+  }
+
+  /** `restart` requests: the matching sessions restart their agent (continuing the conversation where it can). */
+  async restart(req: Extract<GuestRequest, { kind: 'restart' }>): Promise<void> {
+    const targets = [...this.live.values()].filter(
+      (s) =>
+        s.status.attach &&
+        (req.harness === null || s.status.harness === req.harness) &&
+        (!req.cwd || isWithin(req.cwd, s.status.cwd)),
+    );
+    for (const s of targets)
+      await sendControl(
+        { addresses: ['127.0.0.1'], port: s.status.attach!.port, token: s.status.attach!.token },
+        FrameType.Restart,
+      );
+    respond(req.id, { ok: true, message: 'restarted ' + targets.length + ' session(s)' });
+  }
+
+  private onExit(running: SessionStatus, place: Place, code: number | null): void {
+    this.live.delete(running.id);
+    const tail = code === 0 ? '' : ptyHostLogTail(running.id, 6);
+    saveStatus({
+      ...running,
+      phase: 'exited',
+      message: running.harness + ' exited with code ' + code + (tail ? '. Last output:\n' + tail : ''),
+      exitCode: code ?? 1,
+      attach: undefined,
     });
-  } catch (e) {
-    respond(req.id, { ok: false, message: 'Project ' + req.project.name + ' could not be set up: ' + errMsg(e) });
-  } finally {
-    pending.starting--;
-    maybeShutdown();
+    log('Session ' + running.id + ' ended (exit ' + code + ')');
+    if (place.hooks)
+      void runHooksAsync('post-agent', place.env, place.hooks).catch((e: unknown) =>
+        warn('post-agent hooks failed: ' + errMsg(e)),
+      );
+    else safely('post-agent hooks', () => runHooks('post-agent', process.env));
+    safely('claude-mem save', saveClaudeMem);
+    this.idle.check();
   }
-};
+}
 
-export const restartSessions = async (req: Extract<GuestRequest, { kind: 'restart' }>): Promise<void> => {
-  const targets = [...live.values()].filter(
-    (s) =>
-      s.status.attach &&
-      (req.harness === null || s.status.harness === req.harness) &&
-      (!req.cwd || isWithin(req.cwd, s.status.cwd)),
-  );
-  for (const s of targets)
-    await sendControl(
-      { addresses: ['127.0.0.1'], port: s.status.attach!.port, token: s.status.attach!.token },
-      FrameType.Restart,
-    );
-  respond(req.id, { ok: true, message: 'restarted ' + targets.length + ' session(s)' });
-};
+/** The daemon's one session manager. */
+export const sessions = new SessionManager();

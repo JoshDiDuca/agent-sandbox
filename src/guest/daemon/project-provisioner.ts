@@ -35,32 +35,18 @@ interface Entry {
   done?: Provisioned;
 }
 
-/**
- * By project name (lower case). The same spec again is free; a changed one (its config was edited) provisions again.
- */
-const projects = new Map<string, Entry>();
-/** The last finished provisioning of each project (kept while a changed spec provisions again). */
-const ready = new Map<string, Provisioned>();
-
-/** The provisioned project containing this folder, if any (exec in its folders uses its environment). */
-export const provisionedFor = (cwd: string): Provisioned | null =>
-  [...ready.values()]
-    .filter((p) => isWithin(p.spec.workspace, cwd))
-    .sort((a, b) => b.spec.workspace.length - a.spec.workspace.length)[0] ?? null;
-
-export const provisionedProjects = (): Provisioned[] => [...ready.values()];
-
 /** `set` lines for a .cmd file. Values are quoted; a value with a line break cannot be set this way and is left out. */
-const cmdSet = (env: NodeJS.ProcessEnv, names: string[]): string[] =>
-  names
+function cmdSet(env: NodeJS.ProcessEnv, names: readonly string[]): string[] {
+  return names
     .filter((n) => env[n] !== undefined && !/[\r\n]/.test(String(env[n])))
     .map((n) => '@set "' + n + '=' + String(env[n]).replace(/%/g, '%%') + '"');
+}
 
 /**
  * A terminal for the project inside the sandbox: `sbx-shell <name>` (from any terminal tab) opens cmd in its folder
  * with its environment. Written to the sandbox's own disk.
  */
-const writeShell = (spec: ProjectSpec, env: NodeJS.ProcessEnv, names: string[]): void => {
+function writeShell(spec: ProjectSpec, env: NodeJS.ProcessEnv, names: readonly string[]): void {
   const dir = mkdirp(path.join(localDir, 'projects', spec.name));
   fs.writeFileSync(path.join(dir, 'env.cmd'), [...cmdSet(env, [...names, 'PATH']), ''].join('\r\n'));
   fs.writeFileSync(
@@ -83,23 +69,24 @@ const writeShell = (spec: ProjectSpec, env: NodeJS.ProcessEnv, names: string[]):
       '',
     ].join('\r\n'),
   );
-};
+}
 
 /** The guide every agent reads lists every project in the sandbox (they can all see each other's folders). */
-const refreshGuide = async (): Promise<void> => {
+function refreshGuide(projects: readonly Provisioned[]): void {
   // The self-test must never rewrite this machine's real managed CLAUDE.md.
   if (dryRun || (process.env.AGENT_SANDBOX_SELFTEST === '1' && !process.env.AGENT_MANAGED_DIR)) return;
   const boot = readBootEnv();
   if (!boot) return;
-  const list = provisionedProjects().map((p) => ({ guest: p.spec.workspace, host: p.spec.workspaceHost }));
+  const list = projects.map((p) => ({ guest: p.spec.workspace, host: p.spec.workspaceHost }));
   try {
     writeGuides(boot.summary, boot.lan, list);
   } catch (e) {
     warn('Could not update the sandbox guide: ' + errMsg(e));
   }
-};
+}
 
-const provision = async (spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> => {
+/** Sets one project up: hooks, the toolchain steps it needs, its environment, sbx-shell and its status. */
+async function setUp(spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> {
   if (!insideWorkspace(spec.workspace) || !exists(spec.workspace)) {
     throw new Error(
       'Project folder ' +
@@ -164,44 +151,68 @@ const provision = async (spec: ProjectSpec, say: (message: string) => void): Pro
   for (const line of tools.summary) log('  [' + spec.name + '] ' + line);
   saveProjectStatus(spec.name, spec.workspace, 'ready', 'Ready', spec.databases, tools.summary);
   return { spec, env, summary: tools.summary };
-};
+}
 
-/**
- * Provisions a project (or joins the run already doing it: two sessions requested at once wait for the same one).
- * `say` gets the progress lines.
- */
-export const provisionProject = (spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> => {
-  const id = spec.name.toLowerCase();
-  const key = JSON.stringify(spec);
-  const known = projects.get(id);
-  if (known && known.key === key) {
-    known.listeners.add(say);
-    return known.work.finally(() => known.listeners.delete(say));
+/** Projects registered after boot, each provisioned once on demand (a changed spec provisions again). */
+export class ProjectProvisioner {
+  /** By project name (lower case). The same spec again is free. */
+  private readonly running = new Map<string, Entry>();
+  /** The last finished provisioning of each project (kept while a changed spec provisions again). */
+  private readonly ready = new Map<string, Provisioned>();
+
+  /**
+   * Provisions a project (or joins the run already doing it: two sessions requested at once wait for the same one).
+   * `say` gets the progress lines.
+   */
+  provision(spec: ProjectSpec, say: (message: string) => void): Promise<Provisioned> {
+    const id = spec.name.toLowerCase();
+    const key = JSON.stringify(spec);
+    const known = this.running.get(id);
+    if (known && known.key === key) {
+      known.listeners.add(say);
+      return known.work.finally(() => known.listeners.delete(say));
+    }
+    const listeners = new Set([say]);
+    const broadcast = (message: string): void => {
+      for (const l of listeners)
+        try {
+          l(message);
+        } catch {
+          /* a listener's write failing never stops provisioning */
+        }
+    };
+    const work = setUp(spec, broadcast);
+    const entry: Entry = { key, work, listeners };
+    this.running.set(id, entry);
+    work.then(
+      (done) => {
+        entry.done = done;
+        this.ready.set(id, done);
+        refreshGuide(this.all());
+      },
+      (e: unknown) => {
+        warn('Project ' + spec.name + ' could not be set up: ' + errMsg(e));
+        saveProjectStatus(spec.name, spec.workspace, 'failed', errMsg(e), spec.databases, []);
+        // The next session for it tries again.
+        if (this.running.get(id) === entry) this.running.delete(id);
+      },
+    );
+    return work;
   }
-  const listeners = new Set([say]);
-  const broadcast = (message: string): void => {
-    for (const l of listeners)
-      try {
-        l(message);
-      } catch {
-        /* a listener's write failing never stops provisioning */
-      }
-  };
-  const work = provision(spec, broadcast);
-  const entry: Entry = { key, work, listeners };
-  projects.set(id, entry);
-  work.then(
-    (done) => {
-      entry.done = done;
-      ready.set(id, done);
-      return refreshGuide();
-    },
-    (e: unknown) => {
-      warn('Project ' + spec.name + ' could not be set up: ' + errMsg(e));
-      saveProjectStatus(spec.name, spec.workspace, 'failed', errMsg(e), spec.databases, []);
-      // The next session for it tries again.
-      if (projects.get(id) === entry) projects.delete(id);
-    },
-  );
-  return work;
-};
+
+  /** The provisioned project containing this folder, if any (exec in its folders uses its environment). */
+  provisionedFor(cwd: string): Provisioned | null {
+    return (
+      this.all()
+        .filter((p) => isWithin(p.spec.workspace, cwd))
+        .sort((a, b) => b.spec.workspace.length - a.spec.workspace.length)[0] ?? null
+    );
+  }
+
+  all(): Provisioned[] {
+    return [...this.ready.values()];
+  }
+}
+
+/** The daemon's one provisioner. */
+export const provisioner = new ProjectProvisioner();

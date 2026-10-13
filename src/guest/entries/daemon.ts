@@ -7,7 +7,7 @@ import { startProcessCollector } from '../audit/process-audit.js';
 import { safely } from '../daemon/state.js';
 import { log, warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
-import { loop } from '../daemon/daemon.js';
+import { Daemon } from '../daemon/daemon.js';
 
 process.on('uncaughtException', (e) => warn('daemon: unexpected error (continuing): ' + (e.stack ?? errMsg(e))));
 process.on('unhandledRejection', (e) => warn('daemon: unexpected error (continuing): ' + errMsg(e)));
@@ -15,4 +15,4 @@ process.on('unhandledRejection', (e) => warn('daemon: unexpected error (continui
 log('Session daemon started (pid ' + process.pid + ').');
 safely('port forwards', startRelays);
 safely('audit', startProcessCollector);
-loop();
+new Daemon().start();

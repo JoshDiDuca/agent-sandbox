@@ -7,7 +7,7 @@ import { log, warn } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
 import { errMsg } from '../../core/util/errors.js';
 
-export const startRelays = (): void => {
+export function startRelays(): void {
   (session.network.forwardPorts ?? []).forEach((f, i) => {
     const server = net.createServer((client) => {
       const target = net.connect(f.sandbox, '127.0.0.1');
@@ -20,4 +20,4 @@ export const startRelays = (): void => {
       log("Port forward: the PC's localhost:" + f.pc + ' reaches localhost:' + f.sandbox + ' here.'),
     );
   });
-};
+}

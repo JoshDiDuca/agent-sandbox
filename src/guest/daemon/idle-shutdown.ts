@@ -5,16 +5,28 @@ import { saveClaudeMem } from '../setup/claude-mem.js';
 import { isWin, run } from '../runtime/paths.js';
 import { log } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
-import { live, pending, safely } from './state.js';
+import { safely } from './state.js';
 
-export const maybeShutdown = (): void => {
-  if (!session.headless || !isWin) return;
-  const idle = (): boolean => live.size === 0 && pending.starting === 0 && run.scanRequests().valid.length === 0;
-  if (!idle()) return;
-  setTimeout(() => {
-    if (!idle()) return;
-    log('Headless sandbox has no sessions left; shutting down.');
-    safely('claude-mem save', saveClaudeMem);
-    spawnSync(SYSTEM.shutdown(), ['/s', '/t', '5'], { windowsHide: true });
-  }, 15000);
-};
+/** How long the sandbox must stay idle before it shuts down. */
+const GRACE_MS = 15000;
+
+export class IdleShutdown {
+  /** `busy`: a session runs or is starting. */
+  constructor(private readonly busy: () => boolean) {}
+
+  /** After a session ended or failed: shuts a headless sandbox down if it stays idle for a moment. */
+  check(): void {
+    if (!session.headless || !isWin) return;
+    if (!this.idle()) return;
+    setTimeout(() => {
+      if (!this.idle()) return;
+      log('Headless sandbox has no sessions left; shutting down.');
+      safely('claude-mem save', saveClaudeMem);
+      spawnSync(SYSTEM.shutdown(), ['/s', '/t', '5'], { windowsHide: true });
+    }, GRACE_MS);
+  }
+
+  private idle(): boolean {
+    return !this.busy() && run.scanRequests().valid.length === 0;
+  }
+}
