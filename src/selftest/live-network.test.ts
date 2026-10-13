@@ -97,12 +97,12 @@ export const liveNetworkSuite: Suite = {
     const out = path.join(t.dir('cargoshim'), 'cargo.exe');
     const compiled = spawnSync(
       CSC,
-      ['/nologo', '/optimize', '/out:' + out, path.join(gen.launchPath, 'sandbox', 'cargoshim.cs')],
+      ['/nologo', '/optimize', '/out:' + out, path.join(gen.launchPath, 'sandbox', 'csharp', 'CargoShim.cs')],
       { encoding: 'utf8' },
     );
     t.check(
       compiled.status === 0,
-      'cargoshim.cs compiles with the .NET Framework compiler (C# 5)',
+      'CargoShim.cs compiles with the .NET Framework compiler (C# 5)',
       compiled.stdout + compiled.stderr,
     );
   },

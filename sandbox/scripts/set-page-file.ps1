@@ -12,7 +12,7 @@ try {
     # Keep 8 GB of the sandbox's disk free for everything else.
     $SizeMb = [math]::Min($SizeMb, [math]::Floor((Get-PSDrive -Name C).Free / 1MB) - 8192)
     if ($SizeMb -lt 1024) { throw 'too little free disk.' }
-    Add-Type -Path (Join-Path $PSScriptRoot 'pagefile.cs')
+    Add-Type -Path (Join-Path $PSScriptRoot '..\csharp\PageFile.cs')
     [SandboxPageFile]::Set($SizeMb)
     "Paging file set to $SizeMb MB, fixed (sandbox.pageFileMb)." | Add-Content -LiteralPath $log
 } catch {

@@ -7,13 +7,16 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-/** The sandbox\ folder that holds the scripts. */
+/** The sandbox\ folder (boot\, scripts\ and csharp\ in it). */
 export function sandboxScriptsDir(): string {
   const candidates = [path.resolve(HERE, '..', 'sandbox'), path.resolve(HERE, '..', '..', 'sandbox')];
-  return candidates.find((dir) => fs.existsSync(path.join(dir, 'bootstrap.ps1'))) ?? candidates[candidates.length - 1];
+  return (
+    candidates.find((dir) => fs.existsSync(path.join(dir, 'boot', 'bootstrap.ps1'))) ??
+    candidates[candidates.length - 1]
+  );
 }
 
-/** powershell.exe arguments that run sandbox\<name> with `args` (5.1, no profile, never interactive). */
+/** powershell.exe arguments that run sandbox\scripts\<name> with `args` (5.1, no profile, never interactive). */
 export function scriptArgs(name: string, args: readonly string[] = []): string[] {
   return [
     '-NoLogo',
@@ -22,7 +25,7 @@ export function scriptArgs(name: string, args: readonly string[] = []): string[]
     '-ExecutionPolicy',
     'Bypass',
     '-File',
-    path.join(sandboxScriptsDir(), name),
+    path.join(sandboxScriptsDir(), 'scripts', name),
     ...args,
   ];
 }

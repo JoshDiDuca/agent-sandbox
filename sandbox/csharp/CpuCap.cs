@@ -1,4 +1,4 @@
-// Caps a process and everything it starts at a share of the PC's CPU. Loaded by cpucap.ps1 (Add-Type). C# 5.
+// Caps a process and everything it starts at a share of the PC's CPU. Loaded by scripts\set-cpu-cap.ps1 (Add-Type). C# 5.
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;

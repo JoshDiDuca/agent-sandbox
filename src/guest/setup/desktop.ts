@@ -17,6 +17,6 @@ export const applyPersonalization = (): void => {
   const wallpaper = fs.readdirSync(dir).find((f) => f.startsWith('wallpaper'));
   const local = wallpaper ? path.join(mkdirp(path.join(os.homedir(), 'Pictures')), wallpaper) : null;
   if (wallpaper && local) fs.copyFileSync(path.join(dir, wallpaper), local);
-  runScript('desktop.ps1', local ? ['-Wallpaper', local] : []);
+  runScript('set-desktop.ps1', local ? ['-Wallpaper', local] : []);
   log('Desktop personalisation applied from this PC.');
 };

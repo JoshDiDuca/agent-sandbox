@@ -6,7 +6,7 @@ import { nativeScript } from '../native.js';
 
 /**
  * sandbox.keepAwake: asks Windows not to sleep while the sandbox runs (as a video player does; the screen may still
- * turn off). native\keep-awake.ps1 holds the request until `ownerPid` exits, so it never outlives the watcher.
+ * turn off). native\scripts\keep-awake.ps1 holds the request until `ownerPid` exits, so it never outlives the watcher.
  */
 export class KeepAwake {
   private constructor(private readonly child: ChildProcess) {}

@@ -28,7 +28,7 @@ export const execOutput = (file: string, args: string[], options: SpawnSyncOptio
   return result.status === 0 ? String(result.stdout ?? '').trim() : '';
 };
 
-/** Runs sandbox\<name> (a .ps1 in the launch folder) with `args`; throws when it fails. */
+/** Runs sandbox\scripts\<name> (a .ps1 in the launch folder) with `args`; throws when it fails. */
 export function runScript(name: string, args: readonly string[] = []): void {
   exec(SYSTEM.powershell(), scriptArgs(name, args));
 }
@@ -38,7 +38,7 @@ export function scriptOutput(name: string, args: readonly string[] = [], options
   return execOutput(SYSTEM.powershell(), scriptArgs(name, args), options);
 }
 
-/** Runs sandbox\<name> with a JSON file (-<param> path) holding `data`, removed afterwards. */
+/** Runs sandbox\scripts\<name> with a JSON file (-<param> path) holding `data`, removed afterwards. */
 export function runScriptWithJson(name: string, param: string, data: unknown, args: readonly string[] = []): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sbx-'));
   const file = path.join(dir, 'input.json');
@@ -74,7 +74,7 @@ export const robocopy = (from: string, to: string, files: string[] = []): void =
 
 /**
  * A Node install without its global packages (nvm keeps those per version: often tens of thousands of small files,
- * which is what made copying from this PC slow). Same file list as Copy-NodeFromHost in sandbox/bootstrap.ps1.
+ * which is what made copying from this PC slow). Same file list as Copy-NodeFromHost in sandbox/boot/bootstrap.ps1.
  * Copied into a staging folder and renamed into place: node.exe alone (an interrupted copy) must not look like a full install.
  */
 export const copyNode = (from: string, to: string): void => {

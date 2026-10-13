@@ -3,6 +3,6 @@
 # ends with the sandbox. Used by host/stops.ts for sandbox.keepAwake.
 param([Parameter(Mandatory = $true)][int]$OwnerId)
 $ErrorActionPreference = 'Stop'
-Add-Type -Path (Join-Path $PSScriptRoot 'power.cs')
+Add-Type -Path (Join-Path $PSScriptRoot '..\csharp\Power.cs')
 [AgentSandbox.Power]::StayAwake()
 Wait-Process -Id $OwnerId -ErrorAction SilentlyContinue

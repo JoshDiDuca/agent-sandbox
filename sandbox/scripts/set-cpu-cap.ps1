@@ -11,7 +11,7 @@ try {
     if ($Percent -eq 0) { $Percent = [int](Get-Content -LiteralPath 'C:\AgentLaunch\session.json' -Raw -Encoding UTF8 | ConvertFrom-Json).cpuLimitPercent }
     if ($Percent -lt 1 -or $Percent -ge 100) { exit 0 }
     if ($ProcessId -eq 0) { $ProcessId = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId }
-    Add-Type -Path (Join-Path $PSScriptRoot 'cpucap.cs')
+    Add-Type -Path (Join-Path $PSScriptRoot '..\csharp\CpuCap.cs')
     [SandboxCpuCap]::Apply($ProcessId, $Percent)
     "CPU capped at $Percent% of the PC (sandbox.cpuLimit)." | Add-Content -LiteralPath $log
 } catch {

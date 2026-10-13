@@ -78,6 +78,6 @@ export function buildWsb(config: Config, memoryMb: number, mappings: ResolvedMap
     element('MemoryInMB', String(memoryMb)) +
       DEVICES.map(([name, setting]) => element(name, toggle(s[setting]))).join('') +
       element('MappedFolders', folders) +
-      element('LogonCommand', element('Command', xmlEscape(GUEST.launch + '\\sandbox\\logon.cmd'))),
+      element('LogonCommand', element('Command', xmlEscape(GUEST.launch + '\\sandbox\\boot\\logon.cmd'))),
   );
 }

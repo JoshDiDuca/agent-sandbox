@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 if ($Wallpaper) {
     Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallPaper -Value $Wallpaper
-    Add-Type -Path (Join-Path $PSScriptRoot 'desktop.cs')
+    Add-Type -Path (Join-Path $PSScriptRoot '..\csharp\Desktop.cs')
     try {
         [AgentSandbox.Desk]::SetWallpaper($Wallpaper)
     } catch {

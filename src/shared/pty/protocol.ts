@@ -1,4 +1,4 @@
-// Client side of the ptyhost protocol (see sandbox/ptyhost.cs). Used by the window inside the sandbox and by
+// Client side of the ptyhost protocol (see sandbox/csharp/PtyHost.cs). Used by the window inside the sandbox and by
 // `--terminal` / `attach` on the host, so it only depends on Node built-ins.
 
 export const FrameType = {
@@ -51,7 +51,7 @@ export const resizeFrame = (cols: number, rows: number): Buffer => {
   return encodeFrame(FrameType.Resize, payload);
 };
 
-/** Same limit as ptyhost.cs; a peer announcing more is broken or hostile. */
+/** Same limit as PtyHost.cs; a peer announcing more is broken or hostile. */
 export const MAX_FRAME_BYTES = 1 << 20;
 
 /** Splits a TCP byte stream back into frames. */

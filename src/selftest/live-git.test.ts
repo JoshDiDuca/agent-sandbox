@@ -1,4 +1,4 @@
-// Live: compiles gitshim.cs with the .NET Framework compiler and runs real git through it in a scratch repository,
+// Live: compiles GitShim.cs with the .NET Framework compiler and runs real git through it in a scratch repository,
 // as git.exe and through Git Bash, in each git access mode.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,13 +25,13 @@ export const liveGitSuite: Suite = {
         '/nologo',
         '/optimize',
         '/out:' + path.join(shimDir, 'git.exe'),
-        path.join(gen.launchPath, 'sandbox', 'gitshim.cs'),
+        path.join(gen.launchPath, 'sandbox', 'csharp', 'GitShim.cs'),
       ],
       { encoding: 'utf8' },
     );
     t.check(
       compiled.status === 0,
-      'gitshim.cs compiles with the .NET Framework compiler',
+      'GitShim.cs compiles with the .NET Framework compiler',
       compiled.stdout + compiled.stderr,
     );
     if (compiled.status !== 0) return;

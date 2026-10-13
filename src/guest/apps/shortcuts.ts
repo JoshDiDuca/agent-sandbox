@@ -7,7 +7,7 @@ export interface Shortcut {
   readonly exe: string;
 }
 
-/** Desktop and Start menu shortcuts, all in one PowerShell call (sandbox\shortcuts.ps1). */
+/** Desktop and Start menu shortcuts, all in one PowerShell call (sandbox\scripts\new-shortcuts.ps1). */
 export function shortcuts(apps: readonly Shortcut[]): void {
   if (!apps.length) return;
   const desktop = path.join(os.homedir(), 'Desktop');
@@ -27,5 +27,5 @@ export function shortcuts(apps: readonly Shortcut[]): void {
       workingDirectory: path.dirname(app.exe),
     }));
   });
-  runScriptWithJson('shortcuts.ps1', 'ListFile', links);
+  runScriptWithJson('new-shortcuts.ps1', 'ListFile', links);
 }

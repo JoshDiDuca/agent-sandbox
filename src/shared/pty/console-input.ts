@@ -2,7 +2,7 @@
 // Node reads the console as key records in raw mode and drops every mouse record, so an agent that turned mouse
 // tracking on (its terminal then sends the wheel and clicks as mouse reports) got neither. With
 // ENABLE_VIRTUAL_TERMINAL_INPUT the console hands over the terminal's input as it is: mouse reports, focus, keys.
-// Node has no API for the console mode, so sandbox\vt-input.ps1 sets it on the console both share (the input mode
+// Node has no API for the console mode, so sandbox\scripts\enable-vt-input.ps1 sets it on the console both share (the input mode
 // belongs to the console, not to a handle). PowerShell starts in a console of its own, hidden (so it never retitles
 // your tab or touches its modes), then switches to ours. Only built-ins here: view.js bundles this.
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -27,7 +27,7 @@ export function enableVtInput(): VtInput {
   let exited: Promise<void> = Promise.resolve();
   const ready = new Promise<boolean>((resolve) => {
     try {
-      child = spawn(SYSTEM.powershell(), scriptArgs('vt-input.ps1', ['-ProcessId', String(process.pid)]), {
+      child = spawn(SYSTEM.powershell(), scriptArgs('enable-vt-input.ps1', ['-ProcessId', String(process.pid)]), {
         stdio: 'ignore',
         windowsHide: true,
       });

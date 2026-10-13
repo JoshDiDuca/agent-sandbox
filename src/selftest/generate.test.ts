@@ -37,22 +37,22 @@ export const generateSuite: Suite = {
       'runtime/daemon.js',
       'runtime/view.js',
       'runtime/gitguard.js',
-      'sandbox/bootstrap.ps1',
-      'sandbox/logon.cmd',
-      'sandbox/trust.cmd',
-      'sandbox/ptyhost.cs',
-      'sandbox/gitshim.cs',
-      'sandbox/cpucap.ps1',
-      'sandbox/cpucap.cs',
-      'sandbox/pagefile.ps1',
-      'sandbox/pagefile.cs',
-      'sandbox/memlog.ps1',
-      'sandbox/linkgate.cs',
+      'sandbox/boot/bootstrap.ps1',
+      'sandbox/boot/logon.cmd',
+      'sandbox/boot/trust.cmd',
+      'sandbox/csharp/PtyHost.cs',
+      'sandbox/csharp/GitShim.cs',
+      'sandbox/scripts/set-cpu-cap.ps1',
+      'sandbox/csharp/CpuCap.cs',
+      'sandbox/scripts/set-page-file.ps1',
+      'sandbox/csharp/PageFile.cs',
+      'sandbox/scripts/log-memory.ps1',
+      'sandbox/csharp/LinkGate.cs',
     ];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
     t.equal(missing, [], 'the launch folder has the runtime, the C# sources and the boot scripts');
     t.equal(fs.readdirSync(path.join(gen.launchPath, 'runtime')).length, 6, 'the runtime is 6 self-contained files');
-    const logon = fs.readFileSync(path.join(gen.launchPath, 'sandbox', 'logon.cmd'), 'utf8');
+    const logon = fs.readFileSync(path.join(gen.launchPath, 'sandbox', 'boot', 'logon.cmd'), 'utf8');
     t.check(
       logon.indexOf('trust.cmd') < logon.indexOf('wt.exe'),
       'logon.cmd applies the sandbox trust settings before opening Windows Terminal',

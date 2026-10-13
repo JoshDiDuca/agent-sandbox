@@ -66,7 +66,12 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
     [...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]),
   );
   try {
-    runScriptWithJson('machine-env.ps1', 'SettingsFile', { vars, path: env.PATH ?? '', add: [], additive: false });
+    runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', {
+      vars,
+      path: env.PATH ?? '',
+      add: [],
+      additive: false,
+    });
   } catch (e) {
     warn('Could not persist the environment machine-wide: ' + errMsg(e));
   }
@@ -80,7 +85,7 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
 export const addMachineEnvironment = (vars: Record<string, string>, dirs: string[], additive = false): void => {
   if (!isWin || dryRun || testMode) return;
   try {
-    runScriptWithJson('machine-env.ps1', 'SettingsFile', { vars, path: null, add: dirs, additive });
+    runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', { vars, path: null, add: dirs, additive });
   } catch (e) {
     warn('Could not add to the environment: ' + errMsg(e));
   }

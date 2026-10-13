@@ -79,7 +79,7 @@ const setupLavapipe = async (env: ToolEnv, mesaDir: string): Promise<void> => {
 
 /** A real display adapter (sandbox.vGpu on), not only the remote display or basic render driver. */
 const hasGpu = (): boolean =>
-  scriptOutput('gpu-names.ps1', [], { timeout: 30000 })
+  scriptOutput('get-gpu-names.ps1', [], { timeout: 30000 })
     .split(/\r?\n/)
     .map((n) => n.trim())
     .some((n) => n && !/^Microsoft (Remote Display|Basic (Render|Display))/i.test(n));

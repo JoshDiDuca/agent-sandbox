@@ -1,4 +1,4 @@
-// Turns on ENABLE_VIRTUAL_TERMINAL_INPUT on another process's console. Loaded by vt-input.ps1 (Add-Type). C# 5.
+// Turns on ENABLE_VIRTUAL_TERMINAL_INPUT on another process's console. Loaded by scripts\enable-vt-input.ps1 (Add-Type). C# 5.
 using System;
 using System.Runtime.InteropServices;
 

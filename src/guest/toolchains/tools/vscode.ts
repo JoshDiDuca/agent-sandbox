@@ -27,7 +27,7 @@ const VERSION_MARKER = '.agent-sandbox-version';
 const desktopShortcut = (exe: string): void => {
   if (!isWin) return;
   const link = path.join(os.homedir(), 'Desktop', 'Visual Studio Code.lnk');
-  runScriptWithJson('shortcuts.ps1', 'ListFile', [
+  runScriptWithJson('new-shortcuts.ps1', 'ListFile', [
     { link, target: exe, arguments: '"' + (process.env.AGENT_WORKSPACE ?? '') + '"' },
   ]);
 };

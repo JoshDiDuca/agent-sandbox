@@ -1,4 +1,4 @@
-// Applies a wallpaper the way the Settings app does. Loaded by desktop.ps1 (Add-Type). C# 5.
+// Applies a wallpaper the way the Settings app does. Loaded by scripts\set-desktop.ps1 (Add-Type). C# 5.
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 

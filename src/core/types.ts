@@ -215,9 +215,9 @@ export interface GuestSession {
    * C:\Mirror\<letter>.
    */
   substDrives?: { letter: string; target: string }[];
-  /** sandbox.cpuLimit as a number (null = no cap); sandbox\cpucap.ps1 applies it before anything starts. */
+  /** sandbox.cpuLimit as a number (null = no cap); sandbox\scripts\set-cpu-cap.ps1 applies it before anything starts. */
   cpuLimitPercent?: number | null;
-  /** sandbox.pageFileMb (0 = Windows' own); sandbox\pagefile.ps1 applies it at logon. */
+  /** sandbox.pageFileMb (0 = Windows' own); sandbox\scripts\set-page-file.ps1 applies it at logon. */
   pageFileMb?: number;
   /** Apps to install (catalogue ids and your own programs); missing in launch folders of older versions. */
   apps?: Config['apps'];

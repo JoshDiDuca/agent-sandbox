@@ -1,4 +1,4 @@
-// Sets the size of the sandbox's paging file at once, with no restart. Loaded by pagefile.ps1 (Add-Type). C# 5.
+// Sets the size of the sandbox's paging file at once, with no restart. Loaded by scripts\set-page-file.ps1 (Add-Type). C# 5.
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 

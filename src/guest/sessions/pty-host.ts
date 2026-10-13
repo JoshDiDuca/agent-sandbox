@@ -1,4 +1,4 @@
-// Starts one ptyhost (the ConPTY bridge, sandbox/ptyhost.cs) per agent session and waits for it to listen.
+// Starts one ptyhost (the ConPTY bridge, sandbox/csharp/PtyHost.cs) per agent session and waits for it to listen.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';

@@ -167,7 +167,7 @@ const applyBlockedHosts = (): void => {
 const applyDns = (): void => {
   const servers = (session.network.dns ?? []).filter(isIPv4);
   if (!servers.length) return;
-  const r = spawnSync(SYSTEM.powershell(), scriptArgs('dns.ps1', ['-Servers', servers.join(',')]), {
+  const r = spawnSync(SYSTEM.powershell(), scriptArgs('set-dns-servers.ps1', ['-Servers', servers.join(',')]), {
     encoding: 'utf8',
     windowsHide: true,
   });

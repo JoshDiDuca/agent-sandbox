@@ -15,7 +15,7 @@ const MICROSOFT_SIGNER = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=R
 const OK_EXIT_CODES: readonly number[] = [0, 1638, 3010];
 
 /** The subject of a valid Authenticode signature, or '' when the file is unsigned or tampered with. */
-const signerOf = (file: string): string => scriptOutput('signer.ps1', ['-Path', file]).trim();
+const signerOf = (file: string): string => scriptOutput('get-signer.ps1', ['-Path', file]).trim();
 
 /**
  * A real installer (it writes to System32), so it runs on every boot; the installer itself is kept in persistent

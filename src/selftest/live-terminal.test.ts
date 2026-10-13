@@ -86,7 +86,8 @@ export const liveTerminalSuite: Suite = {
     const agent = t.at('mouse-agent.exe');
     fs.writeFileSync(t.at('mouse-agent.cs'), AGENT_CS);
     const errors =
-      compile(path.join(t.packageRoot, 'sandbox', 'ptyhost.cs'), ptyhost) || compile(t.at('mouse-agent.cs'), agent);
+      compile(path.join(t.packageRoot, 'sandbox', 'csharp', 'PtyHost.cs'), ptyhost) ||
+      compile(t.at('mouse-agent.cs'), agent);
     t.check(!errors, 'ptyhost and the stand-in agent compile', errors);
     if (errors) return;
     const client = t.at('client.mjs');
