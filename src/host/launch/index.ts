@@ -2,7 +2,7 @@ export { generateSandbox } from './generate.js';
 export { decideProjectToolchains } from './toolchains.js';
 export { hostToolsOf, logonEnv } from './session-file.js';
 export { GUEST, buildWsb, resolveMemoryMb } from './wsb-file.js';
-export { MAX_BOOT_PROJECTS, planBootProjects, type BootProjects } from './boot-projects.js';
+export { MAX_BOOT_PROJECTS, planBootProjects, shownByRoot, type BootProjects } from './boot-projects.js';
 export { databaseCatalog, planDatabases } from './database-plan.js';
 export { msvcHint, projectEntries, readProjectFiles } from './project-scan.js';
 export { hostDatabases, pcLanguages } from './pc-scan.js';

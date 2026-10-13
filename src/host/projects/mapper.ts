@@ -1,15 +1,20 @@
 import path from 'node:path';
 import { assertSafeWorkspace } from '../../core/safe-paths.js';
 import { dirExists, fail } from '../../core/util/index.js';
-import { guestDirFor, hubName, PROJECTS_GUEST, projectForHostDir, type Mechanism } from '../../shared/paths/index.js';
+import type { Missing } from '../../core/local-config/index.js';
+import { guestDirFor, hubName, ownGuestFolder, projectForHostDir, type Mechanism } from '../../shared/paths/index.js';
 import { detectWsb, runningSandboxId, shareFolder, type Wsb } from '../sandbox/index.js';
 import { ProjectRegistry, type Registry, type RegistryEntry } from './registry.js';
 
-/** Why a folder cannot join the running sandbox without a restart (the caller offers one). */
+/**
+ * Why a folder cannot join the running sandbox without a restart (the caller offers one). With `missing`: it could
+ * join, but you chose to restart for what it wants at boot (core/local-config/boot-wants.ts).
+ */
 export class NeedsRestart extends Error {
   constructor(
     public readonly hostDir: string,
     public readonly reason: string,
+    public readonly missing?: Missing,
   ) {
     super(reason);
   }
@@ -85,7 +90,11 @@ export const projectMapper = (o: MapperOptions): ProjectMapper => {
         );
       const sandbox = runningSandboxId(wsb);
       if (!sandbox.id) throw new NeedsRestart(host, 'wsb share could not find the running sandbox: ' + sandbox.error);
-      const guest = path.win32.join(PROJECTS_GUEST, name);
+      // Where it is as a launch folder too (C:\Workspace\<name>), unless another project already uses that place.
+      const guest = ownGuestFolder(host, false, [
+        ...reg.projects.map((p) => p.guest),
+        ...reg.roots.map((r) => r.guest),
+      ]);
       const shared = shareFolder(wsb, sandbox.id, host, guest);
       if (!shared.ok) throw new NeedsRestart(host, 'wsb share failed (untested on this Windows): ' + shared.error);
       return add(reg, host, guest, 'wsb', name);

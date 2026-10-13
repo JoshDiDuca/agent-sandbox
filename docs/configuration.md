@@ -46,7 +46,19 @@ Commonly changed:
 | `storage.root` | `%LOCALAPPDATA%\AgentSandbox` | everything on your PC |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
 | `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`) |
-| `mappings` | none | more folders from your PC, read-only or read/write; `guest` may be on D: to Z: (e.g. `F:\SteamLibrary\...`) |
+| `mappings` | none | more folders from your PC, read-only or read/write: `{ "host": "F:\\SteamLibrary\\steamapps\\common\\Game", "readOnly": true }`; `guest` (where it appears) is optional, `optional: true` skips a folder that is not on this PC |
+
+Where a mapped folder appears:
+
+- No `guest`: at the same path as on your PC (`C:\Steam\Game` stays `C:\Steam\Game`, `F:\SteamLibrary\...` stays
+  `F:\SteamLibrary\...`). A folder inside the project is already in the sandbox with the project, so it needs no mapping (with `workspaceFilter`
+  on it is mapped on its own, at `C:\Mapped\...`, so a git-ignored folder can still come in).
+- `guest` given: there. Any `C:\` folder works, and any path on D: to Z:.
+- A path the sandbox cannot use goes to `C:\Mapped\<drive>\<path>` instead, and the launch says where and why: the
+  folders it keeps for itself (`C:\Windows`, `C:\Program Files*`, `C:\ProgramData`, `C:\Users`, `C:\AgentData`,
+  `C:\AgentLaunch`, `C:\HostTools`, `C:\nvm`, `C:\Mirror`), a path already used by the project, `C:\Projects` or another
+  mapping (the same folder or one inside the other), a drive root, `A:`/`B:`, or a path Windows cannot have. A mapping is
+  never refused for its guest path. `sandbox config check` shows where each folder will appear before you launch.
 
 Windows Sandbox can only map onto C:, so a guest path on F: is mapped to `C:\Mirror\F\...` and `subst F: C:\Mirror\F` runs at
 boot. Tools that resolve real paths may print the `C:\Mirror` form; history sync understands both. A letter that already
@@ -66,13 +78,28 @@ because they map folders of your PC), decide which folders are already there:
 
 | Setting | Default | |
 |---|---|---|
-| `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart |
+| `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart, and is always under that folder (also when it started the sandbox) |
 | `projects.all` | `false` | also map every project you have started before, at every start (`sandbox projects choose` / `all on`) |
 | `projects.exclude` | none | projects left out of `all` |
 | `projects.askToAddRoot` | `true` | when you start a project whose parent is not a root, ask once whether to add it (answers are saved: yes adds it, no is remembered in `projects.declinedRoots`, never turns this off) |
+| `projects.allowOutsideMappings` | `"ask"` | may a project's `.sandbox-config.json` map folders outside the project (see [project settings](#project-settings))? `"ask"`, `true` or `false` |
 | `projects.wsbShare` | `true` | on Windows 11 24H2+ with the updated Windows Sandbox, add other folders live with `wsb share` (untested; otherwise a restart is offered) |
 
-Other projects appear under `C:\Projects`. Machine-wide protections were fixed when the sandbox started: a project
+**A project is at the same place inside the sandbox whichever project started it**, so git worktrees and Claude's
+project history (both store absolute paths) keep working:
+
+| The project is | Inside the sandbox (default) | With `guestWorkspace: "mirror"` |
+|---|---|---|
+| inside a project root, e.g. `F:\AgentProjects\app` with root `F:\AgentProjects` | `C:\Projects\AgentProjects\app`, also when it started the sandbox | `F:\AgentProjects\app` |
+| anywhere else | `C:\Workspace\app`, also when mapped at boot by a restart or shared with `wsb share` | its PC path (a shared folder: `C:\Workspace\app`) |
+
+The root decides: starting from `app` maps the whole root and opens `app` under it (no second mapping). Exceptions keep
+the project's own `C:\Workspace\app` mapping, with a note at launch: a fixed `guestWorkspace` path, `readOnly` and
+`workspaceFilter` (the root would show the folder unfiltered and writable). Two projects with the same folder name
+get `C:\Workspace\app-2` for the second one. Adding a root moves its projects from `C:\Workspace\<name>` to
+`C:\Projects\<root>\<name>` once ([git worktrees after a move](troubleshooting.md)).
+
+Machine-wide protections were fixed when the sandbox started: a project
 that needs a stricter one (git access, network, the LAN block, read-only, ...) cannot join and says so; one that asks
 for less simply gets the sandbox's stricter value. Every agent in the sandbox can see every mapped project
 ([security](security.md#several-projects)). Each mapped folder passes the same checks as a launch folder (no drives,
@@ -158,12 +185,19 @@ A repo can ship this file, so it is treated as untrusted:
 - You approve it the first time, and again whenever it changes (the approval is tied to the file's exact contents).
 - Read/write folders are flagged in the approval prompt, which is shown without colours or escape codes (a file cannot
   hide lines of it).
-- Its extra folders (`mappings`) must be inside the project itself (also through links and `%VARIABLES%`).
+- Its extra folders (`mappings`) inside the project are fine. Folders outside it (decided after `%VARIABLES%` and links,
+  so a link cannot hide one) follow `projects.allowOutsideMappings` in **your** settings: `"ask"` (the default) asks at
+  an interactive launch, once per project file and folder, listing each folder, read-only or read/write, and where it
+  will appear; a yes is kept in `<storage>\allowed-requests.json` (a no is not, so you are asked again). `true` allows
+  them (still flagged "outside the project" when you approve the file), `false` refuses them. Without a terminal,
+  `"ask"` stops the launch and says how to allow them; `--trust-config` never does. The launch table marks them
+  "(outside the project, allowed)".
 - It may add apps from the catalogue (`apps.install`, added to yours), never programs of its own (`apps.custom`).
 - It can only make protections **stricter**: read-only, git `readonly`/`none`, the LAN block, protected client, and
   turning off network, clipboard, microphone, camera, printers, vGPU, login copying and history / claude-mem sync, and
   turning on `downloads.requireChecksum`. A looser value is used only if you allow it: starting the project from an
-  interactive terminal asks once per setting ("Allow it for this project only?"). Your answer is kept on this PC
+  interactive terminal asks once, in the same question as any folders outside the project ("Allow these for this
+  project?"). Your answer is kept on this PC
   (`<storage>\allowed-requests.json`, which no repo or sandbox can write) for that project file only; `--trust-config`
   never allows one. Otherwise the launch names what was not used. Or set it in your own settings for every project.
 - It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.

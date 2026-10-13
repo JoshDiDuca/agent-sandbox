@@ -1,9 +1,10 @@
 import path from 'node:path';
 import { select } from '@inquirer/prompts';
-import { isWithin } from '../../../shared/paths/index.js';
+import { isWithin, planMirrorWorkspace } from '../../../shared/paths/index.js';
 import type { ResolvedRun } from '../../../core/types.js';
 import { assertSafeMapping, assertSafeWorkspace } from '../../../core/safe-paths.js';
 import { isRootPath } from '../../../core/util/index.js';
+import { autoGuestWorkspace, placeInRoot } from '../../../core/run/index.js';
 import { type Context } from '../context.js';
 import { addToList, setSetting } from '../user-config.js';
 
@@ -42,7 +43,31 @@ export async function maybeAddRoot(ctx: Context, run: ResolvedRun): Promise<void
     addToList(ctx, ['projects', 'roots'], parent);
     run.config.projects.roots.push(parent);
     console.log('Added ' + parent + ' to projects.roots (sandbox projects roots remove ' + parent + ' undoes it).');
+    moveUnderRoot(run);
   }
   if (answer === 'no') addToList(ctx, ['projects', 'declinedRoots'], parent);
   if (answer === 'never') setSetting(ctx, ['projects', 'askToAddRoot'], false);
+}
+
+/** From now on this project is under the root's folder inside the sandbox, from this start on (one move, not two). */
+function moveUnderRoot(run: ResolvedRun): void {
+  const before = run.config.guestWorkspace;
+  const auto = autoGuestWorkspace(run.workspaceHost);
+  const derived = [auto, planMirrorWorkspace(run.workspaceHost, auto).guest];
+  // In place: the caller holds run.config already.
+  if (derived.some((g) => g.toLowerCase() === before.toLowerCase()))
+    run.config.guestWorkspace = placeInRoot(
+      run.config,
+      run.workspaceHost,
+      Boolean(run.mirror),
+      run.notes,
+    ).guestWorkspace;
+  if (run.config.guestWorkspace !== before)
+    console.log(
+      'Inside the sandbox this project is now at ' +
+        run.config.guestWorkspace +
+        ' (was ' +
+        before +
+        '): git worktrees made at the old place need `git worktree repair` once.',
+    );
 }

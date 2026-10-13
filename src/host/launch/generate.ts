@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { GenerateOptions, Generated, ProfileResult } from '../../core/types.js';
+import { widenForProjects } from '../../core/local-config/index.js';
 import { dirExists, ensureDir, fail, writeJson } from '../../core/util/index.js';
 import { capturePersonalization, stageClaudeProfile } from '../profile/index.js';
 import { assertTestWritable } from '../test-guard.js';
@@ -17,7 +18,17 @@ import { buildWsb, resolveMemoryMb } from './wsb-file.js';
 
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
 
-export function generateSandbox(o: GenerateOptions): Generated & { personalization: string } {
+export function generateSandbox(given: GenerateOptions): Generated & { personalization: string } {
+  // Several projects at boot: the sandbox also gets what the others want and you allowed (core/local-config).
+  const others = given.bootWants?.projects ?? [];
+  const boot = planBootProjects({
+    run: given.run,
+    packageRoot: given.packageRoot,
+    extraProjects: given.extraProjects,
+    knownProjects: given.knownProjects,
+  });
+  const wide = widenForProjects(given.run.config, others, { keepOff: given.bootWants?.keepOff, exists: dirExists });
+  const o: GenerateOptions = { ...given, run: { ...given.run, config: wide.config } };
   const { config, dataPath, workspaceHost, harnessName, storageRoot } = o.run;
   const harness =
     harnessName === 'none'
@@ -30,18 +41,16 @@ export function generateSandbox(o: GenerateOptions): Generated & { personalizati
   assertTestWritable(dataPath);
 
   // Checked before anything is written, so a refusal leaves nothing behind.
-  const memoryMb = resolveMemoryMb(config.sandbox, o.freeMemoryBytes);
+  const memoryMb = Math.max(
+    resolveMemoryMb(config.sandbox, o.freeMemoryBytes),
+    ...others.map((p) => (typeof p.config.sandbox.memoryMb === 'number' ? p.config.sandbox.memoryMb : 0)),
+  );
   const launchId = Date.now() + '-' + crypto.randomBytes(3).toString('hex');
   const launchPath = path.join(storageRoot, 'launches', launchId);
   ensureDir(launchPath);
   ensureDir(dataPath);
-  const boot = planBootProjects({
-    run: o.run,
-    packageRoot: o.packageRoot,
-    extraProjects: o.extraProjects,
-    knownProjects: o.knownProjects,
-  });
-  const mappings = collectMappings(o, launchPath, boot);
+  const mappingNotes: string[] = [];
+  const mappings = collectMappings(o, launchPath, boot, mappingNotes);
 
   const profile =
     harnessName === 'claude'
@@ -67,11 +76,14 @@ export function generateSandbox(o: GenerateOptions): Generated & { personalizati
     launchId,
     sessionPath,
     memoryMb,
+    bootConfig: config,
+    widened: wide.widened,
     mappings,
     profile,
     personalization,
     databases,
     toolchains,
-    projects: boot,
+    projects: { ...boot, notes: [...boot.notes, ...wide.notes] },
+    mappingNotes,
   };
 }

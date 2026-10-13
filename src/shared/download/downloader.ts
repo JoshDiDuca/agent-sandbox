@@ -23,9 +23,18 @@ export interface ArchiveOptions extends Checksums {
   members?: string[];
 }
 
+/** Who wants coarse download progress: called as a download starts (in the caller's async context), returns its reporter. */
+export type DownloadWatcher = () => ((fraction: number) => void) | null;
+
 export class Downloader {
   /** downloads.requireChecksum: refuse anything without an expected hash. The guest sets it from session.json. */
   requireChecksum = false;
+  private watcher: DownloadWatcher | null = null;
+
+  /** Reports coarse progress of the downloads that start from now on to `watcher` (null: stop). */
+  watch(watcher: DownloadWatcher | null): void {
+    this.watcher = watcher;
+  }
 
   /**
    * Streams a download to disk, hashing as it goes: big archives (PostgreSQL is ~330 MB) never sit in memory, and the
@@ -51,9 +60,28 @@ export class Downloader {
       const want = sums[kind]?.trim().toLowerCase();
       return want ? [{ want, hash: crypto.createHash(kind) }] : [];
     });
+    // Progress for the boot screen: every 10% or 5 s at most, never per chunk; called here so it knows who is downloading.
+    const size = Number(response.headers.get('content-length')) || 0;
+    const report = size > 0 ? (this.watcher?.() ?? null) : null;
+    let received = 0;
+    let tenth = 0;
+    let reportedAt = Date.now();
     const tap = new Transform({
       transform(chunk: Buffer, _encoding, done) {
         for (const c of checks) c.hash.update(chunk);
+        if (report) {
+          received += chunk.length;
+          const now = Math.floor((received * 10) / size);
+          if (now !== tenth || Date.now() - reportedAt > 5000) {
+            tenth = now;
+            reportedAt = Date.now();
+            try {
+              report(Math.min(1, received / size));
+            } catch {
+              /* progress never breaks a download */
+            }
+          }
+        }
         done(null, chunk);
       },
     });

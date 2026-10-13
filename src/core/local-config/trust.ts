@@ -19,7 +19,7 @@ export const saveTrust = (store: string, file: string, hash: string): void =>
 export const allowStorePath = (storageRoot: string): string => path.join(storageRoot, 'allowed-requests.json');
 const loadAllowed = (store: string): Record<string, string[]> => {
   const parsed = z
-    .record(z.string(), z.array(z.string().max(300)).max(50))
+    .record(z.string(), z.array(z.string().max(2000)).max(500))
     .safeParse(tryReadJson<unknown>(store) ?? {});
   return parsed.success ? parsed.data : {};
 };
@@ -41,3 +41,9 @@ export const saveAllowed = (store: string, file: string, setting: string, value:
     [key(file)]: _.union(_.without(all[key(file)] ?? [], entry, 'no: ' + entry), [(allow ? '' : 'no: ') + entry]),
   });
 };
+
+/** Answers for folders outside the project are kept with the others, one per folder (and read-only or not). */
+export const OUTSIDE_FOLDER = 'folder outside the project';
+export function outsideKey(m: { host: string; readOnly: boolean }): string {
+  return (m.readOnly ? 'read-only ' : 'read/write ') + path.resolve(m.host).toLowerCase();
+}

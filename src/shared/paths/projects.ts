@@ -1,17 +1,35 @@
 // Several projects in one running sandbox. Windows Sandbox fixes its mapped folders at boot, so a project can only
 // join a running sandbox when it is already visible inside:
-//  - the launch folder (mapped directly, as always);
+//  - the launch folder (mapped directly, or shown by the project root it is in);
 //  - a folder inside a project root (projects.roots: whole folders of projects, mapped at every start), including
 //    projects created after boot;
 //  - projects mapped at boot because they were in use when the sandbox was restarted to add them;
 //  - a folder shared into the running sandbox with `wsb share` (Windows 11 24H2+, untested).
-// Roots, boot-mapped projects and shares appear under C:\Projects (roots at their PC path with guestWorkspace "mirror").
+// A project is at the same place inside the sandbox whichever project started it (git worktrees and Claude's project
+// folders store absolute paths):
+//  - a project inside a root is always under the root's folder, C:\Projects\<root>\<name> (also as the launch folder);
+//  - any other project, mapped on its own, is always at C:\Workspace\<name> (also when it is mapped at boot or shared).
+// With guestWorkspace "mirror" both appear at their PC paths when the sandbox can show them there.
 // Pure functions only: used by the host (registration, commands), the guest (daemon checks) and the tests.
 import path from 'node:path';
-import { isValidGuestPath } from './guest-paths.js';
+import { isValidGuestPath, planMirrorWorkspace } from './guest-paths.js';
 
-/** Where roots, boot-mapped projects and shared folders appear inside the sandbox. */
+/** Where project roots appear inside the sandbox. */
 export const PROJECTS_GUEST = 'C:\\Projects';
+/** Where projects mapped on their own appear (the launch folder with guestWorkspace "auto", boot-mapped and shared ones). */
+export const WORKSPACES_GUEST = 'C:\\Workspace';
+
+/**
+ * guestWorkspace "auto" for a folder: C:\Workspace\<folder name>. Keeping the real folder name means Claude's
+ * per-project history and claude-mem's project name match this PC instead of every project being "Workspace".
+ */
+export const autoGuestFolder = (hostDir: string): string => {
+  const name = path.win32
+    .basename(hostDir.replace(/[\\/]+$/, ''))
+    .replace(/[^A-Za-z0-9._ -]/g, '_')
+    .replace(/^[. ]+|[. ]+$/g, '');
+  return WORKSPACES_GUEST + '\\' + (name || 'project');
+};
 
 /** How a project got into the sandbox. */
 export type Mechanism = 'launch' | 'root' | 'boot' | 'wsb';
@@ -78,18 +96,46 @@ export const hostDirFor = (mapped: { host: string; guest: string }, guestDir: st
 export const isBelow = (parent: string, child: string): boolean =>
   isWithin(parent, child) && norm(parent) !== norm(child);
 
-/** A guest folder some project can be in: below C:\Projects, or inside one of the roots (their guest paths). */
+/**
+ * A guest folder some project can be in: below C:\Projects or C:\Workspace (projects mapped on their own, also shared
+ * after boot), or inside one of `roots` (the roots' and boot-mapped projects' guest paths).
+ */
 export const insideProjects = (guestDir: string, roots: string[] = [], projectsDir = PROJECTS_GUEST): boolean =>
-  isBelow(projectsDir, guestDir) || roots.some((r) => isWithin(r, guestDir));
+  isBelow(projectsDir, guestDir) || isBelow(WORKSPACES_GUEST, guestDir) || roots.some((r) => isWithin(r, guestDir));
 
 export interface RootMapping {
   host: string;
   guest: string;
 }
 
+const resolveDir = (dir: string): string => path.win32.resolve(dir).replace(/[\\/]+$/, '');
+
+/** The project roots that are mapped, in order: existing folders, none inside a root listed before it. */
+export const usableRoots = (roots: string[], exists: (dir: string) => boolean): string[] => {
+  const out: string[] = [];
+  for (const root of roots.map(resolveDir)) if (exists(root) && !out.some((r) => isWithin(r, root))) out.push(root);
+  return out;
+};
+
 /**
- * Guest folders for the project roots and the projects mapped at boot: C:\Projects\<name>, unique; with
- * guestWorkspace "mirror" a root appears at its PC path when the sandbox can show it there.
+ * Where a project mapped on its own appears, the same place it has as the launch folder: with "mirror" its PC path
+ * when the sandbox can show it there, else C:\Workspace\<name>. -2, -3, ... when that overlaps a folder in `taken`.
+ */
+export const ownGuestFolder = (hostDir: string, mirror: boolean, taken: string[] = []): string => {
+  const host = resolveDir(hostDir);
+  const free = (guest: string): boolean => !taken.some((t) => isWithin(t, guest) || isWithin(guest, t));
+  const mirrored = mirror ? planMirrorWorkspace(host, '').guest : '';
+  if (mirrored && !isWithin(PROJECTS_GUEST, mirrored) && !isWithin(WORKSPACES_GUEST, mirrored) && free(mirrored))
+    return mirrored;
+  const base = autoGuestFolder(host);
+  if (free(base)) return base;
+  for (let i = 2; ; i++) if (free(base + '-' + i)) return base + '-' + i;
+};
+
+/**
+ * Guest folders for the project roots (C:\Projects\<name>, unique; with guestWorkspace "mirror" at its PC path when
+ * the sandbox can show it there) and the projects mapped at boot (ownGuestFolder, unique against `taken` and each
+ * other). A root's folder depends only on the roots, so every launch with the same roots shows them at the same place.
  */
 export const planProjectMappings = (
   roots: string[],
@@ -97,14 +143,30 @@ export const planProjectMappings = (
   mirror: boolean,
   taken: string[] = [],
 ): { roots: RootMapping[]; projects: RootMapping[] } => {
-  const names = [...taken];
-  const place = (host: string, tryMirror: boolean): RootMapping => {
-    const resolved = path.win32.resolve(host).replace(/[\\/]+$/, '');
-    if (tryMirror && isValidGuestPath(resolved) && !isWithin(PROJECTS_GUEST, resolved))
+  const names: string[] = [];
+  const placeRoot = (host: string): RootMapping => {
+    const resolved = resolveDir(host);
+    if (mirror && isValidGuestPath(resolved) && !isWithin(PROJECTS_GUEST, resolved))
       return { host: resolved, guest: resolved };
     const name = hubName(resolved, names);
     names.push(name);
     return { host: resolved, guest: path.win32.join(PROJECTS_GUEST, name) };
   };
-  return { roots: roots.map((r) => place(r, mirror)), projects: projects.map((p) => place(p, false)) };
+  const planned = roots.map(placeRoot);
+  const used = [...taken, ...planned.map((r) => r.guest)];
+  const placed = projects.map((p): RootMapping => {
+    const guest = ownGuestFolder(p, mirror, used);
+    used.push(guest);
+    return { host: resolveDir(p), guest };
+  });
+  return { roots: planned, projects: placed };
+};
+
+/**
+ * Where a folder inside one of the (usable) roots appears: under the root's guest folder, whichever project started
+ * the sandbox. Null when it is in no root.
+ */
+export const rootGuestDir = (roots: string[], mirror: boolean, hostDir: string): string | null => {
+  const root = projectForHostDir(planProjectMappings(roots, [], mirror).roots, hostDir);
+  return root ? guestDirFor(root, hostDir) : null;
 };

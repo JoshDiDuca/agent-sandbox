@@ -5,13 +5,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedRun, SessionStatus } from '../core/types.js';
 import { LocalOverridesSchema } from '../core/schema/index.js';
-import { checkJoin, protectionsOf } from '../core/local-config/index.js';
+import {
+  allowStorePath,
+  checkJoin,
+  describeMissing,
+  missingAtBoot,
+  missingTip,
+  nothingMissing,
+  protectionsOf,
+  saveAllowed,
+} from '../core/local-config/index.js';
 import { sessionsFirstIn } from '../host/channel/index.js';
 import { buildWsb } from '../host/launch/index.js';
 import { projectSpec, joinRunning } from '../host/projects/index.js';
 import { allProjectsToMap, KnownProjects } from '../host/projects/index.js';
 import { NeedsRestart, projectMapper } from '../host/projects/index.js';
-import { ProjectRegistry } from '../host/projects/index.js';
+import { parseWsbBoot, ProjectRegistry } from '../host/projects/index.js';
 import { RepoGuardStore } from '../host/guard/index.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion, type Wsb } from '../host/sandbox/index.js';
 import { baseEnvFor } from '../guest/boot/project-env.js';
@@ -26,6 +35,7 @@ import {
   projectForGuestDir,
   projectForHostDir,
   PROJECTS_GUEST,
+  rootGuestDir,
 } from '../shared/paths/index.js';
 import { GuestRequestSchema, ProjectSpecSchema } from '../shared/channel/index.js';
 import { projectFolderName } from '../shared/paths/index.js';
@@ -116,9 +126,25 @@ export const projectsSuite: Suite = {
     );
     t.equal(
       plan.projects.map((p) => p.guest),
-      ['C:\\Projects\\api', 'C:\\Projects\\api-2'],
-      'projects get unique C:\\Projects\\<name> folders',
+      ['C:\\Workspace\\api', 'C:\\Workspace\\api-2'],
+      'projects mapped on their own get unique C:\\Workspace\\<name> folders (where they are as the launch folder)',
     );
+    t.equal(
+      planProjectMappings([], ['D:\\x\\app'], false, ['C:\\Workspace\\app']).projects[0].guest,
+      'C:\\Workspace\\app-2',
+      "a project mapped on its own never lands on the launch folder's place",
+    );
+    t.equal(
+      planProjectMappings(['F:\\Code'], ['D:\\x\\api'], true).projects[0].guest,
+      'D:\\x\\api',
+      'with "mirror" a project mapped on its own appears at its PC path, as it would as the launch folder',
+    );
+    t.equal(
+      rootGuestDir(['F:\\Code'], false, 'F:\\Code\\web\\src'),
+      'C:\\Projects\\Code\\web\\src',
+      "a folder inside a root is placed under the root's guest folder",
+    );
+    t.equal(rootGuestDir(['F:\\Code'], false, 'F:\\Other'), null, 'a folder in no root has no root place');
     const mirror = planProjectMappings(['F:\\Code', 'C:\\Users\\me\\src'], [], true);
     t.equal(
       mirror.roots.map((r) => r.guest),
@@ -415,8 +441,55 @@ export const projectsSuite: Suite = {
     );
     t.equal(
       { projectsDir: session.projectsDir, roots: session.roots, projectId: session.projectId },
-      { projectsDir: PROJECTS_GUEST, roots: ['C:\\Projects\\proj-root'], projectId: 'work-a' },
+      {
+        projectsDir: PROJECTS_GUEST,
+        roots: ['C:\\Projects\\proj-root', 'C:\\Workspace\\proj-outside'],
+        projectId: 'work-a',
+      },
       'session.json tells the guest where other projects can be',
+    );
+    // The same project is at the same place whether it started the sandbox or joined one another project started.
+    const fromRoot = f.generate(await f.run({ cwd: inRoot }, rootConfig));
+    const joinedAt = guestDirFor(gen.projects.roots[0], inRoot);
+    t.equal(
+      [f.readJson(fromRoot.sessionPath).workspace, joinedAt],
+      ['C:\\Projects\\proj-root\\web', 'C:\\Projects\\proj-root\\web'],
+      'a project in a root: the same guest folder as the launch folder and when another project started the sandbox',
+    );
+    t.check(
+      !fromRoot.mappings.some((m) => m.host.toLowerCase() === inRoot.toLowerCase()),
+      'a launch folder inside a root is shown by the root (no second mapping of it)',
+    );
+    t.includes(
+      fs.readFileSync(path.join(fromRoot.launchPath, 'env.cmd'), 'utf8'),
+      'AGENT_WORKSPACE=C:\\Projects\\proj-root\\web',
+      'env.cmd: AGENT_WORKSPACE follows',
+    );
+    const asLaunch = f.readJson(f.generate(await f.run({ cwd: outside })).sessionPath).workspace;
+    t.equal(
+      [asLaunch, gen.projects.projects.find((p) => p.host === outside)?.guest],
+      ['C:\\Workspace\\proj-outside', 'C:\\Workspace\\proj-outside'],
+      'a project outside the roots: the same guest folder as the launch folder and when mapped at boot by another',
+    );
+    const mirrorRoot = structuredClone(rootConfig);
+    mirrorRoot.guestWorkspace = 'mirror';
+    t.equal(
+      f.readJson(f.generate(await f.run({ cwd: inRoot }, mirrorRoot)).sessionPath).workspace,
+      rootGuestDir([root], true, inRoot),
+      'with "mirror" a launch folder inside a root is where the root shows it (no overlapping mappings)',
+    );
+    const filtered = structuredClone(rootConfig);
+    filtered.workspaceFilter = { ...filtered.workspaceFilter, enabled: true };
+    const filteredRun = await f.run({ cwd: inRoot }, filtered);
+    t.equal(
+      filteredRun.config.guestWorkspace,
+      'C:\\Workspace\\web',
+      'workspaceFilter: a launch folder inside a root keeps its own (filtered) mapping',
+    );
+    t.check(
+      filteredRun.notes.some((n) => n.includes('C:\\Projects\\proj-root\\web')),
+      'and a note says where it is when another project starts the sandbox',
+      JSON.stringify(filteredRun.notes),
     );
     const badRoot = structuredClone(f.baseConfig);
     badRoot.projects = { ...badRoot.projects, roots: [f.baseConfig.storage.root] };
@@ -700,18 +773,218 @@ export const projectsSuite: Suite = {
     const multiWsb = fs.readFileSync(multiGen.wsbPath, 'utf8');
     t.equal(
       multiGen.projects.projects.map((p) => p.guest),
-      ['C:\\Projects\\work-b'],
+      ['C:\\Workspace\\work-b'],
       'a multi-project launch maps every other project once (folders inside the launch folder and duplicates need nothing)',
     );
     t.includes(
       multiWsb,
-      '<HostFolder>' + f.workB + '</HostFolder><SandboxFolder>C:\\Projects\\work-b</SandboxFolder>',
+      '<HostFolder>' + f.workB + '</HostFolder><SandboxFolder>C:\\Workspace\\work-b</SandboxFolder>',
       'a multi-project launch maps the other project in the .wsb',
     );
     t.equal(
       { autoSession: multiSession.autoSession, workspaceHost: multiSession.workspaceHost },
       { autoSession: false, workspaceHost: f.workA },
       'the boot provisions the launch folder only; the host then opens every session (each project set up on demand, in parallel)',
+    );
+
+    t.section('projects: what a joining project wants at boot (vGPU, memory, its mappings)');
+    // A games project: its approved file asks for vGPU (you allowed it for this project) and maps a folder of its own.
+    const games = t.dir('proj-games');
+    t.dir('proj-games', 'assets');
+    f.writeLocal(games, {
+      sandbox: { vGpu: true },
+      mappings: [{ host: 'assets', guest: 'F:\\GameAssets', readOnly: true }],
+    });
+    saveAllowed(
+      allowStorePath(f.baseConfig.storage.root),
+      path.join(games, '.sandbox-config.json'),
+      'sandbox.vGpu',
+      true,
+      true,
+    );
+    const gamesRun = await f.run({ cwd: games, trustConfig: true });
+    t.equal(gamesRun.config.sandbox.vGpu, true, 'the vGPU you allowed for the project is in its effective config');
+    const launchedRun = await f.run();
+    const runningBoot = {
+      memoryMb: 8192,
+      mappings: [{ host: f.workA, guest: 'C:\\Workspace\\work-a', readOnly: false }],
+    };
+    const wanted = missingAtBoot(protectionsOf(launchedRun.config), runningBoot, gamesRun.config, fs.existsSync);
+    t.equal(
+      { settings: wanted.settings, memoryMb: wanted.memoryMb, mappings: wanted.mappings.map((m) => m.guest) },
+      { settings: ['sandbox.vGpu'], memoryMb: null, mappings: ['F:\\GameAssets'] },
+      "missingAtBoot: vGPU and the project's folder are missing from a sandbox started without them (the missing optional mapping is no wish)",
+    );
+    const mappedMirror = missingAtBoot(
+      protectionsOf(gamesRun.config),
+      {
+        memoryMb: 8192,
+        mappings: [{ host: path.join(games, 'assets'), guest: 'C:\\Mirror\\F\\GameAssets', readOnly: true }],
+      },
+      gamesRun.config,
+      fs.existsSync,
+    );
+    t.check(
+      nothingMissing(mappedMirror),
+      'missingAtBoot: nothing missing when the sandbox has vGPU and the folder (F:\\x is C:\\Mirror\\F\\x in the .wsb)',
+      JSON.stringify(mappedMirror),
+    );
+    const bigger = structuredClone(launchedRun.config);
+    bigger.sandbox.memoryMb = 16384;
+    t.equal(
+      missingAtBoot(protectionsOf(launchedRun.config), runningBoot, bigger).memoryMb,
+      16384,
+      'missingAtBoot: a larger fixed memory size is missing too',
+    );
+    const twoFolders = {
+      settings: ['sandbox.vGpu'],
+      memoryMb: null,
+      mappings: [
+        { host: 'C:\\Steam\\common', guest: 'C:\\Steam', readOnly: true },
+        { host: 'F:\\SteamLibrary', guest: 'F:\\SteamLibrary', readOnly: true },
+      ],
+    };
+    t.equal(
+      describeMissing('mw2-agent', twoFolders),
+      'mw2-agent wants vGPU and 2 folders (C:\\Steam\\common, F:\\SteamLibrary), but this sandbox started without them.',
+      'the message names each missing item',
+    );
+    t.equal(
+      missingTip(twoFolders),
+      'Set sandbox.vGpu (or the mappings) in your own settings to have them in every sandbox.',
+      'the tip names the settings',
+    );
+    t.equal(
+      describeMissing('api', { settings: ['sandbox.vGpu'], memoryMb: null, mappings: [] }),
+      'api wants vGPU, but this sandbox started without it.',
+      'one item reads naturally',
+    );
+    t.equal(
+      parseWsbBoot(buildWsb(f.baseConfig, 6144, [{ host: 'C:\\a&b', guest: 'F:\\x', readOnly: true }])),
+      { memoryMb: 6144, mappings: [{ host: 'C:\\a&b', guest: 'C:\\Mirror\\F\\x', readOnly: true }], widened: {} },
+      'a sandbox started by an older version: memory and mapped folders are read back from its .wsb',
+    );
+    const widenedJoin = checkJoin({ ...base, 'sandbox.vGpu': true }, base, ['sandbox.vGpu']);
+    t.equal(
+      { stricter: widenedJoin.stricter, shared: widenedJoin.shared },
+      { stricter: [], shared: ['sandbox.vGpu'] },
+      'vGPU turned on at boot for another project you allowed it for: a project without it shares it instead of being refused',
+    );
+    t.check(
+      checkJoin({ ...base, 'sandbox.vGpu': true }, base).stricter.some((s) => s.startsWith('sandbox.vGpu')),
+      '... without that record a project without vGPU is still refused (it needs it off)',
+    );
+
+    // joinRunning asks before anything is registered: restart (NeedsRestart with what is missing), or continue without.
+    const storage2 = t.dir('proj-storage2');
+    const data2 = t.dir('proj-storage2', 'data', 'testdata');
+    new ProjectRegistry(storage2).start({
+      launchId: '1700000000001-abcdef',
+      protections: protectionsOf(launchedRun.config),
+      primary: { host: f.workA, guest: 'C:\\Workspace\\work-a' },
+      roots: [{ host: path.dirname(games), guest: 'C:\\Projects\\temp' }],
+      boot: [],
+      atBoot: { ...runningBoot, widened: {} },
+    });
+    const joinGames = (choice: 'continue' | 'restart' | 'cancel') =>
+      joinRunning({
+        storageRoot: storage2,
+        dataPath: data2,
+        packageRoot: f.install,
+        hostDir: games,
+        wsbShare: false,
+        resolve: resolveFor(gamesRun),
+        decide: async () => choice,
+      });
+    const restartFor = await joinGames('restart').then(
+      () => null,
+      (e: unknown) => e,
+    );
+    t.check(
+      restartFor instanceof NeedsRestart &&
+        restartFor.missing?.settings.includes('sandbox.vGpu') === true &&
+        restartFor.missing.mappings.length === 1,
+      'choosing "Restart with them" hands the restart offer what is missing',
+    );
+    await t.throws(() => joinGames('cancel'), 'Cancelled', '"Cancel" stops with a short line');
+    t.check(
+      !new ProjectRegistry(storage2).read()?.projects.some((p) => p.host === games),
+      'neither registers the project',
+    );
+    const continued = await joinGames('continue');
+    t.equal(
+      continued.missing?.settings,
+      ['sandbox.vGpu'],
+      '"Continue anyway" joins without them and says what is missing',
+    );
+
+    // The restart that adds it (and any launch with it mapped at boot) boots with the union.
+    const unionGen = generateSandbox({
+      packageRoot: t.packageRoot,
+      run: launchedRun,
+      harnessArgs: [],
+      probe: f.probe,
+      extraProjects: [games],
+      autoSession: false,
+      bootWants: { projects: [{ name: 'proj-games', config: gamesRun.config }], keepOff: [] },
+    });
+    const unionWsb = fs.readFileSync(unionGen.wsbPath, 'utf8');
+    t.includes(
+      unionWsb,
+      '<vGPU>Enable</vGPU>',
+      'the restart plan: vGPU on because the added project asks for it (and you allowed it)',
+    );
+    t.includes(
+      unionWsb,
+      '<HostFolder>' +
+        path.join(games, 'assets') +
+        '</HostFolder><SandboxFolder>C:\\Mirror\\F\\GameAssets</SandboxFolder><ReadOnly>true</ReadOnly>',
+      "the restart plan: the added project's mapping is mapped",
+    );
+    t.includes(
+      unionWsb,
+      '<HostFolder>' + games + '</HostFolder><SandboxFolder>C:\\Workspace\\proj-games</SandboxFolder>',
+      'the restart plan: the added project itself is mapped (where it is as the launch folder)',
+    );
+    t.equal(
+      unionGen.widened,
+      { 'sandbox.vGpu': 'proj-games' },
+      'the registry learns which boot setting was turned on for which project',
+    );
+    t.check(
+      unionGen.projects.notes.some((n) => n.startsWith('vGPU is on in this sandbox')),
+      'the launch says vGPU is on for every project and why',
+      JSON.stringify(unionGen.projects.notes),
+    );
+    t.check(
+      nothingMissing(
+        missingAtBoot(
+          protectionsOf(unionGen.bootConfig),
+          { memoryMb: unionGen.memoryMb, mappings: unionGen.mappings },
+          gamesRun.config,
+          fs.existsSync,
+        ),
+      ),
+      'after that restart the project joins with nothing missing',
+    );
+    const keptOff = generateSandbox({
+      packageRoot: t.packageRoot,
+      run: launchedRun,
+      harnessArgs: [],
+      probe: f.probe,
+      extraProjects: [games],
+      autoSession: false,
+      bootWants: { projects: [{ name: 'proj-games', config: gamesRun.config }], keepOff: ['sandbox.vGpu'] },
+    });
+    t.includes(
+      fs.readFileSync(keptOff.wsbPath, 'utf8'),
+      '<vGPU>Disable</vGPU>',
+      "a device the launch folder's own file switched off stays off",
+    );
+    t.includes(
+      fs.readFileSync(f.generate(launchedRun).wsbPath, 'utf8'),
+      '<vGPU>Disable</vGPU>',
+      'without other projects nothing changes',
     );
 
     t.section('projects: wsb (Windows Sandbox command line) adapter');

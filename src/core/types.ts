@@ -1,6 +1,7 @@
 // Shared types. Config and channel types come straight from the zod schemas, so each shape is defined exactly once.
 import type { z } from 'zod';
 import type { AutoToolchain, ToolchainDecision } from './detect/index.js';
+import type { BootWant } from './local-config/index.js';
 import type {
   ConfigSchema,
   GitAccessSchema,
@@ -25,10 +26,12 @@ export type Mapping = z.output<typeof MappingSchema>;
 export type Toolchains = Config['toolchains'];
 export type ClaudeProfileConfig = Config['claudeProfile'];
 
+/** label: shown in the launch table, e.g. "outside the project, allowed". */
 export interface ResolvedMapping {
   host: string;
   guest: string;
   readOnly: boolean;
+  label?: string;
 }
 export interface LocalConfigFile {
   path: string;
@@ -57,6 +60,8 @@ export interface RunRequest {
   nodeVersion?: string;
   pythonVersion?: string;
   ask?: (question: string) => Promise<boolean>;
+  /** `ask` can reach you (default: stdin is a terminal). Tests set it. */
+  interactive?: boolean;
 }
 export interface ResolvedRun {
   config: Config;
@@ -70,6 +75,8 @@ export interface ResolvedRun {
   versions: ToolVersions;
   /** Your config asks for guestWorkspace "mirror" (project roots then appear at their PC paths too). */
   mirror?: boolean;
+  /** The project file's folders outside the project that you allowed (host paths; the launch table marks them). */
+  outsideMappings?: string[];
 }
 
 /** A requested version plus where the request came from (shown to the user). */
@@ -122,6 +129,8 @@ export interface GenerateOptions {
   knownProjects?: string[];
   /** false: no agent session at boot. */
   autoSession?: boolean;
+  /** The other projects mapped at boot with their effective configs: the sandbox boots with what they want too. */
+  bootWants?: { projects: BootWant[]; keepOff: string[] };
 }
 export interface Generated {
   wsbPath: string;
@@ -129,12 +138,18 @@ export interface Generated {
   launchId: string;
   sessionPath: string;
   memoryMb: number;
+  /** The config the sandbox boots with: the launch folder's plus what the other projects mapped at boot want. */
+  bootConfig: Config;
+  /** Boot settings turned on for another project (setting -> project). */
+  widened: Record<string, string>;
   mappings: ResolvedMapping[];
   profile: ProfileResult;
   databases: DatabasePlan[];
   /** Project roots and other projects mapped with the launch folder. */
   projects: { roots: { host: string; guest: string }[]; projects: { host: string; guest: string }[]; notes: string[] };
   toolchains: Record<AutoToolchain, ToolchainDecision>;
+  /** Where extra folders went when their own path could not be used, and the optional ones skipped. */
+  mappingNotes: string[];
 }
 /** secretsRemoved: what secrets.strip kept on this PC, e.g. "settings.json env.AWS_SECRET_ACCESS_KEY". */
 export interface ProfileResult {
@@ -155,9 +170,7 @@ export interface GuestSession {
    * The launch folder's project id (file-name safe; status files and sessions use it). Older launch folders lack it.
    */
   projectId?: string;
-  /**
-   * Where other projects appear (C:\Projects), and the project roots' guest folders. Older launch folders lack them.
-   */
+  /** Where project roots appear (C:\Projects), and the guest folders of the roots and the projects mapped at boot. Older launch folders lack them. */
   projectsDir?: string;
   roots?: string[];
   /** false: start no agent session at boot (a restart that adds a project opens its sessions itself). */

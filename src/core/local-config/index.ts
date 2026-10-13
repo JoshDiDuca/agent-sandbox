@@ -11,6 +11,18 @@ export {
   applyOverrides,
   describeOverrides,
   allowRequests,
+  outsideMappings,
+  insideProject,
 } from './overrides.js';
-export { trustStorePath, isTrusted, saveTrust, allowStorePath, allowedAnswer, saveAllowed } from './trust.js';
+export {
+  trustStorePath,
+  isTrusted,
+  saveTrust,
+  allowStorePath,
+  allowedAnswer,
+  saveAllowed,
+  OUTSIDE_FOLDER,
+  outsideKey,
+} from './trust.js';
 export * from './policy.js';
+export * from './boot-wants.js';

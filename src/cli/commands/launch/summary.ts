@@ -7,6 +7,8 @@ export type GeneratedSandbox = Generated & { readonly personalization: string };
 
 function agentRow(run: ResolvedRun, generated: GeneratedSandbox, prepared: Prepared | null): string {
   const { config } = run;
+  // What the sandbox boots with (the launch folder's settings plus what the other projects at boot want).
+  const booted = generated.bootConfig;
   return (
     run.harnessName +
     (prepared?.account ? '  (account: ' + prepared.account + ')' : '') +
@@ -15,7 +17,8 @@ function agentRow(run: ResolvedRun, generated: GeneratedSandbox, prepared: Prepa
     ' MB   CPU: ' +
     (config.sandbox.cpuLimit === 'none' ? 'all' : 'max ' + config.sandbox.cpuLimit + '%') +
     '   Network: ' +
-    config.sandbox.networking +
+    booted.sandbox.networking +
+    (booted.sandbox.vGpu ? '   vGPU' : '') +
     (config.sandbox.headless ? '   HEADLESS' : '')
   );
 }
@@ -74,8 +77,8 @@ function secretsRow(run: ResolvedRun, generated: GeneratedSandbox): string {
     : 'none found in what is copied';
 }
 
-/** Project roots, boot-mapped projects, then any other folder mapped (the first three mappings are the tool's own). */
-function mappingRows(generated: GeneratedSandbox): string[][] {
+/** Project roots, boot-mapped projects, then any other folder mapped (not the tool's own nor the workspace). */
+function mappingRows(run: ResolvedRun, generated: GeneratedSandbox): string[][] {
   const { roots, projects } = generated.projects;
   return [
     ...roots.map((r, i) => [
@@ -84,9 +87,12 @@ function mappingRows(generated: GeneratedSandbox): string[][] {
     ]),
     ...projects.map((p, i) => [i ? '' : 'Projects', p.host + '  ->  ' + p.guest]),
     ...generated.mappings
-      .slice(3)
-      .filter((m) => ![...roots, ...projects].some((p) => p.guest === m.guest))
-      .map((m) => ['  map ' + (m.readOnly ? 'ro' : 'rw'), m.host + '  ->  ' + m.guest]),
+      .slice(2)
+      .filter((m) => m.guest !== run.config.guestWorkspace && ![...roots, ...projects].some((p) => p.guest === m.guest))
+      .map((m) => [
+        '  map ' + (m.readOnly ? 'ro' : 'rw'),
+        m.host + '  ->  ' + m.guest + (m.label ? '  (' + m.label + ')' : ''),
+      ]),
   ];
 }
 
@@ -103,7 +109,7 @@ export function launchSummary(run: ResolvedRun, generated: GeneratedSandbox, pre
     ['Desktop', generated.personalization],
     ['Claude', claudeRow(generated)],
     ['Secrets', secretsRow(run, generated)],
-    ...mappingRows(generated),
+    ...mappingRows(run, generated),
     ['Generated', generated.wsbPath],
   ];
 }

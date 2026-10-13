@@ -32,18 +32,24 @@ export interface JoinCheck {
   stricter: string[];
   /** Settings it would have looser: it gets the sandbox's (stricter) value; shown as a note. */
   looser: string[];
+  /** Settings the sandbox turned on at its start for another project you allowed them for: shared, shown as a note. */
+  shared: string[];
 }
 
 /**
  * Compares a project's effective protections with the running sandbox's. Hub projects are always read/write
- * (Windows Sandbox maps the hub once, read/write), so a read-only project counts as stricter.
+ * (Windows Sandbox maps the hub once, read/write), so a read-only project counts as stricter. `widened`: the boot
+ * settings the sandbox turned on for another of its projects (with your consent); a project that has them off
+ * shares them instead of being refused.
  */
-export const checkJoin = (running: Protections, wanted: Protections): JoinCheck => {
+export const checkJoin = (running: Protections, wanted: Protections, widened: string[] = []): JoinCheck => {
   const stricter: string[] = [];
   const looser: string[] = [];
+  const shared: string[] = [];
   for (const setting of NEVER_LOOSER) {
     const result = compare(setting, setting === 'readOnly' ? false : running[setting], wanted[setting]);
-    if (result > 0)
+    if (result > 0 && widened.includes(setting)) shared.push(setting);
+    else if (result > 0)
       stricter.push(
         setting +
           ' = ' +
@@ -54,5 +60,5 @@ export const checkJoin = (running: Protections, wanted: Protections): JoinCheck 
       );
     if (result < 0) looser.push(setting + ' stays ' + JSON.stringify(running[setting]));
   }
-  return { stricter, looser };
+  return { stricter, looser, shared };
 };

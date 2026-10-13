@@ -43,6 +43,7 @@ import { toolchainsSuite } from './toolchains.test.js';
 import { workspaceSuite } from './workspace.test.js';
 import { workspaceViewSuite } from './workspace-view.test.js';
 import { liveNetworkSuite } from './live-network.test.js';
+import { liveTerminalSuite } from './live-terminal.test.js';
 import { auditSuite } from './audit.test.js';
 import { layoutSuite } from './layout.test.js';
 
@@ -89,6 +90,7 @@ export const SUITES: Suite[] = [
   liveProjectsSuite,
   liveGitSuite,
   liveNetworkSuite,
+  liveTerminalSuite,
 ];
 
 /** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */

@@ -6,6 +6,7 @@ import { ConfigSchema, MappingSchema } from '../core/schema/index.js';
 import { guestPathFor } from '../cli/commands/context.js';
 import { buildWsb } from '../host/launch/index.js';
 import {
+  deriveGuest,
   guestDrive,
   isValidGuestPath,
   planMirrorWorkspace,
@@ -62,15 +63,11 @@ export const mirrorSuite: Suite = {
       [],
       'drive roots, reserved folders, C:\\Mirror, A:/B:, .., streams, odd characters and UNC paths are refused',
     );
-    const mappingAccepts = (guest: string): boolean =>
+    const mappingAccepts = (guest?: string): boolean =>
       MappingSchema.safeParse({ host: 'E:\\Games', guest, readOnly: true }).success;
     t.check(
-      mappingAccepts('F:\\SteamLibrary\\Game') && mappingAccepts('C:\\F'),
-      'schema: mappings[].guest may be on another drive letter',
-    );
-    t.check(
-      !mappingAccepts('C:\\Mirror\\F\\x') && !mappingAccepts('F:\\'),
-      'schema: mappings[].guest may never be C:\\Mirror or a drive root',
+      mappingAccepts('F:\\SteamLibrary\\Game') && mappingAccepts('C:\\Windows\\x') && mappingAccepts(undefined),
+      'schema: any mappings[].guest is accepted, or none (the launch places it; it never fails the config)',
     );
     const workspaceAccepts = (guestWorkspace: string): boolean =>
       ConfigSchema.safeParse({ ...f.makeConfig(), guestWorkspace }).success;
@@ -192,24 +189,106 @@ export const mirrorSuite: Suite = {
       [],
       'no other drive letters: no subst drives',
     );
-    const withMapping = (guest: string) => ({
-      ...run,
-      config: { ...run.config, mappings: [{ host: game, guest, readOnly: true }] },
+
+    t.section('where an extra folder goes: guest left out, or one the sandbox cannot use');
+    t.equal(
+      [
+        deriveGuest('F:\\P\\mw2\\data\\maps', 'F:\\P\\mw2', 'C:\\Workspace\\mw2'),
+        deriveGuest('C:\\Steam\\MOHAA', 'F:\\P\\mw2', 'C:\\Workspace\\mw2'),
+        deriveGuest('f:\\SteamLibrary\\steamapps\\common\\MW2\\', 'F:\\P\\mw2', 'C:\\Workspace\\mw2'),
+      ],
+      ['C:\\Workspace\\mw2\\data\\maps', 'C:\\Steam\\MOHAA', 'F:\\SteamLibrary\\steamapps\\common\\MW2'],
+      'no guest: inside the project = the same place in it; outside = the same path as on the PC (C: as is, F: through C:\\Mirror\\F + subst)',
+    );
+    const other = t.dir('steam', 'Other');
+    const placed = (mappings: { host: string; guest?: string; readOnly: boolean }[]) => {
+      const g = f.generate({ ...run, config: { ...run.config, mappings } });
+      return {
+        guests: g.mappings.filter((m) => m.host === game || m.host === other).map((m) => m.guest),
+        notes: g.mappingNotes,
+        wsb: fs.readFileSync(g.wsbPath, 'utf8'),
+      };
+    };
+    const awkward = placed([
+      { host: game, guest: 'C:\\Windows\\foo', readOnly: true },
+      { host: game, guest: 'C:\\Users\\x', readOnly: true },
+      { host: game, guest: 'C:\\AgentData\\y', readOnly: true },
+      { host: game, guest: 'C:\\Mirror\\F\\x', readOnly: true },
+      { host: game, guest: 'D:\\Games', readOnly: true },
+      { host: game, guest: 'G:\\Projects\\work-a', readOnly: true },
+      { host: game, guest: 'c:/assets/', readOnly: true },
+      { host: other, guest: 'C:\\Assets', readOnly: true },
+      { host: game, guest: 'C:\\Assets', readOnly: true },
+    ]);
+    t.equal(
+      awkward.guests,
+      [
+        'C:\\Mapped\\C\\Windows\\foo',
+        'C:\\Mapped\\C\\Users\\x',
+        'C:\\Mapped\\C\\AgentData\\y',
+        'C:\\Mapped\\C\\Mirror\\F\\x',
+        'D:\\Games',
+        'C:\\Mapped\\G\\Projects\\work-a',
+        'C:\\assets',
+        'C:\\Mapped\\C\\Assets',
+      ],
+      'reserved paths, C:\\Mirror and the workspace itself go to C:\\Mapped\\<drive>\\<path>; D:\\Games and a tidied c:/assets/ are used as they are; a repeat is mapped once; a second folder on the same path moves',
+    );
+    t.check(
+      awkward.notes.some(
+        (n) =>
+          n.includes('C:\\Windows\\foo') && n.includes('keeps for itself') && n.includes('C:\\Mapped\\C\\Windows\\foo'),
+      ),
+      'a note says where a reserved path went and why',
+      awkward.notes.join('\n'),
+    );
+    t.check(
+      awkward.notes.some((n) => n.startsWith(other) && n.includes('already used by') && n.includes(game)),
+      'a conflict note names both folders',
+      awkward.notes.join('\n'),
+    );
+    t.check(
+      !/<SandboxFolder>C:\\(Windows|Users|AgentData\\y|Mirror\\F\\x)/i.test(awkward.wsb),
+      'a reserved guest path never reaches the .wsb',
+    );
+    const derived = placed([{ host: game, readOnly: true }]);
+    t.check(
+      derived.guests.length === 1 &&
+        (/^C:\\Mapped\\C\\Users\\/i.test(derived.guests[0]) || derived.guests[0].toLowerCase() === game.toLowerCase()),
+      'no guest, outside the project: the PC path, or C:\\Mapped\\... when that path is reserved (the temp folder is under C:\\Users)',
+      JSON.stringify(derived),
+    );
+    const inside = t.dir('work-a', 'data');
+    const insideRun = await f.run();
+    const insideGen = f.generate({
+      ...insideRun,
+      config: { ...insideRun.config, mappings: [{ host: inside, readOnly: true }] },
     });
-    await t.throws(
-      () => f.generate(withMapping('C:\\Mirror\\F\\x')),
-      'not a usable sandbox folder',
-      'a mapping straight into C:\\Mirror is refused',
+    t.check(
+      !insideGen.mappings.some((m) => m.host === inside) &&
+        insideGen.mappingNotes.some((n) => n.includes('already in the sandbox at C:\\Workspace\\work-a\\data')),
+      'no guest, inside the project: already there, no second mapping',
+      insideGen.mappingNotes.join('\n'),
     );
-    await t.throws(
-      () => f.generate(withMapping('C:\\Windows\\x')),
-      'not a usable sandbox folder',
-      'a reserved guest folder is refused by the host too (not only the schema)',
+    const missingRequired = await t.thrownMessage(() =>
+      f.generate({
+        ...run,
+        config: {
+          ...run.config,
+          mappings: [
+            { host: t.at('nope-1'), readOnly: true },
+            { host: t.at('nope-2'), guest: 'C:\\Windows', readOnly: true },
+          ],
+        },
+      }),
     );
-    await t.throws(
-      () => f.generate(withMapping('g:\\projects\\work-a\\game')),
-      'overlapping',
-      'mappings overlapping on the same mirrored drive are refused',
+    t.check(
+      missingRequired.includes('2 mapped folders cannot be used') &&
+        missingRequired.includes('nope-1') &&
+        missingRequired.includes('nope-2') &&
+        missingRequired.includes('"optional": true'),
+      'folders that are not there: one message listing each, with the fix',
+      missingRequired,
     );
 
     t.section('exec, attach and history for a mirrored workspace');

@@ -110,21 +110,6 @@ export const localConfigSuite: Suite = {
       'values are type-checked (memory too small)',
     );
     await rejectedBecause(
-      { mappings: [{ host: 'x', guest: 'C:\\Windows\\x', readOnly: true }] },
-      'reserved or invalid guest path',
-      'reserved guest paths are rejected',
-    );
-    await rejectedBecause(
-      { mappings: [{ host: '../shared', guest: 'C:\\Shared', readOnly: true }] },
-      'only map folders inside the project',
-      'a project file cannot map folders outside the project',
-    );
-    await rejectedBecause(
-      { mappings: [{ host: '%APPDATA%', guest: 'C:\\Startup', readOnly: false }] },
-      'only map folders inside the project',
-      '... not even through environment variables',
-    );
-    await rejectedBecause(
       { provisioning: { git: { access: 'admin' } } },
       'provisioning.git.access:',
       'unknown git access modes are rejected',
@@ -136,6 +121,92 @@ export const localConfigSuite: Suite = {
       (await f.run({ cwd: dirC, trustConfig: true })).config.readOnly,
       true,
       '.sandbox-config.json may contain comments and trailing commas',
+    );
+
+    t.section('folders outside the project (projects.allowOutsideMappings)');
+    const dirD = t.dir('work-d');
+    const withOutside = (setting: Config['projects']['allowOutsideMappings']): Config => ({
+      ...f.baseConfig,
+      projects: { ...f.baseConfig.projects, allowOutsideMappings: setting },
+    });
+    const outsideFile = { mappings: [{ host: '../shared', readOnly: true }] };
+    f.writeLocal(dirD, outsideFile);
+    const notAllowed = await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false)));
+    t.check(
+      notAllowed.includes('outside the project') &&
+        notAllowed.includes(f.shared) &&
+        notAllowed.includes('projects.allowOutsideMappings'),
+      'false: refused, naming the folder and the setting that allows it',
+      notAllowed,
+    );
+    const allowedOutside = await f.run({ cwd: dirD, trustConfig: true }, withOutside(true));
+    t.check(
+      allowedOutside.config.mappings.some((m) => m.host === f.shared) &&
+        (allowedOutside.outsideMappings ?? []).includes(f.shared),
+      'true: allowed, and marked as outside the project',
+    );
+    f.writeLocal(dirD, { ...outsideFile, readOnly: true });
+    t.includes(
+      await t.thrownMessage(() => f.run({ cwd: dirD }, withOutside(true))),
+      '(outside the project)',
+      'true: still listed, flagged, when you approve the file',
+    );
+    const asking = await t.thrownMessage(() =>
+      f.run({ cwd: dirD, trustConfig: true, ask: async () => true, interactive: false }),
+    );
+    t.check(
+      asking.includes('projects.allowOutsideMappings') && asking.includes('interactive'),
+      '"ask" without a terminal (even with --trust-config): refused, naming the setting and that an interactive launch asks',
+      asking,
+    );
+    t.includes(
+      await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true, ask: async () => false, interactive: true })),
+      'You did not allow',
+      '"ask": answering no stops the launch',
+    );
+    const questions: string[] = [];
+    f.writeLocal(dirD, { ...outsideFile, sandbox: { vGpu: true } });
+    const asked = await f.run({
+      cwd: dirD,
+      trustConfig: true,
+      interactive: true,
+      ask: async (q) => {
+        questions.push(q);
+        return true;
+      },
+    });
+    t.check(
+      questions.length === 1 && asked.config.sandbox.vGpu && asked.config.mappings.some((m) => m.host === f.shared),
+      '"ask": the folder and a looser setting (vGPU) are asked together, once',
+      JSON.stringify(questions),
+    );
+    t.check(
+      (await f.run({ cwd: dirD, trustConfig: true, interactive: false })).config.mappings.some(
+        (m) => m.host === f.shared,
+      ),
+      '"ask": the answer is remembered for this project file',
+    );
+    // What counts as outside is where the folder really is: environment variables are expanded and links followed.
+    f.writeLocal(dirD, { mappings: [{ host: '%APPDATA%', readOnly: false }] });
+    t.includes(
+      await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false))),
+      'outside the project',
+      '%VAR% is expanded before deciding inside or outside',
+    );
+    fs.symlinkSync(f.shared, path.join(dirD, 'link'), 'junction');
+    f.writeLocal(dirD, { mappings: [{ host: './link', readOnly: true }] });
+    t.includes(
+      await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false))),
+      'outside the project',
+      'a link inside the project to a folder outside counts as outside',
+    );
+    fs.rmSync(path.join(dirD, 'link'));
+    f.writeLocal(dirD, { mappings: [{ host: './assets', readOnly: true }] });
+    t.check(
+      (await f.run({ cwd: dirD, trustConfig: true }, withOutside(false))).config.mappings.some(
+        (m) => m.host === path.join(dirD, 'assets'),
+      ),
+      'a folder inside the project needs no permission',
     );
 
     t.section('a project can only tighten protections');

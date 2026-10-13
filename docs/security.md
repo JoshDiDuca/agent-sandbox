@@ -101,6 +101,11 @@ An agent you start for project A can read and change project B. Keep untrusted r
 `projects.all` (`sandbox projects exclude <folder>`), or give them their own sandbox and `storage.dataName`.
 
 - Only your own config can map more folders; a project's `.sandbox-config.json` cannot set `projects.*`.
+- A project's `.sandbox-config.json` may map folders outside the project only as `projects.allowOutsideMappings` in
+  your settings allows: `"ask"` (default: asked once per project file and folder at an interactive launch, never by
+  `--trust-config`), `true` or `false`. "Outside" is decided where the folder really is (`%VARIABLES%` expanded, links
+  followed). Drives, your profile and this tool's own folders are never mapped, and no mapping lands on a folder the
+  sandbox keeps for itself.
 - Every one of them passes the launch-folder checks (no drives, your profile, system or tool folders).
 - Machine-wide protections (network, LAN block, git access, clipboard and the other `.wsb` settings) are fixed when
   the sandbox starts. A project needing a stricter value cannot join a sandbox that has a looser one (you are told
@@ -109,6 +114,13 @@ An agent you start for project A can read and change project B. Keep untrusted r
   has no "before" picture, so any git hook, program-running git config (`core.hooksPath`, `core.fsmonitor`, ...) or
   planted command in it is neutralised as if the sandbox had added it.
 - A restart that adds a project only ever happens with your consent (a prompt, or `--yes`).
+- What a project wants at boot (a `.wsb` device such as vGPU that you allowed for it, a larger fixed `memoryMb`, its
+  approved mappings) cannot be added to a running sandbox. When it joins one started without them, each missing item
+  is named and you choose: Continue anyway (join without them), Restart with them (lists the sessions that end), or
+  Cancel. Without a terminal it continues and prints the restart command. A sandbox that starts with several projects
+  (a restart, `--session`, `projects.all`, the known projects in your roots) boots with what each of them wants and
+  you allowed; a device turned on that way is on for every project in it (the launch says so), unless the launch
+  folder's own `.sandbox-config.json` switched it off. Unapproved project files add nothing.
 - `wsb share` (Windows 11 24H2+) is used only to add a folder to the running sandbox; it is untested, and any error
   falls back to the restart offer.
 

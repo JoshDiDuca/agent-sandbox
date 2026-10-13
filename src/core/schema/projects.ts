@@ -18,6 +18,11 @@ export const ProjectsSchema = z.strictObject({
     .boolean()
     .describe('When you start a project whose parent folder is not a root yet, ask once whether to add it.'),
   declinedRoots: z.array(z.string().min(1)).describe('Parent folders you said no to (not asked again).'),
+  allowOutsideMappings: z
+    .union([z.literal('ask'), z.boolean()])
+    .describe(
+      'A project\'s .sandbox-config.json may map folders from outside the project (e.g. a game folder on another drive). "ask" = an interactive launch asks once per project and set of folders, and remembers your answer; true = always allowed (still listed when you approve the file); false = never (the launch stops and says which folders). Only your own settings decide this, never a project file.',
+    ),
   wsbShare: z
     .boolean()
     .describe(

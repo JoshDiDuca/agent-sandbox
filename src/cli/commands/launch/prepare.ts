@@ -14,15 +14,32 @@ import type { Config, ResolvedRun } from '../../../core/types.js';
 import { errMsg } from '../../../core/util/index.js';
 import { c, working } from '../../output/index.js';
 import { type Context } from '../context.js';
+import { firstStartNotice, pendingDownloads } from './first-start.js';
 import { LifeRecord, UPDATE_RESTART_WARNING, updateRestartPending } from '../../../host/life/index.js';
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
 export function firstBoot(dataPath: string): boolean {
   return !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
 }
-export const FIRST_BOOT =
-  'First start for this storage: the sandbox downloads and installs the toolchains, databases and agent this project needs.\n' +
-  'That takes a few minutes, once. Everything is kept, so every later start reuses it and takes seconds.';
+/** The first-start heads-up (also when this project needs tools not downloaded yet), or null. */
+export function firstBootNotice(
+  dataPath: string,
+  generated: { toolchains: Record<string, { on: boolean }>; databases: { database: string }[] },
+  config: Config,
+): string | null {
+  const wanted = [
+    'node',
+    ...Object.entries(generated.toolchains)
+      .filter(([, d]) => d.on)
+      .map(([name]) => name),
+    ...(config.toolchains.vscode.enabled ? ['vscode'] : []),
+    ...generated.databases.map((d) => d.database),
+  ];
+  return firstStartNotice(
+    firstBoot(dataPath),
+    pendingDownloads(wanted, (dir) => fs.existsSync(path.join(dataPath, 'tools', dir))),
+  );
+}
 
 function syncSummary(config: Config, dataPath: string, workspaceHost: string): string {
   try {

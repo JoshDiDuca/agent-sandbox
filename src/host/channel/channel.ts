@@ -65,10 +65,11 @@ export class SandboxChannel {
     }
   }
 
-  /** Waits until the sandbox finished provisioning, reporting each boot step. */
+  /** Waits until the sandbox finished provisioning, reporting each boot step (onStatus: every status read, validated). */
   waitForReady(
     launchId: string | null,
     progress: Progress = (m) => printLine('  [sandbox] ' + m),
+    onStatus?: (status: SandboxStatus) => void,
   ): Promise<SandboxStatus> {
     let last = '';
     return this.until(
@@ -76,6 +77,7 @@ export class SandboxChannel {
       () => {
         const status = this.run.readSandboxStatus();
         if (!status || (launchId !== null && status.launchId !== launchId)) return null;
+        onStatus?.(status);
         if (status.message !== last) {
           progress(safeText(status.message).slice(0, 300));
           last = status.message;

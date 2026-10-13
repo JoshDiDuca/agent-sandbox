@@ -33,7 +33,15 @@ import { errMsg } from '../../core/util/errors.js';
 const STEPS = 8;
 const step = (n: number, title: string): void => {
   log('\n\x1b[36m[' + n + '/' + STEPS + '] ' + title + '\x1b[0m');
-  setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title);
+  // The host shows the short title ("Developer tools") with what is being set up in it.
+  setSandboxStatus(n === 1 ? 'booting' : 'provisioning', '[' + n + '/' + STEPS + '] ' + title, {
+    step: n,
+    steps: STEPS,
+    title: title.replace(/ \(.*\)$/, ''),
+    active: [],
+    done: 0,
+    total: 0,
+  });
 };
 const soft = async (what: string, work: () => unknown): Promise<void> => {
   try {

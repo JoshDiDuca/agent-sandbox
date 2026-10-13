@@ -1,5 +1,7 @@
 // Runs the planned steps in parallel, a few at a time, after the steps they depend on. One lock per kind of step is
 // held across runs: the boot and projects that join later never install two Nodes (or two Gos) at once.
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { downloader } from '../../shared/download/index.js';
 import { warn } from '../runtime/log.js';
 import { setSandboxStatus } from '../runtime/status.js';
 import { errMsg } from '../../core/util/errors.js';
@@ -33,6 +35,8 @@ async function runReported(name: string, env: ToolEnv, work: () => Promise<void>
 export class StepScheduler {
   /** One lock per kind of step ("Node 20" and "Node 22" share nvm's folders): held while that step runs, in any run. */
   private readonly locks = new Map<string, Promise<void>>();
+  /** The step a download belongs to (several run at once), for its progress. */
+  private readonly currentStep = new AsyncLocalStorage<string>();
 
   constructor(private readonly parallel = PARALLEL) {}
 
@@ -43,10 +47,27 @@ export class StepScheduler {
     const running = new Set<string>();
     const waiting: (() => void)[] = [];
     let done = 0;
-    const say = o.report ?? ((message: string) => setSandboxStatus('provisioning', message));
+    // The boot (no `report`) also publishes structured progress: what runs now, how far its download is, how many are
+    // done.
+    const percent = new Map<string, number>();
+    const active = (): { name: string; percent?: number }[] =>
+      [...running].map((name) => ({ name, ...(percent.has(name) ? { percent: percent.get(name)! } : {}) }));
+    const say =
+      o.report ??
+      ((message: string) => setSandboxStatus('provisioning', message, { active: active(), done, total: steps.length }));
     const report = (): void => {
       if (running.size) say('Installing ' + [...running].join(', ') + ' (' + done + ' of ' + steps.length + ' done)');
     };
+    if (!o.report)
+      downloader.watch(() => {
+        const name = this.currentStep.getStore();
+        return name
+          ? (fraction) => {
+              percent.set(name, Math.round(fraction * 100));
+              report();
+            }
+          : null;
+      });
     for (const s of steps) {
       // Dependencies first (they are earlier in the plan, so their promises exist), then a free slot.
       finished.set(
@@ -64,9 +85,12 @@ export class StepScheduler {
           running.add(s.name);
           report();
           try {
-            await this.exclusive(s.name, () => runReported(s.name, env, async () => s.install(env)));
+            await this.currentStep.run(s.name, () =>
+              this.exclusive(s.name, () => runReported(s.name, env, async () => s.install(env))),
+            );
           } finally {
             running.delete(s.name);
+            percent.delete(s.name);
             done++;
             report();
             waiting.shift()?.();
@@ -74,7 +98,17 @@ export class StepScheduler {
         })(),
       );
     }
-    await Promise.all(finished.values());
+    try {
+      await Promise.all(finished.values());
+    } finally {
+      if (!o.report) downloader.watch(null);
+    }
+    if (!o.report)
+      setSandboxStatus('provisioning', 'Set up ' + steps.length + ' toolchains and databases', {
+        active: [],
+        done,
+        total: steps.length,
+      });
     return envs;
   }
 

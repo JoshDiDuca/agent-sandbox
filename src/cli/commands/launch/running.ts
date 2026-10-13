@@ -6,7 +6,8 @@ import { NeedsRestart } from '../../../host/projects/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import type { SandboxStatus, SessionStatus } from '../../../core/types.js';
 import { errMsg, fail, sleep } from '../../../core/util/index.js';
-import { c, working, table } from '../../output/index.js';
+import { c, follow, working, table, type Progressing } from '../../output/index.js';
+import { bootLine, readyIn, stillWorking } from './boot-progress.js';
 import type { Context } from '../context.js';
 import { hereDir, joinHere, readyHere, offerRestart, type Joined, type Relauncher } from '../projects/index.js';
 
@@ -58,16 +59,27 @@ export async function runningSandboxStatus(dataPath: string): Promise<SandboxSta
   );
 }
 
-/** Waits for the boot with its current step on a spinner (plain lines without a terminal). */
-export function waitForBoot(dataPath: string, launchId: string | null): Promise<SandboxStatus> {
-  let step = 'starting Windows Sandbox';
-  return working(
-    () => 'Waiting for the sandbox: ' + step,
+/**
+ * Waits for the boot with its current step and what it sets up on one line (plain lines without a terminal).
+ * timed: say how long it took (a first start, where that is worth knowing).
+ */
+export async function waitForBoot(dataPath: string, launchId: string | null, timed = false): Promise<SandboxStatus> {
+  let status: SandboxStatus | null = null;
+  const start = Date.now();
+  const ready = await follow(
+    () => bootLine(status),
     () =>
-      new SandboxChannel(dataPath).waitForReady(launchId, (m) => {
-        step = m;
-      }),
+      new SandboxChannel(dataPath).waitForReady(
+        launchId,
+        () => undefined,
+        (s) => {
+          if (s.phase !== 'failed') status = s;
+        },
+      ),
+    { stall: stillWorking },
   );
+  if (timed) console.log(readyIn(Date.now() - start));
+  return ready;
 }
 
 /** The running sandbox, once it is ready. */
@@ -79,12 +91,14 @@ export async function readySandbox(dataPath: string): Promise<SandboxStatus> {
 /** Waits for a session to start (its project's setup, the agent's install) with its progress on a spinner. */
 export function waitForStart(ctx: Context, requestId: string, what: string): Promise<SessionStatus> {
   let step = 'starting';
-  return working(
-    () => what + ': ' + step,
+  const shown = (): Progressing => ({ line: what + ': ' + step, key: step, what: step });
+  return follow(
+    shown,
     () =>
       new SandboxChannel(ctx.dataPath).waitForSession(requestId, SESSION_START_MS, (m) => {
         step = m;
       }),
+    { stall: stillWorking },
   );
 }
 

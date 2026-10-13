@@ -112,7 +112,7 @@ const SANDBOX_OPTIONS: OptionSpec[] = [
   bool('--no-local-config', "ignore the folder's .sandbox-config.json", { advanced: true }),
   bool(
     '--yes',
-    'when this folder is not in the running sandbox and adding it needs a restart, restart without asking',
+    'when this folder is not in the running sandbox, or wants what it started without (vGPU, folders), restart without asking',
     { noMenu: true },
   ),
 ];

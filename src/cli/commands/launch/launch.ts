@@ -38,7 +38,8 @@ import {
   readySandbox,
 } from './running.js';
 import { maybeAddRoot } from './add-root.js';
-import { prepare, firstBoot, FIRST_BOOT } from './prepare.js';
+import { prepare, firstBootNotice } from './prepare.js';
+import { bootWantsFor } from './boot-wants.js';
 import { launchSummary, type GeneratedSandbox } from './summary.js';
 
 /** A restart that adds a project: map these too, start no session at boot (restart.ts opens them), wait until ready. */
@@ -135,6 +136,7 @@ class Launcher {
     if (!generateOnly) assertCanLaunch();
     if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
     const prepared = generateOnly ? null : await prepare(ctx, run);
+    const bootWants = await bootWantsFor(ctx, run, extras.extraProjects);
     const generated: GeneratedSandbox = generateSandbox({
       packageRoot: ctx.packageRoot,
       run,
@@ -142,9 +144,11 @@ class Launcher {
       probe: probeHost(config, run.harnessName),
       extraProjects: extras.extraProjects,
       autoSession: extras.autoSession,
+      bootWants: bootWants.wants,
     });
 
-    for (const note of [...run.notes, ...generated.projects.notes]) console.log(note);
+    const notes = [...run.notes, ...bootWants.notes, ...generated.projects.notes, ...generated.mappingNotes];
+    for (const note of notes) console.log(note);
     this.warnSecretFiles(run);
     table(launchSummary(run, generated, prepared));
     if (generateOnly) return 0;
@@ -182,10 +186,11 @@ class Launcher {
     );
     new ProjectRegistry(storageRoot).start({
       launchId: generated.launchId,
-      protections: protectionsOf(config),
+      protections: protectionsOf(generated.bootConfig),
       primary: { host: run.workspaceHost, guest: config.guestWorkspace },
       roots,
       boot: projects,
+      atBoot: { memoryMb: generated.memoryMb, mappings: generated.mappings, widened: generated.widened },
     });
     new KnownProjects(storageRoot).remember(run.workspaceHost);
     new LifeRecord(storageRoot, dataPath).start(config.sandbox.keepAwake);
@@ -205,9 +210,10 @@ class Launcher {
     const { config } = run;
     // Hiding runs alongside; a failure to find the window must never break the launch or an attach.
     const hidden = config.sandbox.headless ? hideSandboxWindow(storageRoot).catch(() => false) : null;
+    const headsUp = firstBootNotice(dataPath, generated, config);
     if (options.terminal || options.noAgent || extras.waitUntilReady) {
-      if (firstBoot(dataPath)) console.log(FIRST_BOOT);
-      await waitForBoot(dataPath, generated.launchId);
+      if (headsUp) console.log(headsUp);
+      await waitForBoot(dataPath, generated.launchId, Boolean(headsUp));
       if (extras.waitUntilReady) return 0;
       // Without an agent there is no session to attach to: the sandbox itself is the result.
       if (options.noAgent) {
@@ -220,7 +226,7 @@ class Launcher {
       }
       return attachHere(ctx, await waitForStart(ctx, generated.launchId, 'Starting ' + run.harnessName));
     }
-    if (firstBoot(dataPath)) console.log(FIRST_BOOT);
+    if (headsUp) console.log(headsUp + '\nFollow along: sandbox logs -f');
     if (hidden)
       console.log(
         (await hidden)

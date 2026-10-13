@@ -43,6 +43,16 @@ design decision first).
 | A project's looser request (vGPU, ...) can be allowed once, for that project only; with vGPU, Vulkan runs on the GPU (Dozen) | done |
 | The CPU cap and paging file scripts: Windows calls in their own small C# files, the scripts a few readable lines | done |
 
+## 1.4.1 — Fixes (released)
+
+| Item | Status |
+| --- | --- |
+| A project's folders outside it (game installs ...): `projects.allowOutsideMappings` ("ask" / true / false); any guest path works (unusable ones are placed under `C:\Mapped` with a note); `guest` may be left out; one clear message; `sandbox config check` previews every folder | done |
+| A project keeps the same path in the sandbox whichever project starts it (git worktrees keep working) | done |
+| Joining a running sandbox that lacks what the project needs (vGPU, folders, memory): Continue anyway / Restart with them / Cancel | done |
+| First start: a heads-up with the download size, live progress, "still working", "Ready in ..." | done |
+| Agent sessions: mouse wheel and clicks reach the agent again (conpty.dll), no stray letters from split key sequences | done |
+
 ## 1.5 — VPN
 
 | Item | Status |

@@ -1,14 +1,17 @@
 // The host <-> sandbox channel and the terminal protocol: everything arriving from the sandbox is validated, sized and
 // filtered before this PC acts on it.
 import { safeId } from '../shared/channel/index.js';
-import { GuestRequestSchema, SessionStatusSchema } from '../shared/channel/index.js';
+import { GuestRequestSchema, SandboxStatusSchema, SessionStatusSchema } from '../shared/channel/index.js';
+import { bootLine, firstStartNotice, pendingDownloads, readyIn, stillWorking } from '../cli/commands/launch/index.js';
 import {
   encodeFrame,
   FrameReader,
   FrameType,
   fixWindowsKeys,
   helloFrame,
+  InputJoiner,
   MAX_FRAME_BYTES,
+  MOUSE_OFF,
   OutputFilter,
 } from '../shared/pty/index.js';
 import type { Suite } from './support/suite.js';
@@ -51,6 +54,114 @@ export const channelSuite: Suite = {
       'a session status with an impossible port is rejected',
     );
     t.check(!validSession({ ...goodSession, phase: 'pwned' }), 'a session status with an unknown phase is rejected');
+
+    t.section('boot progress');
+    const goodStatus = {
+      launchId: 'l1',
+      phase: 'provisioning',
+      message: '[3/8] Developer tools',
+      updatedAt: 'x',
+      workspaceHost: 'C:\\p',
+      guestWorkspace: 'C:\\Workspace',
+      headless: false,
+    };
+    const progress = {
+      step: 3,
+      steps: 8,
+      title: 'Developer tools',
+      active: [{ name: 'Rust', percent: 40 }, { name: 'Go' }],
+      done: 2,
+      total: 6,
+    };
+    const parsed = (s: unknown) => SandboxStatusSchema.safeParse(s);
+    t.equal(parsed({ ...goodStatus, progress }).data?.progress, progress, 'a well-formed boot progress is accepted');
+    t.check(
+      parsed(goodStatus).success && parsed(goodStatus).data?.progress === undefined,
+      'a status without progress (an older sandbox) is accepted',
+    );
+    const hostile = [
+      { ...progress, title: 'x'.repeat(5000) },
+      { ...progress, active: Array.from({ length: 100 }, () => ({ name: 'a' })) },
+      { ...progress, active: [{ name: 'a', percent: 500 }] },
+      { ...progress, step: -1 },
+      { ...progress, done: 1e9 },
+      { ...progress, extra: 1 },
+      'pwned',
+    ];
+    t.equal(
+      hostile.map((p) => {
+        const r = parsed({ ...goodStatus, progress: p });
+        return r.success && r.data.progress === undefined;
+      }),
+      hostile.map(() => true),
+      'an oversized or malformed progress is dropped, the status itself still counts',
+    );
+    t.check(
+      !parsed({ ...goodStatus, phase: 'pwned', progress }).success,
+      'a status with an unknown phase is still rejected',
+    );
+    const line = (p: unknown) => bootLine(parsed({ ...goodStatus, progress: p }).data ?? null).line;
+    t.equal(
+      line(progress),
+      '[3/8] Developer tools: downloading Rust 40%; setting up Go (2 of 6 done)',
+      'the line shows the step, the download and what is set up',
+    );
+    t.equal(
+      line({ ...progress, title: 'Agent: claude', step: 6, active: [], done: 0, total: 0 }),
+      '[6/8] Agent: claude',
+      'a step without tools is just its title',
+    );
+    t.equal(
+      line({ ...progress, active: [{ name: '\x1b]52;c;ZXZpbA==\x07Ru\x1b[2Jst\r\n', percent: 99 }] }),
+      '[3/8] Developer tools: downloading Rust 99% (2 of 6 done)',
+      'escape sequences and control characters from the sandbox never reach the terminal',
+    );
+    t.equal(bootLine(null).line, 'Starting Windows Sandbox', 'before the sandbox writes anything');
+    t.equal(
+      bootLine(parsed({ ...goodStatus, message: 'Installing Go (1 of 3 done)' }).data!).line,
+      'Installing Go (1 of 3 done)',
+      'an older sandbox: its message',
+    );
+    t.equal(
+      bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 50 }] } }).data!).key,
+      bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 60 }] } }).data!).key,
+      'a download moving on is no new plain line (only a new step or tool is)',
+    );
+    t.equal(
+      stillWorking('Rust', 3 * 60 * 1000),
+      'Still working on Rust (3 min). Full log: sandbox logs -f',
+      'the notice after a long quiet spell',
+    );
+    t.equal(readyIn(432_000), 'Ready in 7 min 12 s.', 'the time a first start took');
+    const pending = pendingDownloads(
+      ['node', 'rust', 'cpp', 'postgres', 'node', 'constructor'],
+      (dir) => dir === 'nvm',
+    );
+    t.equal(
+      pending,
+      { names: ['rust', 'C/C++', 'PostgreSQL'], mb: 900 },
+      'only what is not downloaded yet counts, once each',
+    );
+    t.equal(
+      firstStartNotice(false, { names: [], mb: 0 }),
+      null,
+      'a later start with everything downloaded says nothing',
+    );
+    t.check(
+      /^First start: .*\(about 900 MB: rust, C\/C\+\+, PostgreSQL\)\. This can take 5-20 minutes/.test(
+        firstStartNotice(true, pending) ?? '',
+      ),
+      'the first start says what it downloads, roughly how much, and how long it can take',
+    );
+    t.check(
+      /^New tools for this project: .*about 1\.8 GB: MSVC, rust/.test(
+        firstStartNotice(
+          false,
+          pendingDownloads(['msvc', 'rust'], () => false),
+        ) ?? '',
+      ),
+      'a new toolchain later on gets its own heads-up',
+    );
 
     t.section('terminal frames');
     const filter = new OutputFilter();
@@ -121,6 +232,32 @@ export const channelSuite: Suite = {
       fixWindowsKeys(Buffer.from([0x61, 0x08, 0x7f, 0x1b])),
       Buffer.from([0x61, 0x7f, 0x08, 0x1b]),
       'Windows console Backspace (^H) reaches the agent as DEL, so it deletes one character, not a word',
+    );
+
+    t.section('typed input keeps escape sequences whole');
+    const joined = (...chunks: string[]): string[] => {
+      const j = new InputJoiner();
+      const out = chunks.map((c) => j.push(Buffer.from(c, 'latin1')).toString('latin1'));
+      out.push(j.flush().toString('latin1'));
+      return out.filter(Boolean);
+    };
+    t.equal(
+      joined('ab\x1b[', 'C'),
+      ['ab', '\x1b[C'],
+      'a Right arrow split after ESC[ is sent whole (ConPTY would read Alt+[ and a typed "C")',
+    );
+    t.equal(
+      joined('\x1b', '[<0;10;', '5M', 'x'),
+      ['\x1b[<0;10;5M', 'x'],
+      'a mouse report split three ways is sent as one',
+    );
+    t.equal(joined('\x1bO', 'A'), ['\x1bOA'], 'an SS3 key split after ESC O is sent whole');
+    t.equal(joined('a\x1b'), ['a', '\x1b'], 'a lone Esc key is held, then sent by the flush');
+    t.equal(joined('\x1b[A\x1bx\x7f'), ['\x1b[A\x1bx\x7f'], 'complete keys (arrows, Alt+x, Backspace) pass at once');
+    t.equal(joined('\x1b[' + '1;'.repeat(40)), ['\x1b[' + '1;'.repeat(40)], 'an endless "sequence" is not held back');
+    t.check(
+      MOUSE_OFF.includes('\x1b[?1000l') && MOUSE_OFF.includes('\x1b[?1003l') && MOUSE_OFF.includes('\x1b[?1006l'),
+      'leaving a session turns every mouse tracking mode off in your terminal',
     );
   },
 };

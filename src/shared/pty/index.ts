@@ -11,5 +11,7 @@ export {
   FrameReader,
 } from './protocol.js';
 export { type Endpoint, connect, sendControl, type Viewers, queryViewers } from './client.js';
-export { type ClientResult, fixWindowsKeys, runTerminalClient } from './terminal.js';
+export { type ClientResult, MOUSE_OFF, fixWindowsKeys, runTerminalClient } from './terminal.js';
+export { JOIN_MS, InputJoiner } from './input-joiner.js';
+export { type VtInput, enableVtInput } from './console-input.js';
 export { OutputFilter } from './output-filter.js';

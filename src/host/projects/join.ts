@@ -1,27 +1,32 @@
 // Joining the running sandbox from another folder. The folder's run is resolved exactly as a fresh launch would
 // resolve it (its approved .sandbox-config.json, versions, toolchain detection, database plan), checked against the
-// running sandbox's machine-wide protections, made visible inside (host/projects.ts: a project root, a project
+// running sandbox's machine-wide protections, made visible inside (host/projects: a project root, a project
 // mapped at boot, or wsb share) and described to the guest, which provisions what is missing before its session.
-// When none of those can make it visible, NeedsRestart reaches the caller, which offers a restart.
+// When none of those can make it visible, NeedsRestart reaches the caller, which offers a restart. So does a project
+// that wants what the sandbox only gets at its start (a .wsb device, more memory, its mappings) when you choose to
+// restart for it; otherwise it joins without them and they are named.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedRun } from '../../core/types.js';
-import { checkJoin, protectionsOf } from '../../core/local-config/index.js';
+import {
+  checkJoin,
+  missingAtBoot,
+  nothingMissing,
+  protectionsOf,
+  type Missing,
+} from '../../core/local-config/index.js';
 import { resolveToolchains } from '../../core/detect/index.js';
-import { assertNoLinks, fail } from '../../core/util/index.js';
-import { IdSchema, type ProjectSpec } from '../../shared/channel/index.js';
-import { RunDir } from '../../shared/channel/index.js';
+import { assertNoLinks, dirExists, fail } from '../../core/util/index.js';
+import { IdSchema, RunDir, type ProjectSpec } from '../../shared/channel/index.js';
 import { syncProjectIn } from '../../sync/index.js';
-import { planDatabases } from '../launch/index.js';
-import { decideProjectToolchains } from '../launch/index.js';
-import { ProjectRegistry, type RegistryEntry } from './registry.js';
-import { projectMapper, type ProjectMapper } from './mapper.js';
-import { KnownProjects } from './known.js';
-import { stageScripts } from '../launch/index.js';
+import { decideProjectToolchains, planDatabases, stageScripts } from '../launch/index.js';
 import { RepoGuardStore } from '../guard/index.js';
+import { ProjectRegistry, type RegistryEntry } from './registry.js';
+import { NeedsRestart, projectMapper, type ProjectMapper } from './mapper.js';
+import { KnownProjects } from './known.js';
 
 /** The launch folder of the running sandbox (host-only storage; its id comes from the guest, so it is checked). */
-export const runningLaunchPath = (storageRoot: string, dataPath: string): string | null => {
+export function runningLaunchPath(storageRoot: string, dataPath: string): string | null {
   const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
   if (
     !launchId ||
@@ -32,7 +37,7 @@ export const runningLaunchPath = (storageRoot: string, dataPath: string): string
   const launchPath = path.join(storageRoot, 'launches', launchId);
   assertNoLinks(storageRoot, launchPath);
   return fs.existsSync(path.join(launchPath, 'session.json')) ? launchPath : null;
-};
+}
 
 /** What a session or command from this folder needs: where it is inside, and (for another project) its spec. */
 export interface Joined {
@@ -41,10 +46,15 @@ export interface Joined {
   spec: ProjectSpec | null;
   run: ResolvedRun | null;
   notes: string[];
+  /** What it wants at boot that the running sandbox started without (it joined without them). */
+  missing: Missing | null;
 }
 
+/** What to do when a joining project wants something the running sandbox started without. */
+export type MissingChoice = 'continue' | 'restart' | 'cancel';
+
 /** The project spec the guest provisions from (scans the project folder like a launch does). */
-export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boolean): ProjectSpec => {
+export function projectSpec(run: ResolvedRun, entry: RegistryEntry, hooks: boolean): ProjectSpec {
   const { config } = run;
   const toolchains = resolveToolchains(config.toolchains, decideProjectToolchains({ run }));
   const harness = run.harnessName === 'none' ? null : config.harnesses[run.harnessName];
@@ -58,13 +68,13 @@ export const projectSpec = (run: ResolvedRun, entry: RegistryEntry, hooks: boole
     harnesses: harness ? { [run.harnessName]: harness } : {},
     hooks,
   };
-};
+}
 
 /**
  * Makes `hostDir` usable in the running sandbox. The launch folder (or a folder below it) needs nothing; any other
  * folder is resolved with `resolve` (the caller's resolveRun, with the approval prompt), checked, and registered.
  */
-export const joinRunning = async (o: {
+export async function joinRunning(o: {
   storageRoot: string;
   dataPath: string;
   packageRoot: string;
@@ -72,11 +82,14 @@ export const joinRunning = async (o: {
   wsbShare: boolean;
   resolve: (projectRoot: string) => Promise<ResolvedRun>;
   mapper?: ProjectMapper;
-}): Promise<Joined> => {
-  const here = new ProjectRegistry(o.storageRoot).here(o.hostDir);
-  if (here?.project.primary) return { ...here, spec: null, run: null, notes: [] };
+  /** Asked before anything is registered when something is missing (default: continue without it). */
+  decide?: (name: string, missing: Missing) => Promise<MissingChoice>;
+}): Promise<Joined> {
+  const registryFile = new ProjectRegistry(o.storageRoot);
+  const here = registryFile.here(o.hostDir);
+  if (here?.project.primary) return { ...here, spec: null, run: null, notes: [], missing: null };
   const registry =
-    new ProjectRegistry(o.storageRoot).read() ??
+    registryFile.read() ??
     fail(
       'The running sandbox was started by an older version, so it cannot take another folder.',
       'Stop it (sandbox stop) and start it again.',
@@ -84,7 +97,7 @@ export const joinRunning = async (o: {
   // A folder below a project already in the sandbox uses that project; anything else becomes a project of its own.
   const root = here?.project.host ?? path.resolve(o.hostDir);
   const run = await o.resolve(root);
-  const check = checkJoin(registry.protections, protectionsOf(run.config));
+  const check = checkJoin(registry.protections, protectionsOf(run.config), Object.keys(registry.atBoot?.widened ?? {}));
   if (check.stricter.length) {
     fail(
       'This project needs stricter protection than the running sandbox has, and those settings are machine-wide:\n  ' +
@@ -94,17 +107,26 @@ export const joinRunning = async (o: {
         '.',
     );
   }
+  // Boot-only wishes (a .wsb device you allowed for it, more memory, its mappings) the running sandbox lacks.
+  const launchPath = runningLaunchPath(o.storageRoot, o.dataPath);
+  const boot = registryFile.bootRecord(launchPath);
+  const found = boot ? missingAtBoot(registry.protections, boot, run.config, dirExists) : null;
+  const missing = found && !nothingMissing(found) ? found : null;
+  if (missing) {
+    const choice = o.decide ? await o.decide(here?.project.name ?? path.basename(root), missing) : 'continue';
+    if (choice === 'cancel') fail('Cancelled: nothing changed.');
+    if (choice === 'restart') throw new NeedsRestart(root, 'it wants what the sandbox only gets at its start', missing);
+  }
   const mapper =
     o.mapper ?? projectMapper({ storageRoot: o.storageRoot, packageRoot: o.packageRoot, wsbShare: o.wsbShare });
   // Guarded from now on. A folder the sandbox could already write (inside a root, or mapped at boot) and that has no
   // snapshot from the launch gets an empty one: what is there now may have been planted, so it counts as new.
   // Anything else is snapshotted before it becomes visible.
   new RepoGuardStore(o.dataPath).add(root, {
-    empty: Boolean(here) || Boolean(new ProjectRegistry(o.storageRoot).rootHere(root)),
+    empty: Boolean(here) || Boolean(registryFile.rootHere(root)),
   });
   const entry = mapper.register(root);
   new KnownProjects(o.storageRoot).remember(entry.host);
-  const launchPath = runningLaunchPath(o.storageRoot, o.dataPath);
   // Your hooks in ~/.agent-sandbox/hooks ran at boot (once per sandbox); the project's own scripts ("scripts" in its
   // .sandbox-config.json, --script) run before its first agent. The launch folder is read-only for the sandbox, but
   // this side can still add them to it.
@@ -116,12 +138,19 @@ export const joinRunning = async (o: {
   } catch {
     /* history is a convenience; never block the session */
   }
-  const notes = [...run.notes, ...check.looser.map((l) => 'The running sandbox is stricter: ' + l + '.')];
+  const notes = [
+    ...run.notes,
+    ...check.looser.map((l) => 'The running sandbox is stricter: ' + l + '.'),
+    ...check.shared.map(
+      (s) => s + ' is on in this sandbox for another of its projects (you allowed it there); this project shares it.',
+    ),
+  ];
   return {
     project: entry,
     guestDir: here ? here.guestDir : entry.guest,
     spec: projectSpec(run, entry, hooks),
     run,
     notes,
+    missing,
   };
-};
+}

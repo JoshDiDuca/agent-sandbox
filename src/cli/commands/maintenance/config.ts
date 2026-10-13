@@ -3,15 +3,24 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DEFAULTS, userConfigPath, userDir } from '../../../core/config/index.js';
 import {
+  allowedAnswer,
+  allowStorePath,
+  applyOverrides,
   describeOverrides,
   isTrusted,
   LOCAL_CONFIG_NAME,
+  loosenedRequests,
   normalizeOverrides,
+  OUTSIDE_FOLDER,
+  outsideKey,
+  outsideMappings,
   readLocalConfig,
   trustStorePath,
 } from '../../../core/local-config/index.js';
-import { fail, safeText, writeJson } from '../../../core/util/index.js';
-import { table } from '../../output/index.js';
+import { guestWorkspaceOf, previewGuest } from '../../../core/run/index.js';
+import type { Mapping, Overrides } from '../../../core/types.js';
+import { dirExists, fail, safeText, writeJson } from '../../../core/util/index.js';
+import { c, table } from '../../output/index.js';
 import { type Context } from '../context.js';
 
 function initConfig(): number {
@@ -65,8 +74,60 @@ function checkLocalConfig(ctx: Context): number {
       (approved ? 'Approved (this exact version).' : 'Not approved yet: the next launch asks you.') +
       '\n',
   );
-  for (const line of describeOverrides(overrides)) console.log('  ' + safeText(line));
+  for (const line of describeOverrides(overrides, dir)) console.log('  ' + safeText(line));
+  previewFolders(ctx, dir, file.path, overrides);
   return 0;
+}
+
+/** What a launch from here would do with each folder and each looser setting, without launching. */
+function previewFolders(ctx: Context, dir: string, filePath: string, overrides: Overrides): void {
+  const config = ctx.loaded.config;
+  const store = allowStorePath(ctx.storageRoot);
+  const workspaceGuest = guestWorkspaceOf(applyOverrides(config, overrides), dir).guest;
+  const outside = outsideMappings(dir, overrides.mappings);
+  const policy = config.projects.allowOutsideMappings;
+  const statusOf = (m: Mapping): string => {
+    if (!dirExists(m.host))
+      return m.optional
+        ? 'not on this PC: skipped'
+        : c.red('the folder does not exist: create it, fix the path, or add "optional": true');
+    if (!outside.includes(m))
+      return m.guest ? 'inside the project' : 'inside the project (already in the sandbox there)';
+    if (policy === true) return 'outside the project, allowed (projects.allowOutsideMappings is true)';
+    if (policy === false) return c.red('outside the project: refused (projects.allowOutsideMappings is false)');
+    return allowedAnswer(store, filePath, OUTSIDE_FOLDER, outsideKey(m)) === true
+      ? 'outside the project, allowed (you said yes)'
+      : c.yellow('outside the project: the next interactive launch asks you');
+  };
+  const rows = (overrides.mappings ?? []).map((m) => {
+    const where = previewGuest(m, dir, workspaceGuest);
+    return [(m.readOnly ? 'ro ' : 'rw ') + safeText(m.host), '->  ' + safeText(where.guest), statusOf(m)];
+  });
+  if (rows.length) {
+    console.log('\nFolders (where they appear in the sandbox):');
+    table(rows);
+  }
+  for (const m of overrides.mappings ?? []) {
+    const note = dirExists(m.host) ? previewGuest(m, dir, workspaceGuest).note : null;
+    if (note) console.log('  ' + safeText(note));
+  }
+  const looser = loosenedRequests(config, overrides);
+  if (looser.length) console.log('\nLooser than your settings (used only if you allow it for this project):');
+  for (const a of looser) {
+    const answer = allowedAnswer(store, filePath, a.key, a.wanted);
+    console.log(
+      '  ' +
+        a.key +
+        ' = ' +
+        JSON.stringify(a.wanted) +
+        ': ' +
+        (answer === true
+          ? 'allowed (you said yes)'
+          : answer === false
+            ? 'not used (you said no)'
+            : 'the next interactive launch asks you'),
+    );
+  }
 }
 
 export function config(ctx: Context): number {

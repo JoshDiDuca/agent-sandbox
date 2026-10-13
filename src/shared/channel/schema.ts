@@ -13,6 +13,17 @@ export const AttachEndpointSchema = z.strictObject({
   token: Text(256),
 });
 
+/** The boot's progress in a shape the host can show: step n of m, what is being set up now, how many are done. */
+export const BootProgressSchema = z.strictObject({
+  step: z.number().int().min(1).max(32),
+  steps: z.number().int().min(1).max(32),
+  title: Text(120),
+  /** Being set up now; percent while it downloads (when the size is known). */
+  active: z.array(z.strictObject({ name: Text(64), percent: z.number().int().min(0).max(100).optional() })).max(8),
+  done: z.number().int().min(0).max(1000),
+  total: z.number().int().min(0).max(1000),
+});
+
 /** C:\AgentData\run\sandbox.json: boot progress of the sandbox as a whole. */
 export const SandboxStatusSchema = z.object({
   launchId: Text(64),
@@ -24,6 +35,8 @@ export const SandboxStatusSchema = z.object({
   headless: z.boolean(),
   /** The sandbox's IPv4 addresses (for network.forwardPorts; the host only uses ones on its Hyper-V network). */
   addresses: z.array(z.string().max(45)).max(8).optional(),
+  /** A malformed progress is dropped, never the status (the phase still counts). */
+  progress: BootProgressSchema.optional().catch(undefined),
 });
 
 const VersionSchema = z.strictObject({ spec: Text(128), source: Text(256) });
@@ -131,6 +144,7 @@ export type ProjectSpec = z.output<typeof ProjectSpecSchema>;
 export type ProjectStatus = z.output<typeof ProjectStatusSchema>;
 export type AttachEndpoint = z.output<typeof AttachEndpointSchema>;
 export type SandboxStatus = z.output<typeof SandboxStatusSchema>;
+export type BootProgress = z.output<typeof BootProgressSchema>;
 export type GuestRequest = z.output<typeof GuestRequestSchema>;
 export type GuestResponse = z.output<typeof GuestResponseSchema>;
 export type SessionStatus = z.output<typeof SessionStatusSchema>;

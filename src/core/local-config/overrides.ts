@@ -15,20 +15,19 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
   const missing = scripts?.filter((s) => !fileExists(s)) ?? [];
   if (missing.length) fail(source + ' is not valid:\n  - scripts: file not found: ' + missing.join(', '));
   const mappings = overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) }));
-  // A repo ships this file, so it must not reach the rest of this PC: its extra folders stay inside the project.
-  const outside = mappings?.filter((m) => !insideProject(dir, m.host)) ?? [];
-  if (outside.length)
-    fail(
-      source +
-        ' is not valid:\n  - mappings: a project file may only map folders inside the project, not ' +
-        outside.map((m) => m.host).join(', '),
-      'Map other folders in your own settings (sandbox config path shows where they are).',
-    );
   return { ...overrides, scripts, mappings };
 };
 
+/**
+ * The project file's mappings of folders outside the project (%VAR% expanded, links and short names followed). A repo
+ * ships this file, so these reach the rest of this PC: projects.allowOutsideMappings in YOUR settings decides.
+ */
+export function outsideMappings<M extends { host: string }>(dir: string, mappings: readonly M[] = []): M[] {
+  return mappings.filter((m) => !insideProject(dir, m.host));
+}
+
 /** `folder` (also where it really is, through links) is inside the project folder `dir`. */
-const insideProject = (dir: string, folder: string): boolean => {
+export const insideProject = (dir: string, folder: string): boolean => {
   // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created
   // yet.
   const real = (p: string): string => {
@@ -98,9 +97,10 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
   if (rest.network?.blockHosts) next.network.blockHosts = _.union(config.network.blockHosts, rest.network.blockHosts);
   if (rest.workspaceFilter?.exclude)
     next.workspaceFilter.exclude = _.union(config.workspaceFilter.exclude, rest.workspaceFilter.exclude);
+  const sameGuest = (a?: string, b?: string): boolean => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
   if (mappings)
     next.mappings = [
-      ..._.reject(config.mappings, (m) => mappings.some((o) => o.guest.toLowerCase() === m.guest.toLowerCase())),
+      ..._.reject(config.mappings, (m) => mappings.some((o) => sameGuest(o.guest, m.guest))),
       ...mappings,
     ];
   return next;
@@ -112,11 +112,20 @@ const flatten = (value: unknown, prefix = ''): string[] =>
     : [prefix + ' = ' + JSON.stringify(value)];
 
 /** Human-readable list of what a local config changes, with risky items flagged. */
-export const describeOverrides = (ov: Overrides): string[] => {
+export const describeOverrides = (ov: Overrides, dir?: string): string[] => {
   const { harness, mappings = [], scripts = [], $schema: _schema, ...sections } = ov;
+  const outside = dir ? outsideMappings(dir, mappings) : [];
   const lines = [
     ...(harness ? ['agent = ' + harness] : []),
-    ...mappings.map((m) => (m.readOnly ? 'read-only' : 'READ/WRITE') + ' folder ' + m.host + '  ->  ' + m.guest),
+    ...mappings.map(
+      (m) =>
+        (m.readOnly ? 'read-only' : 'READ/WRITE') +
+        ' folder ' +
+        m.host +
+        '  ->  ' +
+        (m.guest ?? 'the same path') +
+        (outside.includes(m) ? '  (outside the project)' : ''),
+    ),
     ...scripts.map((s) => 'runs inside the sandbox: ' + s),
     ...flatten(sections),
   ];

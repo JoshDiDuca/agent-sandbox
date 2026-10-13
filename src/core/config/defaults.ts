@@ -191,5 +191,13 @@ export const DEFAULTS: Config = {
     },
   },
   hooks: { failFast: false },
-  projects: { all: false, exclude: [], roots: [], askToAddRoot: true, declinedRoots: [], wsbShare: true },
+  projects: {
+    all: false,
+    exclude: [],
+    roots: [],
+    askToAddRoot: true,
+    declinedRoots: [],
+    allowOutsideMappings: 'ask',
+    wsbShare: true,
+  },
 };

@@ -86,7 +86,7 @@ export const LocalOverridesSchema = z
     mappings: z
       .array(MappingSchema)
       .describe(
-        'Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.',
+        'Extra folders (relative paths are relative to this file), e.g. a read-only data folder at another place in the sandbox. Folders outside the project are used only as your projects.allowOutsideMappings setting allows (by default you are asked once).',
       ),
     scripts: StringsSchema.describe(
       'Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.',

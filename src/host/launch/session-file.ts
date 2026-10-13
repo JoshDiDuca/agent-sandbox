@@ -52,7 +52,8 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
     workspace: config.guestWorkspace,
     workspaceHost,
     projectsDir: PROJECTS_GUEST,
-    roots: parts.boot.roots.map((r) => r.guest),
+    // Every folder mapped for other projects (roots and projects mapped at boot): the guest accepts projects in them.
+    roots: [...parts.boot.roots, ...parts.boot.projects].map((r) => r.guest),
     ...(o.autoSession === false ? { autoSession: false } : {}),
     harnessName,
     harness: parts.harness,

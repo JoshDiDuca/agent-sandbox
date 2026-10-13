@@ -99,8 +99,10 @@
             "description": "Folder on this PC (relative paths are relative to the config file)."
           },
           "guest": {
+            "description": "Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game (shown as F: at boot). Leave it out to use the same path as on this PC (a folder inside the project stays where it is in the project). A path the sandbox cannot use (C:\\Windows\\..., C:\\Users\\..., one already in use) goes to C:\\Mapped\\<drive>\\<path> instead, and the launch says so.",
             "type": "string",
-            "description": "Where it appears inside the sandbox, e.g. C:\\Assets, or on another drive letter (D: to Z:) such as F:\\SteamLibrary\\steamapps\\common\\Game: mapped to C:\\Mirror\\F\\... and shown as F: (subst) at boot."
+            "minLength": 1,
+            "maxLength": 1024
           },
           "readOnly": {
             "type": "boolean",
@@ -1448,6 +1450,18 @@
             "minLength": 1
           },
           "description": "Parent folders you said no to (not asked again)."
+        },
+        "allowOutsideMappings": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "ask"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "description": "A project's .sandbox-config.json may map folders from outside the project (e.g. a game folder on another drive). \"ask\" = an interactive launch asks once per project and set of folders, and remembers your answer; true = always allowed (still listed when you approve the file); false = never (the launch stops and says which folders). Only your own settings decide this, never a project file."
         },
         "wsbShare": {
           "type": "boolean",
