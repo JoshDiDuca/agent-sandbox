@@ -6,20 +6,25 @@
 
 ## The menu
 
-`sandbox` with no arguments opens a menu:
+`sandbox` with no arguments opens the menu, a full-screen app. Categories are on the left (`←` `→` move between the
+sidebar and the list), `/` searches everything, `Enter` opens, `Esc` goes back, `Ctrl+C` leaves.
 
-1. **Repeat last**: the last command you ran, typed or from the menu
-2. Start the default agent, **several agents at once** (pick projects, then agents for each, then which one this
-   terminal attaches to; it builds a `--session` command line), or pick another agent (shows which are installed)
-3. Start a sandbox without an agent
-4. Sandbox, sessions, accounts, data, diagnostics, configuration
-5. **Settings**: every setting with its value and description, changed and saved from the menu. It first asks which
-   file: your own (all projects), or this folder's `.sandbox-config.json` (only what a project may set). Saving a
-   project file does not approve it: the next launch shows what it applies and asks you to approve the changed file.
-   Lists of objects and maps (`harnesses`, `mappings`, environment variables) are edited as JSON, with an example shown.
+- **Start**: repeat your last command, start the default agent (at once, or with options first), **several agents at
+  once** (projects, then agents for each, then which one this terminal attaches to; it builds a `--session` command
+  line), any other agent (shows which are installed), a sandbox without an agent, Claude on this PC.
+- **Sessions**: the sessions running now (Enter attaches), list, restart.
+- **Sandbox**, **Claude accounts**, **Data & cleanup**, **Health & repair**: every command.
+- **Apps & tools**: the [apps catalogue](toolchains.md#apps-and-tools), for all projects or just this one.
+- **Settings**: every setting, on two tabs: **All projects** (your own file, blue) and **This project** (this folder's
+  `.sandbox-config.json`, purple; only what a project may set). `Tab` switches between them and keeps your place.
+  Each setting shows its value in both, its default and its description; `Enter` edits it (on/off flips at once,
+  choices are a list, text and numbers are checked as you type, lists, maps, mapped folders and agents get their own
+  editors), `r` resets it. Comments and formatting in the file are kept, and nothing invalid is ever saved. Saving a
+  project file does not approve it: the next launch shows what it applies and asks you to approve the changed file.
 
-Each command asks for its arguments and options, with on/off options as checkboxes and agents, accounts and sessions
-as lists. It then shows the exact command line and runs it.
+A command opens as a form: its arguments and options with their values, changed in place, and the exact command line
+it will run at the top. **Run** runs it; the output stays until you press a key. Commands that take over the terminal
+(starting an agent with `-t`, `attach`) end the menu.
 
 ## Starting
 

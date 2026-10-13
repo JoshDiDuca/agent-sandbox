@@ -7,17 +7,20 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
 
 ## Layout
 - `src/cli/`: `manifest.ts` defines every command, argument and option once (zod). `args.ts` builds the commander
-  parser from it (pure `parseCli`), `menu.ts` builds the interactive menu (`history.ts` remembers the last commands,
-  `colors.ts` is the one ANSI colour helper), `settings/` is the menu's settings screen (`schema.ts` reads the zod
-  schemas, `prompts.ts` one prompt per kind of setting, `edit.ts` jsonc-preserving edits, `index.ts` the screen for your
-  file and the project's `.sandbox-config.json`), `index.ts` dispatches (no args: menu, `sandbox <agent>`: launch).
+  parser from it (pure `parseCli`), `index.ts` dispatches (no args: menu, `sandbox <agent>`: launch), `history.ts`
+  remembers the last commands, `colors.ts` is the colour policy. `tui/` is the screen toolkit every menu screen uses
+  (`App` shows one `Screen` at a time; `Terminal` = alternate screen, raw keys, diffed redraws; `Frame`, `ListScreen`
+  with sidebar/search/details/tick lists/tabs, `dialogs.ts` text field/confirm/message, `Theme`, `Text`). `menu/` is
+  the menu: `index.ts` (`Menu`, home screen), `command-form.ts` (a command as a form), `several.ts`, `apps.ts` (the
+  apps catalogue screen), `settings/` (`SchemaNode` reads the zod schemas, `ConfigFile` jsonc-preserving edits,
+  `ValueEditor` + collection editors, `categories.ts`, `index.ts` `SettingsEditor` with the two scope tabs).
   `commands/`: one file per area (`launch`, `sessions` incl. `db`, `accounts`, `maintenance`) or a folder when an area
   has several parts: `repair/` (`checks.ts` the checks, `finders.ts` pure finders, `types.ts`), `data/` (`collect.ts`
   what is stored, `clean.ts` targets and removal, `remove.ts` link-safe delete), `setup/` (`facts.ts` what the PC has,
   `checks.ts` the checklist). `context.ts` has what commands share (context, `table`, `printJson`, `requireOnPc`).
   Several projects: `project.ts` is the ONE helper every command uses to find "the project this folder is in"
   (`locateHere` looks, `joinHere` registers); `restart.ts` the consented restart that adds folders; `projects.ts` the
-  `sandbox projects` command; `user-config.ts` edits your config file; `../menu-multi.ts` "Start several agents".
+  `sandbox projects` command; `user-config.ts` edits your config file.
 - `src/core/`: `schema.ts` re-exports `schema/` (zod, split by area: `common`, `sandbox`, `toolchains`, `databases`,
   `profile`, `harness`, `config` = user config + project overrides, `json-schema`; JSON Schemas in `schemas/` are
   generated from it), `config.ts` (`DEFAULTS`, loading), `local-config.ts` (`.sandbox-config.json`, tighten-only rules,
@@ -37,15 +40,17 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`, `project` = provisioning a project
   that joined after boot, per-session env), `project-context.ts` (AsyncLocalStorage: which project a toolchain step
   is for, and `duringSession()`: never switch machine-wide state then), `boot-env.ts` / `project-env.ts` (the boot's
-  base environment, pure part separate), `project-status.ts`, `view.ts`, `gitguard.ts`, `db.ts`,
+  base environment, pure part separate), `project-status.ts`, `view.ts`, `gitguard.ts`, `db.ts`, `apps/` (installs the apps catalogue: `index.ts`,
+  `resolvers.ts` for vendor download pages),
   `ports.ts`, `cmdline.ts` (agent command-line quoting), `helpers.ts` (compiles the C# helpers), `ptyhost.ts`,
   `setup/*`, and `toolchains/*`: `index.ts` is the parallel install scheduler, `plan.ts` lists the steps, `common.ts`
   shared helpers (resolveCached, installOnce, installFromGithub, downloadFile, `auto` detection), `versions.ts` (pure
   version pickers), `leftovers.ts`; one module per area: `node`, `python`, `go`, `java`, `managers`, `runtimes`, `git`,
-  `cli`, `pwsh`, `vscode`; `scripting/` (ruby, php, vcruntime); `native/` (cpp, rust, binstall, dotnet, mesa, msvc/);
+  `cli`, `pwsh`, `vscode` (+ pure `vscode-profile.ts`: its settings and extensions); `scripting/` (ruby, php, vcruntime); `native/` (cpp, rust, binstall, dotnet, mesa, msvc/);
   `databases/` (index, server, one file per database).
 - `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts`, `download.ts` (streamed to `.part`,
   hashed; `downloads.requireChecksum`; GitHub page fallback for the API rate limit), `netrules.ts`, `system.ts`,
+  `apps.ts` (pure: the apps catalogue, and which apps to install),
   `guest-paths.ts`, `projects.ts` (pure: project ids, host <-> guest folders, `C:\Projects`), `safe-remove.ts`,
   `test-guard.ts`.
 - `src/sync/`: history, claude-mem and the background watcher.

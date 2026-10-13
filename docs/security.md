@@ -32,7 +32,13 @@ can read because the whole folder is mapped.
 
 - Host and sandbox talk through small JSON files. The sandbox can ask for four things (start a session, run a command,
   restart, ping), and everything it writes back is validated and size-capped.
-- Text from the sandbox loses its escape sequences before it reaches your terminal.
+- Text from the sandbox loses its escape sequences before it reaches your terminal. When you attach, the session's
+  output passes a filter that drops clipboard writes (OSC 52, however they are split or disguised), terminal macros
+  and other control strings; colours, titles, links and progress pass.
+- What the sandbox adds to a project that tools on your PC would run by themselves is moved to
+  `agent-sandbox-quarantine`: git hooks and program-running git config (also in submodules and nested repositories),
+  commands planted in the project root, Claude Code hooks, helper commands and MCP servers (`.claude/settings*.json`,
+  `.mcp.json`), VS Code folder-open tasks and program paths, and `.envrc`. Ordinary edits to those files stay.
 - Links the sandbox plants are never followed.
 - Files it writes are read with bounded effort.
 - Attaching from your terminal connects only into the sandbox's Hyper-V network, with a per-session token.

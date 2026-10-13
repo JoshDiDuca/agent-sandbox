@@ -90,10 +90,13 @@ toolchains and versions, databases, git mode, extra folders and setup scripts. C
 A repo can ship this file, so it is treated as untrusted:
 
 - You approve it the first time, and again whenever it changes (the approval is tied to the file's exact contents).
-- Read/write folders are flagged in the approval prompt.
+- Read/write folders are flagged in the approval prompt, which is shown without colours or escape codes (a file cannot
+  hide lines of it).
+- Its extra folders (`mappings`) must be inside the project itself (also through links and `%VARIABLES%`).
+- It may add apps from the catalogue (`apps.install`, added to yours), never programs of its own (`apps.custom`).
 - It can only make protections **stricter**: read-only, git `readonly`/`none`, the LAN block, protected client, and
-  turning off network, clipboard, microphone, camera, printers, vGPU and login copying, and turning on
-  `downloads.requireChecksum`. Looser values are ignored.
+  turning off network, clipboard, microphone, camera, printers, vGPU, login copying and history / claude-mem sync, and
+  turning on `downloads.requireChecksum`. Looser values are ignored.
 - It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.
 
 ## Accounts

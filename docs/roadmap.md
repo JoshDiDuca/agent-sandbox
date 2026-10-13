@@ -4,7 +4,7 @@ What is planned, by version. Each version is a coherent release: everything in i
 documented before the version number goes up. Status: **done**, **in progress**, **planned**, **idea** (needs a
 design decision first).
 
-## 1.2 — The app (branch `ux-overhaul`)
+## 1.2 — The app (released)
 
 | Item | Status |
 | --- | --- |
@@ -21,7 +21,8 @@ design decision first).
 
 | Item | Status |
 | --- | --- |
-| Settings scope tabs: "All projects" and "This project" side by side, Tab switches, each with its own colour and badge | in progress |
+| Git-ignored files and folders (node_modules, .env, build output ...) kept out of the sandbox, seamlessly | planned |
+| Settings scope tabs: "All projects" and "This project" side by side, Tab switches, each with its own colour and badge | done (in 1.2) |
 | Network category: offline, allow only these hosts, blocked hosts, LAN rules, firewall rules, port forwarding between the PC and the sandbox | planned |
 | Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | planned |
 

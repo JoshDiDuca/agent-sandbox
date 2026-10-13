@@ -97,9 +97,56 @@ virtualization). Compose projects use the databases above.
 
 Add your own under `harnesses` in the config, with `npmPackage` / `npmBin`, `uvPackage` / `uvBin` or `hostExecutable`.
 
+## Apps and tools
+
+Optional desktop apps and command-line tools, chosen in the menu (**Apps & tools**: by category, searchable, with
+sizes and what is installed already) or in `apps.install`:
+
+| Category | Apps |
+| --- | --- |
+| Editors | Notepad++, Sublime Text, Neovim (VS Code is on by default) |
+| Database clients | DBeaver, pgAdmin 4, HeidiSQL, DB Browser for SQLite, MongoDB Compass, Redis Insight, DbGate, Beekeeper Studio, dynamodb-admin |
+| API clients | Bruno, Insomnia |
+| Git | SourceGit, GitHub Desktop (needs git access `full`), lazygit |
+| Utilities | 7-Zip, WinMerge, Everything, Sysinternals Suite, ImHex (Windows Terminal is on by default) |
+| Browsers | Chrome for Testing, Firefox |
+| Game development | Godot, Blender, LÖVE, Defold, Pixelorama, Tiled (Mesa is added for OpenGL without a GPU) |
+| Cloud and Kubernetes | kubectl, Helm, k9s, Terraform, Azure CLI, Google Cloud CLI, AWS CLI |
+| Diagrams and docs | draw.io, Pandoc |
+| Network and HTTP | mitmproxy, xh, grpcurl, k6 |
+| Command-line tools | jq, yq, ripgrep, fd, bat, fzf, delta, just, hyperfine, watchexec, protoc, Ninja, FFmpeg, SQLite tools, ShellCheck, Gitleaks |
+
+Each is downloaded once into `C:\AgentData\tools\apps` and kept. Nothing is installed with an installer: archives are
+unpacked, installers opened with 7-Zip and MSIs extracted, so it all survives the sandbox closing. Programs get a
+desktop and **Start > Sandbox apps** shortcut; command-line tools are on PATH. Downloads are checked against the
+checksum the publisher gives (GitHub releases, and most vendors); the Visual C++ runtime is installed first.
+
+**Your own programs** (`apps.custom`, or **c** in the Apps screen): a GitHub repository and a pattern for the release
+file, or an https link, plus the program to start (and whether it is a command-line tool). They install the same way.
+
+```jsonc
+"apps": {
+  "install": ["dbeaver", "bruno", "jq", "ripgrep"],
+  "custom": { "mytool": { "name": "My Tool", "github": "me/mytool", "asset": "windows-x64\\.zip$", "exe": "mytool.exe", "cli": true } }
+}
+```
+
+### VS Code
+
+VS Code (on by default) is set up for the sandbox: it points at the sandbox's own JDK (with the right Java version),
+Python, Go, C/C++ compiler (MSVC or MinGW), CMake, .NET, PHP, Ruby, Deno, Git, and has PowerShell 7 and Git Bash
+terminals. It installs the extensions for the languages and databases the project uses (Java pack, Python, Go,
+rust-analyzer, C/C++, C#, ESLint, Prettier, SQLTools ...), the ones the project recommends in
+`.vscode/extensions.json`, and any in `toolchains.vscode.extensions`. Only missing extensions are downloaded, in the
+background (`logs\vscode-extensions.log`). Your own VS Code settings are kept; `toolchains.vscode.setup: false` turns
+this off.
+
 ## Also in the sandbox
 
-- Windows Terminal, your desktop look (theme, accent, taskbar, wallpaper, regional settings)
+- Windows Terminal (new tabs open in the project folder), your desktop look (theme, accent, taskbar, wallpaper,
+  regional settings)
+- Agent sessions run in Microsoft's current pseudo console (downloaded once; `provisioning.conpty`), so the screen
+  stays clean when you resize and the mouse wheel scrolls back through the output
 - Git for Windows with Git Bash, your name and email only
 - Your Claude settings, CLAUDE.md, commands, agents, skills, plugins and MCP servers, with credentials stripped
 - Conversation history and claude-mem, synced both ways
