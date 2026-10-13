@@ -1,10 +1,12 @@
 // Which toolchain and database steps this sandbox runs, in the order their PATH entries are listed, and what each
 // step depends on. The scheduler (index.ts) runs them.
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { Config, DatabasePlan, GitAccess, Toolchains, ToolVersions } from '../../core/types.js';
 import { appsNeedMesa, setupApps } from '../apps/index.js';
-import { dataDir, execAsync, exists, localDir } from '../env.js';
-import { projectWorkspace } from '../project-context.js';
+import { dataDir, dryRun, execAsync, exists, localDir, mkdirp } from '../env.js';
+import { ensureCompiled } from '../helpers.js';
 import { arch, installOnce, tool, wanted, type ToolEnv } from './common.js';
 import { DATABASE_NAMES, setupDatabase } from './databases/index.js';
 import { setupGit } from './git.js';
@@ -43,12 +45,42 @@ const setupPythonTools = async (env: ToolEnv, tools: string[]): Promise<void> =>
   await installOnce(env, 'uv tool', tools, (pkg) => execAsync(uv, ['tool', 'install', pkg], { env: { ...process.env, ...uvVars() } }));
 };
 
-/** Where cargo builds: shared with the PC's target\, a separate folder next to it, one on the sandbox's disk, or a path. */
+/**
+ * Where cargo builds: shared with the PC's target\, one on the sandbox's disk, or a path. "separate" sets no variable:
+ * the cargo shim (sandbox/cargoshim.cs) gives every checkout its own target\sandbox, so git worktrees of several agents
+ * never overwrite each other's builds.
+ */
 const cargoTarget = (targetDir: Toolchains['rust']['targetDir']): string | null => {
-  if (targetDir === 'shared') return null;
-  if (targetDir === 'separate') return path.join(projectWorkspace(), 'target', 'sandbox');
+  if (targetDir === 'shared' || targetDir === 'separate') return null;
   if (targetDir === 'local') return path.join(localDir, 'cargo-target');
   return targetDir;
+};
+
+/** "separate": tools\shims\cargo\cargo.exe in front of the real cargo, which it runs with the checkout's target dir. */
+const cargoShim = (env: ToolEnv, rust: Toolchains['rust']): void => {
+  const real = path.join(tool('rust', 'cargo', 'bin'), 'cargo.exe');
+  if (rust.targetDir !== 'separate' || !exists(real)) return;
+  const dir = mkdirp(tool('shims', 'cargo'));
+  fs.copyFileSync(ensureCompiled('cargoshim'), path.join(dir, 'cargo.exe'));
+  env.prepend.unshift(dir);
+  env.vars.AGENT_REAL_CARGO = real;
+};
+
+/**
+ * Cargo defaults that fit Windows, written only when there is no $CARGO_HOME\config.toml yet: fewer parallel jobs
+ * (parallel rustc ran out of paging file) and, for the GNU host, only line tables as debug info (full debug info made
+ * test executables bigger than the 2 GB Windows allows).
+ */
+const cargoDefaults = (host: string): void => {
+  const file = tool('rust', 'cargo', 'config.toml');
+  if (exists(file) || !exists(path.dirname(file))) return;
+  const jobs = Math.max(2, Math.min(8, Math.floor(os.cpus().length / 2)));
+  const gnu = host.endsWith('-gnu');
+  fs.writeFileSync(file, [
+    '# Written by windows-development-sandbox once; edit freely, it is never overwritten.',
+    '[build]', 'jobs = ' + jobs, '',
+    ...(gnu ? ['[profile.dev]', 'debug = "line-tables-only"', '', '[profile.test]', 'debug = "line-tables-only"', ''] : []),
+  ].join('\n'));
 };
 
 /**
@@ -84,7 +116,11 @@ export const plan = (config: Toolchains, versions: ToolVersions, o: ToolchainOpt
     // Rust links with MSVC (msvc host) or MinGW's gcc (GNU host): whichever it uses goes first.
     {
       name: 'Rust', on: wanted(config.rust.enabled, 'rust'), after: ['C/C++', 'MSVC'],
-      run: async (env) => { await setupRust(env, { ...config.rust, host: rustHost(config) }, o.refresh); Object.assign(env.vars, rustCaches(config.rust)); },
+      run: async (env) => {
+        await setupRust(env, { ...config.rust, host: rustHost(config) }, o.refresh);
+        Object.assign(env.vars, rustCaches(config.rust));
+        if (!dryRun) { cargoDefaults(rustHost(config)); cargoShim(env, config.rust); }
+      },
     },
     { name: '.NET', on: wanted(config.dotnet.enabled, 'dotnet'), run: (env) => setupDotnet(env, config.dotnet, o.refresh) },
     { name: 'Go', on: wanted(config.go.enabled, 'go'), run: (env) => setupGo(env, config.go) },

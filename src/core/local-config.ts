@@ -51,6 +51,13 @@ const keepStrictest = (yours: Config, merged: Config): void => {
   if (GIT_STRICTNESS[yours.provisioning.git.access] > GIT_STRICTNESS[merged.provisioning.git.access]) merged.provisioning.git.access = yours.provisioning.git.access;
 };
 
+/** What a project file asks for that would loosen one of your protections (so it is not used). */
+export const loosenedRequests = (config: Config, ov: Overrides): { key: string; wanted: unknown; yours: unknown }[] => [
+  ...ON_IS_SAFER.filter((p) => _.has(ov, p) && !_.get(ov, p) && _.get(config, p)),
+  ...OFF_IS_SAFER.filter((p) => _.has(ov, p) && _.get(ov, p) && !_.get(config, p)),
+  ...(_.has(ov, 'provisioning.git.access') && GIT_STRICTNESS[_.get(ov, 'provisioning.git.access') as string] < GIT_STRICTNESS[config.provisioning.git.access] ? ['provisioning.git.access'] : []),
+].map((key) => ({ key, wanted: _.get(ov, key), yours: _.get(config, key) }));
+
 /** Applies validated overrides. Mappings with the same guest folder replace the configured ones. */
 export const applyOverrides = (config: Config, ov: Overrides): Config => {
   const { harness, mappings, scripts: _scripts, $schema: _schema, ...rest } = ov;

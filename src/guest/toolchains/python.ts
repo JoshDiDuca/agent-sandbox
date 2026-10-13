@@ -42,16 +42,39 @@ const shimPair = (folder: string, version: '2' | '3', dir: string): void => {
   shim(folder, 'pip' + version, python + ' -m pip');
 };
 
-export const setupPython = async (env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> => {
+/**
+ * `py` like the Python launcher Windows installs: `py -3 x.py`, `py -3.12 ...`, `py -2 ...`, `py x.py`. The launcher
+ * itself is not portable, so py.cmd runs a small script that picks the interpreter (cmd's %* ignores shift).
+ */
+const pyLauncher = (folder: string, py3: string, py2: string | null): void => {
+  const script = path.join(mkdirp(folder), 'py-launcher.py');
+  fs.writeFileSync(script, [
+    'import subprocess, sys',
+    'PY3, PY2 = ' + JSON.stringify(path.join(py3, 'python.exe')) + ', ' + JSON.stringify(py2 ? path.join(py2, 'python.exe') : null),
+    'args = sys.argv[1:]',
+    'exe = PY3',
+    "if args and args[0].startswith('-2'):",
+    '    if not PY2: sys.exit("py: Python 2 is not installed (toolchains.python.python2)")',
+    '    exe, args = PY2, args[1:]',
+    "elif args and (args[0] == '-3' or args[0].startswith('-3.') or args[0].startswith('-3-')):",
+    '    args = args[1:]',
+    'sys.exit(subprocess.call([exe] + args))',
+    '',
+  ].join('\n'));
+  shim(folder, 'py', '"' + path.join(py3, 'python.exe') + '" "' + script + '"');
+};
+
+export const setupPython = async(env: ToolEnv, config: Toolchains['python'], versions: ToolVersions): Promise<void> => {
   if (dryRun) { log('(dry run) would provision Python ' + versions.python.spec + (config.python2 ? ' and Python 2.7' : '')); return; }
   const py3 = await installPython('python', versions.python.spec);
   const shims = shimDir(py3);
   shimPair(shims, '3', py3);
   env.prepend.push(py3, path.join(py3, 'Scripts'), shims);
   env.vars.PYTHONIOENCODING = 'utf-8';
-  env.summary.push('python: ' + path.basename(py3).replace('python-', '') + ' (from ' + versions.python.source + ')');
-  if (!config.python2) return;
+  env.summary.push('python: ' + path.basename(py3).replace('python-', '') + ' (from ' + versions.python.source + '; py works too)');
+  if (!config.python2) { pyLauncher(shims, py3, null); return; }
   const py2 = await installPython('python2', '2.7');
   shimPair(shims, '2', py2);
+  pyLauncher(shims, py3, py2);
   env.summary.push('python2: ' + path.basename(py2).replace('python2-', ''));
 };

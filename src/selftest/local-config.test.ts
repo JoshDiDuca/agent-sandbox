@@ -84,7 +84,9 @@ export const localConfigSuite: Suite = {
       provisioning: { ...f.baseConfig.provisioning, git: { ...f.baseConfig.provisioning.git, access: 'readonly' } },
       sandbox: { ...f.baseConfig.sandbox, vGpu: false, clipboard: false, networking: false, protectedClient: true },
     };
-    const kept = (await f.run({ cwd: dirC, trustConfig: true }, strictUser)).config;
+    const keptRun = await f.run({ cwd: dirC, trustConfig: true }, strictUser);
+    const kept = keptRun.config;
+    t.check(keptRun.notes.some((n) => n.includes('sandbox.vGpu = true') && n.includes('your own settings')), 'what a project asked for and did not get is said at launch, with how to allow it', keptRun.notes.join('\n'));
     t.equal(
       {
         readOnly: kept.readOnly,

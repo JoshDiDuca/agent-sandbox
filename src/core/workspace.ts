@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Config, Overrides, ResolvedRun, RunRequest, ToolVersions, VersionSpec } from './types.js';
 import { planMirrorWorkspace } from '../shared/guest-paths.js';
 import { DATABASES, type Database } from './detect-databases.js';
-import { applyOverrides, describeOverrides, isTrusted, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
+import { applyOverrides, describeOverrides, isTrusted, loosenedRequests, normalizeOverrides, readLocalConfig, saveTrust, trustStorePath } from './local-config.js';
 import { assertSafeWorkspace } from './safe-paths.js';
 import { dirExists, expandPath, fail, fileExists, plainText } from './util.js';
 
@@ -88,6 +88,8 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
       saveTrust(store, local.path, local.hash);
       notes.push('Trusted ' + local.path + ' (you will only be asked again if the file changes).');
     }
+    // Say what the project asked for and did not get (it may only tighten), instead of dropping it silently.
+    for (const ask of loosenedRequests(config, overrides)) notes.push('The project asks for ' + ask.key + ' = ' + JSON.stringify(ask.wanted) + ', but your settings say ' + JSON.stringify(ask.yours) + ', so it is not used. To allow it, set ' + ask.key + ' in your own settings (sandbox, then Settings > All projects).');
     config = applyOverrides(config, overrides);
     scripts.push(...(overrides.scripts ?? []));
     localConfigPath = local.path;

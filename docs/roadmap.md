@@ -23,11 +23,11 @@ design decision first).
 | --- | --- |
 | Git-ignored files and folders (node_modules, .env, build output ...) kept out of the sandbox, seamlessly | planned |
 | Settings scope tabs: "All projects" and "This project" side by side, Tab switches, each with its own colour and badge | done (in 1.2) |
-| A project asking for something only you can allow (vGPU, ...) is said at launch, with how to allow it, instead of being dropped silently | planned |
-| Rust: `CARGO_TARGET_DIR` per checkout (git worktrees of several agents no longer share one target folder); gnu defaults that fit Windows (fewer jobs, `debug = "line-tables-only"` under the 2 GB executable limit) | planned |
-| Git in the sandbox: `core.autocrlf` no longer `true` (worktrees made inside checked out CRLF) | planned |
-| claude-mem: keep a few dated backups instead of replacing the only copy | planned |
-| `py` launcher next to `python` | planned |
+| A project asking for something only you can allow (vGPU, ...) is said at launch, with how to allow it, instead of being dropped silently | done |
+| Rust: `CARGO_TARGET_DIR` per checkout (git worktrees of several agents no longer share one target folder); gnu defaults that fit Windows (fewer jobs, `debug = "line-tables-only"` under the 2 GB executable limit) | done |
+| Git in the sandbox: `core.autocrlf` no longer `true` (worktrees made inside checked out CRLF) | done |
+| claude-mem: keep a few dated backups instead of replacing the only copy | done |
+| `py` launcher next to `python` | done |
 | Network category: offline, allow only these hosts, blocked hosts, LAN rules, firewall rules, port forwarding between the PC and the sandbox | planned |
 | Security sweep, rest of the audit: history and claude-mem sync back (only this project's, no foreign transcripts), what is copied in (other projects' history, `file-history`), sandbox text shown without escape codes everywhere, attach only to the sandbox's own address, logs folder link checks | done |
 

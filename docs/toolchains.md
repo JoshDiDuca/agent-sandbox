@@ -47,8 +47,18 @@ otherwise. `rust.crates` lists cargo binaries to install; they are downloaded pr
 publishes a Windows build, else compiled once.
 
 `rust.targetDir` keeps the sandbox's builds apart from your PC's: `"separate"` (default) builds into
-`target\sandbox`, `"shared"` uses cargo's normal `target`, `"local"` uses the sandbox's own disk (fast, lost on close).
-sccache keeps its cache in `C:\AgentData\cache\sccache` unless the project sets `SCCACHE_DIR`.
+`target\sandbox` of each checkout (git worktrees of several agents each get their own, wherever cargo is run from),
+`"shared"` uses cargo's normal `target`, `"local"` uses the sandbox's own disk (fast, lost on close). A
+`CARGO_TARGET_DIR` you set yourself always wins. sccache keeps its cache in `C:\AgentData\cache\sccache` unless the
+project sets `SCCACHE_DIR`.
+
+The first time, `C:\AgentData\tools\rust\cargo\config.toml` gets Windows-friendly defaults: half the CPUs as build
+jobs (at most 8; many parallel rustc processes ran out of paging file) and, for the GNU host, `debug =
+"line-tables-only"` (full debug info made test executables bigger than the 2 GB Windows allows). It is never
+overwritten; edit it freely.
+
+Git in the sandbox uses `core.autocrlf=input`: checkouts made inside keep the repo's line endings (LF), and a checkout
+from your PC still shows as unchanged. `py` (`py -3`, `py -2`, `py -3.12`) runs the sandbox's Python.
 
 ### Graphics
 

@@ -42,4 +42,8 @@ export const setupGitConfig = (env: NodeJS.ProcessEnv): void => {
   spawnSync(git, ['config', '--global', '--add', 'safe.directory', '*'], { env: rest, windowsHide: true, stdio: 'ignore' });
   // Windows long paths are on in the sandbox, but git skips files over 260 characters unless told.
   spawnSync(git, ['config', '--global', 'core.longpaths', 'true'], { env: rest, windowsHide: true, stdio: 'ignore' });
+  // Git for Windows' system config says autocrlf=true: checkouts made in the sandbox (worktrees, clones) got CRLF and
+  // tools that want LF (rustfmt, shellcheck, prettier) failed on every file. "input" keeps the line endings the repo
+  // has, and a checkout from your PC (CRLF in the folder) still shows as unchanged.
+  spawnSync(git, ['config', '--global', 'core.autocrlf', 'input'], { env: rest, windowsHide: true, stdio: 'ignore' });
 };
