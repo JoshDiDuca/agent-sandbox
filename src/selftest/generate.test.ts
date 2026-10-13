@@ -55,6 +55,7 @@ export const generateSuite: Suite = {
     );
     t.matches(session.hostTools.nodeVersion ?? '', /^\d+\.\d+\.\d+$/, 'session.json: the host Node version is a plain version');
     t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for cpucap.ps1 (default 80 %)');
+    t.equal(session.pageFileMb, 16384, 'session.json carries the paging file limit for pagefile.ps1 (default 16 GB)');
     t.check(!LocalOverrides.safeParse({ sandbox: { cpuLimit: 'none' } }).success, "a project's .sandbox-config.json cannot lift your CPU cap (sandbox.cpuLimit is yours only)");
 
     t.section('what is copied from this PC');

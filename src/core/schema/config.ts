@@ -56,7 +56,8 @@ export const LocalOverrides = z.strictObject({
   workspaceFilter: WorkspaceFilter.pick({ enabled: true, exclude: true }).partial(),
   mappings: z.array(Mapping).describe('Extra folders inside this project (relative to this file), e.g. a read-only data folder at another place in the sandbox.'),
   scripts: Strings.describe('Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.'),
-  sandbox: Sandbox.omit({ cpuLimit: true }).partial(),
+  // This PC's resources are yours to share: CPU and paging file (this PC's disk) are not a project's to set.
+  sandbox: Sandbox.omit({ cpuLimit: true, pageFileMb: true }).partial(),
   // A project may block more (the LAN, hosts); it never opens hosts, ports, DNS or a proxy.
   network: Network.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
   provisioning: Provisioning.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true }).extend({ git: Git.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() }).partial(),

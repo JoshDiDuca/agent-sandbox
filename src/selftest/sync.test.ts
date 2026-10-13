@@ -122,6 +122,10 @@ export const syncSuite: Suite = {
     t.equal(explainStop([ev(41, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:20:00Z'), ev(42, 'Microsoft-Windows-Kernel-Power', '2026-10-13T02:10:00Z')])?.kind, 'sleep', 'the first event counts (sleep, then a crash)');
     t.equal(explainStop([ev(2004, 'Microsoft-Windows-Resource-Exhaustion-Detector', '2026-10-13T02:10:00Z')])?.kind, 'memory', 'low memory is recognised');
     t.equal(explainStop([ev(41, 'SomethingElse', '2026-10-13T02:10:00Z')]), null, 'the same event id from another source is ignored');
+    const lsm = 'Microsoft-Windows-TerminalServices-LocalSessionManager';
+    t.equal(explainStop([ev(24, lsm, '2026-10-13T09:50:00Z', 'PC\\Josh')], 'josh')?.kind, 'session', 'switching user away from your session is recognised');
+    t.equal(explainStop([ev(23, lsm, '2026-10-13T09:50:00Z', 'PC\\Josh')], 'josh')?.text, 'you signed out of Windows', 'signing out is recognised');
+    t.equal(explainStop([ev(24, lsm, '2026-10-13T09:50:00Z', 'PC\\Guest')], 'josh'), null, 'another account\'s session ending does not count');
 
     const lifeRoot = t.at('life-storage');
     const lifeData = path.join(lifeRoot, 'data', 'testdata');

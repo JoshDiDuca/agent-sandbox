@@ -9,6 +9,8 @@ if exist C:\AgentLaunch\env.cmd call C:\AgentLaunch\env.cmd
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 rem sandbox.cpuLimit: this window joins a CPU-capped job first, so everything started below inherits the cap.
 "%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\cpucap.ps1
+rem sandbox.pageFileMb: room for many parallel builds (the sandbox starts with about 1 GB of paging file).
+"%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\AgentLaunch\sandbox\pagefile.ps1
 set "BOOT=%PS% -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File C:\AgentLaunch\sandbox\bootstrap.ps1"
 if not exist C:\AgentData\tools\terminal\wt.exe goto plain
 start "" C:\AgentData\tools\terminal\wt.exe --maximized new-tab --title "Agent Sandbox" -d C:\AgentLaunch %BOOT%

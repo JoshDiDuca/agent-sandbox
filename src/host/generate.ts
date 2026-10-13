@@ -101,6 +101,7 @@ export const generateSandbox =(o: GenerateOptions): Generated & { personalizatio
     personalization: fs.existsSync(path.join(launchPath, 'personalize', 'personalize.reg')),
     substDrives: substDrives(mappings.map((m) => m.guest)),
     cpuLimitPercent: config.sandbox.cpuLimit === 'none' ? null : config.sandbox.cpuLimit,
+    pageFileMb: config.sandbox.pageFileMb,
     apps: config.apps,
     auditProcesses: config.audit.enabled && config.audit.processes,
   };

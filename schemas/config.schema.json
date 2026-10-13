@@ -158,6 +158,12 @@
           ],
           "description": "Most of this PC's CPU the sandbox may use, in percent (5-100), e.g. 50 keeps half free for you; \"none\" = no cap (Windows Sandbox would take every processor). Covers everything this tool starts in the sandbox (agents, installs, builds, its terminal)."
         },
+        "pageFileMb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144,
+          "description": "How far the sandbox's paging file may grow, in MB (it starts at 4 GB and only takes disk space when needed; 8 GB of disk always stays free). Many parallel builds need it: Windows Sandbox starts with about 1 GB, and builds then fail with \"The paging file is too small\". 0 = leave Windows' own."
+        },
         "reserveHostMb": {
           "type": "integer",
           "minimum": 0,

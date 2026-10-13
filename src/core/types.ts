@@ -90,6 +90,8 @@ export interface GuestSession {
   substDrives?: { letter: string; target: string }[];
   /** sandbox.cpuLimit as a number (null = no cap); sandbox\cpucap.ps1 applies it before anything starts. */
   cpuLimitPercent?: number | null;
+  /** sandbox.pageFileMb (0 = Windows' own); sandbox\pagefile.ps1 applies it at logon. */
+  pageFileMb?: number;
   /** Apps to install (catalogue ids and your own programs); missing in launch folders of older versions. */
   apps?: Config['apps'];
   /** audit.enabled and audit.processes: the sandbox reports the programs it starts (host keeps the log). */

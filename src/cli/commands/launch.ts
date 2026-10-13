@@ -307,6 +307,7 @@ export const launch = async (ctx: Context, generateOnly = false, extras: LaunchE
   rememberProject(storageRoot, run.workspaceHost);
   startLife(storageRoot, dataPath, config.sandbox.keepAwake);
   startSandbox(generated.wsbPath);
+  console.log(c.dim('Leaving it running? Lock the PC (Windows key + L). Switching user, signing out or restarting closes the sandbox.'));
   // Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently.
   if (!watcherRunning(dataPath)) spawnDetached(ctx.entry, ['_watch', ...(options.config ? ['--config', path.resolve(options.config)] : [])]);
   // Hiding runs alongside; a failure to find the window must never break the launch or an attach.

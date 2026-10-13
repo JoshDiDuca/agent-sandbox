@@ -21,6 +21,7 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
+| `sandbox.pageFileMb` | how far the sandbox's paging file may grow (default `16384`; it starts at 4 GB, `0` = Windows' own ~1 GB). Many parallel builds need it |
 | `sandbox.keepAwake` | keep this PC from sleeping while a sandbox runs (default `true`), so agents left overnight keep working. The screen may still turn off; closing a laptop lid still sleeps it |
 | `sandbox.cpuLimit` | most of your PC's CPU the sandbox may use, in percent (default `80`; `"none"` = all of it). Your setting only: a project file cannot change it |
 | `sandbox.maxMemoryPercent`, `.maxMemoryMb`, `.reserveHostMb` | `memoryMb: "auto"` = free RAM minus `reserveHostMb` (8 GB), at most `maxMemoryPercent` (80) of your RAM and `maxMemoryMb` |
