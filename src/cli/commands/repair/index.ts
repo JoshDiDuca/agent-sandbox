@@ -3,14 +3,13 @@
 // sandbox is running.
 import path from 'node:path';
 import _ from 'lodash';
-import { DEFAULTS, loadConfig, userDir } from '../../../core/config/index.js';
-import { errMsg, expandPath, UserError } from '../../../core/util/index.js';
-import { isSandboxRunning } from '../../../host/sandbox/index.js';
+import { DEFAULTS, userDir } from '../../../core/config/index.js';
+import { expandPath, UserError } from '../../../core/util/index.js';
 import type { CliOptions } from '../../args.js';
 import { createContext, type Context } from '../context.js';
 import { printJson, table } from '../../output/index.js';
-import { CHECKS } from './checks.js';
-import type { RepairCheck, RepairEnv, RepairResult, RepairStatus } from './types.js';
+import { HealthService } from '../../services/index.js';
+import type { RepairStatus } from './types.js';
 
 const LABEL: Record<RepairStatus, string> = {
   ok: 'OK',
@@ -20,37 +19,8 @@ const LABEL: Record<RepairStatus, string> = {
   skipped: 'SKIPPED',
 };
 
-/** Runs every check in order; a check that throws is reported, never stops the rest. */
-export function runChecks(env: RepairEnv, checks: RepairCheck[] = CHECKS): RepairResult[] {
-  return checks.map((check) => {
-    try {
-      return { name: check.name, ...check.run(env) };
-    } catch (e) {
-      const fix = e instanceof UserError && e.fix ? ' ' + e.fix : '';
-      return { name: check.name, status: 'needs-you', detail: 'check failed: ' + errMsg(e) + fix };
-    }
-  });
-}
-
 export function repair(ctx: Context, configError: UserError | null = null): number {
-  const env: RepairEnv = {
-    ctx,
-    running: isSandboxRunning(),
-    dataPath: ctx.dataPath,
-    storageRoot: ctx.storageRoot,
-    toolsDir: path.join(ctx.dataPath, 'tools'),
-    configError,
-  };
-  // Re-check the config file even when the context loaded (it may have been edited since, or come from --config).
-  if (!env.configError) {
-    try {
-      loadConfig(ctx.options.config);
-    } catch (e) {
-      if (e instanceof UserError) env.configError = e;
-      else throw e;
-    }
-  }
-  const results = runChecks(env);
+  const results = new HealthService(ctx).repair(configError);
   if (printJson(ctx, results)) return results.some((r) => r.status === 'needs-you') ? 1 : 0;
   table(results.map((r) => [LABEL[r.status], r.name, r.detail]));
   const counts = _.countBy(results, 'status');

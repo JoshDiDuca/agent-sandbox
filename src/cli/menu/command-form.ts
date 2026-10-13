@@ -3,12 +3,12 @@
 // command or option appears here on its own.
 import { humanBytes } from '../../core/disk.js';
 import { fail, plainText } from '../../core/util/index.js';
-import { AccountStore } from '../../host/profile/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import { splitArgs } from '../args.js';
 import type { Context } from '../commands/context.js';
-import { cleanTargetOf, collectDataEntries } from '../commands/data/collect.js';
+import { cleanTargetOf } from '../commands/data/collect.js';
+import { AccountsService, DataService } from '../services/index.js';
 import { commandLine } from '../history.js';
 import { askedWhen, type CommandSpec, type OptionSpec } from '../manifest.js';
 import { Text, Theme, type App, type ListItem } from '../tui/index.js';
@@ -41,8 +41,7 @@ export class CommandForm {
   private choices(choices: OptionSpec['choices']): string[] {
     if (Array.isArray(choices)) return choices;
     if (choices === 'harnesses') return Object.keys(this.ctx.loaded.config.harnesses);
-    if (choices === 'accounts')
-      return new AccountStore(this.ctx.storageRoot).list(this.ctx.dataPath).map((a) => a.name);
+    if (choices === 'accounts') return new AccountsService(this.ctx).list().map((a) => a.name);
     if (choices === 'sessions')
       return isSandboxRunning()
         ? new SandboxChannel(this.ctx.dataPath).runningSessions().map((s) => plainText(s.id))
@@ -279,7 +278,7 @@ export class CommandForm {
 
   /** `data clean` targets, ticked from a list with their sizes (never "all": that is typed on purpose). */
   private async dataTargets(path: string[]): Promise<string[] | undefined> {
-    const rows = collectDataEntries(this.ctx.dataPath, this.ctx.storageRoot).flatMap((e) => {
+    const rows = new DataService(this.ctx).entries().flatMap((e) => {
       const target = cleanTargetOf(e);
       return target ? [{ target, bytes: e.bytes }] : [];
     });

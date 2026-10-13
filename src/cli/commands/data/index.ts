@@ -2,12 +2,13 @@
 // removing chosen parts of it. Everything under the data folder is sandbox-writable: sizes and deletes never follow
 // links, and targets resolve strictly inside the data folder.
 import _ from 'lodash';
-import { diskUsage, humanBytes } from '../../../core/disk.js';
+import { humanBytes } from '../../../core/disk.js';
 import { fail } from '../../../core/util/index.js';
 import { printJson, table, working } from '../../output/index.js';
+import { DataService } from '../../services/index.js';
 import { type Context } from '../context.js';
 import { dataClean } from './clean.js';
-import { collectDataEntries, type DataArea } from './collect.js';
+import { type DataArea } from './collect.js';
 
 const AREA_LABEL: Record<DataArea, string> = {
   tools: 'Toolchains',
@@ -19,13 +20,12 @@ const AREA_LABEL: Record<DataArea, string> = {
 };
 
 export async function dataInfo(ctx: Context): Promise<number> {
-  const entries = await working(
+  const report = await working(
     'Measuring the saved data (big folders take a moment)',
-    () => collectDataEntries(ctx.dataPath, ctx.storageRoot),
+    () => new DataService(ctx).report(),
     !ctx.options.json,
   );
-  const total = _.sumBy(entries, 'bytes');
-  const disks = diskUsage(ctx.storageRoot);
+  const { entries, disks, totalBytes: total } = report;
   if (printJson(ctx, { dataPath: ctx.dataPath, storageRoot: ctx.storageRoot, totalBytes: total, entries, disks }))
     return 0;
   console.log('Disks\n');
