@@ -1,6 +1,7 @@
 // Client side of the ptyhost protocol (see sandbox/ptyhost.cs). Used by the window inside the sandbox and by
 // `--terminal` / `attach` on the host, so it only depends on Node built-ins.
 import net from 'node:net';
+import { enableVtInput } from './console-input.js';
 
 export const FrameType = { Hello: 1, Input: 2, Resize: 3, Restart: 4, Ping: 5, Output: 16, Exit: 17, Error: 18, Restarting: 19, Status: 20, Console: 21 } as const;
 
@@ -13,6 +14,9 @@ export const PING_INTERVAL_MS = 5000;
 export interface Frame { type: number; payload: Buffer }
 export interface Endpoint { addresses: string[]; port: number; token: string }
 export type ClientResult = { reason: 'exit'; exitCode: number } | { reason: 'detach' | 'closed' } | { reason: 'error'; message: string };
+
+/** Turns off every mouse tracking mode a program may have turned on in your terminal (normal, button, any, UTF-8, SGR, urxvt). */
+export const MOUSE_OFF = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l';
 
 /** Ctrl+] — the same detach key telnet uses; Claude Code does not bind it. */
 export const DETACH_KEY = 0x1d;
@@ -199,6 +203,41 @@ export const fixWindowsKeys = (chunk: Buffer): Buffer => {
   return Buffer.from(chunk.map((b) => (b === 0x08 ? 0x7f : b === 0x7f ? 0x08 : b)));
 };
 
+/** How long an unfinished escape sequence is held back waiting for the rest (a lone Esc key press waits this long). */
+export const JOIN_MS = 30;
+/** Longest sequence held back; anything longer is not a key, mouse report or terminal reply, and is sent as it is. */
+const MAX_HELD = 64;
+
+/**
+ * Keeps each escape sequence typed into your terminal (keys, mouse reports, the terminal's replies) in one INPUT frame.
+ * The console can hand one over in pieces; ConPTY reads a lone "ESC[" as Alt+[ and the rest as typed text, so a split
+ * Right arrow (ESC[C) left a stray "C" in the agent's prompt. An unfinished sequence at the end of a chunk is held
+ * until the rest arrives (or JOIN_MS passes).
+ */
+export class InputJoiner {
+  private held: Buffer = Buffer.alloc(0);
+  /** The bytes to send now; an unfinished sequence at the end is kept for the next chunk. */
+  push(chunk: Buffer): Buffer {
+    const data = this.held.length ? Buffer.concat([this.held, chunk]) : chunk;
+    const cut = unfinishedSequence(data);
+    this.held = Buffer.from(data.subarray(cut));
+    return data.subarray(0, cut);
+  }
+  holding(): boolean { return this.held.length > 0; }
+  flush(): Buffer { const out = this.held; this.held = Buffer.alloc(0); return out; }
+}
+
+/** Where an escape sequence that has not ended yet starts at the end of `data` (data.length if there is none). */
+const unfinishedSequence = (data: Buffer): number => {
+  const start = data.lastIndexOf(0x1b, -1);
+  if (start === -1 || data.length - start > MAX_HELD) return data.length;
+  const rest = data.subarray(start + 1);
+  if (rest.length === 0) return start;
+  // ESC [ or ESC O (SS3) followed only by parameter / intermediate bytes: the final byte has not arrived yet.
+  if (rest[0] === 0x5b || rest[0] === 0x4f) return rest.subarray(1).every((b) => b >= 0x20 && b <= 0x3f) && (rest[0] === 0x5b || rest.length === 1) ? start : data.length;
+  return data.length;
+};
+
 /**
  * Bridges this process's terminal to the remote program until it exits, the connection drops, or the user presses
  * the detach key. Restores the terminal before resolving.
@@ -208,13 +247,15 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
   const stdout = process.stdout;
   // getWindowSize asks the console every time; columns/rows only change when Node noticed a resize.
   const size = (): [number, number] => { const [c, r] = stdout.isTTY ? stdout.getWindowSize() : [0, 0]; return [c || 120, r || 30]; };
-  const swapKeys = process.platform === 'win32' && stdin.isTTY;
+  // Until the console passes the terminal's input through as it is (enableVtInput), Node turns Backspace into ^H.
+  let swapKeys = process.platform === 'win32' && stdin.isTTY;
   return new Promise((resolve) => {
     let done = false;
     const reader = new FrameReader();
     const filter = new OutputFilter();
     let sent = size();
     let resizeTimer: NodeJS.Timeout | undefined;
+    let vtInput: ReturnType<typeof enableVtInput> | undefined;
     const finish = (result: ClientResult): void => {
       if (done) return;
       done = true;
@@ -223,15 +264,26 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       clearTimeout(resizeTimer);
       clearInterval(heartbeat);
       clearInterval(sizeWatch);
-      if (stdin.isTTY) stdin.setRawMode(false);
-      stdin.pause();
+      clearTimeout(joinTimer);
       socket.destroy();
-      stdout.write('\x1b[0m\x1b[?25h\r\n');
-      resolve(result);
+      // The agent's mouse tracking ends with it: your terminal's wheel scrolls again (and clicks select text).
+      stdout.write('\x1b[0m\x1b[?25h' + MOUSE_OFF + '\r\n');
+      // Wait for a console-mode change still in progress, then give the console back in its normal mode.
+      void (vtInput?.stop() ?? Promise.resolve()).then(() => {
+        if (stdin.isTTY) stdin.setRawMode(false);
+        stdin.pause();
+        resolve(result);
+      });
     };
+    const joiner = new InputJoiner();
+    let joinTimer: NodeJS.Timeout | undefined;
+    const sendInput = (data: Buffer): void => { if (data.length && !done) socket.write(encodeFrame(FrameType.Input, swapKeys ? fixWindowsKeys(data) : data)); };
     const onInput = (chunk: Buffer): void => {
       if (options.detachKey !== undefined && chunk.includes(options.detachKey)) { finish({ reason: 'detach' }); return; }
-      socket.write(encodeFrame(FrameType.Input, swapKeys ? fixWindowsKeys(chunk) : chunk));
+      clearTimeout(joinTimer);
+      sendInput(joiner.push(chunk));
+      // A lone Esc key press is a "sequence" that never completes: send it after a moment.
+      if (joiner.holding()) joinTimer = setTimeout(() => sendInput(joiner.flush()), JOIN_MS);
     };
     // Windows' own ConPTY repaints the whole screen on every resize; dragging a window edge fires dozens of them, and
     // repaints racing each other left the screen garbled. Wait until the size settles, clear what this terminal
@@ -256,7 +308,7 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
       for (const frame of frames) {
         if (frame.type === FrameType.Output) stdout.write(filter.push(frame.payload));
         else if (frame.type === FrameType.Console) passthrough = frame.payload.toString('latin1') === 'conpty.dll';
-        else if (frame.type === FrameType.Restarting) stdout.write('\x1b[2J\x1b[3J\x1b[H');
+        else if (frame.type === FrameType.Restarting) stdout.write(MOUSE_OFF + '\x1b[2J\x1b[3J\x1b[H');
         else if (frame.type === FrameType.Exit) finish({ reason: 'exit', exitCode: frame.payload.length >= 4 ? frame.payload.readInt32LE(0) : 1 });
         else if (frame.type === FrameType.Error) finish({ reason: 'error', message: frame.payload.toString('utf8').slice(0, 500).replace(/[\x00-\x1f\x7f]/g, ' ') });
       }
@@ -268,6 +320,9 @@ export const runTerminalClient = (socket: net.Socket, token: string, options: { 
     stdout.write('\x1b[2J\x1b[3J\x1b[H');
     socket.write(helloFrame(token, c, r));
     if (stdin.isTTY) stdin.setRawMode(true);
+    // After setRawMode (which sets the console mode): mouse reports, focus and keys then arrive as the terminal sent them.
+    vtInput = enableVtInput();
+    void vtInput.ready.then((on) => { if (on) swapKeys = false; });
     stdin.on('data', onInput);
     stdin.resume();
     stdout.on('resize', onResize);

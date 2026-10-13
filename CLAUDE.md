@@ -50,7 +50,7 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   version pickers), `leftovers.ts`; one module per area: `node`, `python`, `go`, `java`, `managers`, `runtimes`, `git`,
   `cli`, `pwsh`, `vscode` (+ pure `vscode-profile.ts`: its settings and extensions); `scripting/` (ruby, php, vcruntime); `native/` (cpp, rust, binstall, dotnet, mesa, msvc/);
   `databases/` (index, server, one file per database).
-- `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts`, `download.ts` (streamed to `.part`,
+- `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts` (+ `console-input.ts`: the console passes mouse reports through), `download.ts` (streamed to `.part`,
   hashed; `downloads.requireChecksum`; GitHub page fallback for the API rate limit), `netrules.ts`, `system.ts`,
   `apps.ts` (pure: the apps catalogue, and which apps to install),
   `guest-paths.ts`, `projects.ts` (pure: project ids, host <-> guest folders, `C:\Projects`), `safe-remove.ts`,

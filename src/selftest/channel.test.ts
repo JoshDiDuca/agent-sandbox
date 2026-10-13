@@ -3,7 +3,7 @@
 import { safeId } from '../shared/rundir.js';
 import { GuestRequest, SandboxStatus, SessionStatus } from '../shared/schema.js';
 import { bootLine, firstStartNotice, pendingDownloads, readyIn, stillWorking } from '../cli/boot-progress.js';
-import { encodeFrame, FrameReader, FrameType, fixWindowsKeys, helloFrame, MAX_FRAME_BYTES, OutputFilter } from '../shared/pty-client.js';
+import { encodeFrame, FrameReader, FrameType, fixWindowsKeys, helloFrame, InputJoiner, MAX_FRAME_BYTES, MOUSE_OFF, OutputFilter } from '../shared/pty-client.js';
 import type { Suite } from './suite.js';
 
 export const channelSuite: Suite = {
@@ -71,5 +71,15 @@ export const channelSuite: Suite = {
     const hello = new FrameReader().push(helloFrame('tok', 100, 30, 2))[0];
     t.equal({ type: hello.type, cols: hello.payload.readInt16LE(0), rows: hello.payload.readInt16LE(2), flags: hello.payload[4], token: hello.payload.subarray(5).toString() }, { type: FrameType.Hello, cols: 100, rows: 30, flags: 2, token: 'tok' }, 'a hello frame carries size, flags and token');
     t.equal(fixWindowsKeys(Buffer.from([0x61, 0x08, 0x7f, 0x1b])), Buffer.from([0x61, 0x7f, 0x08, 0x1b]), 'Windows console Backspace (^H) reaches the agent as DEL, so it deletes one character, not a word');
+
+    t.section('typed input keeps escape sequences whole');
+    const joined = (...chunks: string[]): string[] => { const j = new InputJoiner(); const out = chunks.map((c) => j.push(Buffer.from(c, 'latin1')).toString('latin1')); out.push(j.flush().toString('latin1')); return out.filter(Boolean); };
+    t.equal(joined('ab\x1b[', 'C'), ['ab', '\x1b[C'], 'a Right arrow split after ESC[ is sent whole (ConPTY would read Alt+[ and a typed "C")');
+    t.equal(joined('\x1b', '[<0;10;', '5M', 'x'), ['\x1b[<0;10;5M', 'x'], 'a mouse report split three ways is sent as one');
+    t.equal(joined('\x1bO', 'A'), ['\x1bOA'], 'an SS3 key split after ESC O is sent whole');
+    t.equal(joined('a\x1b'), ['a', '\x1b'], 'a lone Esc key is held, then sent by the flush');
+    t.equal(joined('\x1b[A\x1bx\x7f'), ['\x1b[A\x1bx\x7f'], 'complete keys (arrows, Alt+x, Backspace) pass at once');
+    t.equal(joined('\x1b[' + '1;'.repeat(40)), ['\x1b[' + '1;'.repeat(40)], 'an endless "sequence" is not held back');
+    t.check(MOUSE_OFF.includes('\x1b[?1000l') && MOUSE_OFF.includes('\x1b[?1003l') && MOUSE_OFF.includes('\x1b[?1006l'), 'leaving a session turns every mouse tracking mode off in your terminal');
   },
 };

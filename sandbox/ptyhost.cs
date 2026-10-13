@@ -18,7 +18,8 @@
 //                  20 STATUS  [viewers:2][remoteViewers:2]  viewers heard from recently (remote = not loopback, i.e. the PC)
 //                  21 CONSOLE utf8 "conpty.dll" or "windows", sent after HELLO. With conpty.dll the output is passed
 //                             through (real scrollback, no repaint on resize): a viewer that joins later is sent the
-//                             output since the last screen clear instead, and must not clear its screen on a resize.
+//                             terminal modes in force (mouse tracking ...) and the output since the last screen clear
+//                             instead, and must not clear its screen on a resize.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -265,7 +266,12 @@ sealed class ClientHub
             // Taken and queued under the replay lock, so no output falls between the replay and the live stream.
             lock (replayGate)
             {
-                if (Native.ConsoleKind.StartsWith("conpty") && replay.Length > 0) Send(client, Frame.Output, replay.ToArray());
+                if (Native.ConsoleKind.StartsWith("conpty"))
+                {
+                    byte[] prefix = ModePrefix();
+                    if (prefix.Length > 0) Send(client, Frame.Output, prefix);
+                    if (replay.Length > 0) Send(client, Frame.Output, replay.ToArray());
+                }
                 lock (gate) clients.Add(client);
             }
             TakeOwnership(client);
@@ -319,6 +325,7 @@ sealed class ClientHub
     void Record(byte[] output)
     {
         if (!Native.ConsoleKind.StartsWith("conpty")) return;
+        TrackModes(output);
         int clear = LastClear(output);
         if (clear >= 0) { replay.SetLength(0); replay.Write(output, clear, output.Length - clear); }
         else replay.Write(output, 0, output.Length);
@@ -328,6 +335,56 @@ sealed class ClientHub
         while (from < all.Length && all[from] != (byte)'\n') from++;
         replay.SetLength(0);
         if (from + 1 < all.Length) replay.Write(all, from + 1, all.Length - from - 1);
+    }
+
+    /**
+     * Terminal modes the program (or conpty.dll) turned on that a late viewer's terminal must have too, or its clicks and
+     * wheel never reach the program: mouse tracking (1000, 1002, 1003, 1005, 1006, 1015), focus events (1004), bracketed
+     * paste (2004), win32 input (9001), application cursor keys (1), cursor visibility (25), the alternate screen (1049).
+     * The replay is cut at the last screen clear, which may come after the program turned them on.
+     */
+    static readonly int[] ReplayedModes = { 1, 25, 1000, 1002, 1003, 1004, 1005, 1006, 1015, 1049, 2004, 9001 };
+    readonly Dictionary<int, bool> modes = new Dictionary<int, bool>();
+    /** DECSET / DECRST parser, kept across chunks: 0 text, 1 after ESC, 2 after ESC[, 3 in ESC[? parameters. */
+    int modeState;
+    readonly StringBuilder modeParams = new StringBuilder();
+
+    void TrackModes(byte[] output)
+    {
+        foreach (byte b in output)
+        {
+            if (b == 0x1b) { modeState = 1; continue; }
+            switch (modeState)
+            {
+                case 1: modeState = b == (byte)'[' ? 2 : 0; break;
+                case 2: modeState = b == (byte)'?' ? 3 : 0; modeParams.Length = 0; break;
+                case 3:
+                    if ((b >= (byte)'0' && b <= (byte)'9') || b == (byte)';') { if (modeParams.Length < 64) modeParams.Append((char)b); }
+                    else
+                    {
+                        if (b == (byte)'h' || b == (byte)'l')
+                            foreach (string p in modeParams.ToString().Split(';'))
+                            {
+                                int mode;
+                                if (int.TryParse(p, out mode) && Array.IndexOf(ReplayedModes, mode) >= 0) modes[mode] = b == (byte)'h';
+                            }
+                        modeState = 0;
+                    }
+                    break;
+            }
+        }
+    }
+
+    /** The modes to set before the replay, e.g. ESC[?1000h ESC[?1006h. */
+    byte[] ModePrefix()
+    {
+        var text = new StringBuilder();
+        foreach (int mode in ReplayedModes)
+        {
+            bool on;
+            if (modes.TryGetValue(mode, out on)) text.Append("\x1b[?" + mode + (on ? "h" : "l"));
+        }
+        return Encoding.ASCII.GetBytes(text.ToString());
     }
 
     /** Where the last ESC[2J (clear screen) or ESC c (reset) starts in `data`, or -1. */
@@ -364,7 +421,7 @@ sealed class ClientHub
     }
 
     /** A restarted program starts on a clean screen (viewers clear theirs on RESTARTING). */
-    public void ResetReplay() { lock (replayGate) replay.SetLength(0); }
+    public void ResetReplay() { lock (replayGate) { replay.SetLength(0); modes.Clear(); modeState = 0; } }
 
     public void Notify(byte type)
     {
