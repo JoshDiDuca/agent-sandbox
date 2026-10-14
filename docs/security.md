@@ -101,6 +101,26 @@ roots and out of `projects.all` (`sandbox projects exclude <folder>`), or give t
 `storage.dataName`. What is mapped, the consent prompts, the machine-wide protections and the repo guard for several
 projects are in [projects](projects.md#security).
 
+## Several users on one PC
+
+With an all-users install, each user keeps a private storage folder under `%ProgramData%\AgentSandbox\users\<name>`
+(accounts, logins, history, approvals): only that user, SYSTEM and administrators can open it. Windows runs one sandbox
+per PC and its window belongs to the user who started it, so other users can only use it when its owner turned on
+`sharing.otherUsers`.
+
+What sharing opens, for members of the local group **Agent Sandbox Users**, while the sandbox runs: they may pass
+through the owner's storage and data folders (no listing, no reading) and read and write the set's `run` folder, which
+is where sessions and requests are. Nothing else of the owner's is opened, and the permissions are taken away again when
+the sandbox ends. What that lets them do: list sessions, attach to one (the session token is the credential), run
+commands, and stop the sandbox after typing the owner's name. Commands run with the agent logins already in the sandbox,
+history goes to the owner's account, and they can read what an agent in it can read. Share only with people you would
+let sit at your keyboard.
+
+Other users' secrets stay out: when the sandbox is someone else's, your agent environment values are not sent and
+`--account` is refused. Restarting it, adding a project, showing its window and starting a new one are the owner's
+alone. Everything read from the owner's folders is checked like anything from a sandbox (validated, links refused,
+text cleaned). The "By" label shown for a request is a label, not proof of who sent it.
+
 ## Shared tools
 
 `C:\AgentData` (tools and databases) is shared by every project's sandbox. For a repo you don't trust, give it its own

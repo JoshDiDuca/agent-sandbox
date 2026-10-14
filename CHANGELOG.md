@@ -7,6 +7,19 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## Unreleased
+
+- The installer asks "Just me" or "Everyone on this PC", and installs side by side versions with a private Node.js and
+  commands that read two pointer files. It replaces npm and 1.x installs, brings your settings up to date, and can be
+  run with options or uninstalled (`-Uninstall`, `-RemoveData`). Releases list a `SHA256SUMS` file and the package
+  carries its dependencies.
+- `sandbox update` checks, installs, and rolls back versions, and `--auto on|off` switches automatic updates (a
+  scheduled task for everyone, a daily check at command start for one user). The Maintenance tab has an Updates row.
+- Other Windows users of an all-users install can use the sandbox you started when `sharing.otherUsers` is on:
+  `status`, `sessions`, `attach`, `exec`, `db` work for them, `stop` needs the owner's name typed, and the rest is the
+  owner's alone. Their own logins and agent environment are never sent into your sandbox.
+- `sandbox migrate` brings your saved settings up to date after an upgrade, with a backup.
+
 ## 1.4.3
 
 - Rust builds on the GNU host link with lld, and only a few links run at once across the sandbox. This uses much less

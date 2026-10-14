@@ -5,7 +5,7 @@
 - Windows 10 or 11 **Pro, Enterprise or Education** (Home has no Windows Sandbox)
 - Virtualization turned on in the BIOS/UEFI
 - 8 GB RAM or more is comfortable; the sandbox takes what is free, minus a reserve for your PC
-- Node.js 20+, or none: the installer then uses a private Node.js just for this tool
+- Nothing else: the installer brings a private Node.js just for this tool
 
 ## One line
 
@@ -13,16 +13,99 @@
 irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
-It checks the edition, virtualization, RAM and disk, and offers to turn on Windows Sandbox (that step asks for admin
-and needs a reboot). It then installs the package and runs `sandbox doctor`.
+It checks the edition, virtualization, RAM and disk, offers to turn on Windows Sandbox (that step asks for admin and
+needs a reboot), and asks who it is for:
 
-It uses your Node.js 20+ if you have one. Otherwise it downloads the official Node.js LTS zip, checks its SHA-256 and
-unpacks it into `%LOCALAPPDATA%\WindowsDevelopmentSandbox\node`, used only to run this tool. Your PATH only gets a small
-folder with this tool's commands, not `node` itself, so nothing is installed system-wide.
+```
+1) Just me
+2) Everyone on this PC (needs admin)
+```
 
-The release package is checked against the SHA-256 GitHub lists for it. If GitHub lists none, the installer stops
-instead of installing something it cannot check. To install it anyway, set `$env:WDS_ALLOW_UNVERIFIED = "1"` before
-running the one-liner. A package you name yourself with `WDS_PACKAGE` is installed as given.
+Then it installs, brings your saved settings up to date (`sandbox migrate`), asks once whether new versions should
+install themselves, and runs `sandbox doctor`.
+
+## Just me, or everyone
+
+| | Just me (default) | Everyone on this PC |
+|---|---|---|
+| Program | `%LOCALAPPDATA%\WindowsDevelopmentSandbox` | `%ProgramFiles%\WindowsDevelopmentSandbox` (only administrators change it) |
+| PATH and Start menu | yours | the whole PC's |
+| Saved data (accounts, history, storage) | `%LOCALAPPDATA%\AgentSandbox` | `%ProgramData%\AgentSandbox\users\<name>`, one private folder per user |
+| Admin rights | only to turn on Windows Sandbox | once, to install |
+| Automatic updates | checked when you start a command | a scheduled task at 03:00 |
+
+For everyone, the installer also creates the local group **Agent Sandbox Users** and puts you in it (add others with
+`-AddUsers`). A user added to the group must sign out and in once before it counts. It asks "Let other users of this PC
+use a sandbox you start?" and saves the answer in the machine settings file (see [Configuration](configuration.md)).
+Windows runs one sandbox per PC, so this is how a second user can still use it: [Security](security.md#several-users-on-one-pc).
+
+Everyone installs need an admin PowerShell (right-click Start, Terminal (Admin)). Without admin the installer stops and
+says so.
+
+## Options
+
+The one-liner takes no options. To pass them, run the script as a script block:
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1))) -Scope AllUsers -AutoUpdate -AddUsers alice,bob
+```
+
+| Option | Environment variable | What it does |
+|---|---|---|
+| `-Scope CurrentUser\|AllUsers` | `WDS_SCOPE` | where to install (asked when missing) |
+| `-AutoUpdate` / `-NoAutoUpdate` | `WDS_AUTOUPDATE=1` / `0` | answer the automatic-updates question |
+| `-AddUsers a,b` | `WDS_ADDUSERS` | everyone: also put these users in the group |
+| `-Uninstall` | `WDS_UNINSTALL=1` | remove the program, PATH entry, shortcut and scheduled task; your data stays |
+| `-RemoveData` | `WDS_REMOVEDATA=1` | with `-Uninstall`: also delete saved data, after you type `DELETE` (`-Confirm:$false` skips that) |
+| | `WDS_PACKAGE`, `WDS_SHA256` | install this package (a file or https address) instead of the latest release, checked against that checksum |
+| | `WDS_ALLOW_UNVERIFIED=1` | install a release GitHub lists no SHA-256 for |
+
+The release package is checked against the SHA-256 GitHub lists for it (the asset digest, else the release's
+`SHA256SUMS`). If there is none, the installer stops instead of installing something it cannot check.
+
+## What is installed
+
+```
+<install folder>\
+  node\v22.x.y\node.exe     private Node.js (official zip, SHA-256 checked)
+  versions\1.5.0\package\   the release, one folder per version
+  bin\sandbox.cmd, ...      the commands on your PATH (they read the two files below)
+  active-version            which version runs
+  active-node               which Node runs it
+  install.json              scope, group, automatic updates
+  update-state.json         what the updater did
+```
+
+Only the two small `active-*` files change when you update, so a new version is checked before it is used and the old
+one stays for a rollback. Your PATH only gets `bin\`, not `node` itself.
+
+## Updating
+
+`sandbox update` installs the newest version (`--check` only looks, `--rollback` goes back one version). It never runs
+while a Windows Sandbox is running. A version that fails to start is not used, is recorded as failed, and is not tried
+again until a newer one exists.
+
+`sandbox update --auto on` makes this happen by itself. For one user it is checked when you start a command, at most
+once a day. For everyone it is the scheduled task `\WindowsDevelopmentSandbox\Update` (daily 03:00, up to an hour of
+random delay, as SYSTEM); switching that needs an admin terminal. After an automatic update you are told once on your
+next command ("Updated to 1.6.0", or "Update to 1.6.0 failed; still on 1.5.2").
+
+## Upgrading from an older version
+
+Run the one-liner again. Whichever way the old version was installed, the installer finds it and replaces it:
+
+- the npm package (`windows-development-sandbox` or the old `agent-sandbox`) is uninstalled, and the 1.x private-Node
+  wrappers are replaced by the new commands at the same place (so your PATH entry stays);
+- your saved settings are brought up to date by `sandbox migrate` (a backup is kept first; `--dry-run` lists what it
+  would change, `--restore <backup>` puts a backup back).
+
+## Uninstall
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1))) -Uninstall -Scope AllUsers
+```
+
+Leave out `-Scope` for just you. Add `-RemoveData` to delete the saved data as well.
 
 ## By hand
 
@@ -30,21 +113,15 @@ running the one-liner. A package you name yourself with `WDS_PACKAGE` is install
 # 1. Windows Sandbox, in an admin PowerShell, then reboot
 Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
 
-# 2. The package: from npm, the latest release, a specific one, or from the repository
+# 2. The package (Node.js 20+ needed; updates are then done with npm)
 npm install -g windows-development-sandbox
-npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz
-npm install -g https://github.com/JoshDiDuca/windows-development-sandbox/releases/download/v1.0.0/windows-development-sandbox-1.0.0.tgz
-npm install -g github:JoshDiDuca/windows-development-sandbox
 
 # 3. Check
 sandbox setup     # edition, virtualization, Windows Sandbox, RAM, disk, Node
 sandbox doctor    # what will be copied from this PC or downloaded
 ```
 
-## Upgrading
-
-Run the one-liner again, or `npm install -g` the latest release. Coming from the old `agent-sandbox` package, the
-installer removes it first (both ship the same commands); your storage, logins and config carry over.
+An npm install works fully, but `sandbox update` only prints the npm command for it.
 
 ## First start
 

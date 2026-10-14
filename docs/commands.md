@@ -86,6 +86,20 @@ sandbox, where it appears inside, and the consent prompts are explained in [proj
 
 Changes to what is mapped apply from the next start.
 
+## Updates and settings
+
+| | |
+|---|---|
+| `sandbox update` | install the newest version (never while a sandbox runs); `--check` only looks, `--rollback` goes back one version |
+| `sandbox update --auto on\|off` | install new versions by themselves; for everyone on the PC this needs an admin terminal |
+| `sandbox migrate` | bring your saved settings up to date after an upgrade (a backup is kept); `--dry-run` lists changes, `--restore <backup>` puts one back |
+
+An npm install is updated with `npm install -g windows-development-sandbox`; `sandbox update` says so.
+
+With an all-users install, a sandbox another user started shows in `status` and `sessions` as "started by <name>". When
+they share it, `attach`, `exec`, `db` and `stop` work (stop asks you to type their name; `--yes` in scripts); otherwise
+and for `restart`, `show`, `hide` and starting your own, you are told whose it is.
+
 ## Data and maintenance
 
 | | |

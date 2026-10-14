@@ -21,10 +21,11 @@ on your PC is reachable. Close it and it's gone. Your project, tools, databases 
 irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
 ```
 
-It checks your PC, offers to turn on Windows Sandbox, and installs everything. It uses your Node.js 20+ if you have it,
-otherwise a private copy just for this tool. Nothing is installed system-wide.
-Needs Windows 10/11 **Pro, Enterprise or Education**. Already have Node.js 20+? `npm install -g windows-development-sandbox`
-works too. [Other ways to install](docs/install.md)
+It checks your PC, offers to turn on Windows Sandbox, and asks **1) Just me** or **2) Everyone on this PC** (needs
+admin). It uses a private copy of Node.js just for this tool; nothing else is installed system-wide. `sandbox update`
+installs newer versions, and can do it by itself.
+Needs Windows 10/11 **Pro, Enterprise or Education**. Have Node.js 20+? `npm install -g windows-development-sandbox`
+works too. [Scopes, options, upgrading, uninstall](docs/install.md)
 
 ## Use
 

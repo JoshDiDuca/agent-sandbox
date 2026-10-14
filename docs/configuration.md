@@ -88,6 +88,19 @@ them, because they map folders of your PC), decide which folders are already the
 | `projects.allowOutsideMappings` | `"ask"` | may a project's `.sandbox-config.json` map folders outside the project (see [project settings](#project-settings))? `"ask"`, `true` or `false` |
 | `projects.wsbShare` | `true` | on Windows 11 24H2+ with the updated Windows Sandbox, add other folders live with `wsb share` (untested; otherwise a restart is offered) |
 
+## Machine settings (everyone installs)
+
+An all-users install writes `%ProgramData%\AgentSandbox\config.json` (only administrators change it). It is read under
+your own file, so your settings win. The installer puts two things in it:
+
+```json
+{ "storage": { "root": "%ProgramData%\\AgentSandbox\\users\\%USERNAME%" }, "sharing": { "otherUsers": false } }
+```
+
+`%USERNAME%` is replaced for each user, so everybody gets a private storage folder. Folders in this file must be full
+paths. Whether new versions install themselves is not a
+setting: it lives in the install folder's `install.json` and is changed with `sandbox update --auto on|off`.
+
 ## Network
 
 The **Network** category of the settings (or `network` in your file):
