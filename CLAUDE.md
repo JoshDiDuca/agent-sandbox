@@ -142,6 +142,5 @@ later. `sandbox db` runs it directly inside a sandbox and through the exec chann
 - CI also builds on the official Node 22.0.0 zip (setup-node's 22.0.0 has a broken npm). Releases run no tests.
 
 ## Releasing
-Bump `version` in `package.json` and push to master. CI tags `v<version>` and publishes to GitHub Releases, GitHub
-Packages and npm. The first npm publish is done once from the PC with `npm run publish:npm` (builds, packs, publishes;
-no tests). See docs/development.md.
+Bump `version` in `package.json` and push to master; CI tags and publishes it. The first npm publish is done once from
+the PC (`npm run publish:npm`). Full steps: [docs/development.md](docs/development.md#releases).

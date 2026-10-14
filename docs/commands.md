@@ -71,19 +71,8 @@ or a terminal never stops a session; only the agent exiting does.
 
 ## Several projects
 
-Every command above works from any project's folder and acts on that project. From a folder the running sandbox does
-not have yet, `sandbox claude` (any agent, `start`, `exec`, `db`) adds it without a restart when it can:
-
-1. inside a **project root** (`projects.roots`, mapped at every start): at once, also for folders created after the
-   start;
-2. on Windows 11 24H2+ with the updated Windows Sandbox: `wsb share` (untested; any error falls back to 3);
-3. otherwise you are offered a **restart** that maps it too. It lists the sessions that will end, keeps your files,
-   tools, databases and logins, and can reopen those sessions (continuing their conversations). `--yes` skips the
-   question; without a terminal it is never done without `--yes`.
-
-The project is then set up on demand (its toolchains, versions, databases and its `.sandbox-config.json`, approved as
-at a launch) and its sessions run with its own folder and environment. Inside the sandbox, `sbx-shell <project>` opens
-a terminal in a project with its tools.
+Every command above works from any project's folder and acts on that project. How a second project joins a running
+sandbox, where it appears inside, and the consent prompts are explained in [projects](projects.md).
 
 | `sandbox projects ...` | |
 |---|---|
