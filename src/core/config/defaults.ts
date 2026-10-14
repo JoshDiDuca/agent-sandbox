@@ -24,6 +24,7 @@ export const DEFAULTS: Config = {
     headless: false,
     keepAwake: true,
   },
+  sharing: { otherUsers: false },
   storage: {
     root: '%LOCALAPPDATA%\\AgentSandbox',
     persistAgentState: true,

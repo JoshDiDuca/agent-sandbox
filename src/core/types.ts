@@ -42,6 +42,11 @@ export interface LoadedConfig {
   config: Config;
   configPath: string | null;
   base: string;
+  /**
+   * The files the settings came from: the machine file (all-users install) and the user file, null when absent.
+   * Optional so callers that build a LoadedConfig by hand (no files) keep compiling.
+   */
+  layers?: { machine: string | null; user: string | null };
 }
 
 export interface RunRequest {

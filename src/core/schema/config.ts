@@ -9,6 +9,7 @@ import { AgentCommandsSchema, AttachSchema, ClaudeProfileSchema, SecretsSchema }
 import {
   AuditSchema,
   DownloadsSchema,
+  SharingSchema,
   GitSchema,
   GuestWorkspaceSchema,
   MappingSchema,
@@ -32,6 +33,7 @@ export const ConfigSchema = z
     audit: AuditSchema,
     mappings: z.array(MappingSchema).describe('Extra folders from this PC.'),
     sandbox: SandboxSchema,
+    sharing: SharingSchema,
     storage: z.strictObject({
       root: z.string().min(1).describe('Where everything is kept on this PC (tools, databases, logins, launches).'),
       persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),

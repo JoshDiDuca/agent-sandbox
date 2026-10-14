@@ -65,6 +65,13 @@ export const SandboxSchema = z.strictObject({
       'Keep this PC from sleeping while a sandbox runs, so agents left working overnight keep going (the screen may still turn off; closing a laptop lid still sleeps it).',
     ),
 });
+export const SharingSchema = z.strictObject({
+  otherUsers: z
+    .boolean()
+    .describe(
+      'Let other Windows users of this PC use a sandbox you start: list its sessions, attach, run commands and stop it. They use the agent logins inside it, and history goes to your account.',
+    ),
+});
 const PortSchema = z.number().int().min(1).max(65535);
 const HostEntrySchema = z
   .string()
