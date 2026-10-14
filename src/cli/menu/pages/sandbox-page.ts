@@ -130,6 +130,7 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
     categories: CATEGORIES,
     empty: running ? 'Nothing here yet.' : 'No sandbox is running.',
     actions: sandboxActions,
+    enterLabel: 'run',
     escapeLabel: 'quit',
   };
 }

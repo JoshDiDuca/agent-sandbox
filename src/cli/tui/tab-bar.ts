@@ -16,8 +16,13 @@ export class TabBar {
     const build = (pad: number, shown: (i: number) => string): string =>
       tabs
         .map((tab, i) => {
-          const space = ' '.repeat(pad);
-          return paint(space + shown(i) + (tab.marked ? ' ' + Text.strip(mark(tab)) : '') + space, i === active);
+          const text = shown(i) + (tab.marked ? ' ' + Text.strip(mark(tab)) : '');
+          // The open tab is in brackets too, so it shows without colour.
+          if (i === active) {
+            const space = ' '.repeat(Math.max(0, pad - 1));
+            return paint(space + '[' + text + ']' + space, true);
+          }
+          return paint(' '.repeat(pad) + text + ' '.repeat(pad), false);
         })
         .join('');
     const full = (i: number): string => i + 1 + ' ' + tabs[i].label;
@@ -29,7 +34,7 @@ export class TabBar {
     ];
     const fits = attempts.find((line) => Text.width(line) <= width - 1);
     if (fits) return Text.fit(fits, width);
-    const only = ' ' + (active + 1) + '/' + tabs.length + ' ' + tabs[active].label + ' ';
+    const only = '[' + (active + 1) + '/' + tabs.length + ' ' + tabs[active].label + ']';
     return Text.fit(Theme.selected(only), width);
   }
 }

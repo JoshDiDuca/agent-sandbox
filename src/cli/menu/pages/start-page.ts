@@ -103,6 +103,7 @@ export function startOptions(m: StartModel, cwd: string = process.cwd()): ListOp
         description: 'Tools and databases only.',
       },
     ],
+    enterLabel: 'start',
     escapeLabel: 'quit',
   };
 }

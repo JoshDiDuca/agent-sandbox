@@ -6,7 +6,7 @@ import { Draft } from '../cli/menu/settings/draft.js';
 import { startArgv } from '../cli/menu/pages/start-page.js';
 import { TAB_LABELS } from '../cli/menu/shell.js';
 import { parseDatabaseList } from '../cli/services/index.js';
-import { dialogBox, KeyBar, overlayBox, TabBar, Text } from '../cli/tui/index.js';
+import { dialogBox, KeyBar, overlayBox, TabBar, Text, type KeyHint } from '../cli/tui/index.js';
 import { renderScreens } from './menu-screens.js';
 import type { Suite } from './support/suite.js';
 
@@ -34,23 +34,28 @@ export const menuSuite: Suite = {
     );
 
     t.section('key bar');
-    const keys: [string, string][] = [
-      ['↑↓', 'move'],
-      ['↵', 'open'],
-      ['ctrl+s', 'save'],
-      ['r', 'restart agents'],
-      ['/', 'search'],
-      ['esc', 'quit'],
+    const keys: KeyHint[] = [
+      ['ctrl+s', 'save (2)', 0],
+      ['↵', 'edit', 1],
+      ['r', 'reset', 2],
+      ['tab', 'scope', 3],
+      ['↑↓', 'move', 5],
+      ['/', 'search', 6],
+      ['esc', 'quit', 0],
     ];
     for (const width of WIDTHS) {
-      const line = KeyBar.render(keys, width);
+      const line = Text.strip(KeyBar.render(keys, width));
       t.check(
-        Text.width(line) <= width && Text.strip(line).includes('quit'),
-        'key bar at width ' + width + ' fits and keeps the way out',
-        Text.strip(line),
+        Text.width(line) <= width && line.includes('quit') && line.includes('save (2)'),
+        'key bar at width ' + width + ' fits and keeps save and the way out',
+        line,
       );
     }
-    t.check(Text.strip(KeyBar.render(keys, 200)).includes('restart agents'), 'a wide terminal lists every key');
+    t.check(
+      !Text.strip(KeyBar.render(keys, 60)).includes('search') && Text.strip(KeyBar.render(keys, 60)).includes('edit'),
+      'a narrow key bar drops search before edit',
+    );
+    t.check(Text.strip(KeyBar.render(keys, 200)).includes('search'), 'a wide terminal lists every key');
 
     t.section('dialog box');
     const box = dialogBox({ title: 'Unsaved changes', lines: ['You have 2 unsaved changes.'], buttons: 'Save' }, 61);

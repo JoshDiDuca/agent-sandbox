@@ -90,8 +90,9 @@ export class OverlayScreen<T> implements Screen<T> {
     const parts = this.background.render(size);
     const buttons = this.o.choices
       .map((c, i) => {
-        const text = ' ' + c.label + ' ';
-        if (i !== this.index) return Theme.muted(text);
+        // The chosen button is in brackets too, so it shows without colour.
+        if (i !== this.index) return Theme.muted('  ' + c.label + '  ');
+        const text = '[ ' + c.label + ' ]';
         return c.danger && Theme.colour ? '\x1b[48;5;160m\x1b[97m' + text + '\x1b[0m' : Theme.selected(text);
       })
       .join('  ');
@@ -103,10 +104,10 @@ export class OverlayScreen<T> implements Screen<T> {
       body: overlayBox(body, box, size.width),
       notice: undefined,
       keys: [
-        ['←→', 'choose'],
-        ['↵', 'confirm'],
-        ...this.o.choices.map((c) => [c.key, c.label.toLowerCase()] as [string, string]),
-        ['esc', 'cancel'],
+        ['↵', 'confirm', 1],
+        ...this.o.choices.map((c): [string, string, number] => [c.key, c.label.toLowerCase(), 2]),
+        ['←→', 'choose', 4],
+        ['esc', 'cancel', 0],
       ],
     };
   }

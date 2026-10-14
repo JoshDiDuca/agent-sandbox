@@ -74,7 +74,7 @@ export class Shell implements Screen<ShellExit> {
       ...parts,
       status: unsaved ? Theme.changed('unsaved: ' + unsaved) + '   ' + status : status,
       notice: this.notice ?? parts.notice,
-      keys: unsaved ? [parts.keys[0], ['ctrl+s', 'save'], ...parts.keys.slice(1)] : parts.keys,
+      keys: unsaved ? [['ctrl+s', 'save (' + unsaved + ')', 0], ...parts.keys] : parts.keys,
     };
   }
 

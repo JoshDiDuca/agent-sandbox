@@ -1,6 +1,6 @@
 // The frame every screen is drawn in: a title bar with where you are, the tabs, a status line, the screen's own body
 // and a footer with the keys that work here.
-import { KeyBar } from './key-bar.js';
+import { KeyBar, type KeyHint } from './key-bar.js';
 import { TabBar, type TabInfo } from './tab-bar.js';
 import { Text } from './text.js';
 import { Theme } from './theme.js';
@@ -18,7 +18,7 @@ export interface FrameParts {
   status?: string;
   body: string[];
   /** [key, what it does] pairs, most important first, e.g. [['↵', 'open'], ['esc', 'back']]. */
-  keys: [string, string][];
+  keys: KeyHint[];
   /** A message for the last action (saved, invalid ...), shown above the footer. */
   notice?: string;
   /** Tabs row under the title bar (added by the app for every screen of the menu). */

@@ -39,9 +39,10 @@ export function sessionsOptions(m: SessionsModel): ListOptions<string> {
     })),
     empty: 'No sessions yet.',
     actions: [
-      { key: 'r', label: 'restart agents' },
-      { key: 'l', label: 'refresh' },
+      { key: 'r', label: 'restart agents', importance: 1 },
+      { key: 'l', label: 'refresh', importance: 3 },
     ],
+    enterLabel: 'attach',
     escapeLabel: 'quit',
   };
 }

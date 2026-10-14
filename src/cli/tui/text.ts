@@ -106,11 +106,14 @@ export class Text {
 
   /** "memoryMb" -> "Memory MB", "vGpu" -> "V GPU": a readable label from a setting's key. */
   static humanize(key: string): string {
+    // "harness" is the code's word for an agent; screens say agent.
+    const plain: Record<string, string> = { harness: 'agent', harnesses: 'agents' };
     const words = key
       .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
       .replace(/[_-]+/g, ' ')
       .split(' ')
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((w) => plain[w.toLowerCase()] ?? w);
     const upper = new Set([
       'mb',
       'gb',

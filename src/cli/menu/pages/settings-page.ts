@@ -68,6 +68,24 @@ function effective(file: ConfigFile, draft: Draft, key: string[], config: Config
   return draft.has(file, key) ? (draft.value(file, key) ?? file.defaultOf(key)) : _.get(config, key);
 }
 
+/** Plain words for settings whose key is jargon (the key itself stays in the details pane). */
+const LABELS: Readonly<Record<string, string>> = {
+  mappings: 'Extra folders from this PC',
+  'sandbox.vGpu': 'Graphics acceleration',
+  'sandbox.headless': 'Hide the sandbox window',
+  'sandbox.memoryMb': 'Memory (MB)',
+  'sandbox.pageFileMb': 'Swap file (MB)',
+  'network.dns': 'DNS servers',
+  'projects.wsbShare': 'Add folders while the sandbox runs',
+  'projects.all': 'Map all known projects at start',
+  'claudeProfile.hostDir': 'Claude folder on this PC',
+  'claudeProfile.globalStateFile': 'Claude state file on this PC',
+};
+
+function labelOf(key: string[]): string {
+  return LABELS[key.join('.')] ?? Text.humanize(key[key.length - 1]);
+}
+
 function item(
   s: Setting,
   files: Record<Scope, ConfigFile>,
@@ -104,7 +122,7 @@ function item(
   ];
   return {
     value: id,
-    label: Text.humanize(s.key[s.key.length - 1]),
+    label: labelOf(s.key),
     hint: unsaved
       ? paint(Text.strip(value)) + ' ' + Theme.warn('*')
       : set
@@ -115,6 +133,7 @@ function item(
     section: s.section,
     category: s.category,
     keywords: id,
+    flip: s.node.editor === 'boolean',
   };
 }
 
@@ -135,9 +154,10 @@ export function settingsOptions(files: Record<Scope, ConfigFile>, scope: Scope, 
     items: settings.map((s) => item(s, files, scope, draft, config)),
     categories,
     actions: [
-      { key: 'r', label: file.isProject ? 'remove from project' : 'reset to default' },
-      { key: 'z', label: 'undo unsaved' },
+      { key: 'r', label: file.isProject ? 'remove' : 'reset' },
+      { key: 'z', label: 'undo' },
     ],
+    enterLabel: 'edit',
     escapeLabel: 'quit',
   };
 }
@@ -211,11 +231,7 @@ export class SettingsPage extends ListPage<string> {
       const current = this.file.isProject
         ? (written(this.file, this.draft, setting.key) ?? _.get(config, setting.key))
         : effective(this.file, this.draft, setting.key, config);
-      const path = [
-        'Settings',
-        ...setting.key.slice(0, -1).map(nameOf),
-        Text.humanize(setting.key[setting.key.length - 1]),
-      ];
+      const path = ['Settings', ...setting.key.slice(0, -1).map(nameOf), labelOf(setting.key)];
       const edited = await this.editor.edit(path, setting.key, setting.node, current);
       if (edited) this.stage(setting.key, edited.value);
     } catch (e) {

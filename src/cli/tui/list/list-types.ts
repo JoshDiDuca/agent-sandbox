@@ -18,6 +18,8 @@ export interface ListItem<T> {
   checked?: boolean;
   /** A glyph before the label. */
   icon?: string;
+  /** Space flips this entry (an on/off setting): the footer says so while it is highlighted. */
+  flip?: boolean;
 }
 
 export interface Category {
@@ -30,6 +32,8 @@ export interface ListAction {
   label: string;
   /** Pressed with Ctrl (ctrl+s ...); works while searching too. */
   ctrl?: boolean;
+  /** How long it survives in a narrow footer: 0 never goes, bigger goes earlier (default 2). */
+  importance?: number;
 }
 /** Tabs above the list (e.g. which settings file): Tab switches, the screen reopens on the other one. */
 export interface Tab {
@@ -65,4 +69,6 @@ export interface ListOptions<T> {
   tabs?: { items: Tab[]; active: number };
   /** What Esc does, for the footer ("back", "quit"). */
   escapeLabel?: string;
+  /** What Enter does, for the footer ("open", "edit", "start"). */
+  enterLabel?: string;
 }

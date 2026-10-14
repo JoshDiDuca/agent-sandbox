@@ -2,6 +2,7 @@
 // value column, a details pane for the highlighted entry, search (/), ticking several entries, and extra keys a screen
 // can add (r = reset, d = delete ...). Arrow keys move; Enter opens; Esc goes back.
 import type { FrameParts } from '../frame.js';
+import type { KeyHint } from '../key-bar.js';
 import type { Screen, Size, Step } from '../screen.js';
 import type { Key } from '../terminal.js';
 import { Text } from '../text.js';
@@ -191,8 +192,15 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (!this.o.categories) return [];
     return this.o.categories.map((cat, i) => {
       const count = this.o.items.filter((it) => it.category === cat.id).length;
-      const text = ' ' + Text.fit(cat.label, width - 6) + ' ' + Text.fit(String(count), 3, 'right') + ' ';
-      if (i !== this.category) return Theme.muted(text);
+      const open = i === this.category;
+      // The open category has a marker, so it shows without colour.
+      const text =
+        (open ? Theme.glyph.pointer : ' ') +
+        Text.fit(cat.label, width - 6) +
+        ' ' +
+        Text.fit(String(count), 3, 'right') +
+        ' ';
+      if (!open) return Theme.muted(text);
       return this.focus === 'side' ? Theme.selected(text) : Theme.accentBold(text);
     });
   }
@@ -216,29 +224,35 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     ];
   }
 
-  private keys(): [string, string][] {
+  /** The keys that work now, most important first (a narrow footer drops the later ones). */
+  private keys(): KeyHint[] {
     if (this.searching)
       return [
-        ['type', 'to search'],
-        ['↑↓', 'move'],
-        ['↵', this.o.multi ? 'done' : 'open'],
-        ['esc', 'clear search'],
+        ['type', 'to search', 1],
+        ['↵', this.o.multi ? 'done' : (this.o.enterLabel ?? 'open'), 1],
+        ['esc', 'clear search', 0],
+        ['↑↓', 'move', 4],
       ];
+    const current = this.visible()[this.cursor];
+    const flips = current !== undefined && this.o.items[current].flip;
     return [
-      ['↑↓', 'move'],
-      ...(this.o.tabs
-        ? [['tab', 'switch ' + this.o.tabs.items.map((t) => t.label.toLowerCase()).join(' / ')] as [string, string]]
-        : []),
-      ...(this.o.categories ? [['←→', 'categories'] as [string, string]] : []),
       ...(this.o.multi
-        ? ([['space', 'tick'], ['a', 'tick all shown'], ...(this.o.enterTicks ? [] : [['↵', 'done']])] as [
-            string,
-            string,
-          ][])
-        : [['↵', 'open'] as [string, string]]),
-      ...this.actionsNow().map((a) => [a.ctrl ? 'ctrl+' + a.key : a.key, a.label] as [string, string]),
-      ['/', 'search'],
-      ['esc', this.o.escapeLabel ?? 'back'],
+        ? ([
+            ['space', 'tick', 1],
+            ...(this.o.enterTicks ? [] : [['↵', 'done', 1]]),
+            ['a', 'tick all shown', 6],
+          ] as KeyHint[])
+        : ([['↵', this.o.enterLabel ?? 'open', 1], ...(flips ? [['space', 'flip', 1]] : [])] as KeyHint[])),
+      ...this.actionsNow().map((a): KeyHint => [
+        a.ctrl ? 'ctrl+' + a.key : a.key,
+        a.label,
+        a.ctrl ? 0 : (a.importance ?? 2),
+      ]),
+      ...(this.o.tabs ? ([['tab', 'scope', 3]] as KeyHint[]) : []),
+      ...(this.o.categories ? ([['←→', 'categories', 3]] as KeyHint[]) : []),
+      ['↑↓', 'move', 5],
+      ['/', 'search', 6],
+      ['esc', this.o.escapeLabel ?? 'back', 0],
     ];
   }
 

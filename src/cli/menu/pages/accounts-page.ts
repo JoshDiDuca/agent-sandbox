@@ -30,11 +30,12 @@ export function accountsOptions(accounts: readonly AccountRow[]): ListOptions<st
     })),
     empty: "No saved accounts. Sign in inside the sandbox, then press s to save that login (p saves this PC's).",
     actions: [
-      { key: 's', label: "save sandbox's login" },
-      { key: 'p', label: "save this PC's login" },
-      { key: 'd', label: 'make default' },
-      { key: 'x', label: 'remove' },
+      { key: 's', label: 'save sandbox', importance: 1 },
+      { key: 'p', label: 'save PC', importance: 1 },
+      { key: 'd', label: 'default', importance: 1 },
+      { key: 'x', label: 'remove', importance: 1 },
     ],
+    enterLabel: 'use',
     escapeLabel: 'quit',
   };
 }

@@ -1,21 +1,25 @@
-// The footer: only the keys that work on this screen, dropping the least important when the terminal is narrow.
+// The footer: only the keys that work on this screen. When the terminal is narrow the least important keys go first.
 import { Text } from './text.js';
 import { Theme } from './theme.js';
 
-/** [key, what it does]. */
-export type KeyHint = [string, string];
+/** [key, what it does, importance]: importance 0 is never dropped, a bigger number goes earlier (default 5). */
+export type KeyHint = [string, string, number?];
 
 export class KeyBar {
-  /**
-   * One line. Keys are listed by importance (first = most important, the last one is kept too: it is how you leave).
-   * When they do not fit, the ones just before the last are dropped first.
-   */
   static render(keys: readonly KeyHint[], width: number): string {
     const line = (list: readonly KeyHint[]): string =>
       ' ' + list.map(([k, what]) => Theme.key(k) + ' ' + Theme.muted(what)).join('  ');
-    let shown = [...keys];
-    while (shown.length > 1 && Text.width(line(shown)) > width - 1) shown.splice(shown.length - 2, 1);
-    if (Text.width(line(shown)) > width - 1) shown = shown.slice(-1);
+    const shown = [...keys];
+    const importance = (k: KeyHint): number => k[2] ?? 5;
+    while (Text.width(line(shown)) > width - 1) {
+      // The least important one goes; of equals, the one further right.
+      let drop = -1;
+      shown.forEach((k, i) => {
+        if (importance(k) > 0 && (drop < 0 || importance(k) >= importance(shown[drop]))) drop = i;
+      });
+      if (drop < 0) break;
+      shown.splice(drop, 1);
+    }
     return Text.truncate(line(shown), width - 1);
   }
 }

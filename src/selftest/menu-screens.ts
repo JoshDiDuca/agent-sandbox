@@ -59,6 +59,7 @@ function draw(
   return Frame.render(
     {
       ...parts,
+      keys: unsaved ? [['ctrl+s', 'save (' + unsaved + ')', 0], ...parts.keys] : parts.keys,
       status: (unsaved ? 'unsaved: ' + unsaved + '   ' : '') + (parts.status ?? status),
       tabs: { tabs: TAB_LABELS.map((label) => ({ label })), active },
     },

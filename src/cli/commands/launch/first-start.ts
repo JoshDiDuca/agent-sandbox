@@ -22,7 +22,7 @@ const DOWNLOADS: Readonly<Record<string, { dir: string; mb: number; label?: stri
   dynamodb: { dir: 'dynamodb-local', mb: 80, label: 'DynamoDB Local' },
 };
 
-/** The wanted tools that are not downloaded yet (`has` says whether a folder in <data>\tools exists), with their rough size. */
+/** The wanted tools not downloaded yet (`has`: does a folder in <data>\tools exist), with their rough size. */
 export function pendingDownloads(
   wanted: readonly string[],
   has: (dir: string) => boolean,
