@@ -5,7 +5,8 @@ import { ConfigFile } from '../cli/menu/settings/config-file.js';
 import { Draft } from '../cli/menu/settings/draft.js';
 import { startArgv } from '../cli/menu/pages/start-page.js';
 import { TAB_LABELS } from '../cli/menu/shell.js';
-import { parseDatabaseList } from '../cli/services/index.js';
+import { DEFAULTS } from '../core/config/index.js';
+import { AccountsService, parseDatabaseList } from '../cli/services/index.js';
 import { dialogBox, KeyBar, overlayBox, TabBar, Text, type KeyHint } from '../cli/tui/index.js';
 import { renderScreens } from './menu-screens.js';
 import type { Suite } from './support/suite.js';
@@ -15,7 +16,7 @@ const WIDTHS = [120, 100, 80, 60, 40];
 export const menuSuite: Suite = {
   name: 'menu',
   title: 'menu tabs, key bar, dialogs and unsaved changes',
-  run: (t) => {
+  run: async (t) => {
     t.section('tab bar');
     const tabs = TAB_LABELS.map((label) => ({ label }));
     for (const width of WIDTHS)
@@ -130,6 +131,84 @@ export const menuSuite: Suite = {
         ['redis', false, 6379],
       ],
       'the database list reads sbx-db output and ignores other lines',
+    );
+
+    t.section('accounts for every agent');
+    const storage = t.dir('acc', 'storage');
+    const data = t.dir('acc', 'data');
+    const service = new AccountsService({
+      storageRoot: storage,
+      dataPath: data,
+      loaded: { config: structuredClone(DEFAULTS), configPath: null, base: t.temp },
+    });
+    t.equal(
+      service
+        .agents()
+        .map((a) => [a.name, a.kept])
+        .slice(0, 2),
+      [
+        ['claude', true],
+        ['codex', true],
+      ],
+      'Claude is listed first, then the agents that keep a login',
+    );
+    t.check(
+      service.agents().some((a) => a.name === 'opencode' && !a.kept),
+      'an agent without a known login folder is listed as not kept',
+    );
+    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"A"}');
+    t.equal(service.save('main', false, 'codex'), { name: 'main', email: null }, 'saving the sandbox login works');
+    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"B"}');
+    service.save('other', false, 'codex');
+    t.equal(
+      service.list('codex').map((a) => [a.name, a.isDefault, a.isActive]),
+      [
+        ['main', true, false],
+        ['other', false, true],
+      ],
+      'the first login saved is the default; the last saved from the sandbox is active',
+    );
+    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"B2"}');
+    service.activate('main', 'codex');
+    t.equal(
+      fs.readFileSync(t.at('acc', 'data', 'state', 'codex', 'auth.json'), 'utf8'),
+      '{"token":"A"}',
+      'using a login puts its files into the sandbox state',
+    );
+    service.activate('other', 'codex');
+    t.equal(
+      fs.readFileSync(t.at('acc', 'data', 'state', 'codex', 'auth.json'), 'utf8'),
+      '{"token":"B2"}',
+      'the outgoing login is saved back first (tokens rotate)',
+    );
+    service.rename('other', 'second', 'codex');
+    service.setDefault('second', 'codex');
+    t.equal(
+      service.list('codex').map((a) => [a.name, a.isDefault, a.isActive]),
+      [
+        ['main', false, false],
+        ['second', true, true],
+      ],
+      'rename keeps the default and active marks',
+    );
+    service.remove('main', 'codex');
+    t.equal(service.list('codex').length, 1, 'remove deletes the saved login');
+    await t.throws(() => service.save('x', false, 'opencode'), 'does not keep its login', 'no login folder: refused');
+    await t.throws(() => service.save('bad name', false, 'codex'), 'Invalid account name', 'bad names are refused');
+    t.write(
+      t.at('acc', 'storage', 'accounts', 'old.json'),
+      JSON.stringify({
+        name: 'old',
+        savedAt: '2026-01-01T00:00:00Z',
+        email: 'a@b.c',
+        credentials: {},
+        oauthAccount: null,
+      }),
+    );
+    t.equal(
+      service.list('claude').map((a) => a.name),
+      ['old'],
+      'the old Claude layout is read as Claude accounts',
     );
 
     t.section('every screen');

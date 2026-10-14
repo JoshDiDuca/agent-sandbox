@@ -12,4 +12,5 @@ export { hostClaudeDir, hostGlobalStateFile, sandboxGlobalState, stageClaudeProf
 export { capturePersonalization } from './personalize.js';
 export { toRegFile, type RegValue } from './reg-file.js';
 export { AccountStore, accountsDir, type Account, type AccountRow } from './accounts.js';
+export { AgentAccountStore } from './agent-accounts.js';
 export { sandboxClaudeDir } from './claude-login.js';

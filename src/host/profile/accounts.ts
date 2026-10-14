@@ -173,6 +173,20 @@ export class AccountStore {
     updateIndex(this.storageRoot, (i) => ({ ...i, default: name ?? undefined }));
   }
 
+  rename(name: string, to: string): void {
+    assertName(to);
+    const account =
+      this.read(name) ?? fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
+    if (this.read(to)) fail('There is an account "' + to + '" already.', 'Pick another name.');
+    this.file(to).write({ ...account, name: to });
+    fs.rmSync(this.file(name).file);
+    updateIndex(this.storageRoot, (i) => ({
+      ...i,
+      default: i.default === name ? to : i.default,
+      active: Object.fromEntries(Object.entries(i.active ?? {}).map(([k, n]) => [k, n === name ? to : n])),
+    }));
+  }
+
   remove(name: string): void {
     if (!this.read(name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
     fs.rmSync(this.file(name).file);

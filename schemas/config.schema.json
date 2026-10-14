@@ -1451,6 +1451,37 @@
             },
             "description": "Environment variables for the agent."
           },
+          "home": {
+            "description": "Where its login lives inside the sandbox; leave out when the agent cannot be pointed at a folder (then its login is not kept between sandboxes).",
+            "type": "object",
+            "properties": {
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
+                },
+                "description": "Environment variable -> folder (below the sandbox state folder) the agent keeps its data in."
+              },
+              "loginFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
+                },
+                "description": "Files that make up the login, relative to the agent's own state folder (state\\<agent>)."
+              },
+              "hostDir": {
+                "description": "The agent's own folder on this PC (e.g. ~/.codex): loginFiles are read from it to save this PC's login.",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
           "resumeArguments": {
             "description": "Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.",
             "type": "array",

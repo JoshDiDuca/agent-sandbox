@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Draft } from '../cli/menu/settings/draft.js';
 import { ConfigFile } from '../cli/menu/settings/config-file.js';
 import { AppsModel } from '../cli/menu/apps.js';
-import { accountsOptions } from '../cli/menu/pages/accounts-page.js';
+import { accountsOptions, type AccountsModel } from '../cli/menu/pages/accounts-page.js';
 import { appsOptions } from '../cli/menu/pages/apps-page.js';
 import { maintenanceOptions, type MaintenanceModel } from '../cli/menu/pages/maintenance-page.js';
 import { sandboxOptions, type SandboxModel } from '../cli/menu/pages/sandbox-page.js';
@@ -22,6 +22,21 @@ const SIZES = [
 ];
 
 const NOW = Date.now();
+
+const ACCOUNTS: AccountsModel = {
+  agents: [
+    { name: 'claude', kept: true, canSavePc: true },
+    { name: 'codex', kept: true, canSavePc: true },
+    { name: 'opencode', kept: false, canSavePc: false },
+  ],
+  rows: {
+    claude: [
+      { name: 'work', email: 'me@work.example', isDefault: true, isActive: true, savedAt: '2026-10-13T09:30:00Z' },
+      { name: 'home', email: null, isDefault: false, isActive: false, savedAt: '2026-10-01T18:00:00Z' },
+    ],
+    codex: [{ name: 'main', email: null, isDefault: true, isActive: false, savedAt: '2026-10-12T08:00:00Z' }],
+  },
+};
 
 const SESSIONS = [
   {
@@ -248,23 +263,15 @@ export function renderScreens(dir: string): string {
         ).map((l) => Text.strip(l).replace(/\s+$/, '')),
         size,
       ),
+      block('6 Accounts', draw(5, accountsOptions(ACCOUNTS), size, status), size),
       block(
-        '6 Accounts',
-        draw(
-          5,
-          accountsOptions([
-            {
-              name: 'work',
-              email: 'me@work.example',
-              isDefault: true,
-              isActive: true,
-              savedAt: '2026-10-13T09:30:00Z',
-            },
-            { name: 'home', email: null, isDefault: false, isActive: false, savedAt: '2026-10-01T18:00:00Z' },
-          ]),
-          size,
-          status,
-        ),
+        '6 Accounts · codex',
+        draw(5, { ...accountsOptions(ACCOUNTS), startCategory: 'codex' }, size, status),
+        size,
+      ),
+      block(
+        '6 Accounts · opencode (login not kept)',
+        draw(5, { ...accountsOptions(ACCOUNTS), startCategory: 'opencode' }, size, status),
         size,
       ),
     );

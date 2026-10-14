@@ -1,4 +1,4 @@
-export { AccountsService, type AccountsContext } from './accounts-service.js';
+export { AccountsService, type AccountRef, type AccountsContext, type AgentAccounts } from './accounts-service.js';
 export { AgentCommandsService, type AgentCommand, type AgentCommandsStatus } from './agent-commands-service.js';
 export { DataService, type CleanOutcome, type CleanPlan, type DataReport, type SizedTarget } from './data-service.js';
 export { resolveCleanTargets, type CleanTarget } from './data-targets.js';

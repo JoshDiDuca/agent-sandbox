@@ -223,4 +223,6 @@ export interface GuestSession {
   apps?: Config['apps'];
   /** audit.enabled and audit.processes: the sandbox reports the programs it starts (host keeps the log). */
   auditProcesses?: boolean;
+  /** Every agent's home variables (CODEX_HOME ...) -> folder below the state folder; older launch folders lack it. */
+  agentHomes?: Record<string, string>;
 }

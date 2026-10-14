@@ -28,6 +28,10 @@ export interface CliOptions {
   noLocalConfig: boolean;
   personal: boolean;
   fromHost: boolean;
+  /** account --agent: whose login (default claude). */
+  accountAgent?: string;
+  /** account rename --to: the new name. */
+  accountTo?: string;
   noRestart: boolean;
   follow: boolean;
   json: boolean;
@@ -199,6 +203,8 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
     noLocalConfig: o.localConfig === false,
     personal: Boolean(o.personal),
     fromHost: Boolean(o.fromHost),
+    accountAgent: name === 'account' && typeof o.agent === 'string' ? o.agent : undefined,
+    accountTo: name === 'account' && typeof o.to === 'string' ? o.to : undefined,
     noRestart: o.restart === false,
     follow: Boolean(o.follow),
     json: Boolean(o.json),

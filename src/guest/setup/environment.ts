@@ -8,11 +8,20 @@ import { runScriptWithJson } from '../runtime/process.js';
 import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
 
+/** Older launch folders have no agentHomes: these two were always set. */
+const LEGACY_HOMES: Record<string, string> = { CODEX_HOME: 'codex', GEMINI_CLI_HOME: 'gemini' };
+
+/** Every agent's home variable (CODEX_HOME ...) with the folder it points to in the persistent state. */
+const agentHomes = (): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(session.agentHomes ?? LEGACY_HOMES)
+      .filter(([name]) => name !== 'CLAUDE_CONFIG_DIR')
+      .map(([name, sub]) => [name, path.join(stateDir, sub)]),
+  );
+
 /** Variables agent-sandbox itself sets (besides the toolchains' own). */
 const AGENT_VARS = [
   'CLAUDE_CONFIG_DIR',
-  'CODEX_HOME',
-  'GEMINI_CLI_HOME',
   'npm_config_cache',
   'npm_config_update_notifier',
   'AGENT_WORKSPACE',
@@ -34,12 +43,12 @@ export const agentEnv = (
   tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>,
   target: EnvTarget = { workspace, project: session.project, base: process.env },
 ): NodeJS.ProcessEnv => {
+  const homes = agentHomes();
   const env: NodeJS.ProcessEnv = {
     ...target.base,
     ...tools.vars,
     CLAUDE_CONFIG_DIR: claudeDir,
-    CODEX_HOME: path.join(stateDir, 'codex'),
-    GEMINI_CLI_HOME: path.join(stateDir, 'gemini'),
+    ...homes,
     npm_config_cache: path.join(toolsDir, 'npm-cache'),
     npm_config_update_notifier: 'false',
     AGENT_WORKSPACE: target.workspace,
@@ -50,7 +59,7 @@ export const agentEnv = (
     AGENT_SANDBOX: '1',
     AGENT_SANDBOX_WORKSPACE: target.workspace,
   };
-  for (const dir of [env.CLAUDE_CONFIG_DIR, env.CODEX_HOME, env.GEMINI_CLI_HOME, env.npm_config_cache])
+  for (const dir of [env.CLAUDE_CONFIG_DIR, ...Object.keys(homes).map((n) => env[n]), env.npm_config_cache])
     mkdirp(dir as string);
   // The runner's own Node (bootstrap.ps1 puts it first on PATH) is not exposed: `node` is whatever nvm selected.
   const runners = [path.join(toolsDir, 'node'), path.dirname(process.execPath)].map((d) => d.toLowerCase());
@@ -63,7 +72,9 @@ export const agentEnv = (
 export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): void => {
   if (!isWin || dryRun || testMode) return;
   const vars = Object.fromEntries(
-    [...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]),
+    [...toolVars, ...AGENT_VARS, ...Object.keys(agentHomes())]
+      .filter((n) => env[n] !== undefined)
+      .map((n) => [n, env[n] as string]),
   );
   try {
     runScriptWithJson('machine-env.ps1', 'SettingsFile', { vars, path: env.PATH ?? '', add: [], additive: false });

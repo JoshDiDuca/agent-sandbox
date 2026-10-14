@@ -1,20 +1,24 @@
-// `account list | save | use | default | remove`
-import type { Account } from '../../host/profile/index.js';
+// `account list | save | use | default | rename | remove [--agent <name>]`
 import { fail, safeText } from '../../core/util/index.js';
 import { printJson, table } from '../output/index.js';
-import { AccountsService } from '../services/index.js';
+import { AccountsService, type AccountRef } from '../services/index.js';
 import { type Context } from './context.js';
 
-function label(a: Account): string {
+function label(a: AccountRef): string {
   return '"' + a.name + '"' + (a.email ? ' (' + a.email + ')' : '');
 }
 
-function list(ctx: Context, accounts: AccountsService): number {
-  const rows = accounts.list();
+function list(ctx: Context, accounts: AccountsService, agent: string): number {
+  const rows = accounts.list(agent);
   if (printJson(ctx, rows)) return 0;
   if (rows.length === 0) {
     console.log(
-      "No saved accounts. Sign in inside the sandbox, then: sandbox account save <name>   (or --from-host to save this PC's login)",
+      agent === 'claude'
+        ? "No saved accounts. Sign in inside the sandbox, then: sandbox account save <name>   (or --from-host to save this PC's login)"
+        : 'No saved ' +
+            agent +
+            ' accounts. Sign in inside the sandbox, then: sandbox account save <name> --agent ' +
+            agent,
     );
     return 0;
   }
@@ -31,39 +35,49 @@ function list(ctx: Context, accounts: AccountsService): number {
   return 0;
 }
 
-async function use(ctx: Context, accounts: AccountsService, name: string): Promise<number> {
-  console.log('Sandbox now uses ' + label(accounts.activate(name)) + '.');
-  if (accounts.hasRunningClaude() && !ctx.options.noRestart)
+async function use(ctx: Context, accounts: AccountsService, name: string, agent: string): Promise<number> {
+  console.log('Sandbox now uses ' + label(accounts.activate(name, agent)) + '.');
+  if (accounts.hasRunningSessions(agent) && !ctx.options.noRestart)
     console.log(
-      safeText(await accounts.restartClaude()) + ' with --continue; the conversation carries on under the new account.',
+      safeText(await accounts.restart(agent)) + ' with --continue; the conversation carries on under the new account.',
     );
   return 0;
 }
 
 export async function account(ctx: Context): Promise<number> {
   const [action = 'list', name] = ctx.options.positionals;
+  const newName = ctx.options.accountTo;
+  const agent = ctx.options.accountAgent ?? 'claude';
   const accounts = new AccountsService(ctx);
   const needName = (): string => name ?? fail('Missing account name.', 'Usage: sandbox account ' + action + ' <name>');
   switch (action) {
     case 'list':
-      return list(ctx, accounts);
+      return list(ctx, accounts, agent);
     case 'save':
-      console.log('Saved account ' + label(accounts.save(needName(), Boolean(ctx.options.fromHost))) + '.');
+      console.log('Saved account ' + label(accounts.save(needName(), Boolean(ctx.options.fromHost), agent)) + '.');
       return 0;
     case 'use':
-      return use(ctx, accounts, needName());
+      return use(ctx, accounts, needName(), agent);
     case 'default':
-      accounts.setDefault(needName());
+      accounts.setDefault(needName(), agent);
       console.log('Default account: ' + name);
       return 0;
+    case 'rename':
+      accounts.rename(
+        needName(),
+        newName ?? fail('Missing the new name.', 'Usage: sandbox account rename <name> --to <new-name>'),
+        agent,
+      );
+      console.log('Renamed account ' + name + ' to ' + newName);
+      return 0;
     case 'remove':
-      accounts.remove(needName());
+      accounts.remove(needName(), agent);
       console.log('Removed account ' + name);
       return 0;
     default:
       fail(
         'Unknown account action "' + action + '".',
-        'Use one of: sandbox account list | save <name> | use <name> | default <name> | remove <name>',
+        'Use one of: sandbox account list | save <name> | use <name> | default <name> | rename <name> --to <new-name> | remove <name>',
       );
   }
 }

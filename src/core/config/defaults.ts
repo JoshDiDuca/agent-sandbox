@@ -113,6 +113,7 @@ export const DEFAULTS: Config = {
       npmBin: 'claude',
       arguments: [],
       environment: { DISABLE_AUTOUPDATER: '1' },
+      home: { env: { CLAUDE_CONFIG_DIR: 'claude' }, loginFiles: ['.credentials.json'], hostDir: '~/.claude' },
       resumeArguments: ['--continue'],
     },
     codex: {
@@ -120,6 +121,7 @@ export const DEFAULTS: Config = {
       npmBin: 'codex',
       arguments: [],
       environment: {},
+      home: { env: { CODEX_HOME: 'codex' }, loginFiles: ['auth.json'], hostDir: '~/.codex' },
       resumeArguments: ['resume', '--last'],
     },
     gemini: {
@@ -127,6 +129,11 @@ export const DEFAULTS: Config = {
       npmBin: 'gemini',
       arguments: [],
       environment: {},
+      home: {
+        env: { GEMINI_CLI_HOME: 'gemini' },
+        loginFiles: ['.gemini/oauth_creds.json', '.gemini/google_accounts.json'],
+        hostDir: '~',
+      },
       resumeArguments: ['--resume'],
     },
     // Not tested by us; installed from each project's official npm / PyPI package.
@@ -149,6 +156,10 @@ export const DEFAULTS: Config = {
       npmBin: 'crush',
       arguments: [],
       environment: {},
+      home: {
+        env: { CRUSH_GLOBAL_CONFIG: 'crush/config', CRUSH_GLOBAL_DATA: 'crush/data' },
+        loginFiles: ['data/crush.json'],
+      },
       resumeArguments: ['--continue'],
     },
     copilot: {
@@ -156,6 +167,7 @@ export const DEFAULTS: Config = {
       npmBin: 'copilot',
       arguments: [],
       environment: {},
+      home: { env: { COPILOT_HOME: 'copilot' }, loginFiles: ['config.json'], hostDir: '~/.copilot' },
       resumeArguments: ['--continue'],
     },
     kilo: {

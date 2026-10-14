@@ -288,11 +288,16 @@ const COMMAND_LIST = [
         name: 'action',
         description: 'what to do',
         required: false,
-        choices: ['list', 'save', 'use', 'default', 'remove'],
+        choices: ['list', 'save', 'use', 'default', 'rename', 'remove'],
       },
       { name: 'name', description: 'account name', required: false, choices: 'accounts' },
     ],
     options: [
+      text('--to', 'name', '(rename) the new name', { when: 'rename', label: 'New name' }),
+      text('--agent', 'name', 'whose login: an agent that keeps one (default: claude)', {
+        choices: 'harnesses',
+        label: 'Agent',
+      }),
       bool('--from-host', "(save) save this PC's login instead of the sandbox's", { when: 'save' }),
       bool('--no-restart', '(use) do not restart running sessions', { when: 'use' }),
     ],
