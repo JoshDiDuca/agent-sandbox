@@ -32,7 +32,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
-static class Program
+static class PtyHost
 {
     static int Main(string[] args)
     {
@@ -41,11 +41,11 @@ static class Program
             Console.Error.WriteLine("usage: ptyhost <port> <token> <cols> <rows> <logFile> <commandLine> [<restartCommandLine>]");
             return 2;
         }
-        var log = new Log(args[4]);
+        Log log = new Log(args[4]);
         try
         {
-            var hub = new ClientHub(Encoding.UTF8.GetBytes(args[1]), short.Parse(args[2]), short.Parse(args[3]));
-            var host = new SessionHost(hub, log, args[5], args.Length > 6 && args[6].Length > 0 ? args[6] : args[5]);
+            ClientHub hub = new ClientHub(Encoding.UTF8.GetBytes(args[1]), short.Parse(args[2]), short.Parse(args[3]));
+            SessionHost host = new SessionHost(hub, log, args[5], args.Length > 6 && args[6].Length > 0 ? args[6] : args[5]);
             new Listener(int.Parse(args[0]), hub, host, log).Start();
             return host.Run();
         }
@@ -57,18 +57,21 @@ static class Program
     }
 }
 
-/** Runs the program (and restarts it on request) until it exits on its own. */
+/// <summary>Runs the program (and restarts it on request) until it exits on its own.</summary>
 sealed class SessionHost
 {
-    readonly ClientHub hub;
-    readonly Log log;
-    readonly string restartCommand;
-    string command;
-    volatile bool restartRequested;
+    private readonly ClientHub hub;
+    private readonly Log log;
+    private readonly string restartCommand;
+    private string command;
+    private volatile bool restartRequested;
 
     public SessionHost(ClientHub hub, Log log, string command, string restartCommand)
     {
-        this.hub = hub; this.log = log; this.command = command; this.restartCommand = restartCommand;
+        this.hub = hub;
+        this.log = log;
+        this.command = command;
+        this.restartCommand = restartCommand;
     }
 
     public int Run()
@@ -76,7 +79,7 @@ sealed class SessionHost
         log.Write("starting: " + command);
         while (true)
         {
-            using (var console = PseudoConsole.Start(command, hub.Cols, hub.Rows, hub.Broadcast))
+            using (PseudoConsole console = PseudoConsole.Start(command, hub.Cols, hub.Rows, hub.Broadcast))
             {
                 hub.Attach(console);
                 log.Write("pseudo console: " + Native.ConsoleKind);
@@ -103,26 +106,33 @@ sealed class SessionHost
     }
 }
 
-/** Accepts TCP clients and turns their frames into actions. */
+/// <summary>Accepts TCP clients and turns their frames into actions.</summary>
 sealed class Listener
 {
-    readonly int port;
-    readonly ClientHub hub;
-    readonly SessionHost host;
-    readonly Log log;
-    const int MaxConnections = 32;
-    int connections;
+    private const int MaxConnections = 32;
+    private const int HandshakeTimeoutMs = 10000;
+    private const int KeepAliveIdleMs = 10000;
+    private const int KeepAliveIntervalMs = 3000;
+
+    private readonly int port;
+    private readonly ClientHub hub;
+    private readonly SessionHost host;
+    private readonly Log log;
+    private int connections;
 
     public Listener(int port, ClientHub hub, SessionHost host, Log log)
     {
-        this.port = port; this.hub = hub; this.host = host; this.log = log;
+        this.port = port;
+        this.hub = hub;
+        this.host = host;
+        this.log = log;
     }
 
     public void Start()
     {
         // Reachable from the host only when attach is enabled; otherwise just from inside the sandbox.
         bool remote = Environment.GetEnvironmentVariable("PTYHOST_BIND") == "any";
-        var listener = new TcpListener(remote ? IPAddress.Any : IPAddress.Loopback, port);
+        TcpListener listener = new TcpListener(remote ? IPAddress.Any : IPAddress.Loopback, port);
         listener.Start();
         log.Write("listening on " + (remote ? "all addresses" : "loopback") + ", port " + port);
         Background(delegate
@@ -130,124 +140,253 @@ sealed class Listener
             while (true)
             {
                 TcpClient tcp = listener.AcceptTcpClient();
-                if (Interlocked.Increment(ref connections) > MaxConnections) { Interlocked.Decrement(ref connections); tcp.Close(); continue; }
+                if (Interlocked.Increment(ref connections) > MaxConnections)
+                {
+                    Interlocked.Decrement(ref connections);
+                    tcp.Close();
+                    continue;
+                }
                 tcp.NoDelay = true;
                 KeepAlive(tcp.Client);
-                Background(delegate { try { Serve(tcp); } finally { Interlocked.Decrement(ref connections); } });
+                Background(delegate
+                {
+                    try
+                    {
+                        Serve(tcp);
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref connections);
+                    }
+                });
             }
         });
     }
 
-    void Serve(TcpClient tcp)
+    private void Serve(TcpClient tcp)
     {
-        var client = new Client(tcp);
+        Client client = new Client(tcp);
         try
         {
-            byte type; byte[] payload;
+            byte type;
+            byte[] payload;
             // The handshake must arrive quickly; idle unauthenticated connections are not kept.
-            tcp.ReceiveTimeout = 10000;
-            if (!Frame.Read(client.Stream, out type, out payload) || type != Frame.Hello || payload.Length < 5) return;
-            if (!hub.Admit(client, payload)) return;
-            if (client.Query) { hub.SendStatus(client); return; }
+            tcp.ReceiveTimeout = HandshakeTimeoutMs;
+            if (!Frame.Read(client.Stream, out type, out payload) || type != Frame.Hello || payload.Length < 5)
+            {
+                return;
+            }
+            if (!hub.Admit(client, payload))
+            {
+                return;
+            }
+            if (client.Query)
+            {
+                hub.SendStatus(client);
+                return;
+            }
             tcp.ReceiveTimeout = 0;
             while (Frame.Read(client.Stream, out type, out payload))
             {
                 client.Seen();
-                if (type == Frame.Input) hub.Input(client, payload);
-                else if (type == Frame.Resize && payload.Length >= 4) hub.Resize(client, BitConverter.ToInt16(payload, 0), BitConverter.ToInt16(payload, 2));
-                else if (type == Frame.Restart) host.Restart();
+                if (type == Frame.Input)
+                {
+                    hub.Input(client, payload);
+                }
+                else if (type == Frame.Resize && payload.Length >= 4)
+                {
+                    hub.Resize(client, BitConverter.ToInt16(payload, 0), BitConverter.ToInt16(payload, 2));
+                }
+                else if (type == Frame.Restart)
+                {
+                    host.Restart();
+                }
             }
         }
-        catch (IOException) { }
-        catch (ObjectDisposedException) { }
-        finally { hub.Kill(client); }
+        catch (IOException)
+        {
+            // The connection dropped.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Closed while reading.
+        }
+        finally
+        {
+            hub.Kill(client);
+        }
     }
 
-    static void Background(ThreadStart work) { new Thread(work) { IsBackground = true }.Start(); }
+    private static void Background(ThreadStart work)
+    {
+        Thread thread = new Thread(work);
+        thread.IsBackground = true;
+        thread.Start();
+    }
 
-    /** TCP keepalive after 10 s idle, probing every 3 s: a peer that vanished (PC asleep, network gone) is dropped. */
-    static void KeepAlive(Socket socket)
+    /// <summary>TCP keepalive after 10 s idle, probing every 3 s: a peer that vanished (PC asleep, network gone) is dropped.</summary>
+    private static void KeepAlive(Socket socket)
     {
         try
         {
-            var values = new byte[12];
+            byte[] values = new byte[12];
             BitConverter.GetBytes(1).CopyTo(values, 0);
-            BitConverter.GetBytes(10000).CopyTo(values, 4);
-            BitConverter.GetBytes(3000).CopyTo(values, 8);
+            BitConverter.GetBytes(KeepAliveIdleMs).CopyTo(values, 4);
+            BitConverter.GetBytes(KeepAliveIntervalMs).CopyTo(values, 8);
             socket.IOControl(IOControlCode.KeepAliveValues, values, null);
         }
-        catch (SocketException) { }
+        catch (SocketException)
+        {
+            // Keepalive is a convenience.
+        }
     }
 }
 
-/** One connection. Frames go through a bounded outbox written by its own thread, so a slow viewer never blocks the agent. */
+/// <summary>One connection. Frames go through a bounded outbox written by its own thread, so a slow viewer never blocks the agent.</summary>
 sealed class Client
 {
+    private const int OutboxFrames = 4096;
+    private const int ActiveSeconds = 15;
+
     public readonly TcpClient Tcp;
     public readonly NetworkStream Stream;
-    public readonly BlockingCollection<byte[]> Outbox = new BlockingCollection<byte[]>(4096);
+    public readonly BlockingCollection<byte[]> Outbox = new BlockingCollection<byte[]>(OutboxFrames);
     public readonly bool Remote;
-    /** Set by the writer thread once everything queued has been written and the connection is closed. */
+    /// <summary>Set by the writer thread once everything queued has been written and the connection is closed.</summary>
     public readonly ManualResetEvent Finished = new ManualResetEvent(false);
-    public bool ControlOnly, Query;
-    public short Cols, Rows;
-    long lastSeen = DateTime.UtcNow.Ticks;
+    public bool ControlOnly;
+    public bool Query;
+    public short Cols;
+    public short Rows;
+    private long lastSeen = DateTime.UtcNow.Ticks;
 
     public Client(TcpClient tcp)
     {
         Tcp = tcp;
         Stream = tcp.GetStream();
-        var endpoint = tcp.Client.RemoteEndPoint as IPEndPoint;
+        IPEndPoint endpoint = tcp.Client.RemoteEndPoint as IPEndPoint;
         Remote = endpoint != null && !IPAddress.IsLoopback(endpoint.Address);
-        new Thread(Write) { IsBackground = true }.Start();
+        Thread writer = new Thread(Write);
+        writer.IsBackground = true;
+        writer.Start();
     }
 
-    public void Seen() { Interlocked.Exchange(ref lastSeen, DateTime.UtcNow.Ticks); }
-
-    /** Heard from in the last 15 s. Viewers ping every 5 s, so anything quieter is a terminal that went away. */
-    public bool Active { get { return DateTime.UtcNow.Ticks - Interlocked.Read(ref lastSeen) < TimeSpan.FromSeconds(15).Ticks; } }
-
-    void Write()
+    public void Seen()
     {
-        try { foreach (byte[] frame in Outbox.GetConsumingEnumerable()) Stream.Write(frame, 0, frame.Length); }
-        catch (Exception) { }
+        Interlocked.Exchange(ref lastSeen, DateTime.UtcNow.Ticks);
+    }
+
+    /// <summary>Heard from in the last 15 s. Viewers ping every 5 s, so anything quieter is a terminal that went away.</summary>
+    public bool Active
+    {
+        get { return DateTime.UtcNow.Ticks - Interlocked.Read(ref lastSeen) < TimeSpan.FromSeconds(ActiveSeconds).Ticks; }
+    }
+
+    private void Write()
+    {
+        try
+        {
+            foreach (byte[] frame in Outbox.GetConsumingEnumerable())
+            {
+                Stream.Write(frame, 0, frame.Length);
+            }
+        }
+        catch (Exception)
+        {
+            // The peer went away: stop writing.
+        }
         finally
         {
-            try { Tcp.Close(); } catch (Exception) { }
+            try
+            {
+                Tcp.Close();
+            }
+            catch (Exception)
+            {
+                // Already closed.
+            }
             Finished.Set();
         }
     }
 }
 
-/**
- * Everyone connected to the session. Output goes to all of them; the most recent client to connect, type or resize
- * decides the size (like tmux "latest"), and every size change forces a full repaint so no viewer is left with a
- * half-drawn screen. When the owner leaves, the most recently active viewer left takes over at its own size.
- */
+/// <summary>
+/// Everyone connected to the session. Output goes to all of them; the most recent client to connect, type or resize
+/// decides the size (like tmux "latest"), and every size change forces a full repaint so no viewer is left with a
+/// half-drawn screen. When the owner leaves, the most recently active viewer left takes over at its own size.
+/// </summary>
 sealed class ClientHub
 {
-    readonly object gate = new object();
-    readonly List<Client> clients = new List<Client>();
-    readonly byte[] token;
-    readonly byte[] tail = new byte[8192];
-    int tailLength;
-    readonly object replayGate = new object();
-    readonly MemoryStream replay = new MemoryStream();
-    const int MaxReplay = 4 << 20;
-    PseudoConsole console;
-    Client sizeOwner;
-    short cols, rows;
+    private const int MaxReplay = 4 << 20;
+    private const int TailBytes = 8192;
+    private const int MaxModeParams = 64;
+    private const int ExitDeliveryMs = 1000;
+    private const int KillWaitMs = 3000;
 
-    public ClientHub(byte[] token, short cols, short rows) { this.token = token; this.cols = cols; this.rows = rows; }
+    /// <summary>
+    /// Terminal modes the program (or conpty.dll) turned on that a late viewer's terminal must have too, or its clicks and
+    /// wheel never reach the program: mouse tracking (1000, 1002, 1003, 1005, 1006, 1015), focus events (1004), bracketed
+    /// paste (2004), win32 input (9001), application cursor keys (1), cursor visibility (25), the alternate screen (1049).
+    /// The replay is cut at the last screen clear, which may come after the program turned them on.
+    /// </summary>
+    private static readonly int[] ReplayedModes = { 1, 25, 1000, 1002, 1003, 1004, 1005, 1006, 1015, 1049, 2004, 9001 };
 
-    public short Cols { get { lock (gate) return cols; } }
-    public short Rows { get { lock (gate) return rows; } }
+    private readonly object gate = new object();
+    private readonly List<Client> clients = new List<Client>();
+    private readonly byte[] token;
+    private readonly byte[] tail = new byte[TailBytes];
+    private readonly object replayGate = new object();
+    private readonly MemoryStream replay = new MemoryStream();
+    private readonly Dictionary<int, bool> modes = new Dictionary<int, bool>();
+    private readonly StringBuilder modeParams = new StringBuilder();
+    private int tailLength;
+    private PseudoConsole console;
+    private Client sizeOwner;
+    private short cols;
+    private short rows;
+    /// <summary>DECSET / DECRST parser, kept across chunks: 0 text, 1 after ESC, 2 after ESC[, 3 in ESC[? parameters.</summary>
+    private int modeState;
 
-    public void Attach(PseudoConsole next) { lock (gate) console = next; }
+    public ClientHub(byte[] token, short cols, short rows)
+    {
+        this.token = token;
+        this.cols = cols;
+        this.rows = rows;
+    }
+
+    public short Cols
+    {
+        get
+        {
+            lock (gate)
+            {
+                return cols;
+            }
+        }
+    }
+
+    public short Rows
+    {
+        get
+        {
+            lock (gate)
+            {
+                return rows;
+            }
+        }
+    }
+
+    public void Attach(PseudoConsole next)
+    {
+        lock (gate)
+        {
+            console = next;
+        }
+    }
 
     public bool Admit(Client client, byte[] hello)
     {
-        var offered = new byte[hello.Length - 5];
+        byte[] offered = new byte[hello.Length - 5];
         Buffer.BlockCopy(hello, 5, offered, 0, offered.Length);
         if (!TokenMatches(offered))
         {
@@ -259,49 +398,93 @@ sealed class ClientHub
         client.Rows = BitConverter.ToInt16(hello, 2);
         client.ControlOnly = (hello[4] & 3) != 0;
         client.Query = (hello[4] & 2) != 0;
-        if (client.Query) return true;
-        if (!client.ControlOnly)
+        if (client.Query)
         {
-            Send(client, Frame.Console, Encoding.UTF8.GetBytes(Native.ConsoleKind.StartsWith("conpty") ? "conpty.dll" : "windows"));
-            // Taken and queued under the replay lock, so no output falls between the replay and the live stream.
-            lock (replayGate)
-            {
-                if (Native.ConsoleKind.StartsWith("conpty"))
-                {
-                    byte[] prefix = ModePrefix();
-                    if (prefix.Length > 0) Send(client, Frame.Output, prefix);
-                    if (replay.Length > 0) Send(client, Frame.Output, replay.ToArray());
-                }
-                lock (gate) clients.Add(client);
-            }
-            TakeOwnership(client);
+            return true;
         }
-        else lock (gate) clients.Add(client);
+        if (client.ControlOnly)
+        {
+            lock (gate)
+            {
+                clients.Add(client);
+            }
+            return true;
+        }
+        bool passthrough = Native.ConsoleKind.StartsWith("conpty");
+        Send(client, Frame.Console, Encoding.UTF8.GetBytes(passthrough ? "conpty.dll" : "windows"));
+        // Taken and queued under the replay lock, so no output falls between the replay and the live stream.
+        lock (replayGate)
+        {
+            if (passthrough)
+            {
+                byte[] prefix = ModePrefix();
+                if (prefix.Length > 0)
+                {
+                    Send(client, Frame.Output, prefix);
+                }
+                if (replay.Length > 0)
+                {
+                    Send(client, Frame.Output, replay.ToArray());
+                }
+            }
+            lock (gate)
+            {
+                clients.Add(client);
+            }
+        }
+        TakeOwnership(client);
         return true;
     }
 
     public void Input(Client client, byte[] data)
     {
-        if (client.ControlOnly) return;
-        if (sizeOwner != client) TakeOwnership(client);
+        if (client.ControlOnly)
+        {
+            return;
+        }
+        if (sizeOwner != client)
+        {
+            TakeOwnership(client);
+        }
         PseudoConsole current;
-        lock (gate) current = console;
-        if (current != null) current.Write(data);
+        lock (gate)
+        {
+            current = console;
+        }
+        if (current != null)
+        {
+            current.Write(data);
+        }
     }
 
-    /** A viewer being resized is the one being looked at, so it takes over the size. */
+    /// <summary>A viewer being resized is the one being looked at, so it takes over the size.</summary>
     public void Resize(Client client, short width, short height)
     {
-        if (client.ControlOnly) return;
-        client.Cols = width; client.Rows = height;
+        if (client.ControlOnly)
+        {
+            return;
+        }
+        client.Cols = width;
+        client.Rows = height;
         TakeOwnership(client);
     }
 
     public void SendStatus(Client client)
     {
-        int viewers = 0, remote = 0;
-        foreach (Client c in Snapshot()) if (!c.ControlOnly && c.Active) { viewers++; if (c.Remote) remote++; }
-        var payload = new byte[4];
+        int viewers = 0;
+        int remote = 0;
+        foreach (Client c in Snapshot())
+        {
+            if (!c.ControlOnly && c.Active)
+            {
+                viewers++;
+                if (c.Remote)
+                {
+                    remote++;
+                }
+            }
+        }
+        byte[] payload = new byte[4];
         BitConverter.GetBytes((short)viewers).CopyTo(payload, 0);
         BitConverter.GetBytes((short)remote).CopyTo(payload, 2);
         Send(client, Frame.Status, payload);
@@ -314,60 +497,202 @@ sealed class ClientHub
         lock (replayGate)
         {
             Record(output);
-            foreach (Client c in Snapshot()) if (!c.ControlOnly) Send(c, Frame.Output, output);
+            foreach (Client c in Snapshot())
+            {
+                if (!c.ControlOnly)
+                {
+                    Send(c, Frame.Output, output);
+                }
+            }
         }
     }
 
-    /**
-     * The output a viewer joining now needs to see the screen (conpty.dll does not repaint for it): everything since the
-     * last "clear screen", capped. Cut at a line start when capped, so the replay never begins inside an escape sequence.
-     */
-    void Record(byte[] output)
+    /// <summary>The program's last output as plain text (escape sequences removed), for the log when it exits.</summary>
+    public string TailText()
     {
-        if (!Native.ConsoleKind.StartsWith("conpty")) return;
-        TrackModes(output);
-        int clear = LastClear(output);
-        if (clear >= 0) { replay.SetLength(0); replay.Write(output, clear, output.Length - clear); }
-        else replay.Write(output, 0, output.Length);
-        if (replay.Length <= MaxReplay) return;
-        byte[] all = replay.ToArray();
-        int from = all.Length - MaxReplay / 2;
-        while (from < all.Length && all[from] != (byte)'\n') from++;
-        replay.SetLength(0);
-        if (from + 1 < all.Length) replay.Write(all, from + 1, all.Length - from - 1);
+        string text;
+        lock (tail)
+        {
+            text = Encoding.UTF8.GetString(tail, 0, tailLength);
+        }
+        text = Regex.Replace(text, "\x1b(\\[[0-9;?]*[ -/]*[@-~]|\\][^\x07\x1b]*(\x07|\x1b\\\\)|[@-Z\\\\-_])", "");
+        return Regex.Replace(text, "[\\x00-\\x08\\x0b-\\x1f]", "").Trim();
     }
 
-    /**
-     * Terminal modes the program (or conpty.dll) turned on that a late viewer's terminal must have too, or its clicks and
-     * wheel never reach the program: mouse tracking (1000, 1002, 1003, 1005, 1006, 1015), focus events (1004), bracketed
-     * paste (2004), win32 input (9001), application cursor keys (1), cursor visibility (25), the alternate screen (1049).
-     * The replay is cut at the last screen clear, which may come after the program turned them on.
-     */
-    static readonly int[] ReplayedModes = { 1, 25, 1000, 1002, 1003, 1004, 1005, 1006, 1015, 1049, 2004, 9001 };
-    readonly Dictionary<int, bool> modes = new Dictionary<int, bool>();
-    /** DECSET / DECRST parser, kept across chunks: 0 text, 1 after ESC, 2 after ESC[, 3 in ESC[? parameters. */
-    int modeState;
-    readonly StringBuilder modeParams = new StringBuilder();
+    /// <summary>A restarted program starts on a clean screen (viewers clear theirs on RESTARTING).</summary>
+    public void ResetReplay()
+    {
+        lock (replayGate)
+        {
+            replay.SetLength(0);
+            modes.Clear();
+            modeState = 0;
+        }
+    }
 
-    void TrackModes(byte[] output)
+    public void Notify(byte type)
+    {
+        foreach (Client c in Snapshot())
+        {
+            if (!c.ControlOnly)
+            {
+                Send(c, type, new byte[0]);
+            }
+        }
+    }
+
+    public void KillProgram()
+    {
+        PseudoConsole current;
+        lock (gate)
+        {
+            current = console;
+        }
+        if (current != null)
+        {
+            current.Kill();
+        }
+    }
+
+    public void Exit(int exitCode)
+    {
+        byte[] code = BitConverter.GetBytes(exitCode);
+        List<Client> everyone = Snapshot();
+        foreach (Client c in everyone)
+        {
+            Send(c, Frame.Exit, code);
+            Retire(c);
+        }
+        // Give the writer threads a moment to deliver the EXIT frame before the process ends.
+        foreach (Client c in everyone)
+        {
+            c.Finished.WaitOne(ExitDeliveryMs);
+        }
+    }
+
+    /// <summary>Stops sending to a client after what is already queued (its writer closes the connection when done).</summary>
+    public void Retire(Client client)
+    {
+        Client next = null;
+        lock (gate)
+        {
+            clients.Remove(client);
+            if (sizeOwner == client)
+            {
+                sizeOwner = null;
+                for (int i = clients.Count - 1; i >= 0 && next == null; i--)
+                {
+                    if (!clients[i].ControlOnly)
+                    {
+                        next = clients[i];
+                    }
+                }
+            }
+        }
+        try
+        {
+            client.Outbox.CompleteAdding();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already retired.
+        }
+        if (next != null)
+        {
+            TakeOwnership(next);
+        }
+    }
+
+    /// <summary>
+    /// Disconnects a client. Frames already queued (e.g. "access denied", STATUS) are written first: the client's writer
+    /// thread closes the connection when it is done, so wait for that rather than for an empty queue (the writer takes a
+    /// frame off the queue before it has written it, so an empty queue does not mean "sent"), and only force the close
+    /// if the peer is not reading.
+    /// </summary>
+    public void Kill(Client client)
+    {
+        Retire(client);
+        client.Finished.WaitOne(KillWaitMs);
+        try
+        {
+            client.Tcp.Close();
+        }
+        catch (Exception)
+        {
+            // Already closed.
+        }
+    }
+
+    /// <summary>
+    /// The output a viewer joining now needs to see the screen (conpty.dll does not repaint for it): everything since the
+    /// last "clear screen", capped. Cut at a line start when capped, so the replay never begins inside an escape sequence.
+    /// </summary>
+    private void Record(byte[] output)
+    {
+        if (!Native.ConsoleKind.StartsWith("conpty"))
+        {
+            return;
+        }
+        TrackModes(output);
+        int clear = LastClear(output);
+        if (clear >= 0)
+        {
+            replay.SetLength(0);
+            replay.Write(output, clear, output.Length - clear);
+        }
+        else
+        {
+            replay.Write(output, 0, output.Length);
+        }
+        if (replay.Length <= MaxReplay)
+        {
+            return;
+        }
+        byte[] all = replay.ToArray();
+        int from = all.Length - MaxReplay / 2;
+        while (from < all.Length && all[from] != (byte)'\n')
+        {
+            from++;
+        }
+        replay.SetLength(0);
+        if (from + 1 < all.Length)
+        {
+            replay.Write(all, from + 1, all.Length - from - 1);
+        }
+    }
+
+    private void TrackModes(byte[] output)
     {
         foreach (byte b in output)
         {
-            if (b == 0x1b) { modeState = 1; continue; }
+            if (b == 0x1b)
+            {
+                modeState = 1;
+                continue;
+            }
             switch (modeState)
             {
-                case 1: modeState = b == (byte)'[' ? 2 : 0; break;
-                case 2: modeState = b == (byte)'?' ? 3 : 0; modeParams.Length = 0; break;
+                case 1:
+                    modeState = b == (byte)'[' ? 2 : 0;
+                    break;
+                case 2:
+                    modeState = b == (byte)'?' ? 3 : 0;
+                    modeParams.Length = 0;
+                    break;
                 case 3:
-                    if ((b >= (byte)'0' && b <= (byte)'9') || b == (byte)';') { if (modeParams.Length < 64) modeParams.Append((char)b); }
+                    if ((b >= (byte)'0' && b <= (byte)'9') || b == (byte)';')
+                    {
+                        if (modeParams.Length < MaxModeParams)
+                        {
+                            modeParams.Append((char)b);
+                        }
+                    }
                     else
                     {
                         if (b == (byte)'h' || b == (byte)'l')
-                            foreach (string p in modeParams.ToString().Split(';'))
-                            {
-                                int mode;
-                                if (int.TryParse(p, out mode) && Array.IndexOf(ReplayedModes, mode) >= 0) modes[mode] = b == (byte)'h';
-                            }
+                        {
+                            SetModes(b == (byte)'h');
+                        }
                         modeState = 0;
                     }
                     break;
@@ -375,40 +700,55 @@ sealed class ClientHub
         }
     }
 
-    /** The modes to set before the replay, e.g. ESC[?1000h ESC[?1006h. */
-    byte[] ModePrefix()
+    private void SetModes(bool on)
     {
-        var text = new StringBuilder();
+        foreach (string p in modeParams.ToString().Split(';'))
+        {
+            int mode;
+            if (int.TryParse(p, out mode) && Array.IndexOf(ReplayedModes, mode) >= 0)
+            {
+                modes[mode] = on;
+            }
+        }
+    }
+
+    /// <summary>The modes to set before the replay, e.g. ESC[?1000h ESC[?1006h.</summary>
+    private byte[] ModePrefix()
+    {
+        StringBuilder text = new StringBuilder();
         foreach (int mode in ReplayedModes)
         {
             bool on;
-            if (modes.TryGetValue(mode, out on)) text.Append("\x1b[?" + mode + (on ? "h" : "l"));
+            if (modes.TryGetValue(mode, out on))
+            {
+                text.Append("\x1b[?" + mode + (on ? "h" : "l"));
+            }
         }
         return Encoding.ASCII.GetBytes(text.ToString());
     }
 
-    /** Where the last ESC[2J (clear screen) or ESC c (reset) starts in `data`, or -1. */
-    static int LastClear(byte[] data)
+    /// <summary>Where the last ESC[2J (clear screen) or ESC c (reset) starts in `data`, or -1.</summary>
+    private static int LastClear(byte[] data)
     {
         for (int i = data.Length - 2; i >= 0; i--)
         {
-            if (data[i] != 0x1b) continue;
-            if (data[i + 1] == (byte)'c') return i;
-            if (i + 3 < data.Length && data[i + 1] == (byte)'[' && data[i + 2] == (byte)'2' && data[i + 3] == (byte)'J') return i;
+            if (data[i] != 0x1b)
+            {
+                continue;
+            }
+            if (data[i + 1] == (byte)'c')
+            {
+                return i;
+            }
+            if (i + 3 < data.Length && data[i + 1] == (byte)'[' && data[i + 2] == (byte)'2' && data[i + 3] == (byte)'J')
+            {
+                return i;
+            }
         }
         return -1;
     }
 
-    /** The program's last output as plain text (escape sequences removed), for the log when it exits. */
-    public string TailText()
-    {
-        string text;
-        lock (tail) text = Encoding.UTF8.GetString(tail, 0, tailLength);
-        text = Regex.Replace(text, "\x1b(\\[[0-9;?]*[ -/]*[@-~]|\\][^\x07\x1b]*(\x07|\x1b\\\\)|[@-Z\\\\-_])", "");
-        return Regex.Replace(text, "[\\x00-\\x08\\x0b-\\x1f]", "").Trim();
-    }
-
-    void Remember(byte[] output)
+    private void Remember(byte[] output)
     {
         lock (tail)
         {
@@ -420,211 +760,271 @@ sealed class ClientHub
         }
     }
 
-    /** A restarted program starts on a clean screen (viewers clear theirs on RESTARTING). */
-    public void ResetReplay() { lock (replayGate) { replay.SetLength(0); modes.Clear(); modeState = 0; } }
-
-    public void Notify(byte type)
-    {
-        foreach (Client c in Snapshot()) if (!c.ControlOnly) Send(c, type, new byte[0]);
-    }
-
-    public void KillProgram()
-    {
-        PseudoConsole current;
-        lock (gate) current = console;
-        if (current != null) current.Kill();
-    }
-
-    public void Exit(int exitCode)
-    {
-        byte[] code = BitConverter.GetBytes(exitCode);
-        var everyone = Snapshot();
-        foreach (Client c in everyone) { Send(c, Frame.Exit, code); Retire(c); }
-        // Give the writer threads a moment to deliver the EXIT frame before the process ends.
-        foreach (Client c in everyone) c.Finished.WaitOne(1000);
-    }
-
-    /** Stops sending to a client after what is already queued (its writer closes the connection when done). */
-    public void Retire(Client client)
-    {
-        Client next = null;
-        lock (gate)
-        {
-            clients.Remove(client);
-            if (sizeOwner == client)
-            {
-                sizeOwner = null;
-                for (int i = clients.Count - 1; i >= 0 && next == null; i--) if (!clients[i].ControlOnly) next = clients[i];
-            }
-        }
-        try { client.Outbox.CompleteAdding(); } catch (ObjectDisposedException) { }
-        if (next != null) TakeOwnership(next);
-    }
-
-    /**
-     * Disconnects a client. Frames already queued (e.g. "access denied", STATUS) are written first: the client's writer
-     * thread closes the connection when it is done, so wait for that rather than for an empty queue (the writer takes a
-     * frame off the queue before it has written it, so an empty queue does not mean "sent"), and only force the close
-     * if the peer is not reading.
-     */
-    public void Kill(Client client)
-    {
-        Retire(client);
-        client.Finished.WaitOne(3000);
-        try { client.Tcp.Close(); } catch (Exception) { }
-    }
-
-    void TakeOwnership(Client client)
+    private void TakeOwnership(Client client)
     {
         lock (gate)
         {
             // Kept in order of activity, so a departing owner hands over to whoever was active most recently.
-            if (clients.Remove(client)) clients.Add(client);
+            if (clients.Remove(client))
+            {
+                clients.Add(client);
+            }
             sizeOwner = client;
         }
         Apply(client.Cols, client.Rows);
     }
 
-    void Apply(short width, short height)
+    private void Apply(short width, short height)
     {
-        if (width < 2 || height < 2) return;
+        if (width < 2 || height < 2)
+        {
+            return;
+        }
         PseudoConsole current;
-        lock (gate) { current = console; cols = width; rows = height; }
-        if (current == null) return;
+        lock (gate)
+        {
+            current = console;
+            cols = width;
+            rows = height;
+        }
+        if (current == null)
+        {
+            return;
+        }
         // ConPTY repaints everything on a size change; resizing by one row first forces that even for the same size.
         current.Resize(width, (short)(height - 1));
         current.Resize(width, height);
     }
 
-    bool TokenMatches(byte[] offered)
+    private bool TokenMatches(byte[] offered)
     {
         int diff = offered.Length ^ token.Length;
-        for (int i = 0; i < offered.Length && i < token.Length; i++) diff |= offered[i] ^ token[i];
+        for (int i = 0; i < offered.Length && i < token.Length; i++)
+        {
+            diff |= offered[i] ^ token[i];
+        }
         return diff == 0;
     }
 
-    List<Client> Snapshot() { lock (gate) return new List<Client>(clients); }
+    private List<Client> Snapshot()
+    {
+        lock (gate)
+        {
+            return new List<Client>(clients);
+        }
+    }
 
-    /** Queues a frame; a client whose outbox is full has stopped reading and is disconnected. */
-    void Send(Client client, byte type, byte[] payload)
+    /// <summary>Queues a frame; a client whose outbox is full has stopped reading and is disconnected.</summary>
+    private void Send(Client client, byte type, byte[] payload)
     {
         bool queued;
-        try { queued = client.Outbox.TryAdd(Frame.Encode(type, payload)); }
-        catch (InvalidOperationException) { return; }
-        if (!queued) Kill(client);
+        try
+        {
+            queued = client.Outbox.TryAdd(Frame.Encode(type, payload));
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+        if (!queued)
+        {
+            Kill(client);
+        }
     }
 }
 
-/** One program running inside a pseudo console, with a thread pumping its output to `onOutput`. */
+/// <summary>One program running inside a pseudo console, with a thread pumping its output to `onOutput`.</summary>
 sealed class PseudoConsole : IDisposable
 {
-    readonly IntPtr handle;
-    readonly IntPtr process;
-    readonly FileStream input;
-    readonly Thread pump;
-    readonly object gate = new object();
-    bool closed, disposed;
+    private const int PumpBufferBytes = 16384;
+    private const uint Infinite = 0xFFFFFFFF;
+    private const int PumpJoinMs = 5000;
 
-    PseudoConsole(IntPtr handle, IntPtr process, FileStream input, Thread pump)
+    private readonly IntPtr handle;
+    private readonly IntPtr process;
+    private readonly FileStream input;
+    private readonly Thread pump;
+    private readonly object gate = new object();
+    private bool closed;
+    private bool disposed;
+
+    private PseudoConsole(IntPtr handle, IntPtr process, FileStream input, Thread pump)
     {
-        this.handle = handle; this.process = process; this.input = input; this.pump = pump;
+        this.handle = handle;
+        this.process = process;
+        this.input = input;
+        this.pump = pump;
     }
 
     public static PseudoConsole Start(string commandLine, short cols, short rows, Action<byte[]> onOutput)
     {
-        SafeFileHandle inRead, inWrite, outRead, outWrite;
-        Native.Check(Native.CreatePipe(out inRead, out inWrite, IntPtr.Zero, 0), "CreatePipe");
-        Native.Check(Native.CreatePipe(out outRead, out outWrite, IntPtr.Zero, 0), "CreatePipe");
+        SafeFileHandle inRead;
+        SafeFileHandle inWrite;
+        SafeFileHandle outRead;
+        SafeFileHandle outWrite;
+        Native.Check(Native.CreatePipe(out inRead, out inWrite), "CreatePipe");
+        Native.Check(Native.CreatePipe(out outRead, out outWrite), "CreatePipe");
         IntPtr handle;
-        int hr = Native.CreatePseudoConsole(new Native.Coord { X = cols, Y = rows }, inRead, outWrite, 0, out handle);
-        if (hr != 0) throw new IOException("CreatePseudoConsole failed: 0x" + hr.ToString("X8"));
+        int hr = Native.CreatePseudoConsole(Native.Size(cols, rows), inRead, outWrite, 0, out handle);
+        if (hr != 0)
+        {
+            throw new IOException("CreatePseudoConsole failed: 0x" + hr.ToString("X8"));
+        }
         inRead.Dispose();
         outWrite.Dispose();
         IntPtr process = Native.Spawn(commandLine, handle);
-        var output = new FileStream(outRead, FileAccess.Read);
-        var pump = new Thread(() => Pump(output, onOutput)) { IsBackground = true };
+        FileStream output = new FileStream(outRead, FileAccess.Read);
+        Thread pump = new Thread(() => Pump(output, onOutput));
+        pump.IsBackground = true;
         pump.Start();
         return new PseudoConsole(handle, process, new FileStream(inWrite, FileAccess.Write), pump);
     }
 
-    static void Pump(FileStream output, Action<byte[]> onOutput)
-    {
-        var buffer = new byte[16384];
-        try
-        {
-            int n;
-            while ((n = output.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                var chunk = new byte[n];
-                Buffer.BlockCopy(buffer, 0, chunk, 0, n);
-                onOutput(chunk);
-            }
-        }
-        catch (IOException) { }
-        finally { output.Dispose(); }
-    }
-
     public int WaitForExit()
     {
-        Native.WaitForSingleObject(process, 0xFFFFFFFF);
+        Native.WaitForSingleObject(process, Infinite);
         uint code;
         Native.GetExitCodeProcess(process, out code);
         Close();
-        pump.Join(5000);
+        pump.Join(PumpJoinMs);
         return (int)code;
     }
 
     public void Write(byte[] data)
     {
-        try { lock (input) { input.Write(data, 0, data.Length); input.Flush(); } }
-        catch (IOException) { }
-        catch (ObjectDisposedException) { }
+        try
+        {
+            lock (input)
+            {
+                input.Write(data, 0, data.Length);
+                input.Flush();
+            }
+        }
+        catch (IOException)
+        {
+            // The program has ended.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Same.
+        }
     }
 
     public void Resize(short cols, short rows)
     {
-        lock (gate) if (!closed) Native.ResizePseudoConsole(handle, new Native.Coord { X = cols, Y = rows });
+        lock (gate)
+        {
+            if (!closed)
+            {
+                Native.ResizePseudoConsole(handle, Native.Size(cols, rows));
+            }
+        }
     }
 
-    /** Closing the pseudo console ends every process attached to it (the agent and anything it started). */
+    /// <summary>Closing the pseudo console ends every process attached to it (the agent and anything it started).</summary>
     public void Kill()
     {
-        lock (gate) { if (disposed) return; Native.TerminateProcess(process, 1); }
+        lock (gate)
+        {
+            if (disposed)
+            {
+                return;
+            }
+            Native.TerminateProcess(process, 1);
+        }
         Close();
     }
 
     public void Dispose()
     {
         Close();
-        lock (gate) { if (disposed) return; disposed = true; Native.CloseHandle(process); }
+        lock (gate)
+        {
+            if (disposed)
+            {
+                return;
+            }
+            disposed = true;
+            Native.CloseHandle(process);
+        }
     }
 
-    void Close()
+    private static void Pump(FileStream output, Action<byte[]> onOutput)
+    {
+        byte[] buffer = new byte[PumpBufferBytes];
+        try
+        {
+            int n;
+            while ((n = output.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                byte[] chunk = new byte[n];
+                Buffer.BlockCopy(buffer, 0, chunk, 0, n);
+                onOutput(chunk);
+            }
+        }
+        catch (IOException)
+        {
+            // The pseudo console was closed.
+        }
+        finally
+        {
+            output.Dispose();
+        }
+    }
+
+    private void Close()
     {
         lock (gate)
         {
-            if (closed) return;
+            if (closed)
+            {
+                return;
+            }
             closed = true;
-            try { input.Dispose(); } catch (IOException) { }
+            try
+            {
+                input.Dispose();
+            }
+            catch (IOException)
+            {
+                // The pipe is broken already.
+            }
             Native.ClosePseudoConsole(handle);
         }
     }
 }
 
-/** The wire format (see the top of this file). */
+/// <summary>The wire format (see the top of this file).</summary>
 static class Frame
 {
-    public const byte Hello = 1, Input = 2, Resize = 3, Restart = 4, Ping = 5;
-    public const byte Output = 16, Exit = 17, Error = 18, Restarting = 19, Status = 20, Console = 21;
-    const int MaxPayload = 1 << 20;
+    public const byte Hello = 1;
+    public const byte Input = 2;
+    public const byte Resize = 3;
+    public const byte Restart = 4;
+    public const byte Ping = 5;
+    public const byte Output = 16;
+    public const byte Exit = 17;
+    public const byte Error = 18;
+    public const byte Restarting = 19;
+    public const byte Status = 20;
+    public const byte Console = 21;
+    private const int HeaderBytes = 5;
+    private const int MaxPayload = 1 << 20;
 
     public static bool Read(Stream stream, out byte type, out byte[] payload)
     {
-        type = 0; payload = null;
-        var header = new byte[5];
-        if (!ReadExactly(stream, header)) return false;
+        type = 0;
+        payload = null;
+        byte[] header = new byte[HeaderBytes];
+        if (!ReadExactly(stream, header))
+        {
+            return false;
+        }
         int length = BitConverter.ToInt32(header, 1);
-        if (length < 0 || length > MaxPayload) return false;
+        if (length < 0 || length > MaxPayload)
+        {
+            return false;
+        }
         type = header[0];
         payload = new byte[length];
         return ReadExactly(stream, payload);
@@ -632,20 +1032,23 @@ static class Frame
 
     public static byte[] Encode(byte type, byte[] payload)
     {
-        var frame = new byte[5 + payload.Length];
+        byte[] frame = new byte[HeaderBytes + payload.Length];
         frame[0] = type;
         BitConverter.GetBytes(payload.Length).CopyTo(frame, 1);
-        Buffer.BlockCopy(payload, 0, frame, 5, payload.Length);
+        Buffer.BlockCopy(payload, 0, frame, HeaderBytes, payload.Length);
         return frame;
     }
 
-    static bool ReadExactly(Stream stream, byte[] buffer)
+    private static bool ReadExactly(Stream stream, byte[] buffer)
     {
         int offset = 0;
         while (offset < buffer.Length)
         {
             int n = stream.Read(buffer, offset, buffer.Length - offset);
-            if (n <= 0) return false;
+            if (n <= 0)
+            {
+                return false;
+            }
             offset += n;
         }
         return true;
@@ -654,116 +1057,271 @@ static class Frame
 
 sealed class Log
 {
-    readonly string file;
-    public Log(string file) { this.file = file; }
+    private readonly string file;
+
+    public Log(string file)
+    {
+        this.file = file;
+    }
+
     public void Write(string message)
     {
-        try { File.AppendAllText(file, DateTime.Now.ToString("s") + " " + message + Environment.NewLine); } catch (Exception) { }
+        try
+        {
+            File.AppendAllText(file, DateTime.Now.ToString("s") + " " + message + Environment.NewLine);
+        }
+        catch (Exception)
+        {
+            // Logging never stops the session.
+        }
     }
 }
 
+/// <summary>
+/// The pseudo console: the newer conpty.dll (+ OpenConsole.exe next to it) when PTYHOST_CONPTY names one, else the one
+/// built into Windows. Windows 10/11 before 24H2 ship a ConPTY that re-renders the screen instead of passing the
+/// program's output through, which garbles wide characters after a resize and loses mouse input and scrollback.
+/// </summary>
 static class Native
 {
-    [StructLayout(LayoutKind.Sequential)] public struct Coord { public short X; public short Y; }
+    private const uint ExtendedStartupInfoPresent = 0x00080000;
+    private const int UseStdHandles = 0x00000100;
+    private static readonly IntPtr PseudoConsoleAttribute = (IntPtr)0x00020016;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Coord
+    {
+        public short X;
+        public short Y;
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    struct StartupInfo
+    private struct StartupInfo
     {
-        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
-        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
-        public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+        public int cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public int dwX;
+        public int dwY;
+        public int dwXSize;
+        public int dwYSize;
+        public int dwXCountChars;
+        public int dwYCountChars;
+        public int dwFillAttribute;
+        public int dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
     }
 
-    [StructLayout(LayoutKind.Sequential)] struct StartupInfoEx { public StartupInfo StartupInfo; public IntPtr lpAttributeList; }
-    [StructLayout(LayoutKind.Sequential)] struct ProcessInformation { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
-
-    const uint ExtendedStartupInfoPresent = 0x00080000;
-    const int UseStdHandles = 0x00000100;
-    static readonly IntPtr PseudoConsoleAttribute = (IntPtr)0x00020016;
-
-    public static void Check(bool ok, string what) { if (!ok) throw new IOException(what + " failed: " + Marshal.GetLastWin32Error()); }
-
-    /** Starts `commandLine` attached to the pseudo console. Null std handles: never leak our own stdio into the child. */
-    public static IntPtr Spawn(string commandLine, IntPtr pseudoConsole)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct StartupInfoEx
     {
-        IntPtr size = IntPtr.Zero;
-        InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
-        IntPtr attributes = Marshal.AllocHGlobal(size);
-        try
-        {
-            Check(InitializeProcThreadAttributeList(attributes, 1, 0, ref size), "InitializeProcThreadAttributeList");
-            Check(UpdateProcThreadAttribute(attributes, 0, PseudoConsoleAttribute, pseudoConsole, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero), "UpdateProcThreadAttribute");
-            var info = new StartupInfoEx();
-            info.StartupInfo.cb = Marshal.SizeOf(typeof(StartupInfoEx));
-            info.StartupInfo.dwFlags = UseStdHandles;
-            info.lpAttributeList = attributes;
-            ProcessInformation pi;
-            if (!CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, ExtendedStartupInfoPresent, IntPtr.Zero, null, ref info, out pi))
-                throw new IOException("CreateProcess failed (" + Marshal.GetLastWin32Error() + "): " + commandLine);
-            CloseHandle(pi.hThread);
-            return pi.hProcess;
-        }
-        finally
-        {
-            DeleteProcThreadAttributeList(attributes);
-            Marshal.FreeHGlobal(attributes);
-        }
+        public StartupInfo StartupInfo;
+        public IntPtr lpAttributeList;
     }
 
-    // The pseudo console: the newer conpty.dll (+ OpenConsole.exe next to it) when PTYHOST_CONPTY names one, else the one
-    // built into Windows. Windows 10/11 before 24H2 ship a ConPTY that re-renders the screen instead of passing the
-    // program's output through, which garbles wide characters after a resize and loses mouse input and scrollback.
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate int CreateFn(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate int ResizeFn(IntPtr hPC, Coord size);
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate void CloseFn(IntPtr hPC);
-    static CreateFn create;
-    static ResizeFn resize;
-    static CloseFn close;
-    /** "conpty.dll" or "windows": which pseudo console is in use (logged, and told to viewers). */
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessInformation
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public int dwProcessId;
+        public int dwThreadId;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate int CreateFn(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate int ResizeFn(IntPtr hPC, Coord size);
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate void CloseFn(IntPtr hPC);
+
+    private static CreateFn create;
+    private static ResizeFn resize;
+    private static CloseFn close;
+
+    /// <summary>"conpty.dll" or "windows": which pseudo console is in use (logged, and told to viewers).</summary>
     public static string ConsoleKind = "windows";
+
+    private static class NativeMethods
+    {
+        [DllImport("kernel32.dll", EntryPoint = "CreatePseudoConsole")]
+        public static extern int CreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
+
+        [DllImport("kernel32.dll", EntryPoint = "ResizePseudoConsole")]
+        public static extern int ResizePseudoConsole(IntPtr hPC, Coord size);
+
+        [DllImport("kernel32.dll", EntryPoint = "ClosePseudoConsole")]
+        public static extern void ClosePseudoConsole(IntPtr hPC);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr LoadLibraryW(string path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false, SetLastError = true)]
+        public static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CreatePipe(out SafeFileHandle hReadPipe, out SafeFileHandle hWritePipe, IntPtr lpPipeAttributes, int nSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool InitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool CreateProcessW(string lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref StartupInfoEx lpStartupInfo, out ProcessInformation lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
+    }
 
     static Native()
     {
         string dll = Environment.GetEnvironmentVariable("PTYHOST_CONPTY");
-        if (string.IsNullOrEmpty(dll) || !File.Exists(dll) || !File.Exists(Path.Combine(Path.GetDirectoryName(dll), "OpenConsole.exe"))) return;
-        IntPtr module = LoadLibraryW(dll);
-        if (module == IntPtr.Zero) return;
-        IntPtr c = GetProcAddress(module, "ConptyCreatePseudoConsole"), r = GetProcAddress(module, "ConptyResizePseudoConsole"), x = GetProcAddress(module, "ConptyClosePseudoConsole");
-        if (c == IntPtr.Zero || r == IntPtr.Zero || x == IntPtr.Zero) return;
+        if (string.IsNullOrEmpty(dll) || !File.Exists(dll) || !File.Exists(Path.Combine(Path.GetDirectoryName(dll), "OpenConsole.exe")))
+        {
+            return;
+        }
+        IntPtr module = NativeMethods.LoadLibraryW(dll);
+        if (module == IntPtr.Zero)
+        {
+            return;
+        }
+        IntPtr c = NativeMethods.GetProcAddress(module, "ConptyCreatePseudoConsole");
+        IntPtr r = NativeMethods.GetProcAddress(module, "ConptyResizePseudoConsole");
+        IntPtr x = NativeMethods.GetProcAddress(module, "ConptyClosePseudoConsole");
+        if (c == IntPtr.Zero || r == IntPtr.Zero || x == IntPtr.Zero)
+        {
+            return;
+        }
         create = (CreateFn)Marshal.GetDelegateForFunctionPointer(c, typeof(CreateFn));
         resize = (ResizeFn)Marshal.GetDelegateForFunctionPointer(r, typeof(ResizeFn));
         close = (CloseFn)Marshal.GetDelegateForFunctionPointer(x, typeof(CloseFn));
         ConsoleKind = "conpty.dll";
     }
 
-    /** conpty.dll first; if it cannot start one (OpenConsole.exe blocked or broken), the built-in one for good. */
+    public static Coord Size(short cols, short rows)
+    {
+        Coord size = new Coord();
+        size.X = cols;
+        size.Y = rows;
+        return size;
+    }
+
+    public static void Check(bool ok, string what)
+    {
+        if (!ok)
+        {
+            throw new IOException(what + " failed: " + Marshal.GetLastWin32Error());
+        }
+    }
+
+    public static bool CreatePipe(out SafeFileHandle read, out SafeFileHandle write)
+    {
+        return NativeMethods.CreatePipe(out read, out write, IntPtr.Zero, 0);
+    }
+
+    /// <summary>Starts `commandLine` attached to the pseudo console. Null std handles: never leak our own stdio into the child.</summary>
+    public static IntPtr Spawn(string commandLine, IntPtr pseudoConsole)
+    {
+        IntPtr size = IntPtr.Zero;
+        NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+        IntPtr attributes = Marshal.AllocHGlobal(size);
+        try
+        {
+            Check(NativeMethods.InitializeProcThreadAttributeList(attributes, 1, 0, ref size), "InitializeProcThreadAttributeList");
+            Check(NativeMethods.UpdateProcThreadAttribute(attributes, 0, PseudoConsoleAttribute, pseudoConsole, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero), "UpdateProcThreadAttribute");
+            StartupInfoEx info = new StartupInfoEx();
+            info.StartupInfo.cb = Marshal.SizeOf(typeof(StartupInfoEx));
+            info.StartupInfo.dwFlags = UseStdHandles;
+            info.lpAttributeList = attributes;
+            ProcessInformation pi;
+            if (!NativeMethods.CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, ExtendedStartupInfoPresent, IntPtr.Zero, null, ref info, out pi))
+            {
+                throw new IOException("CreateProcess failed (" + Marshal.GetLastWin32Error() + "): " + commandLine);
+            }
+            NativeMethods.CloseHandle(pi.hThread);
+            return pi.hProcess;
+        }
+        finally
+        {
+            NativeMethods.DeleteProcThreadAttributeList(attributes);
+            Marshal.FreeHGlobal(attributes);
+        }
+    }
+
+    /// <summary>conpty.dll first; if it cannot start one (OpenConsole.exe blocked or broken), the built-in one for good.</summary>
     public static int CreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC)
     {
         if (create != null)
         {
             int hr = create(size, hInput, hOutput, dwFlags, out phPC);
-            if (hr == 0) return 0;
-            create = null; resize = null; close = null;
+            if (hr == 0)
+            {
+                return 0;
+            }
+            create = null;
+            resize = null;
+            close = null;
             ConsoleKind = "windows (conpty.dll failed: 0x" + hr.ToString("X8") + ")";
         }
-        return KernelCreatePseudoConsole(size, hInput, hOutput, dwFlags, out phPC);
+        return NativeMethods.CreatePseudoConsole(size, hInput, hOutput, dwFlags, out phPC);
     }
-    public static int ResizePseudoConsole(IntPtr hPC, Coord size) { return resize != null ? resize(hPC, size) : KernelResizePseudoConsole(hPC, size); }
-    public static void ClosePseudoConsole(IntPtr hPC) { if (close != null) close(hPC); else KernelClosePseudoConsole(hPC); }
 
-    [DllImport("kernel32.dll", EntryPoint = "CreatePseudoConsole")] static extern int KernelCreatePseudoConsole(Coord size, SafeFileHandle hInput, SafeFileHandle hOutput, uint dwFlags, out IntPtr phPC);
-    [DllImport("kernel32.dll", EntryPoint = "ResizePseudoConsole")] static extern int KernelResizePseudoConsole(IntPtr hPC, Coord size);
-    [DllImport("kernel32.dll", EntryPoint = "ClosePseudoConsole")] static extern void KernelClosePseudoConsole(IntPtr hPC);
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr LoadLibraryW(string path);
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false)] static extern IntPtr GetProcAddress(IntPtr module, string name);
-    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CreatePipe(out SafeFileHandle hReadPipe, out SafeFileHandle hWritePipe, IntPtr lpPipeAttributes, int nSize);
-    [DllImport("kernel32.dll", SetLastError = true)] static extern bool InitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize);
-    [DllImport("kernel32.dll", SetLastError = true)] static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
-    [DllImport("kernel32.dll")] static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    static extern bool CreateProcessW(string lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref StartupInfoEx lpStartupInfo, out ProcessInformation lpProcessInformation);
-    [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
-    [DllImport("kernel32.dll")] public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
-    [DllImport("kernel32.dll")] public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
-    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr hObject);
+    public static int ResizePseudoConsole(IntPtr hPC, Coord size)
+    {
+        return resize != null ? resize(hPC, size) : NativeMethods.ResizePseudoConsole(hPC, size);
+    }
+
+    public static void ClosePseudoConsole(IntPtr hPC)
+    {
+        if (close != null)
+        {
+            close(hPC);
+        }
+        else
+        {
+            NativeMethods.ClosePseudoConsole(hPC);
+        }
+    }
+
+    public static uint WaitForSingleObject(IntPtr handle, uint milliseconds)
+    {
+        return NativeMethods.WaitForSingleObject(handle, milliseconds);
+    }
+
+    public static bool GetExitCodeProcess(IntPtr process, out uint exitCode)
+    {
+        return NativeMethods.GetExitCodeProcess(process, out exitCode);
+    }
+
+    public static bool TerminateProcess(IntPtr process, uint exitCode)
+    {
+        return NativeMethods.TerminateProcess(process, exitCode);
+    }
+
+    public static bool CloseHandle(IntPtr handle)
+    {
+        return NativeMethods.CloseHandle(handle);
+    }
 }

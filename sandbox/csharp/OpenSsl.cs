@@ -7,7 +7,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 
-static class OpensslShim
+static class OpenSsl
 {
     static int Main()
     {

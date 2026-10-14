@@ -10,7 +10,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 
-static class Program
+static class VsWhere
 {
     private const int MaxFindResults = 100;
 
