@@ -3,12 +3,12 @@ import _ from 'lodash';
 import type { SessionStatus } from '../../core/types.js';
 import { SandboxChannel, sessionsFirstIn, sessionViewers } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
-import { ProjectRegistry, type RegistryEntry } from '../../host/projects/index.js';
+import type { RegistryEntry } from '../../host/projects/index.js';
 import { RunDir } from '../../shared/channel/index.js';
 import { isWithin, projectForGuestDir } from '../../shared/paths/index.js';
 import type { Viewers } from '../../shared/pty/index.js';
 import type { Context } from '../commands/context.js';
-import { hereDir, locateHere } from '../commands/projects/here.js';
+import { hereDir, locateHere, registryOf } from '../commands/projects/here.js';
 
 export function viewerText(v: Viewers | null | undefined): string {
   return v === undefined
@@ -115,6 +115,6 @@ export class SessionsService {
   }
 
   private projects(): RegistryEntry[] {
-    return new ProjectRegistry(this.ctx.storageRoot).read()?.projects ?? [];
+    return registryOf(this.ctx).read()?.projects ?? [];
   }
 }

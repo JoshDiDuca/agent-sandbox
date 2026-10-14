@@ -3,8 +3,17 @@ import { safeText } from '../../../core/util/index.js';
 import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { SessionsService, viewerText } from '../../services/index.js';
 import { type Context } from '../context.js';
+import { lookAtSandbox } from '../shared-use.js';
 
-export async function sessions(ctx: Context): Promise<number> {
+export async function sessions(asked: Context): Promise<number> {
+  // Another user's sandbox: shared, its sessions are listed from their folders; not shared, only whose it is.
+  const view = lookAtSandbox(asked);
+  const ctx = view.ctx;
+  if (view.limited) {
+    if (!printJson(ctx, [])) console.log(view.line);
+    return 0;
+  }
+  if (view.line && !ctx.options.json) console.log(c.bold(view.line));
   const service = new SessionsService(ctx);
   const list = await service.list();
   if (

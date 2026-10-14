@@ -6,14 +6,26 @@ import { select } from '@inquirer/prompts';
 import type { SandboxStatus } from '../../../core/types.js';
 import { describeMissing, missingTip, type Missing } from '../../../core/local-config/index.js';
 import { askYesNo } from '../../../core/prompt.js';
-import { isInsideOrEqual } from '../../../core/util/index.js';
+import { fail, isInsideOrEqual } from '../../../core/util/index.js';
+import { ownerName } from '../../../host/sharing/index.js';
 import { resolveRun } from '../../../core/run/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
-import { ProjectRegistry, type RegistryEntry, joinRunning, type MissingChoice } from '../../../host/projects/index.js';
+import {
+  BorrowedRegistry,
+  ProjectRegistry,
+  type RegistryEntry,
+  joinRunning,
+  type MissingChoice,
+} from '../../../host/projects/index.js';
 import type { ProjectSpec } from '../../../shared/channel/index.js';
 import { c, working } from '../../output/index.js';
 import { describeSessions } from './describe-sessions.js';
 import { guestPathFor, type Context } from '../context.js';
+
+/** The running sandbox's projects: this user's registry, or the record of the user who shares theirs. */
+export function registryOf(ctx: Context): ProjectRegistry {
+  return ctx.borrowed ? new BorrowedRegistry(ctx.borrowed.record) : new ProjectRegistry(ctx.storageRoot);
+}
 
 /** The folder the command is about: --workspace, else the current one. */
 export function hereDir(ctx: Context): string {
@@ -28,10 +40,15 @@ export interface Located {
 /** Where this folder is in the running sandbox, if it is in it at all (nothing is registered). */
 export function locateHere(ctx: Context, status: SandboxStatus | null): Located {
   const dir = hereDir(ctx);
-  const here = new ProjectRegistry(ctx.storageRoot).here(dir);
+  const here = registryOf(ctx).here(dir);
   if (here) return here;
   // A sandbox started before projects existed: only its launch folder.
-  if (!new ProjectRegistry(ctx.storageRoot).read() && status && isInsideOrEqual(status.workspaceHost, dir))
+  if (
+    !ctx.borrowed &&
+    !new ProjectRegistry(ctx.storageRoot).read() &&
+    status &&
+    isInsideOrEqual(status.workspaceHost, dir)
+  )
     return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
   return { project: null, guestDir: null };
 }
@@ -59,6 +76,17 @@ export function markRestarted(): void {
 export async function joinHere(ctx: Context, status: SandboxStatus, o: { noRestart?: boolean } = {}): Promise<Joined> {
   const { options, loaded, packageRoot, storageRoot, dataPath } = ctx;
   const dir = hereDir(ctx);
+  // Another user's sandbox: only the projects it already has; nothing joins it, nothing restarts it.
+  if (ctx.borrowed) {
+    const user = ownerName(ctx.borrowed.user);
+    const known = registryOf(ctx).here(dir);
+    if (!known)
+      fail(
+        dir + ' is not one of the folders in ' + user + "'s sandbox.",
+        'Run it from a folder that sandbox has (sandbox status lists them), or ask ' + user + ' to add this one.',
+      );
+    return { project: known.project, guestDir: known.guestDir, spec: null, harness: null, notes: [] };
+  }
   // A sandbox started before projects existed: only its launch folder (guestPathFor explains why otherwise).
   if (!new ProjectRegistry(storageRoot).read())
     return {

@@ -20,6 +20,7 @@ import { configSuite } from './config.test.js';
 import { migrateSuite } from './migrate.test.js';
 import { updateSuite } from './update.test.js';
 import { installSuite } from './install.test.js';
+import { sharedUseSuite } from './shared-use.test.js';
 import { updateServiceSuite } from './update-service.test.js';
 import { sharingSuite } from './sharing.test.js';
 import { dataSuite } from './data.test.js';
@@ -63,6 +64,7 @@ export const SUITES: Suite[] = [
   updateServiceSuite,
   installSuite,
   sharingSuite,
+  sharedUseSuite,
   workspaceSuite,
   localConfigSuite,
   // the generated sandbox and the guest that boots it

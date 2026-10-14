@@ -4,13 +4,13 @@ import { errMsg, fail, safeText } from '../../core/util/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { RepoGuardStore } from '../../host/guard/index.js';
 import { SessionLedger } from '../../host/life/index.js';
-import { ProjectRegistry, type Registry, type RegistryEntry } from '../../host/projects/index.js';
+import type { Registry, RegistryEntry } from '../../host/projects/index.js';
 import { hideSandboxWindow, isSandboxRunning, showSandboxWindow } from '../../host/sandbox/index.js';
 import { RunDir, type ProjectStatus } from '../../shared/channel/index.js';
 import { isWithin, projectForGuestDir } from '../../shared/paths/index.js';
 import { watcherRunning } from '../../sync/index.js';
 import type { Context } from '../commands/context.js';
-import { hereDir, locateHere } from '../commands/projects/here.js';
+import { hereDir, locateHere, registryOf } from '../commands/projects/here.js';
 import { AccountsService } from './accounts-service.js';
 import { DatabasesService } from './databases-service.js';
 import { SessionsService, viewerText, type ListedSession } from './sessions-service.js';
@@ -82,9 +82,10 @@ export class SandboxService {
     const running = isSandboxRunning();
     const run = new RunDir(ctx.dataPath);
     const channel = new SandboxChannel(ctx.dataPath);
-    const guard = new RepoGuardStore(ctx.dataPath);
+    // The owner's repo guard, logins and watcher are their host state, outside the folders shared with this user.
+    const guard = ctx.borrowed ? null : new RepoGuardStore(ctx.dataPath);
     const sandbox = run.readSandboxStatus();
-    const registry = running ? new ProjectRegistry(ctx.storageRoot).read() : null;
+    const registry = running ? registryOf(ctx).read() : null;
     const ready = running && sandbox?.phase === 'ready';
     const daemon = ready
       ? await channel.ping().then(
@@ -96,7 +97,7 @@ export class SandboxService {
     const sessionList = running ? await new SessionsService(ctx).list() : [];
     const provisioning = running ? run.listProjectStatus() : [];
     const ports = ready && sandbox ? await new DatabasesService(ctx).runningPorts(sandbox.guestWorkspace) : null;
-    const findings = guard.findings();
+    const findings = guard?.findings() ?? [];
     const startedAt = Number(/^(\d+)-/.exec(registry?.launchId ?? sandbox?.launchId ?? '')?.[1]) || null;
     const all = registry?.projects ?? [];
     const facts = { here: here.project?.name ?? null, provisioning, sessions: sessionList, ports, findings };
@@ -109,8 +110,8 @@ export class SandboxService {
         headless: sandbox?.headless,
         startedAt: running ? startedAt : null,
         daemon,
-        account: new AccountsService(ctx).activeName(),
-        syncWatcher: watcherRunning(ctx.dataPath),
+        account: ctx.borrowed ? null : new AccountsService(ctx).activeName(),
+        syncWatcher: ctx.borrowed ? false : watcherRunning(ctx.dataPath),
       },
       here: { folder: hereDir(ctx), project: here.project?.name ?? null, guest: here.guestDir },
       roots: registry?.roots ?? [],
@@ -119,7 +120,7 @@ export class SandboxService {
         .filter((s) => s.phase === 'running' && !projects.some((p) => p.sessions.some((x) => x.id === s.id)))
         .map((s) => ({ id: s.id, harness: safeText(s.harness), cwd: safeText(s.cwd) })),
       repoGuard: {
-        guarded: guard.guarded().length,
+        guarded: guard?.guarded().length ?? 0,
         findings: findings.map((f) => f.kind + ': ' + f.detail),
       },
     };
@@ -150,8 +151,9 @@ export class SandboxService {
 
   /** Asks the sandbox to shut down (history and claude-mem sync back when it closes). */
   async shutdown(sandbox: SandboxStatus): Promise<void> {
-    // On purpose, not a crash: its sessions are kept for the next start, and the watcher does not restart it.
-    new SessionLedger(this.ctx.storageRoot, this.ctx.dataPath).markClosedOnPurpose();
+    // On purpose, not a crash: its sessions are kept for the next start, and the watcher does not restart it. (Another
+    // user's sandbox: that record is theirs; its watcher sees a shutdown with nothing wrong.)
+    if (!this.ctx.borrowed) new SessionLedger(this.ctx.storageRoot, this.ctx.dataPath).markClosedOnPurpose();
     await new SandboxChannel(this.ctx.dataPath).exec(
       ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'],
       sandbox.guestWorkspace,

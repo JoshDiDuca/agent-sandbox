@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { IdSchema } from '../../shared/channel/index.js';
+import type { ActiveSandbox } from '../sharing/active-record.js';
 import { JsonFile } from '../../shared/io/index.js';
 import {
   guestDirFor,
@@ -144,6 +145,35 @@ export class ProjectRegistry {
   /** The running sandbox's root containing this folder, if any. */
   rootHere(hostDir: string): RootMapping | null {
     return projectForHostDir(this.read()?.roots ?? [], hostDir);
+  }
+}
+
+/**
+ * The projects of a sandbox another user started and shares: what that user's record lists, in the shape of a registry.
+ * Read only (the registry file is the owner's, in storage this user cannot open); entries that do not fit are left out.
+ */
+export class BorrowedRegistry extends ProjectRegistry {
+  constructor(private readonly record: ActiveSandbox) {
+    super(path.join(path.dirname(record.dataPath), 'unused'));
+  }
+
+  override read(): Registry {
+    const projects = this.record.projects.flatMap((p, i) => {
+      const entry = RegistryEntrySchema.safeParse({
+        name: p.id,
+        host: p.hostPath,
+        guest: p.guestPath,
+        primary: i === 0,
+        mechanism: 'boot',
+        registeredAt: this.record.startedAt,
+      });
+      return entry.success ? [entry.data] : [];
+    });
+    return { launchId: '', protections: {}, roots: [], projects };
+  }
+
+  override save(): void {
+    throw new Error('The projects of ' + this.record.user + "'s sandbox are theirs to change.");
   }
 }
 

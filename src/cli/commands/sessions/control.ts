@@ -2,6 +2,9 @@ import path from 'node:path';
 import { askYesNo } from '../../../core/prompt.js';
 import type { SessionStatus } from '../../../core/types.js';
 import { fail, safeText } from '../../../core/util/index.js';
+import { SandboxChannel } from '../../../host/channel/index.js';
+import { runningOwner } from '../../../host/sharing/index.js';
+import { useSharedSandbox } from '../shared-use.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { working, c } from '../../output/index.js';
 import { SandboxService, SessionsService } from '../../services/index.js';
@@ -10,6 +13,7 @@ import { SandboxService, SessionsService } from '../../services/index.js';
 export async function restart(ctx: Context): Promise<number> {
   requireOnPc('restart');
   requireRunning();
+  await useSharedSandbox(ctx, { kind: 'owner-only', what: 'restart the agents' });
   const service = new SessionsService(ctx);
   const scope = service.restartScope(Boolean(ctx.options.all));
   if (scope.notAProject)
@@ -39,13 +43,21 @@ async function othersMayEnd(ctx: Context, others: readonly SessionStatus[]): Pro
   return askYesNo(others.length + ' of them belong to other projects. Stop the whole sandbox?');
 }
 
-export async function stop(ctx: Context): Promise<number> {
+export async function stop(asked: Context): Promise<number> {
   requireOnPc('stop');
-  const service = new SandboxService(ctx);
-  if (!service.isRunning()) {
+  if (!new SandboxService(asked).isRunning()) {
     console.log('No Windows Sandbox is running.');
     return 0;
   }
+  // Another user's sandbox: only when shared, and only after typing their name (--yes in scripts).
+  let ctx = asked;
+  if (runningOwner().kind !== 'mine') {
+    ctx = await useSharedSandbox(asked, (shared) => ({
+      kind: 'stop',
+      sessions: new SandboxChannel(shared.dataPath).currentSessions().length,
+    }));
+  }
+  const service = new SandboxService(ctx);
   // Stopping ends every project's sessions, not just this folder's: say which, and ask when others would end too.
   const { sandbox, running, others } = service.stopPlan();
   if (running.length)

@@ -8,6 +8,7 @@ import { errMsg } from '../../core/util/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
 import type { Context } from '../commands/context.js';
+import { lookAtSandbox } from '../commands/shared-use.js';
 import { commandLine } from '../history.js';
 import { commandSpec } from '../manifest.js';
 import { AgentCommandsService, LogsService } from '../services/index.js';
@@ -43,6 +44,16 @@ export class Menu {
   private status(): string {
     const folder = Theme.muted(Text.middle(process.cwd(), 70));
     if (!isSandboxRunning()) return Theme.muted(Theme.glyph.off + ' No sandbox running') + '   ' + folder;
+    const view = lookAtSandbox(this.ctx);
+    if (view.line)
+      return (
+        Theme.ok(Theme.glyph.on + ' ' + view.line) +
+        Theme.muted(
+          view.limited
+            ? '. You can use it when they share it, or start your own after it stops.'
+            : '. Its window is on their desktop; use its agents here.',
+        )
+      );
     const n = new SandboxChannel(this.ctx.dataPath).runningSessions().length;
     return (
       Theme.ok(Theme.glyph.on + ' Sandbox running') +

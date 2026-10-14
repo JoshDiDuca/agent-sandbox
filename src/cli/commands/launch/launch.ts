@@ -27,6 +27,18 @@ import { c, table } from '../../output/index.js';
 import { syncAgentCommands } from '../agent-commands.js';
 import { requireOnPc, type Context } from '../context.js';
 import { joinHere } from '../projects/index.js';
+import { useSharedSandbox } from '../shared-use.js';
+import {
+  beginSharing,
+  currentUserName,
+  currentUserSid,
+  listProcesses,
+  runningOwner,
+  sessionOf,
+  sharingDeps,
+  takeSharingNotice,
+} from '../../../host/sharing/index.js';
+import { packageVersion } from '../../../core/package-info.js';
 import { reopenedText, reopenSessions, type Reopen, type Relauncher } from '../sessions/reopen.js';
 import { sessionsToResume } from './resume-offer.js';
 import {
@@ -70,8 +82,14 @@ class Launcher {
       options.terminal = true;
     if (!generateOnly) requireOnPc('launch');
     if (!generateOnly) this.syncAgentCommands();
-    if (!generateOnly && isSandboxRunning())
-      return options.noAgent ? startIntoRunning(this.ctx, RELAUNCHER) : launchIntoRunning(this.ctx, RELAUNCHER);
+    if (!generateOnly && isSandboxRunning()) {
+      // Another user's sandbox: an agent session in a project it has, when it is shared; nothing else.
+      const ctx = await useSharedSandbox(
+        this.ctx,
+        options.noAgent ? { kind: 'owner-only', what: 'start a sandbox' } : { kind: 'use' },
+      );
+      return options.noAgent ? startIntoRunning(ctx, RELAUNCHER) : launchIntoRunning(ctx, RELAUNCHER);
+    }
     if (options.sessions.length) return this.launchSessions();
     return this.launchHere();
   }
@@ -135,7 +153,7 @@ class Launcher {
     const { ctx, generateOnly, extras } = this;
     const run = await this.resolve();
     const { config } = run;
-    if (!generateOnly) assertCanLaunch();
+    if (!generateOnly) assertCanLaunch(isSandboxRunning() ? runningOwner() : undefined);
     if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
     const prepared = generateOnly ? null : await prepare(ctx, run);
     const bootWants = await bootWantsFor(ctx, run, extras.extraProjects);
@@ -157,6 +175,7 @@ class Launcher {
     // A restart or sandbox resume reopens sessions itself (they pass the projects they keep).
     const reopen = extras.extraProjects ? [] : await sessionsToResume(ctx, run);
     this.record(run, generated);
+    this.share(generated);
     startSandbox(generated.wsbPath);
     this.startWatcher();
     if (reopen.length) await this.reopenAfterBoot(generated.launchId, reopen);
@@ -206,6 +225,32 @@ class Launcher {
       headless: config.sandbox.headless,
       configPath: this.options.config ? path.resolve(this.options.config) : null,
     });
+  }
+
+  /**
+   * An all-users install: whose sandbox this is (the record other users read) and, when sharing is on, the folder
+   * permissions that let the group use it. Done before the sandbox starts, so it never runs unrecorded.
+   */
+  private share(generated: GeneratedSandbox): void {
+    const deps = sharingDeps(this.ctx.packageRoot);
+    if (!deps) return;
+    const shared = this.ctx.loaded.config.sharing.otherUsers;
+    const rows = listProcesses();
+    beginSharing(deps, {
+      user: currentUserName(),
+      sid: currentUserSid(),
+      windowsSession: sessionOf(rows) ?? 0,
+      dataPath: this.ctx.dataPath,
+      shared,
+      version: packageVersion(),
+      projects: generated.projects.projects.map((p) => ({
+        id: path.basename(p.host),
+        hostPath: p.host,
+        guestPath: p.guest,
+      })),
+    });
+    const notice = shared ? takeSharingNotice(this.ctx.storageRoot) : null;
+    if (notice) console.log(c.yellow(notice));
   }
 
   /** Waits for the boot, then opens the sessions of the last sandbox in it (each in its own tab). */

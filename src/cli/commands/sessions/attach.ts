@@ -5,6 +5,7 @@ import { isWithin } from '../../../shared/paths/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { attachHere, readySandbox } from '../launch/index.js';
 import { locateHere, type Located } from '../projects/index.js';
+import { useSharedSandbox } from '../shared-use.js';
 import { ago } from '../../output/index.js';
 import { SessionsService } from '../../services/index.js';
 
@@ -27,9 +28,10 @@ function chooseSession(service: SessionsService, running: readonly SessionStatus
   });
 }
 
-export async function attach(ctx: Context): Promise<number> {
+export async function attach(asked: Context): Promise<number> {
   requireOnPc('attach');
   requireRunning('Start one with: sandbox claude --terminal');
+  const ctx = await useSharedSandbox(asked, { kind: 'use' });
   const ready = await readySandbox(ctx.dataPath);
   const service = new SessionsService(ctx);
   const id = ctx.options.positionals[0];

@@ -4,6 +4,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { refuseInSelfTest } from '../test-guard.js';
 import { fail, fileExists, isWin } from '../../core/util/index.js';
+import { launchBlocked } from '../sharing/rules.js';
+import type { SandboxOwner } from '../sharing/owner.js';
 
 const SANDBOX_PROCESSES = ['WindowsSandboxClient.exe', 'WindowsSandboxRemoteSession.exe', 'WindowsSandbox.exe'];
 
@@ -33,18 +35,25 @@ export function sandboxFeatureInstalled(): boolean {
   return isWin && fileExists(path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'WindowsSandbox.exe'));
 }
 
-export function assertCanLaunch(): void {
+/** `owner`: whose sandbox runs, when the caller knows (host/sharing); it makes the message say who started it. */
+export function assertCanLaunch(owner?: SandboxOwner): void {
   if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Use sandbox generate to only write the files.');
   if (!sandboxFeatureInstalled())
     fail(
       'Windows Sandbox is not enabled on this PC.',
       'Run in an admin PowerShell, then reboot: Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All  (needs Windows Pro, Enterprise or Education)',
     );
-  if (isSandboxRunning())
+  if (isSandboxRunning()) {
+    const other = owner ? launchBlocked(owner) : null;
     fail(
-      'A Windows Sandbox is already running (Windows allows one at a time).',
-      'Attach to it with sandbox claude -t, show it with sbx-show, or shut it down with sandbox stop.',
+      other
+        ? other + ' (Windows allows one per PC).'
+        : 'A Windows Sandbox is already running (Windows allows one at a time).',
+      other
+        ? 'Use it with sandbox attach if it is shared with you, or start yours after it stops.'
+        : 'Attach to it with sandbox claude -t, show it with sbx-show, or shut it down with sandbox stop.',
     );
+  }
 }
 
 /** cmd.exe expands %VAR% and ^ even inside quotes, and a quote ends them: such a path could run something else. */

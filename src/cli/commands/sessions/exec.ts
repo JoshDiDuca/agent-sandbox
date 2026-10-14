@@ -7,6 +7,7 @@ import { printJson, working } from '../../output/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { readySandbox } from '../launch/index.js';
 import { hereDir, joinHere, provisionJoined } from '../projects/index.js';
+import { useSharedSandbox } from '../shared-use.js';
 import { DatabasesService } from '../../services/index.js';
 
 /** What a command run in the sandbox printed (text from the sandbox: through safeText), or why it failed. */
@@ -36,11 +37,12 @@ async function guestFolderHere(ctx: Context, what: string): Promise<string> {
   }
 }
 
-export async function exec(ctx: Context): Promise<number> {
-  const command = [...ctx.options.positionals, ...ctx.options.passthrough];
+export async function exec(asked: Context): Promise<number> {
+  const command = [...asked.options.positionals, ...asked.options.passthrough];
   if (command.length === 0) fail('No command given.', 'Usage: sandbox exec [--timeout <s>] -- <command> [args...]');
   requireOnPc('exec');
   requireRunning();
+  const ctx = await useSharedSandbox(asked, { kind: 'use' });
   const cwd = await guestFolderHere(ctx, 'exec');
   const result = await new SandboxChannel(ctx.dataPath).exec(command, cwd, ctx.options.timeout);
   if (!printJson(ctx, result)) printExecResult(result);
@@ -50,13 +52,15 @@ export async function exec(ctx: Context): Promise<number> {
 /**
  * `sandbox db`: runs the sandbox's own `sbx-db` in this folder's project, which knows its database versions and ports.
  */
-export async function db(ctx: Context): Promise<number> {
-  const [rawAction = 'list', name] = ctx.options.positionals;
-  const databases = new DatabasesService(ctx);
-  const action = databases.validate(rawAction, name);
+export async function db(asked: Context): Promise<number> {
+  const [rawAction = 'list', name] = asked.options.positionals;
+  const first = new DatabasesService(asked);
+  const action = first.validate(rawAction, name);
   // Already inside the sandbox: run the database tool here instead of asking the sandbox from outside.
-  if (databases.isInsideSandbox()) return databases.runInside(action, name);
+  if (first.isInsideSandbox()) return first.runInside(action, name);
   requireRunning('Start one with: sandbox start --database <name>');
+  const ctx = await useSharedSandbox(asked, { kind: 'use' });
+  const databases = new DatabasesService(ctx);
   const cwd = await guestFolderHere(ctx, 'db');
   const result = await working(
     (action === 'list' ? 'Asking' : action === 'start' ? 'Starting' : 'Stopping') +

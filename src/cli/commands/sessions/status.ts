@@ -4,6 +4,7 @@ import type { RegistryEntry } from '../../../host/projects/index.js';
 import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
 import { SandboxService, type ProjectInfo } from '../../services/index.js';
 import type { Context } from '../context.js';
+import { lookAtSandbox } from '../shared-use.js';
 
 const MECHANISM_TEXT = {
   launch: 'started from here',
@@ -37,12 +38,22 @@ function printProject(p: ProjectInfo): void {
   for (const f of p.repoGuard) console.log('      ' + c.yellow('guard: ' + f));
 }
 
-export async function status(ctx: Context): Promise<number> {
+export async function status(asked: Context): Promise<number> {
+  // Another user's sandbox: shared, it is shown from their folders; not shared, only whose it is.
+  const view = lookAtSandbox(asked);
+  const ctx = view.ctx;
+  if (view.limited) {
+    const owner = view.owner;
+    const user = owner?.kind === 'other' ? owner.user : null;
+    if (!printJson(ctx, { sandbox: { running: true, shared: false, startedBy: user } })) console.log(view.line);
+    return 0;
+  }
   const report = await new SandboxService(ctx).status();
   const { startedAt, ...state } = report.sandbox;
   const info = {
     // Same keys and order as the service's state, with the start time shown as an uptime.
     sandbox: {
+      ...(ctx.borrowed ? { startedBy: ctx.borrowed.user, shared: true } : {}),
       running: state.running,
       phase: state.phase,
       message: state.message,
@@ -60,6 +71,7 @@ export async function status(ctx: Context): Promise<number> {
   };
   if (printJson(ctx, info)) return 0;
   const yesNo = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v ?? '-'));
+  if (view.line) console.log(c.bold(view.line) + c.dim('. Its window is on their desktop; use its agents here.'));
   table(Object.entries(info.sandbox).map(([k, v]) => [_.startCase(k), safeText(yesNo(v))]));
   if (!state.running) return 0;
   console.log(

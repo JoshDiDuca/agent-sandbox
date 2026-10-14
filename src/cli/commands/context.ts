@@ -6,6 +6,7 @@ import type { LoadedConfig } from '../../core/types.js';
 import { loadConfig, userDir } from '../../core/config/index.js';
 import { expandPath, fail, isInsideOrEqual } from '../../core/util/index.js';
 import { GUEST_DATA_DIR, insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
+import type { Borrowed } from '../../host/sharing/index.js';
 
 export interface Context {
   packageRoot: string;
@@ -14,6 +15,11 @@ export interface Context {
   loaded: LoadedConfig;
   storageRoot: string;
   dataPath: string;
+  /**
+   * Set when the running sandbox is another user's and shared with this one: dataPath is then their data folder, and
+   * its projects come from their record. Only the commands in shared-use.ts make such a context.
+   */
+  borrowed?: Borrowed;
 }
 
 /** Keeps ~/.agent-sandbox/*.schema.json in step with the installed version (local schema paths editors trust). */

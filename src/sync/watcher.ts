@@ -25,6 +25,8 @@ import {
 import { SandboxChannel } from '../host/channel/index.js';
 import { ProjectRegistry } from '../host/projects/registry.js';
 import { storageOf } from '../host/storage/index.js';
+import { endSharing, sharingDeps } from '../host/sharing/index.js';
+import { PACKAGE_ROOT } from '../core/package-info.js';
 import { syncBack } from './sync-cycle.js';
 
 const WATCH_INTERVAL_MS = 60 * 1000;
@@ -278,6 +280,9 @@ export class Watcher {
     } catch {
       /* best effort */
     }
+    // An all-users install: the record of whose sandbox this was goes, and the group loses access to the folders.
+    const sharing = sharingDeps(PACKAGE_ROOT);
+    if (sharing) endSharing(sharing, this.dataPath);
     fs.rmSync(watcherPidFile(this.dataPath), { force: true });
   }
 }
