@@ -116,6 +116,7 @@ Changes to what is mapped apply from the next start.
 | `sandbox setup` | check this PC (edition, virtualization, Windows Sandbox, RAM, disk, Node) and offer fixes |
 | `sandbox doctor` | what will be copied from this PC or downloaded |
 | `sandbox repair` | find and fix stale state, interrupted downloads, half-installed tools, broken caches |
+| `sandbox migrate [--dry-run] [--restore <backup>]` | bring your saved settings up to date with this version (this also runs by itself the first time a new version starts; `--restore` puts back the files saved before an update) |
 | `sandbox generate` | dry run: what a launch would do, without starting anything |
 | `sandbox self-test [suite...]` | the built-in tests (only inside a Windows Sandbox); name suites to run just those |
 

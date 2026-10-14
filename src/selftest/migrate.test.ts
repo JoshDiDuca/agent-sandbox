@@ -13,6 +13,8 @@ import {
   type MigrationContext,
 } from '../host/migrate/index.js';
 import { DEFAULTS_SNAPSHOTS } from '../host/migrate/snapshots.js';
+import { runMigrate } from '../cli/commands/index.js';
+import { autoMigrates, continuesAfterFailedMigration, MigrateService } from '../cli/services/index.js';
 import type { Suite } from './support/suite.js';
 
 interface ConfigShape {
@@ -215,5 +217,47 @@ export const migrateSuite: Suite = {
       'the result still loads with the current default',
     );
     t.check(!unpin.applies(unpinCtx), 'running it again finds nothing to do (idempotent)');
+
+    t.section('sandbox migrate');
+    const cmdUser = t.dir('cmd-user');
+    const cmdConfig = t.write(
+      t.at('cmd-user', 'config.json'),
+      JSON.stringify({ ...JSON.parse(JSON.stringify(old.defaults)), sandbox: { memoryMb: 4096 } }, null, 2),
+    );
+    const service = new MigrateService(
+      { storageRoot: t.dir('cmd-storage'), userDir: cmdUser, configPath: cmdConfig },
+      '9.9.9',
+      MIGRATIONS,
+      () => false,
+    );
+    t.check(service.versionChanged(), 'a new version is noticed from the small record');
+    const lines: string[] = [];
+    const say = (line: string): void => void lines.push(line);
+    await runMigrate(service, { dryRun: true }, say);
+    t.includes(lines.join('\n'), '2026-10-unpin-config-defaults', 'a dry run lists the pending change');
+    t.check(readText(cmdConfig).includes('"toolchains"'), 'and changes nothing');
+    lines.length = 0;
+    await runMigrate(service, { dryRun: false }, say);
+    t.includes(lines.join('\n'), 'Updated: 2026-10-unpin-config-defaults.', 'a run says what it applied');
+    t.check(!service.versionChanged(), 'and the record moves to the new version');
+    lines.length = 0;
+    await runMigrate(service, { dryRun: true }, say);
+    t.equal(lines, ['Nothing to update.'], 'a dry run with nothing pending says so');
+    const backups = t.at('cmd-storage', 'backups');
+    const made = fs.readdirSync(backups);
+    t.equal(made.length, 1, 'the run kept one backup');
+    fs.writeFileSync(cmdConfig, 'broken by hand');
+    lines.length = 0;
+    await runMigrate(service, { dryRun: false, restore: path.join(backups, made[0]) }, say);
+    t.check(readText(cmdConfig).includes('"toolchains"'), '--restore puts the saved files back');
+    t.check(
+      !autoMigrates('self-test', false) && !autoMigrates('migrate', false) && !autoMigrates('doctor', true),
+      'self-test, migrate and anything inside a sandbox skip the automatic update',
+    );
+    t.check(autoMigrates('launch', false) && autoMigrates('menu', false), 'other commands run it');
+    t.check(
+      continuesAfterFailedMigration('doctor') && !continuesAfterFailedMigration('launch'),
+      'only doctor goes on after a failed update',
+    );
   },
 };

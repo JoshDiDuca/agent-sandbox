@@ -3,6 +3,13 @@ export { AgentCommandsService, type AgentCommand, type AgentCommandsStatus } fro
 export { DataService, type CleanOutcome, type CleanPlan, type DataReport, type SizedTarget } from './data-service.js';
 export { resolveCleanTargets, type CleanTarget } from './data-targets.js';
 export { DatabasesService, parseDatabaseList, type DatabaseAction, type DatabaseRow } from './databases-service.js';
+export {
+  autoMigrates,
+  continuesAfterFailedMigration,
+  MigrateService,
+  type MigrateContext,
+  type MigrateResult,
+} from './migrate-service.js';
 export { LogsService, type LogFile } from './logs-service.js';
 export { HealthService, runChecks, type SetupReport } from './health-service.js';
 export { ProjectsService, type ProjectRow, type ProjectSettings, type ProjectsListing } from './projects-service.js';

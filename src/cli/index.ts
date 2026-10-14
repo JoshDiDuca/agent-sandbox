@@ -52,8 +52,11 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     : preset.command
       ? [preset.command, ...argv]
       : argv;
-  if (options.command === 'menu')
-    return menu(commands.createContext(PACKAGE_ROOT, entry, options), runFromMenu(options.config));
+  if (options.command === 'menu') {
+    const menuCtx = commands.createContext(PACKAGE_ROOT, entry, options);
+    await commands.migrateBeforeCommand(menuCtx, options.command);
+    return menu(menuCtx, runFromMenu(options.config));
+  }
   // Loaded only when asked for: normal commands never load test code.
   if (options.command === 'self-test')
     return (await import('../selftest/index.js')).selfTest(PACKAGE_ROOT, options.positionals);
@@ -70,6 +73,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     );
   const ctx = commands.createContext(PACKAGE_ROOT, entry, options);
   validateOptions(ctx);
+  await commands.migrateBeforeCommand(ctx, options.command);
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));
   return (await handler(ctx)) ?? 0;

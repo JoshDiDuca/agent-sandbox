@@ -3,13 +3,21 @@
 import _ from 'lodash';
 import type { DiskUsage } from '../../../core/disk.js';
 import { humanBytes } from '../../../core/disk.js';
+import { userDir } from '../../../core/config/index.js';
 import { errMsg, fail } from '../../../core/util/index.js';
 import type { Context } from '../../commands/context.js';
 import { cleanTargetOf, type DataEntry } from '../../commands/data/collect.js';
 import type { RepairResult, RepairStatus } from '../../commands/repair/types.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
 import { ago } from '../../output/index.js';
-import { DataService, HealthService, LogsService, type LogFile, type SetupReport } from '../../services/index.js';
+import {
+  DataService,
+  HealthService,
+  LogsService,
+  MigrateService,
+  type LogFile,
+  type SetupReport,
+} from '../../services/index.js';
 import {
   Text,
   Theme,
@@ -31,6 +39,8 @@ export interface MaintenanceModel {
   readonly doctor: readonly (readonly string[])[] | null;
   readonly repair: readonly RepairResult[] | null;
   readonly setup: SetupReport | { error: string } | null;
+  /** The changes still to make to your saved settings (or why they cannot be read). */
+  readonly settings: { readonly pending: readonly string[] } | { readonly error: string };
   /** The commands listed under "More commands". */
   readonly more: readonly { name: string; summary: string }[];
 }
@@ -40,6 +50,7 @@ const CATEGORIES = [
   { id: 'logs', label: 'Logs', description: "The sandbox's own logs." },
   { id: 'doctor', label: 'Doctor', description: 'Checks this PC and your settings.' },
   { id: 'repair', label: 'Repair', description: 'Finds common problems and fixes what it can.' },
+  { id: 'settings', label: 'Saved settings', description: 'Brings your saved settings up to date with this version.' },
   { id: 'setup', label: 'Set up this PC', description: 'Can this PC run Windows Sandbox?' },
   { id: 'more', label: 'More commands', description: 'Less common commands.' },
 ];
@@ -148,6 +159,27 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
                   : Theme.error('ACTION NEEDED'),
             description: c.detail,
           }));
+  const settings: ListItem<string>[] =
+    'error' in m.settings
+      ? [{ value: 'settings:error', label: m.settings.error, category: 'settings' }]
+      : m.settings.pending.length
+        ? m.settings.pending.map((line, i) => ({
+            value: 'settings:' + i,
+            label: line.split(':')[0],
+            category: 'settings',
+            hint: Theme.warn('to update'),
+            description: 'Enter updates your saved settings (a backup is kept first).',
+            details: [line],
+          }))
+        : [
+            {
+              value: 'settings:none',
+              label: 'Up to date',
+              category: 'settings',
+              hint: Theme.ok('OK'),
+              description: 'Nothing to update.',
+            },
+          ];
   const more: ListItem<string>[] = m.more.map((c) => ({
     value: 'more:' + c.name,
     label: Text.humanize(c.name),
@@ -158,7 +190,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...dataItems(m), ...logs, ...doctor, ...repair, ...setup, ...more],
+    items: [...dataItems(m), ...logs, ...doctor, ...repair, ...settings, ...setup, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
     escapeLabel: 'quit',
@@ -176,6 +208,8 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         return [{ key: 'l', label: 'check again' }];
       case 'repair':
         return [{ key: 'f', label: 'check and fix' }];
+      case 'settings':
+        return [{ key: 'u', label: 'update now' }];
       case 'setup': {
         const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
         return [
@@ -197,6 +231,8 @@ export class MaintenancePage extends ListPage<string> {
   private repairRows: RepairResult[] | null = null;
   private setupReport: MaintenanceModel['setup'] = null;
   private seen: string | undefined;
+  private settings: MaintenanceModel['settings'] = { pending: [] };
+  private readonly migrate: MigrateService;
   private readonly health: HealthService;
   private readonly dataService: DataService;
 
@@ -206,6 +242,11 @@ export class MaintenancePage extends ListPage<string> {
   ) {
     super(app);
     this.health = new HealthService(ctx);
+    this.migrate = new MigrateService({
+      storageRoot: ctx.storageRoot,
+      userDir: userDir(),
+      configPath: ctx.loaded.configPath,
+    });
     this.dataService = new DataService(ctx);
   }
 
@@ -216,6 +257,7 @@ export class MaintenancePage extends ListPage<string> {
       doctor: this.doctorRows,
       repair: this.repairRows,
       setup: this.setupReport,
+      settings: this.settings,
       more: MORE_COMMANDS.flatMap((name) => {
         const spec = commandSpec(name);
         return spec ? [{ name, summary: spec.summary }] : [];
@@ -229,6 +271,7 @@ export class MaintenancePage extends ListPage<string> {
     } catch {
       this.logs = [];
     }
+    this.readSettings();
     return Promise.resolve();
   }
 
@@ -246,6 +289,28 @@ export class MaintenancePage extends ListPage<string> {
     else return;
     this.rebuild(undefined);
     return;
+  }
+
+  private readSettings(): void {
+    try {
+      this.settings = { pending: this.migrate.plan() };
+    } catch (e) {
+      this.settings = { error: errMsg(e) };
+    }
+  }
+
+  private async updateSettings(): Promise<Outcome<string>> {
+    if (!('pending' in this.settings) || !this.settings.pending.length)
+      return { notice: Theme.muted('Your saved settings are up to date.') };
+    this.busy('Updating your saved settings…');
+    const notes: string[] = [];
+    const result = await this.migrate.run((line) => notes.push(line));
+    this.readSettings();
+    return {
+      notice: result.postponed.length
+        ? Theme.warn('Waiting until no sandbox runs: ' + result.postponed.join(', ') + '.')
+        : Theme.ok(Theme.glyph.ok + ' Saved settings updated.'),
+    };
   }
 
   private async loadDoctor(): Promise<void> {
@@ -279,6 +344,7 @@ export class MaintenancePage extends ListPage<string> {
         const file = this.logs.find((l) => l.name === id.slice(4));
         return file ? { exit: { kind: 'view', file: file.path } } : {};
       }
+      if (key === 'u' || (result.kind === 'pick' && id?.startsWith('settings:'))) return await this.updateSettings();
       if (key === 'f' || id === 'repair:run') return this.repair();
       if (key === 'l' && this.category === 'doctor') {
         await this.loadDoctor();

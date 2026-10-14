@@ -372,6 +372,18 @@ const COMMAND_LIST = [
     options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })],
   },
   {
+    name: 'migrate',
+    summary: 'bring your saved settings up to date with this version',
+    group: 'Health',
+    args: [],
+    options: [
+      bool('--dry-run', 'only list what would change'),
+      text('--restore', 'backup', 'put back the files saved before an update (a folder under <storage>\\backups)', {
+        advanced: true,
+      }),
+    ],
+  },
+  {
     name: 'repair',
     summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)',
     group: 'Health',
