@@ -44,6 +44,12 @@ export function editConfigText(
     : { problems: describeIssues(parsed.error) };
 }
 
+/** One setting to change (value undefined = remove the line, back to the default). */
+export interface SettingChange {
+  readonly key: string[];
+  readonly value: unknown;
+}
+
 export class ConfigFile {
   readonly schema: SchemaNode;
 
@@ -100,14 +106,25 @@ export class ConfigFile {
    * 'unchanged', 'saved', or the problems that stopped it.
    */
   set(key: string[], value: unknown): 'unchanged' | 'saved' | { problems: string[] } {
-    const text = this.text();
-    const next = !this.isProject && value !== undefined && _.isEqual(value, this.defaultOf(key)) ? undefined : value;
-    if (_.isEqual(next, fileValue(text, key)) && (this.isProject || _.isEqual(value, _.get(this.userConfig(), key))))
-      return 'unchanged';
-    const result = editConfigText(text, key, next, this.target);
-    if ('problems' in result) return result;
+    return this.setMany([{ key, value }]);
+  }
+
+  /** Saves several settings with one write, keeping comments; nothing is written unless every change is valid. */
+  setMany(changes: readonly SettingChange[]): 'unchanged' | 'saved' | { problems: string[] } {
+    const original = this.text();
+    let text = original;
+    const config = this.isProject ? undefined : this.userConfig();
+    for (const { key, value } of changes) {
+      const next = !this.isProject && value !== undefined && _.isEqual(value, this.defaultOf(key)) ? undefined : value;
+      if (_.isEqual(next, fileValue(text, key)) && (config === undefined || _.isEqual(value, _.get(config, key))))
+        continue;
+      const result = editConfigText(text, key, next, this.target);
+      if ('problems' in result) return result;
+      text = result.text;
+    }
+    if (text === original) return 'unchanged';
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, result.text, 'utf8');
+    fs.writeFileSync(this.file, text, 'utf8');
     return 'saved';
   }
 }

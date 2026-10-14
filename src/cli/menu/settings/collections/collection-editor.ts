@@ -2,11 +2,11 @@ import _ from 'lodash';
 import { type App, Theme, type ListItem } from '../../../tui/index.js';
 import { type SchemaNode } from '../schema-node.js';
 import type { ValueEditor, Edited } from '../value-editor.js';
-import { SAVE, ADD } from '../editor-actions.js';
+import { ADD } from '../editor-actions.js';
 
 /**
- * The shared shape of the list and map editors: a working copy shown as a list with "Save" and "Add" at the top, Enter
- * to change an entry, d to delete it. Esc with unsaved changes asks first.
+ * The shared shape of the list and map editors: a working copy shown as a list with "Add" at the top, Enter to change
+ * an entry, d to delete it. Esc hands the working copy back to be staged (no Save row).
  */
 export abstract class CollectionEditor<C> {
   protected value!: C;
@@ -36,14 +36,10 @@ export abstract class CollectionEditor<C> {
       const picked = await this.app.list<string>({
         path: this.path,
         intro: this.node.description,
+        status: dirty
+          ? Theme.changed(Theme.glyph.changed + ' changed: Esc keeps it for saving with Ctrl+S')
+          : undefined,
         items: [
-          {
-            value: SAVE,
-            label: dirty
-              ? Theme.ok(Theme.glyph.ok + ' Save changes')
-              : Theme.muted(Theme.glyph.ok + ' Done (no changes)'),
-            section: 'Actions',
-          },
           { value: ADD, label: '+ Add ' + this.noun, section: 'Actions' },
           ...entries.map((e) => ({
             ...e,
@@ -62,28 +58,14 @@ export abstract class CollectionEditor<C> {
         ],
         empty: 'No ' + this.noun + 's yet.',
       });
-      if (picked.kind === 'back') {
-        if (
-          !dirty ||
-          (await this.app.confirm({
-            path: this.path,
-            question: 'Discard your changes?',
-            yes: 'Discard',
-            no: 'Keep editing',
-            initial: false,
-            danger: true,
-          }))
-        )
-          return undefined;
-        continue;
-      }
-      if (picked.kind === 'pick' && picked.value === SAVE) return dirty ? { value: this.value } : undefined;
+      // Leaving keeps the working copy: the caller stages it, and nothing is written until Ctrl+S.
+      if (picked.kind === 'back') return dirty ? { value: this.value } : undefined;
       if (picked.kind === 'pick' && picked.value === ADD) {
         await this.add();
         continue;
       }
       const id = picked.kind === 'pick' || picked.kind === 'action' ? picked.value : undefined;
-      if (id === undefined || id === SAVE || id === ADD) continue;
+      if (id === undefined || id === ADD) continue;
       focus = id;
       if (picked.kind === 'pick') await this.open(id);
       else if (picked.kind === 'action' && picked.key === 'd') this.remove(id);

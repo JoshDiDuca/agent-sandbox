@@ -28,6 +28,8 @@ export interface Category {
 export interface ListAction {
   key: string;
   label: string;
+  /** Pressed with Ctrl (ctrl+s ...); works while searching too. */
+  ctrl?: boolean;
 }
 /** Tabs above the list (e.g. which settings file): Tab switches, the screen reopens on the other one. */
 export interface Tab {
@@ -51,10 +53,13 @@ export interface ListOptions<T> {
   items: ListItem<T>[];
   categories?: Category[];
   multi?: boolean;
+  /** Multi-select where Enter ticks too and the screen never finishes by itself (the page saves with a key). */
+  enterTicks?: boolean;
   /** Start on this entry (and its category). */
   startAt?: T;
   startCategory?: string;
-  actions?: ListAction[];
+  /** Extra keys; a function picks them by the open category. */
+  actions?: ListAction[] | ((category: string | undefined) => ListAction[]);
   notice?: string;
   empty?: string;
   tabs?: { items: Tab[]; active: number };
