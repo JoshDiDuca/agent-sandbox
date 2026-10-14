@@ -49,7 +49,8 @@ design decision first).
 | --- | --- |
 | A project's folders outside it (game installs ...): `projects.allowOutsideMappings` ("ask" / true / false); guest paths are used exactly as given (1.4.2: an unusable one stops the launch with the fix instead of moving the folder); `guest` may be left out; one clear message; `sandbox config check` previews every folder | done |
 | A project keeps the same path in the sandbox whichever project starts it (git worktrees keep working) | done |
-| Joining a running sandbox that lacks what the project needs (vGPU, folders, memory): Continue anyway / Restart with them / Cancel | done |
+| Joining a running sandbox that lacks what the project needs (vGPU, folders, memory): Restart with them (sessions reopen and continue) / Continue without them / Cancel | done |
+| Reopen the sessions of the last sandbox (`sandbox resume`, `resume.sessions`, `resume.restartAfterCrash`), each in its own conversation | done |
 | First start: a heads-up with the download size, live progress, "still working", "Ready in ..." | done |
 | Agent sessions: mouse wheel and clicks reach the agent again (conpty.dll), no stray letters from split key sequences | done |
 

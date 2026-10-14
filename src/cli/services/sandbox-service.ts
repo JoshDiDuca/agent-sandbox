@@ -3,6 +3,7 @@ import type { SandboxStatus, SessionStatus } from '../../core/types.js';
 import { errMsg, fail, safeText } from '../../core/util/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { RepoGuardStore } from '../../host/guard/index.js';
+import { SessionLedger } from '../../host/life/index.js';
 import { ProjectRegistry, type Registry, type RegistryEntry } from '../../host/projects/index.js';
 import { hideSandboxWindow, isSandboxRunning, showSandboxWindow } from '../../host/sandbox/index.js';
 import { RunDir, type ProjectStatus } from '../../shared/channel/index.js';
@@ -149,6 +150,8 @@ export class SandboxService {
 
   /** Asks the sandbox to shut down (history and claude-mem sync back when it closes). */
   async shutdown(sandbox: SandboxStatus): Promise<void> {
+    // On purpose, not a crash: its sessions are kept for the next start, and the watcher does not restart it.
+    new SessionLedger(this.ctx.storageRoot, this.ctx.dataPath).markClosedOnPurpose();
     await new SandboxChannel(this.ctx.dataPath).exec(
       ['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '2'],
       sandbox.guestWorkspace,

@@ -15,7 +15,7 @@ import {
   protectionsOf,
   saveAllowed,
 } from '../core/local-config/index.js';
-import { sessionsFirstIn } from '../host/channel/index.js';
+import { SandboxChannel, sessionsFirstIn } from '../host/channel/index.js';
 import { buildWsb } from '../host/launch/index.js';
 import { projectSpec, joinRunning } from '../host/projects/index.js';
 import { allProjectsToMap, KnownProjects } from '../host/projects/index.js';
@@ -37,7 +37,7 @@ import {
   PROJECTS_GUEST,
   rootGuestDir,
 } from '../shared/paths/index.js';
-import { GuestRequestSchema, ProjectSpecSchema } from '../shared/channel/index.js';
+import { GuestRequestSchema, ProjectSpecSchema, RunDir } from '../shared/channel/index.js';
 import { projectFolderName } from '../shared/paths/index.js';
 import { syncHistoryOut } from '../sync/index.js';
 import { validateOptions, validateProjectsArgs } from '../cli/validate.js';
@@ -385,6 +385,22 @@ export const projectsSuite: Suite = {
     t.check(
       sessionRequest({ project: spec, harnessSpec: f.baseConfig.harnesses.codex }).success,
       'a session request carries an agent definition',
+    );
+    // sandbox codex from a joined project: the request that reaches the guest names that agent and that folder.
+    const codexId = new SandboxChannel(data, () => true).requestSession('codex', [], spec.workspace, {
+      project: spec,
+      harnessSpec: f.baseConfig.harnesses.codex,
+    });
+    const codexRequest = GuestRequestSchema.parse(
+      JSON.parse(fs.readFileSync(new RunDir(data).requestFile(codexId), 'utf8')),
+    );
+    t.check(
+      codexRequest.kind === 'session' &&
+        codexRequest.harness === 'codex' &&
+        codexRequest.cwd === spec.workspace &&
+        codexRequest.project?.name === spec.name &&
+        codexRequest.harnessSpec?.npmBin === 'codex',
+      'an agent asked for in a joined project is requested there, with its definition (the guest installs it on demand)',
     );
     t.check(
       !sessionRequest({ project: { ...spec, name: '..\\evil' } }).success,

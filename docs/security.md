@@ -116,7 +116,7 @@ An agent you start for project A can read and change project B. Keep untrusted r
 - A restart that adds a project only ever happens with your consent (a prompt, or `--yes`).
 - What a project wants at boot (a `.wsb` device such as vGPU that you allowed for it, a larger fixed `memoryMb`, its
   approved mappings) cannot be added to a running sandbox. When it joins one started without them, each missing item
-  is named and you choose: Continue anyway (join without them), Restart with them (lists the sessions that end), or
+  is named and you choose: Restart with them (sessions reopen and continue), Continue without them, or
   Cancel. Without a terminal it continues and prints the restart command. A sandbox that starts with several projects
   (a restart, `--session`, `projects.all`, the known projects in your roots) boots with what each of them wants and
   you allowed; a device turned on that way is on for every project in it (the launch says so), unless the launch

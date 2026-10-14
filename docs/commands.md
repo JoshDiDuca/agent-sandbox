@@ -63,6 +63,7 @@ Anything else goes to the agent: `sandbox claude --continue`. If an agent has a 
 | `sandbox db [start\|stop <name>]` | list, start or stop this folder's project's databases (`sbx-db` inside) |
 | `sandbox exec -- <cmd>` | run a command in this folder inside the sandbox, with its project's tools (`--timeout`, `--workspace`) |
 | `sandbox restart` | restart this folder's project's agents in place; they resume their conversation (`--all`: every project's) |
+| `sandbox resume` | reopen the sessions from the last sandbox, each continuing its own conversation; starts the sandbox the way it was started if none runs. A launch does the same by itself or asks, as `resume.sessions` says. Terminal tabs you opened yourself inside the sandbox are not reopened |
 | `sandbox stop` | shut down (history syncs back); asks first when other projects' sessions would end (`--yes` skips) |
 | `sandbox show` / `hide` | show or hide the window (`sbx-show`, `sbx-hide`); hidden, it keeps running |
 
@@ -78,7 +79,7 @@ not have yet, `sandbox claude` (any agent, `start`, `exec`, `db`) adds it withou
    start;
 2. on Windows 11 24H2+ with the updated Windows Sandbox: `wsb share` (untested; any error falls back to 3);
 3. otherwise you are offered a **restart** that maps it too. It lists the sessions that will end, keeps your files,
-   tools, databases and logins, and can reopen those sessions (continuing their conversations). `--yes` skips the
+   tools, databases and logins, and reopens those sessions afterwards (each continuing its conversation). `--yes` skips the
    question; without a terminal it is never done without `--yes`.
 
 The project is then set up on demand (its toolchains, versions, databases and its `.sandbox-config.json`, approved as

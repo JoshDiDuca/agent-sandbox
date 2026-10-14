@@ -55,7 +55,14 @@ export const HarnessSchema = z
     resumeArguments: StringsSchema.optional().describe(
       'Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.',
     ),
+    resumeOneArguments: StringsSchema.optional().describe(
+      'Arguments that reopen one conversation, with {id} where its id goes (claude: --resume {id}). Used instead of resumeArguments when the conversation of a session is known.',
+    ),
   })
+  .refine(
+    (h) => !h.resumeOneArguments || h.resumeOneArguments.some((a) => a.includes('{id}')),
+    'needs {id} in resumeOneArguments',
+  )
   .refine((h) => h.hostExecutable || h.npmPackage || h.uvPackage, 'needs hostExecutable, npmPackage or uvPackage')
   .refine((h) => !h.uvPackage || h.uvBin, 'needs uvBin when uvPackage is set')
   .refine((h) => !h.npmPackage || h.npmBin, 'needs npmBin when npmPackage is set');

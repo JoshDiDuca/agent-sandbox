@@ -15,7 +15,7 @@ import {
   hideSandboxWindow,
 } from '../../../host/sandbox/index.js';
 import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
-import { LifeRecord } from '../../../host/life/index.js';
+import { LifeRecord, SessionLedger } from '../../../host/life/index.js';
 import { isWithin } from '../../../shared/paths/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { protectionsOf } from '../../../core/local-config/index.js';
@@ -26,7 +26,9 @@ import type { ResolvedRun } from '../../../core/types.js';
 import { c, table } from '../../output/index.js';
 import { syncAgentCommands } from '../agent-commands.js';
 import { requireOnPc, type Context } from '../context.js';
-import { joinHere, type Relauncher } from '../projects/index.js';
+import { joinHere } from '../projects/index.js';
+import { reopenedText, reopenSessions, type Reopen, type Relauncher } from '../sessions/reopen.js';
+import { sessionsToResume } from './resume-offer.js';
 import {
   startIntoRunning,
   launchIntoRunning,
@@ -152,9 +154,12 @@ class Launcher {
     this.warnSecretFiles(run);
     table(launchSummary(run, generated, prepared));
     if (generateOnly) return 0;
+    // A restart or sandbox resume reopens sessions itself (they pass the projects they keep).
+    const reopen = extras.extraProjects ? [] : await sessionsToResume(ctx, run);
     this.record(run, generated);
     startSandbox(generated.wsbPath);
     this.startWatcher();
+    if (reopen.length) await this.reopenAfterBoot(generated.launchId, reopen);
     return this.afterStart(run, generated);
   }
 
@@ -194,6 +199,21 @@ class Launcher {
     });
     new KnownProjects(storageRoot).remember(run.workspaceHost);
     new LifeRecord(storageRoot, dataPath).start(config.sandbox.keepAwake);
+    new SessionLedger(storageRoot, dataPath).startLaunch({
+      primary: run.workspaceHost,
+      harness: this.options.noAgent ? null : run.harnessName,
+      projects: projects.map((p) => p.host).filter((host) => host.toLowerCase() !== run.workspaceHost.toLowerCase()),
+      headless: config.sandbox.headless,
+      configPath: this.options.config ? path.resolve(this.options.config) : null,
+    });
+  }
+
+  /** Waits for the boot, then opens the sessions of the last sandbox in it (each in its own tab). */
+  private async reopenAfterBoot(launchId: string, reopen: readonly Reopen[]): Promise<void> {
+    const { ctx } = this;
+    const ready = await waitForBoot(ctx.dataPath, launchId);
+    const opened = await reopenSessions(ctx, ready, reopen, RELAUNCHER);
+    console.log(reopenedText(opened, reopen.length, reopen));
   }
 
   /** Absolute: the watcher runs from another folder, and a relative --config there would make it exit silently. */
@@ -248,4 +268,4 @@ export function launch(ctx: Context, generateOnly = false, extras: LaunchExtras 
 }
 
 /** What a restart (restart.ts) uses to start the sandbox again and reopen its sessions. */
-const RELAUNCHER: Relauncher = { launch, readySandbox, joinHere, openSession };
+export const RELAUNCHER: Relauncher = { launch, readySandbox, joinHere, openSession };

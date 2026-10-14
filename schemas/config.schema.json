@@ -1497,6 +1497,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "resumeOneArguments": {
+            "description": "Arguments that reopen one conversation, with {id} where its id goes (claude: --resume {id}). Used instead of resumeArguments when the conversation of a session is known.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -1567,6 +1574,27 @@
       },
       "additionalProperties": false,
       "description": "Several projects in one sandbox: folders of projects mapped at every start, and adding folders while it runs."
+    },
+    "resume": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "always",
+            "afterCrash",
+            "never"
+          ],
+          "description": "When a sandbox starts after one that had agent sessions: \"ask\" lists them and asks whether to reopen them (without a terminal it prints the command sandbox resume), \"always\" reopens them, \"afterCrash\" reopens them only when the last sandbox ended unexpectedly, \"never\" leaves it to sandbox resume. Terminal tabs you opened yourself in the sandbox are never reopened."
+        },
+        "restartAfterCrash": {
+          "type": "boolean",
+          "description": "When the sandbox ends because Windows Sandbox crashed or ran out of memory, start it again by itself and reopen its sessions (at most 3 times in 6 hours)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Reopening the sessions of the last sandbox when a new one starts."
     }
   },
   "additionalProperties": false

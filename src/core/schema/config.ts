@@ -20,6 +20,7 @@ import {
 import { ToolchainsSchema } from './toolchains.js';
 import { AppsSchema } from './apps.js';
 import { ProjectsSchema } from './projects.js';
+import { ResumeSchema } from './resume.js';
 
 export const ConfigSchema = z
   .strictObject({
@@ -65,6 +66,7 @@ export const ConfigSchema = z
     projects: ProjectsSchema.describe(
       'Several projects in one sandbox: folders of projects mapped at every start, and adding folders while it runs.',
     ),
+    resume: ResumeSchema.describe('Reopening the sessions of the last sandbox when a new one starts.'),
   })
   .refine((c) => c.harnesses[c.defaultHarness] !== undefined, {
     message: 'defaultHarness must be one of the configured harnesses',

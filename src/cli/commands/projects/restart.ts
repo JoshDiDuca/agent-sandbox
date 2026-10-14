@@ -5,36 +5,23 @@
 // where the agent supports it) and then starts the new project's session.
 import path from 'node:path';
 import _ from 'lodash';
-import type { SandboxStatus, SessionStatus } from '../../../core/types.js';
+import type { SessionStatus } from '../../../core/types.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { missingTip } from '../../../core/local-config/index.js';
 import { fail, sleep } from '../../../core/util/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { ProjectRegistry, type Registry, type NeedsRestart } from '../../../host/projects/index.js';
-import { hostDirFor, projectForGuestDir } from '../../../shared/paths/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
+import { SessionLedger } from '../../../host/life/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { c, working } from '../../output/index.js';
-import type { CliOptions } from '../../args.js';
 import type { Context } from '../context.js';
-import type { LaunchExtras, OpenSessionOptions } from '../launch/index.js';
-import { markRestarted, type Joined } from './here.js';
+import { freshContext, reopenedText, reopenSessions, sessionsToReopen, type Relauncher } from '../sessions/reopen.js';
+import { markRestarted } from './here.js';
 import { describeSessions } from './describe-sessions.js';
 
-/** What a restart needs from launch (launch imports this file, so it is handed in rather than imported). */
-export interface Relauncher {
-  launch(ctx: Context, generateOnly: boolean, extras: LaunchExtras): Promise<number>;
-  readySandbox(dataPath: string): Promise<SandboxStatus>;
-  joinHere(ctx: Context, status: SandboxStatus, o?: { noRestart?: boolean }): Promise<Joined>;
-  openSession(ctx: Context, ready: SandboxStatus, joined: Joined, o: OpenSessionOptions): Promise<number>;
-}
-
-/** A session to open again after the restart: its agent and its folder on this PC. */
-interface Reopen {
-  readonly harness: string;
-  readonly hostDir: string;
-}
+export type { Relauncher };
 
 /** The command to run again with consent, for a non-interactive terminal. */
 function againWithYes(ctx: Context): string {
@@ -46,17 +33,11 @@ function againWithYes(ctx: Context): string {
   );
 }
 
-/** Where each running session is on this PC, so it can be reopened after the restart. */
-function sessionsToReopen(registry: Registry, sessions: SessionStatus[]): Reopen[] {
-  return sessions.flatMap((s) => {
-    const project = projectForGuestDir([...registry.projects, ...registry.roots.map((r) => ({ ...r }))], s.cwd);
-    return project ? [{ harness: s.harness, hostDir: hostDirFor(project, s.cwd) }] : [];
-  });
-}
-
 /** Shuts the sandbox down and waits until it (and the background sync's final pass) is gone. */
 async function stopAndWait(ctx: Context): Promise<void> {
   const status = new RunDir(ctx.dataPath).readSandboxStatus();
+  // Stopped on purpose, not a crash: the watcher must not start it again by itself.
+  new SessionLedger(ctx.storageRoot, ctx.dataPath).markClosedOnPurpose();
   await working('Stopping the sandbox (history syncs back)', async () => {
     await new SandboxChannel(ctx.dataPath)
       .exec(['C:\\Windows\\System32\\shutdown.exe', '/s', '/t', '0'], status?.guestWorkspace ?? 'C:\\', 30)
@@ -67,28 +48,6 @@ async function stopAndWait(ctx: Context): Promise<void> {
     // The watcher syncs history back a few seconds after the window closes; the next start needs it gone.
     for (let i = 0; i < 60 && watcherRunning(ctx.dataPath); i++) await sleep(1000);
   });
-}
-
-/** The same command for another folder, as a plain new session (nothing attached, no agent arguments). */
-function freshContext(
-  ctx: Context,
-  workspace: string,
-  harness: string | undefined,
-  more: Partial<CliOptions> = {},
-): Context {
-  return {
-    ...ctx,
-    options: {
-      ...ctx.options,
-      workspace,
-      harness,
-      terminal: false,
-      newSession: true,
-      passthrough: [],
-      sessions: [],
-      ...more,
-    },
-  };
 }
 
 /**
@@ -105,7 +64,7 @@ function explain(needs: NeedsRestart[], hidden: NeedsRestart[], registry: Regist
       ' (and keeps ' +
       registry.projects.map((p) => p.host).join(', ') +
       '). ' +
-      (sessions.length ? describeSessions(sessions) + ' will end' : 'No session is running') +
+      (sessions.length ? describeSessions(sessions) + ' will end and reopen afterwards' : 'No session is running') +
       '; your files, tools, databases and logins are kept. It takes about a minute.',
   );
   for (const parent of _.uniq(hidden.map((n) => path.dirname(n.hostDir))))
@@ -121,35 +80,7 @@ async function consented(ctx: Context): Promise<boolean> {
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   if (!interactive)
     fail('Not restarting without your consent.', 'Run it again with --yes to restart: ' + againWithYes(ctx));
-  return askYesNo('Restart the sandbox now?');
-}
-
-/** Reopens each session the restart ended, continuing its conversation where the agent supports it. */
-async function reopenSessions(
-  ctx: Context,
-  ready: SandboxStatus,
-  reopen: readonly Reopen[],
-  relauncher: Relauncher,
-): Promise<void> {
-  for (const s of reopen) {
-    const at = freshContext(ctx, s.hostDir, s.harness);
-    try {
-      const joined = await relauncher.joinHere(at, ready, { noRestart: true });
-      for (const note of joined.notes) console.log(note);
-      await relauncher.openSession(at, ready, joined, {
-        attach: false,
-        harness: s.harness,
-        args: ctx.loaded.config.harnesses[s.harness]?.resumeArguments ?? [],
-        reuse: false,
-      });
-    } catch (e) {
-      console.warn(
-        c.yellow(
-          'Could not reopen ' + s.harness + ' in ' + s.hostDir + ': ' + (e instanceof Error ? e.message : String(e)),
-        ),
-      );
-    }
-  }
+  return askYesNo('Restart the sandbox now? (its sessions reopen and continue)');
 }
 
 export async function offerRestart(
@@ -176,15 +107,6 @@ export async function offerRestart(
     return 1;
   }
   const reopen = sessionsToReopen(registry, sessions);
-  const resume =
-    reopen.length > 0 &&
-    (ctx.options.yes ||
-      (await askYesNo(
-        'Reopen the ' +
-          reopen.length +
-          ' session(s) afterwards (continuing their conversations where the agent supports it)?',
-        true,
-      )));
 
   await stopAndWait(ctx);
   markRestarted();
@@ -197,6 +119,9 @@ export async function offerRestart(
     waitUntilReady: true,
   });
   const ready = await relauncher.readySandbox(ctx.dataPath);
-  if (resume) await reopenSessions(ctx, ready, reopen, relauncher);
+  if (reopen.length) {
+    const opened = await reopenSessions(ctx, ready, reopen, relauncher);
+    console.log(reopenedText(opened, reopen.length, reopen));
+  }
   return then();
 }

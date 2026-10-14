@@ -197,6 +197,15 @@ const COMMAND_LIST = [
     interactive: true,
   },
   {
+    name: 'resume',
+    summary: 'reopen the sessions from the last sandbox',
+    group: 'Sessions',
+    args: [],
+    options: [
+      bool('--auto', 'used by the background sync after a crash: no questions', { noMenu: true, advanced: true }),
+    ],
+  },
+  {
     name: 'sessions',
     summary: 'list agent sessions and who is attached',
     group: 'Sessions',

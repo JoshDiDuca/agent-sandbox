@@ -10,6 +10,7 @@ export type StateFileSuffix =
   | '-mark.json'
   | '-repo.json'
   | '-repo-findings.json'
+  | '-sessions.json'
   | '-size.json'
   | '-views.json';
 

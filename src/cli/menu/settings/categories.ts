@@ -81,6 +81,12 @@ export const CATEGORIES: SettingsCategory[] = [
     keys: ['projects'],
   },
   {
+    id: 'resume',
+    label: 'Reopening sessions',
+    description: 'Open the sessions of the last sandbox again when a new one starts, or after a crash.',
+    keys: ['resume'],
+  },
+  {
     id: 'desktop',
     label: 'Desktop look',
     description: 'Copy your theme, accent colour, taskbar and wallpaper into the sandbox.',
@@ -102,6 +108,7 @@ const NAMES: Record<string, string> = {
   hooks: 'Hooks',
   personalization: 'Desktop look',
   projects: 'Projects',
+  resume: 'Reopening sessions',
   harnesses: 'Agents',
   databases: 'Databases',
   toolchains: 'Toolchains',

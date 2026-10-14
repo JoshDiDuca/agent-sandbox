@@ -261,6 +261,10 @@
       },
       "resumeArguments": [
         "--continue"
+      ],
+      "resumeOneArguments": [
+        "--resume",
+        "{id}"
       ]
     },
     "codex": {
@@ -485,6 +489,10 @@
   },
   "hooks": {
     "failFast": false
+  },
+  "resume": {
+    "sessions": "ask",
+    "restartAfterCrash": false
   },
   "projects": {
     "all": false,

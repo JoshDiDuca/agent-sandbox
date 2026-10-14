@@ -115,6 +115,7 @@ export const DEFAULTS: Config = {
       environment: { DISABLE_AUTOUPDATER: '1' },
       home: { env: { CLAUDE_CONFIG_DIR: 'claude' }, loginFiles: ['.credentials.json'], hostDir: '~/.claude' },
       resumeArguments: ['--continue'],
+      resumeOneArguments: ['--resume', '{id}'],
     },
     codex: {
       npmPackage: '@openai/codex@latest',
@@ -247,6 +248,7 @@ export const DEFAULTS: Config = {
     },
   },
   hooks: { failFast: false },
+  resume: { sessions: 'ask', restartAfterCrash: false },
   projects: {
     all: false,
     exclude: [],

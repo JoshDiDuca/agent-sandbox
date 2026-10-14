@@ -123,6 +123,8 @@ export const SessionStatusSchema = z.object({
   message: Text(),
   updatedAt: TimeSchema,
   startedAt: TimeSchema,
+  /** The agent's own conversation this session is in (Claude: the file name of its .jsonl), once known. */
+  conversation: Text(128).optional(),
   exitCode: z.number().int().optional(),
   attach: AttachEndpointSchema.optional(),
 });

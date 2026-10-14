@@ -37,7 +37,7 @@ import siblings directly, never your own barrel. Guest code imports files direct
   (`ProjectRegistry`, `KnownProjects`, `ProjectMapper` with `NeedsRestart`, `join.ts`), `guard/` (`RepoGuard` with its
   `GuardRule`s, `RepoGuardStore`, quarantine, mark of the web), `profile/` (secrets stripping, Claude profile and
   logins, `AccountStore`, desktop look), `sandbox/` (platform, probe, doctor rows, the window, the `wsb` CLI adapter),
-  `life/` (`LifeRecord`, stop events, crash reports, `KeepAwake`, Windows Update), `workspace-view/` (workspaceFilter:
+  `life/` (`LifeRecord`, `SessionLedger` = what to reopen, stop events, crash reports, `KeepAwake`, Windows Update), `workspace-view/` (workspaceFilter:
   `IgnoreRules`, `WorkspaceView`), `agent-commands/`, `audit/`, `network/` (port forwards), `storage/` (cleanup,
   `hostStateFile`), `tools/` (Windows Terminal, conpty.dll), `native.ts` (HostTools.exe and `native\scripts`),
   `test-guard.ts`.

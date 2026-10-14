@@ -18,6 +18,7 @@ import {
   sync,
   watcher,
 } from './maintenance/index.js';
+import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
 
 export type Handler = (ctx: Context) => number | Promise<number | void>;
@@ -32,6 +33,7 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   'agent-commands': agentCommandsCommand,
   db: db,
   restart: restart,
+  resume: resume,
   stop: stop,
   show: show,
   hide: hide,
