@@ -5,6 +5,7 @@ import { loadConfig } from '../../core/config/index.js';
 import { errMsg, expandPath, fail, isWin, UserError } from '../../core/util/index.js';
 import { detectWsb, doctorRows, insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
 import { KnownProjects, ProjectRegistry } from '../../host/projects/index.js';
+import { nativeScript } from '../../host/native.js';
 import { refuseInSelfTest } from '../../host/test-guard.js';
 import { SYSTEM } from '../../shared/system.js';
 import type { Context } from '../commands/context.js';
@@ -130,16 +131,14 @@ export class HealthService {
   /** Runs the enable command in an elevated PowerShell (Windows asks for permission); true if it worked. */
   enableFeature(): boolean {
     refuseInSelfTest('turn on Windows features');
-    const inner = "'-NoProfile','-Command','" + ENABLE_COMMAND + " | Out-Null'";
-    const outer =
-      "try { $p = Start-Process -FilePath '" +
-      SYSTEM.powershell() +
-      "' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList " +
-      inner +
-      '; exit $p.ExitCode } catch { exit 1 }';
     return (
-      spawnSync(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', outer], { stdio: 'inherit' })
-        .status === 0
+      spawnSync(
+        SYSTEM.powershell(),
+        nativeScript('scripts/run-elevated.ps1', ['-Command', ENABLE_COMMAND + ' | Out-Null']),
+        {
+          stdio: 'inherit',
+        },
+      ).status === 0
     );
   }
 }
