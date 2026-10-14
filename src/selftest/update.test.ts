@@ -296,6 +296,7 @@ export const updateSuite: Suite = {
       JSON.stringify(hash),
     );
     t.equal(layout.activeVersion(), '1.0.3', 'a refused download changes nothing');
+    t.equal(new UpdateStateFile(root).read().failed?.version, '1.0.5', 'a wrong sha256 is recorded as failed');
 
     t.equal(updater.rollback(), '1.0.1', 'rollback returns the previous version');
     t.equal(layout.activeVersion(), '1.0.1', 'rollback moves the pointers back');
@@ -306,6 +307,30 @@ export const updateSuite: Suite = {
     const six = await updater.run({ sandboxRunning: false });
     t.equal(six.kind, 'installed', 'a newer release after a rollback installs');
     t.equal(runShim(layout), '1.0.6', 'and the shim runs it');
+
+    t.section('updater: a failed download is retried, not blocked');
+    const before = new UpdateStateFile(root).read().failed;
+    publish(t, feed, '1.0.7', 'good');
+    const tarball = path.join(feed, 'windows-development-sandbox-1.0.7.tgz');
+    const copy = t.at('pack', 'kept-1.0.7.tgz');
+    fs.copyFileSync(tarball, copy);
+    fs.rmSync(tarball);
+    const missing = await updater.run({ sandboxRunning: false });
+    t.check(
+      missing.kind === 'failed' && missing.blocked === false,
+      'a download that fails (file missing) is reported and does not block the version',
+      JSON.stringify(missing),
+    );
+    t.equal(new UpdateStateFile(root).read().failed, before, 'a failed download leaves the failure record untouched');
+    t.equal(new UpdateStateFile(root).read().lastResult?.ok, false, 'the last result says the attempt failed');
+    t.equal(layout.activeVersion(), '1.0.6', 'a failed download changes nothing');
+    fs.copyFileSync(copy, tarball);
+    const retried = await updater.run({ sandboxRunning: false });
+    t.equal(
+      retried,
+      { kind: 'installed', version: '1.0.7', previous: '1.0.6' },
+      'the next run retries the same version and installs it',
+    );
 
     t.section('feed');
     t.equal(await new FolderFeed(t.dir('empty-feed')).latest(), null, 'a folder with no feed.json has no release');

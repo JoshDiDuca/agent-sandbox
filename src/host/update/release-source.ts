@@ -1,6 +1,5 @@
 // Where a newer version comes from: the latest GitHub release (the tgz asset and its sha256), or a folder with a
 // feed.json (tests, and local builds). Both give the same ReleaseInfo, so the updater does not care which one it has.
-import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
@@ -82,11 +81,8 @@ export class FolderFeed implements ReleaseSource {
     const feed = new JsonFile(FeedSchema, path.join(this.folder, 'feed.json')).read();
     if (!feed) return null;
     if (path.basename(feed.file) !== feed.file) fail('feed.json names a file outside its folder: ' + feed.file);
+    // A missing file is found by the download, like a failed network fetch: it does not block the version.
     const file = path.join(this.folder, feed.file);
-    if (!fs.existsSync(file)) fail('feed.json names ' + file + ', which does not exist.');
-    return {
-      version: feed.version,
-      tarball: { url: pathToFileURL(file).href, sha256: feed.sha256.toLowerCase(), size: fs.statSync(file).size },
-    };
+    return { version: feed.version, tarball: { url: pathToFileURL(file).href, sha256: feed.sha256.toLowerCase() } };
   }
 }

@@ -23,6 +23,8 @@ import { UpdateStateFile } from './update-state.js';
 const ENTRY = 'dist/bin/sandbox.js';
 const PACKAGE_NAME = 'windows-development-sandbox';
 const CHECK_MS = 60 * 1000;
+/** The download's message when the bytes do not match the published sha256 (the only download failure that blocks). */
+const CHECKSUM_FAILURE = /^Checksum mismatch/;
 
 const PackageSchema = z.object({ name: z.string(), version: z.string() });
 
@@ -43,7 +45,8 @@ export interface RunOptions {
 export type UpdateResult =
   | { kind: 'skipped'; reason: SkipReason; current: string }
   | { kind: 'installed'; version: string; previous: string | null }
-  | { kind: 'failed'; version: string; reason: string };
+  /** blocked: the version is recorded as failed and not tried again until a newer one exists. */
+  | { kind: 'failed'; version: string; reason: string; blocked: boolean };
 
 const sha256Of = (file: string): string => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
@@ -106,8 +109,10 @@ export class Updater {
     const archive = path.join(this.layout.root, 'staging', version + '.tgz');
     const work = this.layout.versionDir(version) + '.staging';
     let activated = false;
+    let downloading = true;
     try {
       await this.download(release, archive);
+      downloading = false;
       safeRemove(work, this.layout.versionsDir);
       await extractArchive(archive, work);
       const bins = this.checkPackage(work, version);
@@ -119,10 +124,16 @@ export class Updater {
       this.checkShim(version);
     } catch (e) {
       const reason = errMsg(e);
+      // A download that failed for a reason other than a wrong checksum (network, server, timeout, missing file) says
+      // nothing about the version: it is retried by the next check.
+      if (downloading && !CHECKSUM_FAILURE.test(reason)) {
+        this.recordAttempt(version, false);
+        return { kind: 'failed', version, reason, blocked: false };
+      }
       if (activated) this.layout.setActive(current, node);
       this.discard(work, version);
       this.recordFailure(version, reason);
-      return { kind: 'failed', version, reason };
+      return { kind: 'failed', version, reason, blocked: true };
     } finally {
       safeRemove(archive, path.join(this.layout.root, 'staging'));
     }
@@ -217,6 +228,12 @@ export class Updater {
   private recordFailure(version: string, reason: string): void {
     const at = this.now().toISOString();
     this.state.update((s) => ({ ...s, failed: { version, at, reason }, lastResult: { version, ok: false, at } }));
+  }
+
+  /** A failed attempt that does not block the version: only the last result changes. */
+  private recordAttempt(version: string, ok: boolean): void {
+    const at = this.now().toISOString();
+    this.state.update((s) => ({ ...s, lastResult: { version, ok, at } }));
   }
 
   /** The updater changes the install folder: during the self-test only a temp folder is allowed. */
