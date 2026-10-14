@@ -45,7 +45,7 @@ const WRITE_COMMANDS = [
 ];
 const GIT_DIR_PATHS = ['**/.git', '**/.git/**'];
 
-export const gitDenyRules = (access: GitAccess): string[] => {
+export function gitDenyRules(access: GitAccess): string[] {
   if (access === 'full') return [];
   const commands = access === 'none' ? ['git'] : WRITE_COMMANDS.map((c) => 'git ' + c);
   const shellRules = SHELLS.flatMap((shell) => commands.map((c) => shell + '(' + c + ':*)'));
@@ -53,4 +53,4 @@ export const gitDenyRules = (access: GitAccess): string[] => {
     access === 'none' ? ['Read(' + p + ')', 'Edit(' + p + ')'] : ['Edit(' + p + ')'],
   );
   return [...shellRules, ...fileRules];
-};
+}

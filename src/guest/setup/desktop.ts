@@ -10,7 +10,7 @@ import { log } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
 
 /** Imports the host's look (registry values + wallpaper) and restarts Explorer so it applies. */
-export const applyPersonalization = (): void => {
+export function applyPersonalization(): void {
   const dir = path.join(launchDir, 'personalize');
   if (!session.personalization || !exists(dir) || dryRun || !isWin) return;
   exec(SYSTEM.reg(), ['import', path.join(dir, 'personalize.reg')], { stdio: 'ignore' });
@@ -19,4 +19,4 @@ export const applyPersonalization = (): void => {
   if (wallpaper && local) fs.copyFileSync(path.join(dir, wallpaper), local);
   runScript('set-desktop.ps1', local ? ['-Wallpaper', local] : []);
   log('Desktop personalisation applied from this PC.');
-};
+}

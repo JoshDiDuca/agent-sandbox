@@ -16,13 +16,13 @@ const ALLOW_RULES = [
 ];
 
 /** HTTP_PROXY & co. for everything in the sandbox: its own proxy (allowOnly) or yours (network.proxy). */
-export const proxyEnv = (): Record<string, string> => {
+export function proxyEnv(): Record<string, string> {
   const own = (session.network.allowOnly ?? []).length > 0;
   const url = own ? 'http://127.0.0.1:' + PROXY_PORT : (session.network.proxy ?? '');
   if (!url) return {};
   const noProxy = 'localhost,127.0.0.1,::1';
   return { HTTP_PROXY: url, HTTPS_PROXY: url, http_proxy: url, https_proxy: url, NO_PROXY: noProxy, no_proxy: noProxy };
-};
+}
 
 /**
  * network.allowOnly, after the tools are installed: the sandbox's proxy (a copy of Node named sbx-netproxy.exe, so the
@@ -30,7 +30,7 @@ export const proxyEnv = (): Record<string, string> => {
  * the system proxy, everything else through HTTP_PROXY. A guardrail for agents that behave: an admin in the sandbox
  * could undo it, which is why sandbox.networking false is the only hard isolation.
  */
-export const applyAllowOnly = async (): Promise<boolean> => {
+export async function applyAllowOnly(): Promise<boolean> {
   const hosts = session.network.allowOnly ?? [];
   if (!session.networking || !hosts.length) return false;
   if (!isWin || dryRun) {
@@ -84,4 +84,4 @@ export const applyAllowOnly = async (): Promise<boolean> => {
       '. Refused ones are listed in logs\\netproxy.log.',
   );
   return true;
-};
+}

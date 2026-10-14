@@ -15,12 +15,12 @@ const append = (line: string): void => {
   }
 };
 
-export const log = (message: string): void => {
+export function log(message: string): void {
   console.log(message);
   append(message);
-};
-export const warn = (message: string): void => {
+}
+export function warn(message: string): void {
   console.warn('\x1b[33mWARNING: ' + message + '\x1b[0m');
   append('WARNING: ' + message);
-};
+}
 export const logPath = logFile;

@@ -28,12 +28,12 @@ export interface GuideProject {
   host: string;
 }
 
-export const sandboxGuide = (
+export function sandboxGuide(
   toolSummary: string[],
   lan: 'blocked' | 'open' | 'offline' = 'blocked',
   projects: GuideProject[] = [],
-): string =>
-  [
+): string {
+  return [
     BEGIN,
     '## Sandbox manifest — you are in a DISPOSABLE Windows Sandbox',
     'Wiped on close: everything except the paths below (installers, winget/choco, C:\\Users, Program Files, registry).',
@@ -71,16 +71,17 @@ export const sandboxGuide = (
       '. Other sessions may share this workspace; the user may be typing from the host.',
     END,
   ].join('\n');
+}
 
 /** Inserts or replaces the generated section, keeping whatever else the file contains (the host's CLAUDE.md). */
-export const upsertGuide = (file: string, guide: string): void => {
+export function upsertGuide(file: string, guide: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const start = current.indexOf(BEGIN);
   const end = current.indexOf(END);
   const without = start >= 0 && end > start ? current.slice(0, start) + current.slice(end + END.length) : current;
   fs.writeFileSync(file, without.trimEnd() + (without.trim() ? '\n\n' : '') + guide + '\n', 'utf8');
-};
+}
 
 /**
  * Claude Code loads the machine-wide managed memory (C:\Program Files\ClaudeCode\CLAUDE.md on Windows) before the
@@ -88,17 +89,18 @@ export const upsertGuide = (file: string, guide: string): void => {
  * there: the user's own global CLAUDE.md and every project's CLAUDE.md stay exactly as they are.
  * Codex/Gemini have no machine-level file, so the block goes into their sandbox-only global instruction files.
  */
-export const managedClaudeMd = (): string =>
-  path.join(
+export function managedClaudeMd(): string {
+  return path.join(
     process.env.AGENT_MANAGED_DIR ?? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'ClaudeCode'),
     'CLAUDE.md',
   );
+}
 
-export const writeGuides = (
+export function writeGuides(
   toolSummary: string[],
   lan: 'blocked' | 'open' | 'offline',
   projects: GuideProject[] = [],
-): string => {
+): string {
   const guide = sandboxGuide(toolSummary, lan, projects);
   const managed = managedClaudeMd();
   fs.mkdirSync(path.dirname(managed), { recursive: true });
@@ -108,7 +110,7 @@ export const writeGuides = (
   upsertGuide(path.join(stateDir, 'gemini', '.gemini', 'GEMINI.md'), guide);
   removeGuide(path.join(claudeDir, 'CLAUDE.md'));
   return managed;
-};
+}
 
 /** Older versions put the block into the user's CLAUDE.md; take it out again. */
 const removeGuide = (file: string): void => {

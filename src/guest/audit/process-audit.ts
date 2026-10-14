@@ -20,7 +20,7 @@ const MAX_PER_PASS = 2000;
 const auditOn = (): boolean => Boolean(session.auditProcesses) && isWin && !dryRun;
 
 /** Turns on process-creation auditing with command lines (the registry is new every boot). */
-export const enableProcessAudit = (): void => {
+export function enableProcessAudit(): void {
   if (!auditOn()) return;
   spawnSync(
     path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'auditpol.exe'),
@@ -43,7 +43,7 @@ export const enableProcessAudit = (): void => {
     { windowsHide: true, stdio: 'ignore' },
   );
   log('Audit: programs started in the sandbox are recorded (audit.processes).');
-};
+}
 
 const wevtutil = (): string => path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'wevtutil.exe');
 const newestRecord = (): number => {
@@ -57,7 +57,7 @@ const newestRecord = (): number => {
 /**
  * Reads new process events every 15 s for the daemon's life (from the moment it started: older ones are boot noise).
  */
-export const startProcessCollector = (): void => {
+export function startProcessCollector(): void {
   if (!auditOn()) return;
   let last = newestRecord();
   const pass = (): void => {
@@ -85,4 +85,4 @@ export const startProcessCollector = (): void => {
     }
   };
   setInterval(pass, 15000).unref?.();
-};
+}

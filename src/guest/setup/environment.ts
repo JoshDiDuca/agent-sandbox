@@ -30,10 +30,10 @@ export interface EnvTarget {
   base: NodeJS.ProcessEnv;
 }
 
-export const agentEnv = (
+export function agentEnv(
   tools: Pick<ToolEnv, 'vars' | 'prepend' | 'append'>,
   target: EnvTarget = { workspace, project: session.project, base: process.env },
-): NodeJS.ProcessEnv => {
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...target.base,
     ...tools.vars,
@@ -57,10 +57,10 @@ export const agentEnv = (
   const base = (target.base.PATH ?? '').split(path.delimiter).filter((d) => d && !runners.includes(d.toLowerCase()));
   env.PATH = [...new Set([...tools.prepend, ...base, ...tools.append])].join(path.delimiter);
   return env;
-};
+}
 
 /** Makes the agent environment machine-wide, so new terminal tabs and anything the agent starts see the same tools. */
-export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): void => {
+export function persistEnvironment(env: NodeJS.ProcessEnv, toolVars: string[]): void {
   if (!isWin || dryRun || testMode) return;
   const vars = Object.fromEntries(
     [...toolVars, ...AGENT_VARS].filter((n) => env[n] !== undefined).map((n) => [n, env[n] as string]),
@@ -75,18 +75,18 @@ export const persistEnvironment = (env: NodeJS.ProcessEnv, toolVars: string[]): 
   } catch (e) {
     warn('Could not persist the environment machine-wide: ' + errMsg(e));
   }
-};
+}
 
 /**
  * Adds variables and PATH folders machine-wide after boot (`sbx-db start`): new terminal tabs see them.
  * additive: for a project registered later. Only variables not set yet, and folders go to the END of PATH, so what
  * the boot project's terminals see never changes; the project's own sessions get its full environment anyway.
  */
-export const addMachineEnvironment = (vars: Record<string, string>, dirs: string[], additive = false): void => {
+export function addMachineEnvironment(vars: Record<string, string>, dirs: string[], additive = false): void {
   if (!isWin || dryRun || testMode) return;
   try {
     runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', { vars, path: null, add: dirs, additive });
   } catch (e) {
     warn('Could not add to the environment: ' + errMsg(e));
   }
-};
+}

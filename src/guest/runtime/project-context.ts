@@ -12,6 +12,12 @@ export interface ProjectContext {
 
 const store = new AsyncLocalStorage<ProjectContext>();
 
-export const withProject = <T>(context: ProjectContext, work: () => Promise<T>): Promise<T> => store.run(context, work);
-export const projectWorkspace = (): string => store.getStore()?.workspace ?? workspace;
-export const duringSession = (): boolean => store.getStore()?.duringSession ?? false;
+export function withProject<T>(context: ProjectContext, work: () => Promise<T>): Promise<T> {
+  return store.run(context, work);
+}
+export function projectWorkspace(): string {
+  return store.getStore()?.workspace ?? workspace;
+}
+export function duringSession(): boolean {
+  return store.getStore()?.duringSession ?? false;
+}

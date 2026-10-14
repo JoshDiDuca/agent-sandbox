@@ -20,7 +20,7 @@ const waitUntilStarted = async (id: string): Promise<SessionStatus | null> => {
   return run.readSession(id);
 };
 
-export const viewSession = async (id: string): Promise<number> => {
+export async function viewSession(id: string): Promise<number> {
   const session = await waitUntilStarted(id);
   if (session?.phase === 'failed') {
     console.error('Session ' + id + ' could not start: ' + session.message);
@@ -36,4 +36,4 @@ export const viewSession = async (id: string): Promise<number> => {
   if (result.reason === 'exit') console.log(session.harness + ' exited with code ' + result.exitCode + '.');
   else if (result.reason === 'error') console.log('Session error: ' + result.message);
   return result.reason === 'exit' ? result.exitCode : 1;
-};
+}

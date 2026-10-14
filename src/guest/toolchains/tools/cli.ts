@@ -28,9 +28,9 @@ const toolVars: Partial<Record<CliName, () => Record<string, string>>> = {
 };
 
 /**
- * tools\shims\openssl.exe (sandbox/csharp/OpenSsl.cs), a launcher for Git's mingw64\bin\openssl.exe. A real .exe so programs
- * that call CreateProcess directly (Rust's Command::new("openssl")) find it, and only the shim is on PATH: mingw64\bin
- * itself would bring Git's runtime DLLs along and could shadow MinGW's gcc from the C/C++ step.
+ * tools\shims\openssl.exe (sandbox/csharp/OpenSsl.cs), a launcher for Git's mingw64\bin\openssl.exe. A real .exe so
+ * programs that call CreateProcess directly (Rust's Command::new("openssl")) find it, and only the shim is on PATH:
+ * mingw64\bin itself would bring Git's runtime DLLs along and could shadow MinGW's gcc from the C/C++ step.
  */
 const shimOpenssl = (env: ToolEnv): void => {
   if (!exists(tool('git', 'mingw64', 'bin', 'openssl.exe'))) {

@@ -7,9 +7,11 @@ import type { GitAccess } from '../../core/types.js';
 import { gitDenyRules } from './git-rules.js';
 import { managedClaudeMd } from '../boot/guide.js';
 
-export const managedSettingsFile = (): string => path.join(path.dirname(managedClaudeMd()), 'managed-settings.json');
+export function managedSettingsFile(): string {
+  return path.join(path.dirname(managedClaudeMd()), 'managed-settings.json');
+}
 
-export const writeManagedSettings = (access: GitAccess): void => {
+export function writeManagedSettings(access: GitAccess): void {
   const file = managedSettingsFile();
   const deny = gitDenyRules(access);
   if (deny.length === 0) {
@@ -18,4 +20,4 @@ export const writeManagedSettings = (access: GitAccess): void => {
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ permissions: { deny } }, null, 2) + '\n', 'utf8');
-};
+}

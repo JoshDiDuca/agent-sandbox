@@ -23,7 +23,7 @@ const PROJECT_VARS =
   /^(AGENT_WORKSPACE|AGENT_PROJECT|AGENT_SANDBOX_WORKSPACE|AGENT_PROJECT_FILE|CARGO_TARGET_DIR|VIRTUAL_ENV)$/i;
 
 /** The environment a later project starts from: the daemon's own, without the boot project's toolchains. */
-export const baseEnvFor = (boot: BootEnv | null, current: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
+export function baseEnvFor(boot: BootEnv | null, current: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   if (!boot) return { ...current };
   const drop = new Set(boot.toolVars.map((v) => v.toLowerCase()));
   // Windows spells it Path; a plain object would keep both spellings.
@@ -33,4 +33,4 @@ export const baseEnvFor = (boot: BootEnv | null, current: NodeJS.ProcessEnv = pr
     ),
   );
   return { ...base, PATH: boot.basePath };
-};
+}

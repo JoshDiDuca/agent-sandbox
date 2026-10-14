@@ -82,20 +82,20 @@ const attachRule = (ptyHostExe: string): string[][] => [
   ],
 ];
 
-export const run = (commands: string[][]): void => {
+export function run(commands: string[][]): void {
   for (const c of commands) {
     const r = netsh(c);
     if (r.status !== 0 && c[2] !== 'delete')
       throw new Error('netsh ' + c.slice(0, 5).join(' ') + ' failed (exit ' + r.status + '): ' + r.out.trim());
   }
-};
+}
 
 /**
  * Applies the LAN block. Internet is checked first; if it works before the rules but not after, the rules (not the
  * internet) are the problem, so they are removed and the agent is told the LAN is open. If there is no internet at
  * all, the block stays in place: being offline is never a reason to open the LAN.
  */
-export const applyNetworkPolicy = async (ptyHostExe: string | null): Promise<LanState> => {
+export async function applyNetworkPolicy(ptyHostExe: string | null): Promise<LanState> {
   if (!session.networking) {
     log('Networking is disabled for this sandbox.');
     return 'offline';
@@ -147,7 +147,7 @@ export const applyNetworkPolicy = async (ptyHostExe: string | null): Promise<Lan
     'LAN blocked in the guest firewall (10/8, 172.16/12, 192.168/16, 100.64/10, link-local, multicast, IPv6 local, SMB); DNS/DHCP to the gateway allowed.',
   );
   return 'blocked';
-};
+}
 
 // ---- the rest of the network settings -----------------------------------------------------------------------------
 
@@ -175,7 +175,9 @@ const applyDns = (): void => {
   log('DNS servers (network.dns): ' + servers.join(', '));
 };
 
-/** network.forwardPorts: the relays (in the daemon) take connections from the PC only, i.e. the sandbox's own subnet. */
+/**
+ * network.forwardPorts: the relays (in the daemon) take connections from the PC only, i.e. the sandbox's own subnet.
+ */
 const forwardRule = (): string[][] => {
   const forwards = session.network.forwardPorts ?? [];
   return forwards.length

@@ -11,8 +11,8 @@ import { wanted } from '../detect.js';
 
 /**
  * Where cargo builds: shared with the PC's target\, one on the sandbox's disk, or a path. "separate" sets no variable:
- * the cargo shim (sandbox/csharp/CargoShim.cs) gives every checkout its own target\sandbox, so git worktrees of several agents
- * never overwrite each other's builds.
+ * the cargo shim (sandbox/csharp/CargoShim.cs) gives every checkout its own target\sandbox, so git worktrees of several
+ * agents never overwrite each other's builds.
  */
 const cargoTarget = (targetDir: Toolchains['rust']['targetDir']): string | null => {
   if (targetDir === 'shared' || targetDir === 'separate') return null;
@@ -31,8 +31,8 @@ export function cargoShim(env: ToolEnv, rust: Toolchains['rust']): void {
 }
 
 /**
- * GNU host: Rust links through tools\shims\linkgate.exe (sandbox/csharp/LinkGate.cs), which lets only `linkSlots` links run
- * at once in the whole sandbox and, with linker "lld", has MinGW's gcc use Rust's own lld instead of GNU ld.
+ * GNU host: Rust links through tools\shims\linkgate.exe (sandbox/csharp/LinkGate.cs), which lets only `linkSlots` links
+ * run at once in the whole sandbox and, with linker "lld", has MinGW's gcc use Rust's own lld instead of GNU ld.
  */
 export function linkGate(env: ToolEnv, rust: Toolchains['rust'], host: string): void {
   const gcc = tool('mingw', 'mingw64', 'bin', 'gcc.exe');

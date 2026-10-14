@@ -1,5 +1,6 @@
 // `session` and `restart` requests: agent sessions, each in its own ptyhost process. A session runs in the launch
-// folder's project (the boot environment) or in a project registered later, which is provisioned first (daemon/project).
+// folder's project (the boot environment) or in a project registered later, which is provisioned first
+// (daemon/project).
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -188,7 +189,9 @@ export class SessionManager {
     }
   }
 
-  /** `project` requests: provision a registered project without an agent (sandbox start / exec / db from its folder). */
+  /**
+   * `project` requests: provision a registered project without an agent (sandbox start / exec / db from its folder).
+   */
   async prepare(req: Extract<GuestRequest, { kind: 'project' }>): Promise<void> {
     this.starting++;
     try {

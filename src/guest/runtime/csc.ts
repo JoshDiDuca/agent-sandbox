@@ -1,5 +1,5 @@
-// Builds the sandbox's small C# helpers (sandbox\csharp: PtyHost.cs, GitShim.cs, VsWhere.cs, ...) with the .NET Framework
-// compiler that ships with Windows.
+// Builds the sandbox's small C# helpers (sandbox\csharp: PtyHost.cs, GitShim.cs, VsWhere.cs, ...) with the .NET
+// Framework compiler that ships with Windows.
 //
 // The helpers are compiled onto the sandbox's own disk (wiped on close) on every boot, never cached in persistent
 // storage: a tampered ptyhost.exe there would survive the wipe and see every keystroke typed from this PC.

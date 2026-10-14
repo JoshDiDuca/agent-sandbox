@@ -18,7 +18,7 @@ export const claudeMemPaths = {
 
 const claudeMemEnabled = (): boolean => session.claudeProfile.syncClaudeMem && !dryRun;
 
-export const restoreClaudeMem = (): void => {
+export function restoreClaudeMem(): void {
   if (!claudeMemEnabled()) return;
   // A save cut off between its two renames (see saveClaudeMem) leaves only the aside copy: it is the newest data.
   const previous = claudeMemPaths.store + '.previous';
@@ -43,7 +43,7 @@ export const restoreClaudeMem = (): void => {
   if (!exists(claudeMemPaths.store)) return;
   robocopy(claudeMemPaths.store, claudeMemPaths.local);
   log('claude-mem data restored from persistent storage.');
-};
+}
 
 /** Size + mtime of every SQLite database and -wal file under `dir`: when these have not moved, nothing was written. */
 const databaseFingerprint = (dir: string): string => {
@@ -84,7 +84,9 @@ const looksLikeSqlite = (file: string): boolean => {
 
 const MAX_BACKUPS = 3;
 const BACKUP_EVERY_MS = 6 * 3600 * 1000;
-/** Moves the replaced copy into `dir` as a dated backup (at most one per 6 hours, the newest 3 kept); else deletes it. */
+/**
+ * Moves the replaced copy into `dir` as a dated backup (at most one per 6 hours, the newest 3 kept); else deletes it.
+ */
 const keepBackup = (previous: string, dir: string): void => {
   if (!exists(previous)) return;
   const backups = exists(dir)
@@ -103,12 +105,13 @@ const keepBackup = (previous: string, dir: string): void => {
     fs.rmSync(path.join(dir, old), { recursive: true, force: true });
 };
 
-export const saveClaudeMem = (): void => {
+export function saveClaudeMem(): void {
   if (!claudeMemEnabled() || !exists(claudeMemPaths.local)) return;
   const { store, local } = claudeMemPaths;
   const fingerprint = databaseFingerprint(local);
   if (fingerprint === lastSaved && exists(store)) return;
-  // A damaged copy (zero-filled after a crash, cut short) must never replace the store: that once destroyed the only copy.
+  // A damaged copy (zero-filled after a crash, cut short) must never replace the store: that once destroyed the only
+  // copy.
   if (!looksLikeSqlite(path.join(local, 'claude-mem.db'))) {
     warn(
       'claude-mem: the local database does not look valid, so it was not saved over the stored copy (' + local + ').',
@@ -131,4 +134,4 @@ export const saveClaudeMem = (): void => {
   }
   keepBackup(previous, store + '.backups');
   lastSaved = fingerprint;
-};
+}

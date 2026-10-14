@@ -41,7 +41,7 @@ const field = (event: string, name: string): string =>
   decode(new RegExp("<Data Name='" + name + "'>([^<]*)</Data>").exec(event)?.[1] ?? '');
 
 /** The events in wevtutil's XML output as audit lines, with the newest record id seen. */
-export const parseProcessEvents = (xml: string): { lines: string[]; last: number } => {
+export function parseProcessEvents(xml: string): { lines: string[]; last: number } {
   const lines: string[] = [];
   let last = 0;
   for (const event of xml.split('</Event>')) {
@@ -62,4 +62,4 @@ export const parseProcessEvents = (xml: string): { lines: string[]; last: number
     );
   }
   return { lines, last };
-};
+}

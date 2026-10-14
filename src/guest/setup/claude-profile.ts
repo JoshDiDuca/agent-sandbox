@@ -31,7 +31,7 @@ type ClaudeState = {
 
 const readState = (file: string): ClaudeState | null => {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')) as ClaudeState;
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')) as ClaudeState;
   } catch {
     return null;
   }
@@ -44,12 +44,12 @@ const sameFolder = (a: string, b: string): boolean =>
  * merged into it each boot: user-scope `mcpServers`, and this project's local-scope servers under the sandbox path.
  * Servers with the same name are replaced by this PC's definition; servers added inside the sandbox are kept.
  */
-export const mergeMcpServers = (
+export function mergeMcpServers(
   hostFile: string,
   guestFile: string,
   hostWorkspace: string,
   guestWorkspace: string,
-): number => {
+): number {
   const host = readState(hostFile);
   const guest = readState(guestFile);
   if (!host || !guest) return 0;
@@ -69,9 +69,9 @@ export const mergeMcpServers = (
   };
   writeJsonAtomic(guestFile, merged);
   return Object.keys(host.mcpServers ?? {}).length + Object.keys(hostProject).length;
-};
+}
 
-export const syncClaudeProfile = (): void => {
+export function syncClaudeProfile(): void {
   const profile = session.claudeProfile;
   if (profile.items.length === 0) {
     log('No Claude settings were staged from this PC.');
@@ -101,4 +101,4 @@ export const syncClaudeProfile = (): void => {
   );
   if (mcp) log('Claude settings: ' + mcp + ' MCP server(s) from this PC merged in');
   if (profile.credentials) warn('Your host Claude LOGIN was copied into the sandbox (copyCredentials is true).');
-};
+}

@@ -7,10 +7,12 @@ import { portOpen } from '../runtime/ports.js';
 import { logsDir, toolsDir } from '../runtime/paths.js';
 import { session } from '../runtime/session.js';
 
-export const ensurePtyHost = (): string => ensureCompiled('ptyhost');
+export function ensurePtyHost(): string {
+  return ensureCompiled('ptyhost');
+}
 
 /** Resolves when ptyhost listens; rejects early if it exits first (e.g. the agent could not be started). */
-export const waitForPtyHost = async (child: ChildProcess, port: number, timeoutMs: number): Promise<void> => {
+export async function waitForPtyHost(child: ChildProcess, port: number, timeoutMs: number): Promise<void> {
   let exitCode: number | null | undefined;
   child.once('exit', (code) => {
     exitCode = code;
@@ -22,18 +24,20 @@ export const waitForPtyHost = async (child: ChildProcess, port: number, timeoutM
     await new Promise((r) => setTimeout(r, 200));
   }
   throw new Error('the session host did not start listening on port ' + port);
-};
+}
 
-export const ptyHostLog = (id: string): string => path.join(logsDir, 'ptyhost-' + id + '.log');
+export function ptyHostLog(id: string): string {
+  return path.join(logsDir, 'ptyhost-' + id + '.log');
+}
 
 /** The last lines of a session's ptyhost log (the agent's final output is written there when it exits). */
-export const ptyHostLogTail = (id: string, lines = 12): string => {
+export function ptyHostLogTail(id: string, lines = 12): string {
   try {
     return fs.readFileSync(ptyHostLog(id), 'utf8').trim().split(/\r?\n/).slice(-lines).join('\n');
   } catch {
     return '';
   }
-};
+}
 
 export interface PtyHostOptions {
   exe: string;
@@ -49,7 +53,10 @@ export interface PtyHostOptions {
   remote: boolean;
 }
 
-/** conpty.dll (+ OpenConsole.exe) the host downloaded, when provisioning.conpty is on; ptyhost falls back to Windows' own. */
+/**
+ * conpty.dll (+ OpenConsole.exe) the host downloaded, when provisioning.conpty is on; ptyhost falls back to Windows'
+ * own.
+ */
 const conptyDll = (): string | null => {
   const dll = path.join(toolsDir, 'conpty', 'conpty.dll');
   return session.provisioning.conpty?.enabled !== false &&
@@ -60,7 +67,7 @@ const conptyDll = (): string | null => {
 };
 
 /** Starts ptyhost detached, so closing a terminal tab never kills the agent; only the agent exiting ends it. */
-export const startPtyHost = (o: PtyHostOptions): ChildProcess => {
+export function startPtyHost(o: PtyHostOptions): ChildProcess {
   const env: NodeJS.ProcessEnv = { ...o.env, PTYHOST_BIND: o.remote ? 'any' : 'loopback' };
   delete env.PTYHOST_CONPTY;
   const dll = conptyDll();
@@ -70,4 +77,4 @@ export const startPtyHost = (o: PtyHostOptions): ChildProcess => {
     [String(o.port), o.token, String(o.cols), String(o.rows), ptyHostLog(o.id), o.command, o.restartCommand],
     { cwd: o.cwd, env, detached: true, stdio: 'ignore', windowsHide: true },
   );
-};
+}

@@ -10,16 +10,18 @@ import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
 
 /** The launch folder's project id (older launch folders: derived from its name). */
-export const primaryProject = (): string => session.projectId ?? hubName(session.workspaceHost || session.project, []);
+export function primaryProject(): string {
+  return session.projectId ?? hubName(session.workspaceHost || session.project, []);
+}
 
-export const saveProjectStatus = (
+export function saveProjectStatus(
   name: string,
   workspace: string,
   phase: ProjectStatus['phase'],
   message: string,
   databases: DatabasePlan[],
   summary: string[],
-): void => {
+): void {
   try {
     writeJsonAtomic(run.projectFile(name), {
       name,
@@ -36,4 +38,4 @@ export const saveProjectStatus = (
   } catch (e) {
     warn('Could not write the status of project ' + name + ': ' + errMsg(e));
   }
-};
+}

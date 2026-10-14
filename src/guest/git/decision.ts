@@ -75,7 +75,7 @@ const LISTING: Record<string, (rest: string[]) => boolean> = {
 const WITH_VALUE = new Set(['-C', '--namespace']);
 const FORBIDDEN_GLOBAL = /^(-c|--config-env|--exec-path|--git-dir|--work-tree|--super-prefix)(=|$)/;
 
-export const gitDecision = (args: string[], access: string): Decision => {
+export function gitDecision(args: string[], access: string): Decision {
   if (access === 'full') return { allow: true };
   if (access !== 'readonly')
     return {
@@ -98,4 +98,4 @@ export const gitDecision = (args: string[], access: string): Decision => {
       command +
       ' is blocked: git is read-only in this sandbox (provisioning.git.access = readonly). Reading (status, log, diff, show, blame) is allowed.',
   };
-};
+}
