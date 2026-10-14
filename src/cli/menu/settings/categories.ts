@@ -64,8 +64,8 @@ export const CATEGORIES: SettingsCategory[] = [
     id: 'security',
     label: 'Security & privacy',
     description:
-      'Git-ignored files kept out, secrets kept out of the sandbox, download checks and what is kept on this PC.',
-    keys: ['workspaceFilter', 'audit', 'secrets', 'downloads', 'storage'],
+      'Git-ignored files kept out, secrets kept out of the sandbox, download checks, what is kept on this PC, and sharing your sandbox with other Windows users.',
+    keys: ['workspaceFilter', 'audit', 'secrets', 'downloads', 'storage', 'sharing'],
   },
   {
     id: 'setup',
