@@ -98,11 +98,12 @@ jobs:
             SHA256SUMS
           generate_release_notes: true
           body: |
-            Install or update (in a normal PowerShell; it checks your PC and installs Node.js if needed):
+            Install or update (in PowerShell; it checks your PC, asks "Just me" or "Everyone on this PC", and brings its
+            own Node.js). Already installed this way? `sandbox update` does it.
             ```
             irm https://github.com/${{ github.repository }}/releases/latest/download/install.ps1 | iex
             ```
-            Or, with Node.js 20+ already installed:
+            Or, with Node.js 20+ already installed (updates are then done with npm):
             ```
             npm install -g https://github.com/${{ github.repository }}/releases/latest/download/windows-development-sandbox.tgz
             ```
