@@ -19,12 +19,10 @@ export const workspaceViewSuite: Suite = {
     t.check(
       Boolean(workspace) &&
         !workspace!.host.toLowerCase().startsWith(project.toLowerCase()) &&
-        workspace!.host.includes('views'),
-      'the sandbox maps the filtered view, not the project folder',
-    );
-    t.check(
-      git?.host === path.join(project, '.git') && !git.readOnly,
-      "... and the project's .git beside it, so git works",
+        workspace!.host.includes('views') &&
+        git?.host === path.join(project, '.git') &&
+        !git.readOnly,
+      "the sandbox maps the filtered view, not the project folder, and the project's .git beside it so git works",
     );
     const noGit = await f.launch(
       { cwd: project },
@@ -97,41 +95,42 @@ export const workspaceViewSuite: Suite = {
     const view = new WorkspaceView({ ...paths, guestGitDir: 'C:\\Workspace\\project.git' });
     view.prepare();
     const inView = (rel: string): boolean => fs.existsSync(path.join(paths.view, ...rel.split('/')));
-    t.check(inView('src/main.ts') && inView('README.md') && inView('.gitignore'), 'view: what git tracks is there');
-    t.check(!inView('.env') && !inView('node_modules'), 'view: ignored files (.env, node_modules) are not');
-    t.equal(
-      fs.readFileSync(path.join(paths.view, '.git'), 'utf8'),
-      'gitdir: C:/Workspace/project.git\n',
-      "view: its .git points at the project's real .git (mapped separately)",
+    t.check(
+      inView('src/main.ts') &&
+        inView('README.md') &&
+        inView('.gitignore') &&
+        !inView('.env') &&
+        !inView('node_modules'),
+      'view: what git tracks is there, ignored files (.env, node_modules) are not',
     );
-    t.check(!paths.view.toLowerCase().startsWith(host.toLowerCase()), 'view: it lives outside the project');
+    t.check(
+      fs.readFileSync(path.join(paths.view, '.git'), 'utf8') === 'gitdir: C:/Workspace/project.git\n' &&
+        !paths.view.toLowerCase().startsWith(host.toLowerCase()),
+      "view: lives outside the project; its .git points at the project's real .git (mapped separately)",
+    );
 
     t.section('both ways');
     t.write(path.join(host, 'src', 'main.ts'), 'console.log(2);\n');
     t.touch(path.join(host, 'src', 'main.ts'), 5);
     view.syncChanged(['src/main.ts']);
-    t.equal(
-      fs.readFileSync(path.join(paths.view, 'src', 'main.ts'), 'utf8'),
-      'console.log(2);\n',
-      'your edit reaches the sandbox',
-    );
+    const editArrived = fs.readFileSync(path.join(paths.view, 'src', 'main.ts'), 'utf8') === 'console.log(2);\n';
     t.write(path.join(paths.view, 'src', 'new.ts'), 'export {};\n');
     t.write(path.join(paths.view, 'node_modules', 'pkg', 'index.js'), 'sandbox build');
     t.write(path.join(paths.view, 'dist', 'bundle.js'), 'built');
     view.syncAll();
-    t.check(fs.existsSync(path.join(host, 'src', 'new.ts')), 'a file the agent creates reaches your project');
-    t.equal(
-      fs.readFileSync(path.join(host, 'node_modules', 'pkg', 'index.js'), 'utf8'),
-      'host build',
-      "the sandbox's own node_modules never overwrite yours",
+    t.check(
+      editArrived &&
+        fs.existsSync(path.join(host, 'src', 'new.ts')) &&
+        fs.readFileSync(path.join(host, 'node_modules', 'pkg', 'index.js'), 'utf8') === 'host build' &&
+        !fs.existsSync(path.join(host, 'dist')),
+      "your edit reaches the sandbox; a file the agent creates reaches your project; the sandbox's own node_modules never overwrite yours and its build output stays in the sandbox",
     );
-    t.check(!fs.existsSync(path.join(host, 'dist')), 'its build output stays in the sandbox');
     fs.rmSync(path.join(paths.view, 'README.md'));
     view.syncAll();
-    t.check(!fs.existsSync(path.join(host, 'README.md')), 'a deletion in the sandbox is repeated in your project');
+    const deletedHere = !fs.existsSync(path.join(host, 'README.md'));
     fs.rmSync(path.join(host, 'src', 'new.ts'));
     view.syncAll();
-    t.check(!inView('src/new.ts'), 'a deletion in your project is repeated in the sandbox');
+    t.check(deletedHere && !inView('src/new.ts'), 'a deletion on either side is repeated on the other');
 
     t.section('conflicts and changing rules');
     t.write(path.join(host, 'src', 'main.ts'), 'yours\n');
@@ -144,21 +143,17 @@ export const workspaceViewSuite: Suite = {
       stats.conflicts === 1 &&
         fs.readFileSync(path.join(host, 'src', 'main.ts'), 'utf8') === 'yours\n' &&
         conflicts.length === 1 &&
-        fs.readFileSync(path.join(host, 'src', conflicts[0]), 'utf8') === 'sandbox\n',
-      "changed on both sides: yours stays, the sandbox's version is kept next to it",
-    );
-    t.equal(
-      fs.readFileSync(path.join(paths.view, 'src', 'main.ts'), 'utf8'),
-      'yours\n',
-      '... and the sandbox sees yours',
+        fs.readFileSync(path.join(host, 'src', conflicts[0]), 'utf8') === 'sandbox\n' &&
+        fs.readFileSync(path.join(paths.view, 'src', 'main.ts'), 'utf8') === 'yours\n',
+      "changed on both sides: yours stays (and the sandbox sees it), the sandbox's version is kept next to it",
     );
     t.write(path.join(host, '.gitignore'), 'node_modules/\ndist/\n');
     view.syncChanged(['.gitignore']);
-    t.check(inView('.env'), 'a file no longer ignored comes in when .gitignore changes');
+    const comesIn = inView('.env');
     t.equal(
-      view.syncAll(),
-      { toView: 0, toHost: 0, deleted: 0, conflicts: 0, skipped: 0 },
-      'a pass with nothing changed copies nothing',
+      [comesIn, view.syncAll()],
+      [true, { toView: 0, toHost: 0, deleted: 0, conflicts: 0, skipped: 0 }],
+      'a file no longer ignored comes in when .gitignore changes; a pass with nothing changed copies nothing',
     );
     t.check(
       view.syncChanged(['../outside.txt', 'C:/Windows/x', '']).toHost === 0,

@@ -60,39 +60,31 @@ export const projectsSuite: Suite = {
   title: 'several projects in one sandbox (paths, joining, policy, specs, --session)',
   run: async (t, f) => {
     t.section('projects: guest paths');
-    t.check(
-      isWithin('C:\\code\\a', 'c:\\CODE\\a\\src') && !isWithin('C:\\code\\a', 'C:\\code\\ab'),
-      'isWithin: case-insensitive, and no prefix matches (a vs ab)',
-    );
-    t.check(
-      hubName('F:\\Code\\my app (v2)', []) === 'my-app-v2' &&
-        hubName('F:\\Code\\api', ['API', 'api-2']) === 'api-3' &&
-        hubName('F:\\' + 'x'.repeat(80), []).length === 48,
-      'project ids are file-name safe, unique (case-insensitive) and capped',
-    );
     const projects = [
       { host: 'F:\\Code', guest: 'C:\\Projects\\Code' },
       { host: 'F:\\Code\\api', guest: 'C:\\Projects\\api' },
     ];
-    t.check(
-      projectForHostDir(projects, 'f:\\code\\api\\src')?.guest === 'C:\\Projects\\api' &&
-        projectForHostDir(projects, 'F:\\Code\\web')?.guest === 'C:\\Projects\\Code' &&
-        projectForHostDir(projects, 'F:\\Other') === null &&
-        projectForGuestDir(projects, 'C:\\Projects\\api\\x')?.host === 'F:\\Code\\api',
-      'the most specific mapped folder wins; unrelated folders belong to no project',
-    );
     const mapped = { host: 'F:\\Code', guest: 'C:\\Projects\\Code' };
     const webGuest = guestDirFor(mapped, 'F:\\Code\\web\\src');
     t.check(
-      webGuest === 'C:\\Projects\\Code\\web\\src' && hostDirFor(mapped, webGuest) === 'F:\\Code\\web\\src',
-      'host folder <-> guest folder round trip',
-    );
-    t.check(
-      insideProjects('c:\\projects\\api\\src') &&
+      isWithin('C:\\code\\a', 'c:\\CODE\\a\\src') &&
+        !isWithin('C:\\code\\a', 'C:\\code\\ab') &&
+        hubName('F:\\Code\\my app (v2)', []) === 'my-app-v2' &&
+        hubName('F:\\Code\\api', ['API', 'api-2']) === 'api-3' &&
+        hubName('F:\\' + 'x'.repeat(80), []).length === 48 &&
+        projectForHostDir(projects, 'f:\\code\\api\\src')?.guest === 'C:\\Projects\\api' &&
+        projectForHostDir(projects, 'F:\\Code\\web')?.guest === 'C:\\Projects\\Code' &&
+        projectForHostDir(projects, 'F:\\Other') === null &&
+        projectForGuestDir(projects, 'C:\\Projects\\api\\x')?.host === 'F:\\Code\\api' &&
+        webGuest === 'C:\\Projects\\Code\\web\\src' &&
+        hostDirFor(mapped, webGuest) === 'F:\\Code\\web\\src' &&
+        insideProjects('c:\\projects\\api\\src') &&
         !insideProjects('C:\\Projects') &&
         !insideProjects('C:\\ProjectsX\\a') &&
-        insideProjects('F:\\Code\\web', ['F:\\Code']),
-      'C:\\Projects\\<name> holds projects (not look-alikes); a mirrored root counts too',
+        insideProjects('F:\\Code\\web', ['F:\\Code']) &&
+        rootGuestDir(['F:\\Code'], false, 'F:\\Code\\web\\src') === 'C:\\Projects\\Code\\web\\src' &&
+        rootGuestDir(['F:\\Code'], false, 'F:\\Other') === null,
+      'path helpers: case-insensitive, no prefix matches (a vs ab); ids file-name safe, unique and capped; the most specific folder wins; host <-> guest round trip; C:\\Projects look-alikes are not projects; roots place their folders',
     );
     const plan = planProjectMappings(
       ['F:\\Code', 'E:\\Work\\Code', 'C:\\Users\\me\\src'],
@@ -100,62 +92,44 @@ export const projectsSuite: Suite = {
       false,
     );
     t.equal(
-      [plan.roots.map((r) => r.guest), plan.projects.map((p) => p.guest)],
       [
-        ['C:\\Projects\\Code', 'C:\\Projects\\Code-2', 'C:\\Projects\\src'],
-        ['C:\\Workspace\\api', 'C:\\Workspace\\api-2'],
-      ],
-      'roots and projects mapped on their own get unique guest folders',
-    );
-    t.equal(
-      planProjectMappings([], ['D:\\x\\app'], false, ['C:\\Workspace\\app']).projects[0].guest,
-      'C:\\Workspace\\app-2',
-      "a project mapped on its own never lands on the launch folder's place",
-    );
-    t.equal(
-      [
+        plan.roots.map((r) => r.guest),
+        plan.projects.map((p) => p.guest),
+        planProjectMappings([], ['D:\\x\\app'], false, ['C:\\Workspace\\app']).projects[0].guest,
         planProjectMappings(['F:\\Code'], ['D:\\x\\api'], true).projects[0].guest,
         planProjectMappings(['F:\\Code', 'C:\\Users\\me\\src'], [], true).roots.map((r) => r.guest),
       ],
-      ['D:\\x\\api', ['F:\\Code', 'C:\\Projects\\src']],
-      'with "mirror" folders appear at their PC path when the sandbox can show it there (C:\\Users\\... cannot)',
-    );
-    t.check(
-      rootGuestDir(['F:\\Code'], false, 'F:\\Code\\web\\src') === 'C:\\Projects\\Code\\web\\src' &&
-        rootGuestDir(['F:\\Code'], false, 'F:\\Other') === null,
-      'a folder inside a root is placed under the root; one in no root has no root place',
+      [
+        ['C:\\Projects\\Code', 'C:\\Projects\\Code-2', 'C:\\Projects\\src'],
+        ['C:\\Workspace\\api', 'C:\\Workspace\\api-2'],
+        'C:\\Workspace\\app-2',
+        'D:\\x\\api',
+        ['F:\\Code', 'C:\\Projects\\src'],
+      ],
+      'roots and projects mapped on their own get unique guest folders, never the launch folder\'s place; with "mirror" they appear at their PC path when the sandbox can show it there (C:\\Users\\... cannot)',
     );
 
     t.section('projects: tighten-only protections when joining a running sandbox');
     const base = protectionsOf(f.baseConfig);
     const same = checkJoin(base, base);
-    t.equal(
-      { stricter: same.stricter, looser: same.looser },
-      { stricter: [], looser: [] },
-      'the same settings join without notes',
-    );
     const readonlyGit = protectionsOf({
       ...f.baseConfig,
       provisioning: { ...f.baseConfig.provisioning, git: { ...f.baseConfig.provisioning.git, access: 'readonly' } },
     });
     const loosening = checkJoin(readonlyGit, base);
-    t.check(
-      checkJoin(base, readonlyGit).stricter.some((s) => s.startsWith('provisioning.git.access')) &&
-        loosening.stricter.length === 0 &&
-        loosening.looser.some((s) => s.includes('provisioning.git.access stays "readonly"')),
-      'stricter git access than the running sandbox is refused; asking for less keeps the sandbox value with a note',
-      JSON.stringify(loosening.looser),
-    );
     const offline = protectionsOf({ ...f.baseConfig, sandbox: { ...f.baseConfig.sandbox, networking: false } });
-    t.check(
-      checkJoin(base, offline).stricter.some((s) => s.startsWith('sandbox.networking')) &&
-        checkJoin(offline, base).looser.some((s) => s.startsWith('sandbox.networking')),
-      'networking off is stricter, networking on is looser',
-    );
     const readOnly = protectionsOf({ ...f.baseConfig, readOnly: true });
     t.check(
-      checkJoin(readOnly, readOnly).stricter.some((s) => s.startsWith('readOnly')),
-      'a read-only project cannot join (other projects are mapped read/write)',
+      same.stricter.length === 0 &&
+        same.looser.length === 0 &&
+        checkJoin(base, readonlyGit).stricter.some((s) => s.startsWith('provisioning.git.access')) &&
+        loosening.stricter.length === 0 &&
+        loosening.looser.some((s) => s.includes('provisioning.git.access stays "readonly"')) &&
+        checkJoin(base, offline).stricter.some((s) => s.startsWith('sandbox.networking')) &&
+        checkJoin(offline, base).looser.some((s) => s.startsWith('sandbox.networking')) &&
+        checkJoin(readOnly, readOnly).stricter.some((s) => s.startsWith('readOnly')),
+      'joining: the same settings need no notes; stricter than the running sandbox is refused (git access, networking off), asking for less keeps the sandbox value with a note; a read-only project cannot join',
+      JSON.stringify(loosening.looser),
     );
     t.check(
       !LocalOverridesSchema.safeParse({ projects: { roots: ['C:\\'] } }).success &&
@@ -196,13 +170,10 @@ export const projectsSuite: Suite = {
       primary.primary &&
         registry?.projects.length === 2 &&
         registry.projects[1].mechanism === 'boot' &&
-        registry.projects[1].name === 'work-b',
-      'at launch the registry holds the launch folder (primary) and the projects mapped with it',
-    );
-    t.check(
-      new ProjectRegistry(storage).here(path.join(f.workA, 'src'))?.guestDir === 'C:\\Workspace\\work-a\\src' &&
+        registry.projects[1].name === 'work-b' &&
+        new ProjectRegistry(storage).here(path.join(f.workA, 'src'))?.guestDir === 'C:\\Workspace\\work-a\\src' &&
         new ProjectRegistry(storage).here(outside) === null,
-      'here: a folder inside a project finds it, a folder in no project does not',
+      'at launch the registry holds the launch folder (primary) and the projects mapped with it; a folder inside a project finds it, one in no project does not',
     );
     const noWsb = projectMapper({ storageRoot: storage, packageRoot: f.install, wsbShare: true, detect: () => null });
     const web = noWsb.register(inRoot);
@@ -216,13 +187,6 @@ export const projectsSuite: Suite = {
     const needs = caught(() => noWsb.register(outside));
     const shareOff = caught(() =>
       projectMapper({ storageRoot: storage, packageRoot: f.install, wsbShare: false }).register(outside),
-    );
-    t.check(
-      needs instanceof NeedsRestart &&
-        needs.reason.includes('wsb share needs Windows 11 24H2') &&
-        shareOff instanceof NeedsRestart &&
-        shareOff.reason.includes('projects.wsbShare'),
-      'a folder outside every root needs a restart when wsb share is missing or switched off, and says why',
     );
     const listFails = caught(() =>
       projectMapper({
@@ -238,15 +202,23 @@ export const projectsSuite: Suite = {
       }).register(outside),
     );
     t.check(
-      listFails instanceof NeedsRestart && listFails.reason.includes('wsb share could not find the running sandbox'),
-      'when wsb cannot tell which sandbox is ours, it falls back to the restart offer',
+      needs instanceof NeedsRestart &&
+        needs.reason.includes('wsb share needs Windows 11 24H2') &&
+        shareOff instanceof NeedsRestart &&
+        shareOff.reason.includes('projects.wsbShare') &&
+        listFails instanceof NeedsRestart &&
+        listFails.reason.includes('wsb share could not find the running sandbox'),
+      'a folder outside every root needs a restart when wsb share is missing, switched off, or cannot tell which sandbox is ours, and says why',
     );
-    await t.throws(() => noWsb.register(storage), 'cannot be the workspace', 'joining refuses the storage folder');
-    await t.throws(() => noWsb.register('C:\\'), 'whole drive', 'joining refuses a drive root');
-    await t.throws(
-      () => noWsb.unregister(primary.name),
-      'stays until the sandbox stops',
-      'the launch folder cannot be removed from a running sandbox',
+    const refusedStorage = await t.thrownMessage(() => noWsb.register(storage));
+    const refusedDrive = await t.thrownMessage(() => noWsb.register('C:\\'));
+    const refusedRemoval = await t.thrownMessage(() => noWsb.unregister(primary.name));
+    t.check(
+      refusedStorage.includes('cannot be the workspace') &&
+        refusedDrive.includes('whole drive') &&
+        refusedRemoval.includes('stays until the sandbox stops'),
+      'joining refuses the storage folder and a drive root; the launch folder cannot be removed from a running sandbox',
+      [refusedStorage, refusedDrive, refusedRemoval].join(' / '),
     );
 
     const resolveFor = (run: ResolvedRun) => async (): Promise<ResolvedRun> => run;
@@ -254,23 +226,21 @@ export const projectsSuite: Suite = {
       joinRunning({ storageRoot: storage, dataPath: data, packageRoot: f.install, hostDir, wsbShare: false, resolve });
     const webRun = await f.run({ cwd: inRoot, trustConfig: true });
     const joined = await join(inRoot, resolveFor(webRun));
+    const launchFolder = await join(path.join(f.workA, 'sub'), () => Promise.reject(new Error('must not resolve')));
     t.check(
       joined.spec?.workspace === 'C:\\Projects\\proj-root\\web' &&
         ProjectSpecSchema.safeParse(joined.spec).success &&
         joined.spec.harnesses.claude !== undefined &&
-        new KnownProjects(storage).list().some((k) => k.host === inRoot),
-      'joining builds a valid spec with its guest folder and the agent, and remembers the project',
+        new KnownProjects(storage).list().some((k) => k.host === inRoot) &&
+        launchFolder.spec === null,
+      'joining builds a valid spec with its guest folder and the agent, and remembers the project; the launch folder (and below) needs no spec',
     );
-    const launchFolder = await join(path.join(f.workA, 'sub'), () => Promise.reject(new Error('must not resolve')));
-    t.equal(launchFolder.spec, null, 'the launch folder (and below) needs no spec');
-    await t.throws(
-      () => join(tightDir, resolveFor(tight)),
-      'stricter than the running sandbox',
-      'a project that tightens git access beyond the running sandbox is refused without consent',
-    );
+    const refusedTight = await t.thrownMessage(() => join(tightDir, resolveFor(tight)));
     t.check(
-      new ProjectRegistry(storage).read()?.projects.every((p) => p.host !== tightDir) === true,
-      'a refused project is not registered',
+      refusedTight.includes('stricter than the running sandbox') &&
+        new ProjectRegistry(storage).read()?.projects.every((p) => p.host !== tightDir) === true,
+      'a project that tightens git access beyond the running sandbox is refused without consent, and not registered',
+      refusedTight,
     );
     let asked: string[] = [];
     const agreed = await t.thrownMessage(() =>
@@ -312,10 +282,7 @@ export const projectsSuite: Suite = {
         createdAt: new Date().toISOString(),
         ...extra,
       });
-    t.check(
-      sessionRequest({ project: spec, harnessSpec: f.baseConfig.harnesses.codex }).success,
-      'a session request carries a project spec and an agent definition',
-    );
+    const carries = sessionRequest({ project: spec, harnessSpec: f.baseConfig.harnesses.codex }).success;
     const codexId = new SandboxChannel(data, () => true).requestSession('codex', [], spec.workspace, {
       project: spec,
       harnessSpec: f.baseConfig.harnesses.codex,
@@ -324,12 +291,13 @@ export const projectsSuite: Suite = {
       JSON.parse(fs.readFileSync(new RunDir(data).requestFile(codexId), 'utf8')),
     );
     t.check(
-      codexRequest.kind === 'session' &&
+      carries &&
+        codexRequest.kind === 'session' &&
         codexRequest.harness === 'codex' &&
         codexRequest.cwd === spec.workspace &&
         codexRequest.project?.name === spec.name &&
         codexRequest.harnessSpec?.npmBin === 'codex',
-      'an agent asked for in a joined project is requested there, with its definition',
+      'a session request carries a project spec and an agent definition: an agent asked for in a joined project is requested there',
     );
     const manyDatabases = Array(9).fill(
       spec.databases[0] ?? { database: 'redis', reasons: [], version: 'x', port: 6379 },
@@ -339,13 +307,10 @@ export const projectsSuite: Suite = {
       !sessionRequest({ project: { ...spec, name: '..\\evil' } }).success &&
         !sessionRequest({ project: { ...spec, extra: 1 } }).success &&
         !sessionRequest({ project: { ...spec, databases: manyDatabases } }).success &&
-        !sessionRequest({ project: { ...spec, harnesses: manyAgents } }).success,
-      'specs are validated: file-name safe ids, no unknown keys, capped lists',
-    );
-    t.check(
-      GuestRequestSchema.safeParse({ kind: 'project', id: 'p1', project: spec, createdAt: 'x' }).success &&
+        !sessionRequest({ project: { ...spec, harnesses: manyAgents } }).success &&
+        GuestRequestSchema.safeParse({ kind: 'project', id: 'p1', project: spec, createdAt: 'x' }).success &&
         !GuestRequestSchema.safeParse({ kind: 'project', id: 'p1', createdAt: 'x' }).success,
-      '"project" requests need a spec',
+      'specs are validated: file-name safe ids, no unknown keys, capped lists; "project" requests need a spec',
     );
 
     t.section('projects: which projects are mapped at boot');
@@ -372,55 +337,50 @@ export const projectsSuite: Suite = {
       'roots are mapped as C:\\Projects\\<name>, a missing root is skipped with a note, projects.all maps known projects',
       JSON.stringify(gen.projects.notes),
     );
-    t.includes(
-      wsb,
-      '<HostFolder>' +
-        root +
-        '</HostFolder><SandboxFolder>C:\\Projects\\proj-root</SandboxFolder><ReadOnly>false</ReadOnly>',
-      'roots are mapped read/write in the .wsb',
-    );
     t.equal(
-      { projectsDir: session.projectsDir, roots: session.roots, projectId: session.projectId },
       {
+        rwInWsb: wsb.includes(
+          '<HostFolder>' +
+            root +
+            '</HostFolder><SandboxFolder>C:\\Projects\\proj-root</SandboxFolder><ReadOnly>false</ReadOnly>',
+        ),
+        projectsDir: session.projectsDir,
+        roots: session.roots,
+        projectId: session.projectId,
+      },
+      {
+        rwInWsb: true,
         projectsDir: PROJECTS_GUEST,
         roots: ['C:\\Projects\\proj-root', 'C:\\Workspace\\proj-outside'],
         projectId: 'work-a',
       },
-      'session.json tells the guest where other projects can be',
+      'roots are mapped read/write in the .wsb, and session.json tells the guest where other projects can be',
     );
     // A project is at the same place whether it started the sandbox or joined one another project started.
     const fromRoot = f.generate(await f.run({ cwd: inRoot }, rootConfig));
     t.check(
       f.readJson(fromRoot.sessionPath).workspace === 'C:\\Projects\\proj-root\\web' &&
         guestDirFor(gen.projects.roots[0], inRoot) === 'C:\\Projects\\proj-root\\web' &&
-        !fromRoot.mappings.some((m) => m.host.toLowerCase() === inRoot.toLowerCase()),
-      'a project in a root: same guest folder as launch folder or joined, and no second mapping of it',
-    );
-    t.includes(
-      fs.readFileSync(path.join(fromRoot.launchPath, 'env.cmd'), 'utf8'),
-      'AGENT_WORKSPACE=C:\\Projects\\proj-root\\web',
-      'env.cmd: AGENT_WORKSPACE follows',
+        !fromRoot.mappings.some((m) => m.host.toLowerCase() === inRoot.toLowerCase()) &&
+        fs
+          .readFileSync(path.join(fromRoot.launchPath, 'env.cmd'), 'utf8')
+          .includes('AGENT_WORKSPACE=C:\\Projects\\proj-root\\web'),
+      'a project in a root: same guest folder as launch folder or joined (and in env.cmd), and no second mapping of it',
     );
     const asLaunch = f.readJson(f.generate(await f.run({ cwd: outside })).sessionPath).workspace;
-    t.equal(
-      [asLaunch, gen.projects.projects.find((p) => p.host === outside)?.guest],
-      ['C:\\Workspace\\proj-outside', 'C:\\Workspace\\proj-outside'],
-      'a project outside the roots: the same guest folder as launch folder and when mapped at boot',
-    );
     const mirrorRoot = structuredClone(rootConfig);
     mirrorRoot.guestWorkspace = 'mirror';
-    t.equal(
-      f.readJson(f.generate(await f.run({ cwd: inRoot }, mirrorRoot)).sessionPath).workspace,
-      rootGuestDir([root], true, inRoot),
-      'with "mirror" a launch folder inside a root is where the root shows it',
-    );
+    const mirrored = f.readJson(f.generate(await f.run({ cwd: inRoot }, mirrorRoot)).sessionPath).workspace;
     const filtered = structuredClone(rootConfig);
     filtered.workspaceFilter = { ...filtered.workspaceFilter, enabled: true };
     const filteredRun = await f.run({ cwd: inRoot }, filtered);
     t.check(
-      filteredRun.config.guestWorkspace === 'C:\\Workspace\\web' &&
+      asLaunch === 'C:\\Workspace\\proj-outside' &&
+        gen.projects.projects.find((p) => p.host === outside)?.guest === 'C:\\Workspace\\proj-outside' &&
+        mirrored === rootGuestDir([root], true, inRoot) &&
+        filteredRun.config.guestWorkspace === 'C:\\Workspace\\web' &&
         filteredRun.notes.some((n) => n.includes('C:\\Projects\\proj-root\\web')),
-      'workspaceFilter: a launch folder inside a root keeps its own mapping, with a note where the root shows it',
+      'a project outside the roots has the same guest folder as launch folder and mapped at boot; "mirror" puts a folder in a root where the root shows it; workspaceFilter keeps its own mapping, with a note',
       JSON.stringify(filteredRun.notes),
     );
     const badRoot = structuredClone(f.baseConfig);
@@ -512,50 +472,45 @@ export const projectsSuite: Suite = {
       startedAt,
     });
     t.equal(
-      sessionsFirstIn(
-        [
-          status('a1', 'C:\\Workspace\\a', '1'),
-          status('b1', 'C:\\Projects\\b', '2'),
-          status('a2', 'C:\\Workspace\\a\\x', '3'),
-          status('b2', 'C:\\Projects\\b\\y', '4'),
-        ],
-        'C:\\Projects\\b',
-      ).map((x) => x.id),
-      ['b2', 'b1', 'a2', 'a1'],
-      "this project's sessions come first, newest first",
+      [
+        sessionsFirstIn(
+          [
+            status('a1', 'C:\\Workspace\\a', '1'),
+            status('b1', 'C:\\Projects\\b', '2'),
+            status('a2', 'C:\\Workspace\\a\\x', '3'),
+            status('b2', 'C:\\Projects\\b\\y', '4'),
+          ],
+          'C:\\Projects\\b',
+        ).map((x) => x.id),
+        describeSessions([
+          { harness: 'claude', cwd: 'C:\\Workspace\\api', project: 'api' },
+          { harness: 'codex', cwd: 'C:\\Projects\\web' },
+        ]),
+      ],
+      [['b2', 'b1', 'a2', 'a1'], '2 sessions (claude in api, codex in web)'],
+      "this project's sessions come first, newest first; the restart offer lists the sessions that would end",
     );
-    t.equal(
-      describeSessions([
-        { harness: 'claude', cwd: 'C:\\Workspace\\api', project: 'api' },
-        { harness: 'codex', cwd: 'C:\\Projects\\web' },
-      ]),
-      '2 sessions (claude in api, codex in web)',
-      'the restart offer lists the sessions that would end',
-    );
-    await t.throws(
-      () => validateProjectsArgs(['bogus']),
-      'projects action',
-      '`sandbox projects` rejects an unknown action',
-    );
-    await t.throws(() => validateProjectsArgs(['add']), 'Which folder', '`sandbox projects add` needs a folder');
+    const badAction = await t.thrownMessage(() => validateProjectsArgs(['bogus']));
+    const noFolder = await t.thrownMessage(() => validateProjectsArgs(['add']));
     validateProjectsArgs([]);
     validateProjectsArgs(['all', 'on']);
+    t.check(
+      badAction.includes('projects action') && noFolder.includes('Which folder'),
+      '`sandbox projects` rejects an unknown action, and `add` needs a folder',
+      badAction + ' / ' + noFolder,
+    );
 
     t.section('projects: several sessions at once (--session agent@folder)');
     const want = parseSessionWant('claude@C:\\code\\a@b', 'C:\\here');
+    const own = parseSessionWant('codex@C:\\code\\web|--model o3 "two words"', 'C:\\here');
     t.check(
       want.harness === 'claude' &&
         want.folder === 'C:\\code\\a@b' &&
         parseSessionWant('codex', 'C:\\here').folder === 'C:\\here' &&
-        parseSessionWant('gemini@sub', 'C:\\here').folder === 'C:\\here\\sub',
-      '--session: the first @ splits agent from folder; no folder means this one; relative folders become absolute',
-    );
-    await t.throws(() => parseSessionWant('@C:\\x'), 'names no agent', '--session without an agent is refused');
-    const own = parseSessionWant('codex@C:\\code\\web|--model o3 "two words"', 'C:\\here');
-    t.equal(
-      { folder: own.folder, args: own.args },
-      { folder: 'C:\\code\\web', args: ['--model', 'o3', 'two words'] },
-      "--session: after | come that agent's own arguments (quotes keep words together)",
+        parseSessionWant('gemini@sub', 'C:\\here').folder === 'C:\\here\\sub' &&
+        own.folder === 'C:\\code\\web' &&
+        JSON.stringify(own.args) === JSON.stringify(['--model', 'o3', 'two words']),
+      "--session: the first @ splits agent from folder; no folder means this one; relative folders become absolute; after | come that agent's own arguments (quotes keep words together)",
     );
     const multi = parseCli([
       'launch',
@@ -589,20 +544,19 @@ export const projectsSuite: Suite = {
         storageRoot: f.baseConfig.storage.root,
         dataPath: t.at('vdata'),
       }) as Context;
-    await t.throws(
-      () => validateOptions(validationContext(parseCli(['launch', '--session', 'claud@' + f.workA]))),
-      'Did you mean',
-      'an unknown agent in --session suggests the closest one',
+    const noAgent = await t.thrownMessage(() => parseSessionWant('@C:\\x'));
+    const unknownAgent = await t.thrownMessage(() =>
+      validateOptions(validationContext(parseCli(['launch', '--session', 'claud@' + f.workA]))),
     );
-    await t.throws(
-      () =>
-        validateOptions(
-          validationContext(parseCli(['launch', '--session', 'claude@' + f.workA, '--harness', 'codex'])),
-        ),
-      'do not apply',
-      '--session cannot be mixed with --harness/--workspace',
+    const mixed = await t.thrownMessage(() =>
+      validateOptions(validationContext(parseCli(['launch', '--session', 'claude@' + f.workA, '--harness', 'codex']))),
     );
     validateOptions(validationContext(multi));
+    t.check(
+      noAgent.includes('names no agent') && unknownAgent.includes('Did you mean') && mixed.includes('do not apply'),
+      '--session without an agent is refused, an unknown agent suggests the closest one, and it cannot be mixed with --harness/--workspace',
+      [noAgent, unknownAgent, mixed].join(' / '),
+    );
     t.equal(
       severalAgentsArgv(
         [
@@ -654,11 +608,6 @@ export const projectsSuite: Suite = {
       mappings: [{ host: f.workA, guest: 'C:\\Workspace\\work-a', readOnly: false }],
     };
     const wanted = missingAtBoot(protectionsOf(launchedRun.config), runningBoot, gamesRun.config, fs.existsSync);
-    t.equal(
-      { settings: wanted.settings, memoryMb: wanted.memoryMb, mappings: wanted.mappings.map((m) => m.guest) },
-      { settings: ['sandbox.vGpu'], memoryMb: null, mappings: ['F:\\GameAssets'] },
-      "missingAtBoot: vGPU and the project's folder are missing from a sandbox started without them",
-    );
     const mappedMirror = missingAtBoot(
       protectionsOf(gamesRun.config),
       {
@@ -668,34 +617,45 @@ export const projectsSuite: Suite = {
       gamesRun.config,
       fs.existsSync,
     );
-    t.check(
-      nothingMissing(mappedMirror),
-      'missingAtBoot: nothing missing when the sandbox has vGPU and the folder (F:\\x is C:\\Mirror\\F\\x in the .wsb)',
-      JSON.stringify(mappedMirror),
-    );
     t.equal(
-      describeMissing('mw2-agent', {
+      {
+        settings: wanted.settings,
+        memoryMb: wanted.memoryMb,
+        mappings: wanted.mappings.map((m) => m.guest),
+        nothingMissingWhenMapped: nothingMissing(mappedMirror),
+        message: describeMissing('mw2-agent', {
+          settings: ['sandbox.vGpu'],
+          memoryMb: null,
+          mappings: [
+            { host: 'C:\\Steam\\common', guest: 'C:\\Steam', readOnly: true },
+            { host: 'F:\\SteamLibrary', guest: 'F:\\SteamLibrary', readOnly: true },
+          ],
+        }),
+      },
+      {
         settings: ['sandbox.vGpu'],
         memoryMb: null,
-        mappings: [
-          { host: 'C:\\Steam\\common', guest: 'C:\\Steam', readOnly: true },
-          { host: 'F:\\SteamLibrary', guest: 'F:\\SteamLibrary', readOnly: true },
-        ],
-      }),
-      'mw2-agent wants vGPU and 2 folders (C:\\Steam\\common, F:\\SteamLibrary), but this sandbox started without them.',
-      'the message names each missing item',
-    );
-    t.equal(
-      parseWsbBoot(buildWsb(f.baseConfig, 6144, [{ host: 'C:\\a&b', guest: 'F:\\x', readOnly: true }])),
-      { memoryMb: 6144, mappings: [{ host: 'C:\\a&b', guest: 'C:\\Mirror\\F\\x', readOnly: true }], widened: {} },
-      'a sandbox started by an older version: memory and mapped folders are read back from its .wsb',
+        mappings: ['F:\\GameAssets'],
+        nothingMissingWhenMapped: true,
+        message:
+          'mw2-agent wants vGPU and 2 folders (C:\\Steam\\common, F:\\SteamLibrary), but this sandbox started without them.',
+      },
+      "missingAtBoot: vGPU and the project's folder are missing from a sandbox started without them, nothing when it has both (F:\\x is C:\\Mirror\\F\\x in the .wsb); the message names each missing item",
     );
     const widenedJoin = checkJoin({ ...base, 'sandbox.vGpu': true }, base, ['sandbox.vGpu']);
     t.check(
-      widenedJoin.stricter.length === 0 &&
+      JSON.stringify(
+        parseWsbBoot(buildWsb(f.baseConfig, 6144, [{ host: 'C:\\a&b', guest: 'F:\\x', readOnly: true }])),
+      ) ===
+        JSON.stringify({
+          memoryMb: 6144,
+          mappings: [{ host: 'C:\\a&b', guest: 'C:\\Mirror\\F\\x', readOnly: true }],
+          widened: {},
+        }) &&
+        widenedJoin.stricter.length === 0 &&
         widenedJoin.shared.join() === 'sandbox.vGpu' &&
         checkJoin({ ...base, 'sandbox.vGpu': true }, base).stricter.some((s) => s.startsWith('sandbox.vGpu')),
-      'vGPU turned on at boot for a project you allowed it for is shared; without that record it is refused',
+      'a sandbox started by an older version: memory and folders are read back from its .wsb; vGPU turned on at boot for a project you allowed it for is shared, without that record it is refused',
     );
 
     // joinRunning asks before anything is registered: restart (NeedsRestart with what is missing), or continue without.
@@ -723,21 +683,17 @@ export const projectsSuite: Suite = {
       () => null,
       (e: unknown) => e,
     );
+    const cancelled = await t.thrownMessage(() => joinGames('cancel'));
+    const notRegistered = !new ProjectRegistry(storage2).read()?.projects.some((p) => p.host === games);
     t.check(
       restartFor instanceof NeedsRestart &&
         restartFor.missing?.settings.includes('sandbox.vGpu') === true &&
-        restartFor.missing.mappings.length === 1,
-      'choosing "Restart with them" hands the restart offer what is missing',
-    );
-    await t.throws(() => joinGames('cancel'), 'Cancelled', '"Cancel" stops with a short line');
-    t.check(
-      !new ProjectRegistry(storage2).read()?.projects.some((p) => p.host === games),
-      'neither registers the project',
-    );
-    t.equal(
-      (await joinGames('continue')).missing?.settings,
-      ['sandbox.vGpu'],
-      '"Continue anyway" joins without them and says what is missing',
+        restartFor.missing.mappings.length === 1 &&
+        cancelled.includes('Cancelled') &&
+        notRegistered &&
+        (await joinGames('continue')).missing?.settings.join() === 'sandbox.vGpu',
+      '"Restart with them" hands the restart offer what is missing, "Cancel" stops with a short line (neither registers the project), "Continue anyway" joins and says what is missing',
+      cancelled,
     );
 
     // The restart that adds it (and any launch with it mapped at boot) boots with the union.
@@ -763,20 +719,17 @@ export const projectsSuite: Suite = {
         ),
       'the restart plan: vGPU on, and the added project and its mapping are mapped',
     );
-    t.check(
+    const unionLearns =
       unionGen.widened['sandbox.vGpu'] === 'proj-games' &&
-        unionGen.projects.notes.some((n) => n.startsWith('vGPU is on in this sandbox')) &&
-        nothingMissing(
-          missingAtBoot(
-            protectionsOf(unionGen.bootConfig),
-            { memoryMb: unionGen.memoryMb, mappings: unionGen.mappings },
-            gamesRun.config,
-            fs.existsSync,
-          ),
+      unionGen.projects.notes.some((n) => n.startsWith('vGPU is on in this sandbox')) &&
+      nothingMissing(
+        missingAtBoot(
+          protectionsOf(unionGen.bootConfig),
+          { memoryMb: unionGen.memoryMb, mappings: unionGen.mappings },
+          gamesRun.config,
+          fs.existsSync,
         ),
-      'the registry learns which setting was turned on for which project; after that restart nothing is missing',
-      JSON.stringify(unionGen.projects.notes),
-    );
+      );
     const keptOff = generateSandbox({
       packageRoot: t.packageRoot,
       run: launchedRun,
@@ -786,14 +739,15 @@ export const projectsSuite: Suite = {
       autoSession: false,
       bootWants: { projects: [{ name: 'proj-games', config: gamesRun.config }], keepOff: ['sandbox.vGpu'] },
     });
-    t.includes(
-      fs.readFileSync(keptOff.wsbPath, 'utf8'),
-      '<vGPU>Disable</vGPU>',
-      "a device the launch folder's own file switched off stays off",
+    t.check(
+      unionLearns && fs.readFileSync(keptOff.wsbPath, 'utf8').includes('<vGPU>Disable</vGPU>'),
+      "the registry learns which setting was turned on for which project, after that restart nothing is missing; a device the launch folder's own file switched off stays off",
+      JSON.stringify(unionGen.projects.notes),
     );
 
     t.section('projects: wsb (Windows Sandbox command line) adapter');
     const id = '12345678-1234-1234-1234-1234567890ab';
+    const apps = 'C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\wsb.exe';
     t.check(
       parseVersion('Windows Sandbox CLI version 0.4.1.0\n') === '0.4.1.0' &&
         parseVersion('nothing') === null &&
@@ -801,23 +755,17 @@ export const projectsSuite: Suite = {
         parseIp('none') === null &&
         parseCommands('Commands:\n  start    Starts a sandbox\n  list     Lists\n  share    Shares\n').join() ===
           'start,list,share' &&
-        parseCommands('no commands here').length === 0,
-      'wsb --version, ip and --help are read; other text gives nothing',
-    );
-    t.check(
-      parseList(JSON.stringify([{ Id: id, Status: 'Running', Uptime: '00:10' }]))[0]?.id === id &&
+        parseCommands('no commands here').length === 0 &&
+        parseList(JSON.stringify([{ Id: id, Status: 'Running', Uptime: '00:10' }]))[0]?.id === id &&
         parseList(JSON.stringify({ WindowsSandboxEnvironments: [{ id, status: 'Stopped' }] }))[0]?.status ===
           'Stopped' &&
         parseList('Id                                    Status   Uptime\n' + id + '  Running  00:01:02\n')[0]
           ?.status === 'Running' &&
-        parseList('nothing').length === 0,
-      'wsb list is read as an array, an object or a table',
-    );
-    const apps = 'C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\wsb.exe';
-    t.check(
-      findWsb({ LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', SystemRoot: 'C:\\Windows' }, (p) => p === apps) ===
-        apps && findWsb({ SystemRoot: 'C:\\Windows' }, () => false) === null,
-      'wsb.exe is looked for at absolute paths only',
+        parseList('nothing').length === 0 &&
+        findWsb({ LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', SystemRoot: 'C:\\Windows' }, (p) => p === apps) ===
+          apps &&
+        findWsb({ SystemRoot: 'C:\\Windows' }, () => false) === null,
+      'wsb --version, ip and --help are read, wsb list as an array, an object or a table, other text gives nothing; wsb.exe is looked for at absolute paths only',
     );
   },
 };

@@ -19,26 +19,35 @@ export const dataSuite: Suite = {
     const resolve = (...inputs: string[]): string[] =>
       resolveCleanTargets(inputs, dataPath, storage).map((r) => path.relative(storage, r.path));
     const inData = (...parts: string[]): string => path.join('data', 'default', ...parts);
-    t.equal(resolve('tools/go'), [inData('tools', 'go')], 'tools/<name> resolves inside the data folder');
-    t.equal(resolve('tools\\go'), [inData('tools', 'go')], 'either slash works');
     t.equal(
-      resolve('Tools/agents/claude'),
-      [inData('tools', 'agents', 'claude')],
-      'tools/agents/<name> resolves, whatever the case',
+      [
+        resolve('tools/go'),
+        resolve('tools\\go'),
+        resolve('Tools/agents/claude'),
+        resolve('databases/postgres-18'),
+        resolve('logs'),
+        resolve('launches'),
+        resolve('state/claude'),
+        resolve('tools', 'tools/go', 'tools/go'),
+        resolve('all', 'logs'),
+      ],
+      [
+        [inData('tools', 'go')],
+        [inData('tools', 'go')],
+        [inData('tools', 'agents', 'claude')],
+        [inData('databases', 'postgres-18')],
+        [inData('logs')],
+        ['launches'],
+        [inData('state', 'claude')],
+        [inData('tools')],
+        [inData(), 'launches'],
+      ],
+      'targets resolve inside the data folder (either slash, any case); launches is the storage folder; nested and repeated collapse; `all` is data plus launches',
     );
-    t.equal(resolve('databases/postgres-18'), [inData('databases', 'postgres-18')], 'databases/<name> resolves');
-    t.equal(resolve('logs'), [inData('logs')], 'logs resolves');
-    t.equal(resolve('launches'), ['launches'], "launches resolves to the storage folder's launches");
-    t.equal(resolve('state/claude'), [inData('state', 'claude')], 'state/<agent> resolves');
-    t.equal(resolve('tools', 'tools/go', 'tools/go'), [inData('tools')], 'nested and repeated targets collapse');
-    t.equal(resolve('all', 'logs'), [inData(), 'launches'], '`all` is the data folder plus launches');
     t.check(
-      Boolean(resolveCleanTargets(['state/claude'], dataPath, storage)[0].warning?.includes('login')),
-      'cleaning state warns about the login',
-    );
-    t.check(
-      Boolean(resolveCleanTargets(['all'], dataPath, storage)[0].warning),
-      'cleaning everything carries a warning',
+      Boolean(resolveCleanTargets(['state/claude'], dataPath, storage)[0].warning?.includes('login')) &&
+        Boolean(resolveCleanTargets(['all'], dataPath, storage)[0].warning),
+      'cleaning state warns about the login; cleaning everything carries a warning',
     );
     const badTargets = [
       '',
@@ -93,18 +102,15 @@ export const dataSuite: Suite = {
     } catch {
       /* no junctions here */
     }
-    t.equal(sizeOf(sized), 1024, 'sizes count real files only' + (linked ? ' (a junction counts 0)' : ''));
-    t.equal(
-      [humanBytes(1536), humanBytes(0), humanBytes(3 * 1024 ** 3)],
-      ['1.5 KB', '0 B', '3.0 GB'],
-      'sizes are shown in readable units',
+    t.check(
+      sizeOf(sized) === 1024 && humanBytes(1536) === '1.5 KB' && humanBytes(3 * 1024 ** 3) === '3.0 GB',
+      'sizes count real files only' + (linked ? ' (a junction counts 0)' : '') + ', in readable units',
     );
     if (linked) t.equal(findLinks(sized).length, 1, 'repair finds a junction planted in the data folder');
     removeTree(sized, t.temp);
-    t.check(!fs.existsSync(sized), 'a folder is removed');
     t.check(
-      fs.existsSync(path.join(outside, 'keep.txt')),
-      'removing a folder never deletes what a link inside points to',
+      !fs.existsSync(sized) && fs.existsSync(path.join(outside, 'keep.txt')),
+      'a folder is removed, but never what a link inside points to',
     );
 
     t.section('storage cleanup');
@@ -128,21 +134,25 @@ export const dataSuite: Suite = {
     t.dir('prune', 'data', 'd', 'tools', 'node');
     const pruned = pruneStorage(store, { keep: ['kept'] });
     const left = (p: string): boolean => fs.existsSync(path.join(store, p));
-    t.equal(pruned.launches, 1, 'cleanup removes one launch folder');
     t.equal(
-      { old: left('launches/old'), kept: left('launches/kept'), new: left('launches/new') },
-      { old: false, kept: true, new: true },
+      {
+        removed: pruned.launches,
+        old: left('launches/old'),
+        kept: left('launches/kept'),
+        new: left('launches/new'),
+      },
+      { removed: 1, old: false, kept: true, new: true },
       'cleanup: launch folders older than 7 days go; the running launch and recent ones stay',
     );
     t.equal(
-      { oldLog: left('data/d/logs/guest-old.log'), newLog: left('data/d/logs/guest-new.log') },
-      { oldLog: false, newLog: true },
-      'cleanup: logs older than 14 days go',
-    );
-    t.equal(
-      { interrupted: left('data/d/tools/git.staging-ab12'), realTool: left('data/d/tools/node') },
-      { interrupted: false, realTool: true },
-      'cleanup: interrupted downloads go; real tools stay',
+      {
+        oldLog: left('data/d/logs/guest-old.log'),
+        newLog: left('data/d/logs/guest-new.log'),
+        interrupted: left('data/d/tools/git.staging-ab12'),
+        realTool: left('data/d/tools/node'),
+      },
+      { oldLog: false, newLog: true, interrupted: false, realTool: true },
+      'cleanup: logs older than 14 days and interrupted downloads go; new logs and real tools stay',
     );
   },
 };

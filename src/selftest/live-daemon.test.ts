@@ -43,27 +43,26 @@ export const liveDaemonSuite: Suite = {
       const viewer = await openViewer(attach);
       viewers.push(viewer);
       const sawReady = await sees(t, viewer, 'LIVE-AGENT-READY');
-      t.check(
-        Boolean(sawReady),
-        "an attached client sees the agent's screen",
-        'screen so far: ' + tail(viewer.output()) + '\n' + daemon.diagnostics(),
-      );
       viewer.type('echo TYPED-%USERNAME:~0,0%OK');
       const sawTyped = await sees(t, viewer, 'TYPED-OK');
-      t.check(Boolean(sawTyped), 'keystrokes reach the agent', 'screen so far: ' + tail(viewer.output()));
+      t.check(
+        Boolean(sawReady && sawTyped),
+        "an attached client sees the agent's screen, and its keystrokes reach the agent",
+        'screen so far: ' + tail(viewer.output()) + '\n' + daemon.diagnostics(),
+      );
 
       const intruder = await openViewer(attach, { token: 'wrong-token', cols: 80, rows: 24 });
       viewers.push(intruder);
       const denied = await t.waitFor(() => intruder.error(), WAIT.viewers);
       t.check(
-        Boolean(denied) && denied!.includes('denied'),
-        'a client with the wrong token is refused',
-        'error frame: ' + JSON.stringify(denied) + ', connection closed: ' + intruder.closed(),
-      );
-      t.check(
-        !intruder.output().includes('LIVE-AGENT'),
-        'a client with the wrong token sees nothing of the session',
-        tail(intruder.output()),
+        Boolean(denied) && denied!.includes('denied') && !intruder.output().includes('LIVE-AGENT'),
+        'a client with the wrong token is refused and sees nothing of the session',
+        'error frame: ' +
+          JSON.stringify(denied) +
+          ', connection closed: ' +
+          intruder.closed() +
+          '\n' +
+          tail(intruder.output()),
       );
 
       t.section('live: counting viewers');
@@ -71,11 +70,10 @@ export const liveDaemonSuite: Suite = {
       // expected value.
       const one = await viewersWhen(t, attach, (v) => v.viewers === 1);
       t.check(
-        one !== null,
-        'a single attached terminal is counted as one viewer',
+        one !== null && one.remote === 0,
+        'a single attached terminal is counted as one viewer; one on loopback (inside the sandbox) is not remote',
         'last answer: ' + JSON.stringify(await queryViewers(local, 5000)),
       );
-      t.equal(one?.remote, 0, 'a viewer on loopback (inside the sandbox) is not counted as remote');
       const second = await openViewer(attach, { cols: 60, rows: 20 });
       viewers.push(second);
       const two = await viewersWhen(t, attach, (v) => v.viewers === 2);
@@ -87,12 +85,10 @@ export const liveDaemonSuite: Suite = {
       second.close();
       const backToOne = await viewersWhen(t, attach, (v) => v.viewers === 1);
       t.check(
-        backToOne !== null,
-        'a closed terminal stops counting at once',
+        backToOne !== null && backToOne.remote === 0 && daemon.status('live1')?.phase === 'running',
+        'a closed terminal stops counting at once, the remaining viewer is still not remote, and the session keeps running',
         'last answer: ' + JSON.stringify(await queryViewers(local, 5000)),
       );
-      t.equal(backToOne?.remote, 0, 'the remaining viewer is still not remote');
-      t.equal(daemon.status('live1')?.phase, 'running', 'the session keeps running when a terminal closes');
       t.equal(
         await queryViewers({ ...local, token: 'wrong-token' }, 10000),
         null,
@@ -123,13 +119,14 @@ export const liveDaemonSuite: Suite = {
       daemon.request({ kind: 'shell', id: 'evil', command: 'calc' });
       daemon.request({ kind: 'ping', id: 'ping1' });
       const ping = await daemon.response('ping1');
-      t.check(Boolean(ping?.ok), 'ping is answered', JSON.stringify(ping));
       // Requests are handled in order, so by the time the ping is answered the unknown one has been dealt with.
       t.check(
-        !fs.existsSync(path.join(daemon.run, 'responses', 'evil.json')),
-        'an unknown request kind gets no answer...',
+        Boolean(ping?.ok) &&
+          !fs.existsSync(path.join(daemon.run, 'responses', 'evil.json')) &&
+          !fs.existsSync(path.join(daemon.run, 'requests', 'evil.json')),
+        'ping is answered; an unknown request kind gets no answer and is deleted',
+        JSON.stringify(ping),
       );
-      t.check(!fs.existsSync(path.join(daemon.run, 'requests', 'evil.json')), '... and is deleted');
 
       t.section('live: restart and exit');
       daemon.request({ kind: 'restart', id: 'restart1', harness: 'claude' });
@@ -145,8 +142,11 @@ export const liveDaemonSuite: Suite = {
         const s = daemon.status('live1');
         return s?.phase === 'exited' ? s : null;
       }, WAIT.exit);
-      t.equal(gotExit ? viewer.exitCode() : null, 3, "the agent's exit code reaches the attached client");
-      t.equal(ended?.exitCode, 3, "the agent's exit code reaches the session status");
+      t.equal(
+        [gotExit ? viewer.exitCode() : null, ended?.exitCode],
+        [3, 3],
+        "the agent's exit code reaches the attached client and the session status",
+      );
     } finally {
       for (const v of viewers) v.close();
       await daemon.stop();

@@ -60,15 +60,18 @@ export const networkSuite: Suite = {
         { address: '192.168.1.10', netmask: '255.255.255.0', family: 'IPv4', internal: false, mac: '', cidr: null },
       ],
     } as unknown as ReturnType<typeof os.networkInterfaces>;
-    t.check(isSandboxAddress('172.20.5.9', interfaces), 'an address in the Hyper-V subnet is the sandbox');
-    t.check(!isSandboxAddress('192.168.1.20', interfaces), 'a LAN address is not');
+    t.check(
+      isSandboxAddress('172.20.5.9', interfaces) &&
+        !isSandboxAddress('192.168.1.20', interfaces) &&
+        !isSandboxAddress('127.0.0.1', interfaces) &&
+        !isSandboxAddress('8.8.8.8', interfaces) &&
+        !isSandboxAddress('172.20.0.1', interfaces),
+      "only an address in the Hyper-V subnet is the sandbox (not a LAN, loopback, internet or this PC's own address)",
+    );
     t.check(
       !isSandboxAddress('172.30.4.4', interfaces),
       'an address on the WSL Hyper-V network is not (keystrokes never go to a WSL VM)',
     );
-    t.check(!isSandboxAddress('127.0.0.1', interfaces), 'loopback is not');
-    t.check(!isSandboxAddress('8.8.8.8', interfaces), 'an internet address is not');
-    t.check(!isSandboxAddress('172.20.0.1', interfaces), "this PC's own address on that subnet is not");
 
     t.section('network settings');
     const allow = expandAllowList(['@developer', 'Example.COM', '*.corp.example', 'not a host!']);

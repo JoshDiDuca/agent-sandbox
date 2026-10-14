@@ -21,23 +21,30 @@ export const personalizationSuite: Suite = {
       { key: 'X', name: 'D', kind: 'DWord', value: 4294967295 },
       { key: 'X', name: 'B', kind: 'Binary', value: Buffer.from([1, 255]).toString('base64') },
     ]);
-    t.includes(reg, '[HKEY_CURRENT_USER\\Control Panel\\Desktop]', 'the .reg file only writes under HKCU');
-    t.includes(reg, '"WallpaperStyle"="10"', 'string values are written as strings');
-    t.includes(reg, '"D"=dword:ffffffff', 'DWORD values are written in hex');
-    t.includes(reg, '"B"=hex:01,ff', 'binary values are written as hex bytes');
+    t.check(
+      reg.includes('[HKEY_CURRENT_USER\\Control Panel\\Desktop]') &&
+        reg.includes('"WallpaperStyle"="10"') &&
+        reg.includes('"D"=dword:ffffffff') &&
+        reg.includes('"B"=hex:01,ff'),
+      'the .reg file only writes under HKCU: strings as strings, DWORDs and binary as hex',
+    );
 
     t.section('Windows Terminal profile');
     const shown = withPwshProfile({ theme: 'dark', profiles: { defaults: { font: {} } } }, true);
     const shownProfiles = shown?.profiles as { list: Record<string, unknown>[]; defaults?: unknown } | undefined;
-    t.equal(shownProfiles?.list.length, 1, 'a PowerShell 7 profile is added once pwsh is installed');
-    t.equal(shownProfiles?.list[0].guid, PWSH_PROFILE_GUID, 'the added profile has our GUID');
-    t.includes(String(shownProfiles?.list[0].commandline), 'pwsh.exe', 'the added profile starts pwsh.exe');
-    t.check(Boolean(shownProfiles?.defaults) && shown?.theme === 'dark', 'the rest of the settings are kept');
-    t.equal(withPwshProfile(shown!, true), null, 'nothing is rewritten when the profile is already there');
-    t.equal(
-      withPwshProfile({ profiles: { defaults: {} } }, false),
-      null,
-      'nothing is rewritten when pwsh was never wanted',
+    const oldForm = withPwshProfile({ profiles: [{ guid: 'a' }] }, true)?.profiles as { list: unknown[] };
+    t.check(
+      shownProfiles?.list.length === 1 &&
+        shownProfiles.list[0].guid === PWSH_PROFILE_GUID &&
+        String(shownProfiles.list[0].commandline).includes('pwsh.exe') &&
+        Boolean(shownProfiles.defaults) &&
+        shown?.theme === 'dark' &&
+        oldForm.list.length === 2,
+      'a PowerShell 7 profile (our GUID, starts pwsh.exe) is added once pwsh is installed; settings kept; old array form works',
+    );
+    t.check(
+      withPwshProfile(shown!, true) === null && withPwshProfile({ profiles: { defaults: {} } }, false) === null,
+      'nothing is rewritten when the profile is already there or pwsh was never wanted',
     );
 
     const edited = {
@@ -54,8 +61,6 @@ export const personalizationSuite: Suite = {
       { hidden: true, name: 'My pwsh', fontSize: 14, count: 2 },
       "turning pwsh off hides the profile and keeps the user's edits",
     );
-    const oldForm = withPwshProfile({ profiles: [{ guid: 'a' }] }, true)?.profiles as { list: unknown[] };
-    t.equal(oldForm.list.length, 2, 'the old array form of "profiles" works');
 
     t.section('Windows Terminal settings.json on disk (JSONC, temp copy)');
     const data = t.at('wt-data');
@@ -73,16 +78,18 @@ export const personalizationSuite: Suite = {
     t.write(path.join(data, 'tools', 'pwsh', 'pwsh.exe'), 'MZ');
     syncPwshProfile(data, true);
     const added = read();
-    t.equal(added.theme, 'light', "once pwsh is installed the profile is added and the user's settings are kept");
     t.equal(
-      added.profiles.list.map((p) => p.guid),
-      ['{x}', PWSH_PROFILE_GUID],
-      'the profile is added after the existing ones',
+      { theme: added.theme, guids: added.profiles.list.map((p) => p.guid) },
+      { theme: 'light', guids: ['{x}', PWSH_PROFILE_GUID] },
+      "once pwsh is installed the profile is added after the existing ones and the user's settings are kept",
     );
     syncPwshProfile(data, false);
-    t.equal(read().profiles.list[1].hidden, true, 'the profile is hidden when pwsh is turned off');
+    const hiddenAfter = read().profiles.list[1].hidden;
     t.write(settings, '{ not json');
     syncPwshProfile(data, true);
-    t.equal(fs.readFileSync(settings, 'utf8'), '{ not json', 'an unreadable settings file is left alone');
+    t.check(
+      hiddenAfter === true && fs.readFileSync(settings, 'utf8') === '{ not json',
+      'the profile is hidden when pwsh is turned off; an unreadable settings file is left alone',
+    );
   },
 };

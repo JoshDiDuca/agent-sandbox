@@ -13,17 +13,17 @@ export const generateSuite: Suite = {
     t.section('the .wsb file');
     const gen = await f.launch({}, { args: ['--version'], probe: { ...f.probe, gitDir: f.shared, nvmDir: f.workB } });
     const wsb = fs.readFileSync(gen.wsbPath, 'utf8');
-    t.includes(wsb, '<MemoryInMB>8192</MemoryInMB>', 'wsb: the configured memory');
-    t.includes(
+    t.check(
+      wsb.includes('<MemoryInMB>8192</MemoryInMB>') &&
+        wsb.includes('<SandboxFolder>C:\\Workspace\\work-a</SandboxFolder>') &&
+        wsb.includes('C:\\HostTools\\git') &&
+        wsb.includes('C:\\HostTools\\nvm') &&
+        !wsb.includes('Missing') &&
+        wsb.includes('logon.cmd</Command>') &&
+        wsb.includes('<vGPU>Disable</vGPU>'),
+      "wsb: the configured memory, the workspace at its guest folder, this PC's git and nvm, the logon command, vGPU off; a missing optional folder is skipped",
       wsb,
-      '<SandboxFolder>C:\\Workspace\\work-a</SandboxFolder>',
-      'wsb: the workspace is mapped to its guest folder',
     );
-    t.includes(wsb, 'C:\\HostTools\\git', "wsb: this PC's git is mapped");
-    t.includes(wsb, 'C:\\HostTools\\nvm', "wsb: this PC's nvm is mapped");
-    t.excludes(wsb, 'Missing', 'wsb: an optional mapping whose folder is missing is skipped');
-    t.includes(wsb, 'logon.cmd</Command>', 'wsb: the logon command');
-    t.includes(wsb, '<vGPU>Disable</vGPU>', 'wsb: vGPU is off');
     t.includes(
       buildWsb(f.baseConfig, 4096, [{ host: 'C:\\a&b', guest: 'C:\\X', readOnly: true }]),
       'C:\\a&amp;b',
@@ -49,23 +49,20 @@ export const generateSuite: Suite = {
       'sandbox/csharp/LinkGate.cs',
     ];
     const missing = expectedFiles.filter((file) => !fs.existsSync(path.join(gen.launchPath, file)));
-    t.equal(missing, [], 'the launch folder has the runtime, the C# sources and the boot scripts');
-    t.equal(fs.readdirSync(path.join(gen.launchPath, 'runtime')).length, 6, 'the runtime is 6 self-contained files');
+    t.check(
+      missing.length === 0 && fs.readdirSync(path.join(gen.launchPath, 'runtime')).length === 6,
+      'the launch folder has the runtime (6 self-contained files), the C# sources and the boot scripts',
+      missing.join(', '),
+    );
     const logon = fs.readFileSync(path.join(gen.launchPath, 'sandbox', 'boot', 'logon.cmd'), 'utf8');
     t.check(
-      logon.indexOf('trust.cmd') < logon.indexOf('wt.exe'),
-      'logon.cmd applies the sandbox trust settings before opening Windows Terminal',
-    );
-    t.includes(logon, 'tools\\terminal\\wt.exe', 'logon.cmd opens Windows Terminal from the tools folder');
-    t.includes(logon, '-NoExit', 'logon.cmd falls back to a PowerShell window');
-    t.check(
-      logon.indexOf('env.cmd') > 0 && logon.indexOf('env.cmd') < logon.indexOf('wt.exe'),
-      'logon.cmd sets AGENT_WORKSPACE (env.cmd) before Windows Terminal starts, so new tabs can open in it',
-    );
-    t.includes(
-      fs.readFileSync(path.join(gen.launchPath, 'env.cmd'), 'utf8'),
-      'AGENT_WORKSPACE=',
-      'env.cmd names the workspace',
+      logon.indexOf('trust.cmd') < logon.indexOf('wt.exe') &&
+        logon.includes('tools\\terminal\\wt.exe') &&
+        logon.includes('-NoExit') &&
+        logon.indexOf('env.cmd') > 0 &&
+        logon.indexOf('env.cmd') < logon.indexOf('wt.exe') &&
+        fs.readFileSync(path.join(gen.launchPath, 'env.cmd'), 'utf8').includes('AGENT_WORKSPACE='),
+      'logon.cmd applies the trust settings and sets AGENT_WORKSPACE (env.cmd) before Windows Terminal, falling back to a PowerShell window',
     );
     t.equal(
       logonEnv('C:\\Workspace\\100%\\x'),
@@ -85,6 +82,9 @@ export const generateSuite: Suite = {
         nvmFromHost: Boolean(session.hostTools.nvm),
         nodeSpec: session.versions.node.spec,
         gitAccess: session.provisioning.git.access,
+        plainNodeVersion: /^\d+\.\d+\.\d+$/.test(session.hostTools.nodeVersion ?? ''),
+        cpuLimitPercent: session.cpuLimitPercent,
+        pageFileMb: session.pageFileMb,
       },
       {
         launchId: true,
@@ -95,19 +95,11 @@ export const generateSuite: Suite = {
         nvmFromHost: true,
         nodeSpec: '22.3.0',
         gitAccess: 'full',
+        plainNodeVersion: true,
+        cpuLimitPercent: 80,
+        pageFileMb: 16384,
       },
-      'session.json carries the id, paths, agent arguments, host tools, versions and git access',
-    );
-    t.matches(
-      session.hostTools.nodeVersion ?? '',
-      /^\d+\.\d+\.\d+$/,
-      'session.json: the host Node version is a plain version',
-    );
-    t.equal(session.cpuLimitPercent, 80, 'session.json carries the CPU cap for SandboxTools cpu-cap (default 80 %)');
-    t.equal(
-      session.pageFileMb,
-      16384,
-      'session.json carries the paging file limit for SandboxTools page-file (default 16 GB)',
+      'session.json carries the id, paths, agent arguments, host tools, versions, git access and the CPU (80 %) and paging file (16 GB) limits',
     );
     t.check(
       !LocalOverridesSchema.safeParse({ sandbox: { cpuLimit: 'none' } }).success,
@@ -119,34 +111,34 @@ export const generateSuite: Suite = {
     const stagedMissing = ['settings.json', 'CLAUDE.md', '.claude.json', 'plugins'].filter(
       (name) => !fs.existsSync(path.join(staged, name)),
     );
-    t.equal(stagedMissing, [], 'Claude settings, instructions, global state and plugins are staged');
-    t.check(!fs.existsSync(path.join(staged, '.credentials.json')), 'the Claude login is not staged');
+    t.check(
+      stagedMissing.length === 0 && !fs.existsSync(path.join(staged, '.credentials.json')),
+      'Claude settings, instructions, global state and plugins are staged; the Claude login is not',
+      stagedMissing.join(', '),
+    );
     const gitconfig =
       '[user]\n\tname = Josh\n\temail = "j@x.io"\n[credential]\n\thelper = store\n[url "https://TOKEN@github.com/"]\n\tinsteadOf = https://github.com/\n';
     t.equal(
-      gitIdentity(gitconfig),
-      '[user]\n\tname = Josh\n\temail = j@x.io\n',
-      'only name/email from ~/.gitconfig reach the sandbox (no credential helpers or token URLs)',
+      [gitIdentity(gitconfig), gitIdentity('[core]\n\tname = x\n')],
+      ['[user]\n\tname = Josh\n\temail = j@x.io\n', ''],
+      'only name/email from ~/.gitconfig reach the sandbox (no credential helpers or token URLs; a name outside [user] is not an identity)',
     );
-    t.equal(gitIdentity('[core]\n\tname = x\n'), '', 'a name outside [user] is not an identity');
     const auto = { ...f.baseConfig.sandbox, memoryMb: 'auto' as const };
     const MB = 1048576;
     const pcRam = 64 * 1024 * MB;
-    t.equal(resolveMemoryMb(auto, 40000 * MB, pcRam), 31744, "memory 'auto' follows free RAM minus the reserve");
+    t.equal(
+      [
+        resolveMemoryMb(auto, 40000 * MB, pcRam),
+        resolveMemoryMb({ ...auto, maxMemoryPercent: 80 }, 30000 * MB, 32 * 1024 * MB),
+        resolveMemoryMb({ ...auto, maxMemoryPercent: 50 }, 60000 * MB, pcRam),
+      ],
+      [31744, 21504, 32768],
+      "memory 'auto' follows free RAM minus the reserve and never takes more than maxMemoryPercent of the PC's RAM",
+    );
     await t.throws(
       () => resolveMemoryMb(auto, 9000 * MB, pcRam),
       'Not enough free RAM',
       "memory 'auto' refuses when too little RAM is free",
-    );
-    t.equal(
-      resolveMemoryMb({ ...auto, maxMemoryPercent: 80 }, 30000 * MB, 32 * 1024 * MB),
-      21504,
-      "memory 'auto' never takes more than maxMemoryPercent of the PC's RAM",
-    );
-    t.equal(
-      resolveMemoryMb({ ...auto, maxMemoryPercent: 50 }, 60000 * MB, pcRam),
-      32768,
-      "memory 'auto' is capped at half the PC's RAM with maxMemoryPercent 50 (free RAM and maxMemoryMb still apply)",
     );
   },
 };

@@ -46,16 +46,18 @@ async function service(t: Harness): Promise<void> {
     now: () => clock.at,
   });
 
-  t.check(
-    svc.managed && svc.status().version === '1.0.0' && svc.status().autoUpdate === false,
-    'a managed install reports its version and has automatic updates off by default',
-  );
-  t.equal((await svc.check()).available, false, 'no feed, no newer version');
+  const emptyCheck = (await svc.check()).available;
   publish(t, feed, '1.0.1', 'good');
   const found = await svc.check();
   t.check(
-    found.available && found.latest?.version === '1.0.1' && layout.activeVersion() === '1.0.0',
-    'check finds the newer version and changes nothing',
+    svc.managed &&
+      svc.status().version === '1.0.0' &&
+      svc.status().autoUpdate === false &&
+      emptyCheck === false &&
+      found.available &&
+      found.latest?.version === '1.0.1' &&
+      layout.activeVersion() === '1.0.0',
+    'a managed install reports its version, automatic updates off by default; check finds a newer version and changes nothing',
   );
 
   sandbox = true;
@@ -67,17 +69,20 @@ async function service(t: Harness): Promise<void> {
   sandbox = false;
 
   const held = new UpdateLock(root, () => clock.at).acquire();
-  t.check(held !== null && (await svc.run()) === null, 'a second update while one runs does nothing');
+  const whileHeld = held !== null && (await svc.run()) === null;
   held?.();
   fs.writeFileSync(path.join(root, 'update.lock'), JSON.stringify({ pid: 2147483000, at: clock.at.toISOString() }));
-  t.check(new UpdateLock(root, () => clock.at).acquire() !== null, 'a lock left by a process that died is taken over');
+  t.check(
+    whileHeld && new UpdateLock(root, () => clock.at).acquire() !== null,
+    'a second update while one runs does nothing; a lock left by a process that died is taken over',
+  );
   fs.rmSync(path.join(root, 'update.lock'));
 
-  t.equal(svc.notice(), null, 'no notice before any update');
+  const noticeBefore = svc.notice();
   const done = await svc.run();
   t.check(
-    done?.kind === 'installed' && done.version === '1.0.1' && runShim(layout) === '1.0.1',
-    'run installs the newer version',
+    noticeBefore === null && done?.kind === 'installed' && done.version === '1.0.1' && runShim(layout) === '1.0.1',
+    'no notice before any update; run installs the newer version',
   );
   const notice = svc.notice();
   if (notice) svc.markNoticeSeen(notice);
@@ -110,17 +115,17 @@ async function service(t: Harness): Promise<void> {
   );
 
   t.section('update service: automatic updates');
-  t.equal(svc.autoUpdateDue(), false, 'off: never due');
+  const dueOff = svc.autoUpdateDue();
   svc.setAuto(true);
-  t.check(new InstallRecordFile(root).read()?.autoUpdate === true, 'the setting is in install.json');
-  t.equal(svc.autoUpdateDue(), false, 'on, but looked a moment ago: not due');
+  const savedOn = new InstallRecordFile(root).read()?.autoUpdate === true;
+  const dueSoon = svc.autoUpdateDue();
   clock.at = new Date(clock.at.getTime() + 25 * 3600_000);
   const due = svc.autoUpdateDue();
   sandbox = true;
   t.equal(
-    [due, svc.autoUpdateDue()],
-    [true, false],
-    'on and the last look over a day ago: due, but never while a sandbox runs',
+    [dueOff, savedOn, dueSoon, due, svc.autoUpdateDue()],
+    [false, true, false, true, false],
+    'never due while off; the setting is in install.json; not due a moment after a look, due after a day, never while a sandbox runs',
   );
   sandbox = false;
 }
@@ -161,13 +166,15 @@ async function command(t: Harness): Promise<void> {
   const lines: string[] = [];
   const print = (line: string): void => void lines.push(line);
   const npm = new UpdateService(null, { version: '1.0.0' });
+  const npmAuto = await t.thrownMessage(() => npm.setAuto(true));
   t.check(
     !npm.managed &&
       (await runUpdate(npm, { check: false, rollback: false, unattended: false }, print)) === 0 &&
-      lines.join('\n').includes('npm install -g windows-development-sandbox'),
-    'an npm install is not managed and is told the npm command',
+      lines.join('\n').includes('npm install -g windows-development-sandbox') &&
+      npmAuto.includes('installed with npm'),
+    'an npm install is not managed, is told the npm command, and cannot turn on automatic updates',
+    npmAuto,
   );
-  await t.throws(() => npm.setAuto(true), 'installed with npm', 'automatic updates need a managed install');
 
   const root = t.dir('cmd', 'install');
   const feed = t.at('cmd', 'feed');
@@ -187,8 +194,12 @@ async function command(t: Harness): Promise<void> {
     '--auto on/off creates and removes the scheduled task of an all-users install; it never updates from a CLI start',
   );
   task.fail = true;
-  await t.throws(() => machine.setAuto(true), 'needs admin', 'a task that cannot be created fails');
-  t.equal(new InstallRecordFile(root).read()?.autoUpdate, false, 'and the setting stays off');
+  const noAdmin = await t.thrownMessage(() => machine.setAuto(true));
+  t.check(
+    noAdmin.includes('needs admin') && new InstallRecordFile(root).read()?.autoUpdate === false,
+    'a task that cannot be created fails and the setting stays off',
+    noAdmin,
+  );
 
   publish(t, feed, '1.0.1', 'good');
   lines.length = 0;
@@ -218,7 +229,6 @@ function script(t: Harness): void {
     encoding: 'utf8',
     windowsHide: true,
   });
-  t.equal(parse.status, 0, 'it parses under the PowerShell 5.1 parser' + (parse.stderr ? ': ' + parse.stderr : ''));
   const shim = path.join(t.dir('task'), 'sandbox.cmd');
   fs.writeFileSync(shim, '@echo off\r\n');
   const check = (args: string[]): number | null =>
@@ -228,15 +238,13 @@ function script(t: Harness): void {
     }).status;
   const good = check(['-Command', shim]);
   t.check(
-    good === 0 || good === 2,
-    'a real sandbox.cmd is accepted (2 = this PowerShell is not admin)',
-    'exit ' + good,
-  );
-  if (good === 0) t.equal(check(['-Command', 'sandbox.cmd']), 1, 'a relative path is refused');
-  t.equal(
-    UpdateTask.registerArgs(InstallLayout.at(t.at('task', 'root'), 'machine')),
-    ['-Command', path.join(t.at('task', 'root'), 'bin', 'sandbox.cmd')],
-    'the task runs the shim, not a version folder',
+    parse.status === 0 &&
+      (good === 0 || good === 2) &&
+      (good !== 0 || check(['-Command', 'sandbox.cmd']) === 1) &&
+      JSON.stringify(UpdateTask.registerArgs(InstallLayout.at(t.at('task', 'root'), 'machine'))) ===
+        JSON.stringify(['-Command', path.join(t.at('task', 'root'), 'bin', 'sandbox.cmd')]),
+    'it parses under PowerShell 5.1; a real sandbox.cmd is accepted (2 = not admin), a relative path refused; the task runs the shim',
+    'parse ' + parse.status + (parse.stderr ? ': ' + parse.stderr : '') + ', exit ' + good,
   );
 }
 

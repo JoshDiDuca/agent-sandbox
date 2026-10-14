@@ -21,26 +21,28 @@ export const accountsSuite: Suite = {
       claudeDir: t.at('host-login'),
       globalStateFile: t.at('host-login.json'),
     });
-    t.equal(new AccountStore(storage).list(dataA).length, 2, 'accounts can be saved from the sandbox and from this PC');
-    t.equal(new AccountStore(storage).defaultName(), 'personal', 'the first account saved becomes the default');
-    t.equal(new AccountStore(storage).activeFor(dataA), 'personal', 'the first account saved is the active one');
     t.check(
-      !fs.existsSync(path.join(sandboxClaude, '.agent-sandbox-account')),
-      'which account is active is not recorded inside the sandbox...',
+      new AccountStore(storage).list(dataA).length === 2 &&
+        new AccountStore(storage).defaultName() === 'personal' &&
+        new AccountStore(storage).activeFor(dataA) === 'personal',
+      'accounts can be saved from the sandbox and from this PC; the first one saved is the default and active',
     );
-    t.check(fs.existsSync(path.join(storage, 'accounts', 'index.json')), '... it is recorded host-side');
+    t.check(
+      !fs.existsSync(path.join(sandboxClaude, '.agent-sandbox-account')) &&
+        fs.existsSync(path.join(storage, 'accounts', 'index.json')),
+      'which account is active is recorded host-side, not inside the sandbox',
+    );
 
     t.write(path.join(sandboxClaude, '.credentials.json'), '{"claudeAiOauth":{"refreshToken":"personal-2"}}');
     new AccountStore(storage).activate(dataA, 'work');
     const stateAfter = f.readJson(path.join(sandboxClaude, '.claude.json'));
-    t.includes(
-      fs.readFileSync(path.join(sandboxClaude, '.credentials.json'), 'utf8'),
-      'work-1',
-      "switching swaps in the other account's credentials",
+    t.check(
+      fs.readFileSync(path.join(sandboxClaude, '.credentials.json'), 'utf8').includes('work-1') &&
+        stateAfter.oauthAccount.emailAddress === 'me@work' &&
+        stateAfter.other === 1 &&
+        new AccountStore(storage).activeFor(dataA) === 'work',
+      'switching swaps in the other credentials and account, keeps the rest of the sandbox state, and marks it active',
     );
-    t.equal(stateAfter.oauthAccount.emailAddress, 'me@work', 'switching swaps the signed-in account');
-    t.equal(stateAfter.other, 1, 'switching keeps the rest of the sandbox state');
-    t.equal(new AccountStore(storage).activeFor(dataA), 'work', 'the new account is active');
     t.includes(
       JSON.stringify(new AccountStore(storage).read('personal')?.credentials),
       'personal-2',

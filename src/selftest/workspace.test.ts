@@ -21,15 +21,10 @@ export const workspaceSuite: Suite = {
       { host: f.workA, guest: 'C:\\Workspace\\work-a', harness: 'claude', dataFolder: 'testdata' },
       'any folder is the workspace; its guest path is C:\\Workspace\\<folder name>',
     );
-    t.equal(
-      autoGuestWorkspace('C:\\x\\My Proj (2)'),
-      'C:\\Workspace\\My Proj _2_',
-      'auto guest folder names are sanitised',
-    );
-    t.equal(
-      autoGuestWorkspace('D:\\...'),
-      'C:\\Workspace\\project',
-      'a folder name with nothing usable becomes "project"',
+    t.check(
+      autoGuestWorkspace('C:\\x\\My Proj (2)') === 'C:\\Workspace\\My Proj _2_' &&
+        autoGuestWorkspace('D:\\...') === 'C:\\Workspace\\project',
+      'auto guest folder names are sanitised; a name with nothing usable becomes "project"',
     );
     t.equal(
       { node: run.versions.node.spec, nodeSource: run.versions.node.source, python: run.versions.python.spec },
@@ -52,12 +47,15 @@ export const workspaceSuite: Suite = {
       { node: 'lts/iron', source: '.nvmrc', python: '3.11' },
       '.nvmrc and .python-version are respected',
     );
-    t.equal((await f.run({ nodeVersion: '18' })).versions.node.source, 'command line', '--node beats .nvmrc');
+    const flagged = (await f.run({ nodeVersion: '18' })).versions.node.source;
     fs.rmSync(nvmrc);
     fs.rmSync(pythonVersion);
     const nodeVersion = path.join(f.workA, '.node-version');
     t.write(nodeVersion, 'v20.11.1');
-    t.equal((await f.run()).versions.node.spec, 'v20.11.1', '.node-version is respected');
+    t.check(
+      flagged === 'command line' && (await f.run()).versions.node.spec === 'v20.11.1',
+      '--node beats .nvmrc; .node-version is respected',
+    );
     fs.rmSync(nodeVersion);
 
     const voltaProject = t.write(
@@ -65,13 +63,12 @@ export const workspaceSuite: Suite = {
       '{"name":"x","volta":{"node":"20.11.1","pnpm":"9.1.0"}}',
     );
     t.write(t.at('no-volta-ws', 'package.json'), '{"name":"y","volta":{"node":"latest; rm -rf"}}');
-    t.equal(
-      voltaNode(path.dirname(voltaProject)),
-      '20.11.1',
-      'Volta: package.json "volta.node" picks the Node version',
+    t.check(
+      voltaNode(path.dirname(voltaProject)) === '20.11.1' &&
+        voltaNode(t.at('no-volta-ws')) === null &&
+        voltaNode(t.at('missing')) === null,
+      'Volta: package.json "volta.node" picks the Node version; only a plain version is accepted; no file, no version',
     );
-    t.equal(voltaNode(t.at('no-volta-ws')), null, 'Volta: only a plain version is accepted');
-    t.equal(voltaNode(t.at('missing')), null, 'Volta: a folder without package.json has no version');
 
     t.section('folders that are refused');
     await t.throws(() => f.run({ cwd: f.install }), 'install folder', 'the install folder is refused');

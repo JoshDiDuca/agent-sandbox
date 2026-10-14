@@ -24,12 +24,11 @@ export const agentCommandsSuite: Suite = {
     const on = { ...DEFAULTS, agentCommands: { enabled: true, agents: 'auto' as const } };
 
     t.section('finding agents');
-    t.equal(
-      realAgent('claude', commandsDir(storage), PATH),
-      path.join(localBin, 'claude.exe'),
-      "the real agent is found on PATH, skipping this tool's own forwarding files",
+    t.check(
+      realAgent('claude', commandsDir(storage), PATH) === path.join(localBin, 'claude.exe') &&
+        realAgent('nope', commandsDir(storage), PATH) === null,
+      "the real agent is found on PATH, skipping this tool's own forwarding files; one not installed is not found",
     );
-    t.equal(realAgent('nope', commandsDir(storage), PATH), null, 'an agent that is not installed is not found');
     const commandsOf = (config: typeof DEFAULTS, searchPath: string): string[] =>
       agentCommands(config, storage, searchPath)
         .map((a) => a.command)
@@ -54,25 +53,27 @@ export const agentCommandsSuite: Suite = {
     t.section('the forwarding files');
     const claude = { harness: 'claude', command: 'claude', real: path.join(localBin, 'claude.exe') };
     const cmd = forwardingCmd(claude, 'C:\\node\\node.exe', 'C:\\tool\\dist\\bin\\sandbox.js');
-    t.includes(
-      cmd,
-      '"C:\\node\\node.exe" "C:\\tool\\dist\\bin\\sandbox.js" launch --harness claude --headless --terminal -- %*',
-      'the .cmd starts the agent in a hidden sandbox attached to this terminal...',
+    t.check(
+      cmd.includes(
+        '"C:\\node\\node.exe" "C:\\tool\\dist\\bin\\sandbox.js" launch --harness claude --headless --terminal -- %*',
+      ) &&
+        cmd.includes('if "%SANDBOX_AGENT_DIRECT%"=="1" goto direct') &&
+        cmd.includes('call "' + claude.real + '" %*'),
+      'the .cmd starts the agent in a hidden sandbox attached to this terminal, unless SANDBOX_AGENT_DIRECT=1 (real agent)',
     );
-    t.includes(cmd, 'if "%SANDBOX_AGENT_DIRECT%"=="1" goto direct', '... unless SANDBOX_AGENT_DIRECT=1...');
-    t.includes(cmd, 'call "' + claude.real + '" %*', '... which runs the real agent');
     const sh = forwardingSh(
       { ...claude, real: "C:\\Users\\me\\it's\\claude.exe" },
       'C:\\node\\node.exe',
       'C:\\tool\\sandbox.js',
     );
-    t.check(sh.startsWith('#!/bin/sh'), 'Git Bash gets a shell script');
-    t.includes(
-      sh,
-      "exec '/c/node/node.exe' '/c/tool/sandbox.js' launch --harness claude --headless --terminal -- \"$@\"",
-      'the shell script starts the same sandbox, with POSIX paths',
+    t.check(
+      sh.startsWith('#!/bin/sh') &&
+        sh.includes(
+          "exec '/c/node/node.exe' '/c/tool/sandbox.js' launch --harness claude --headless --terminal -- \"$@\"",
+        ) &&
+        sh.includes("'/c/Users/me/it'\\''s/claude.exe'"),
+      'Git Bash gets a shell script with POSIX paths, quoted safely',
     );
-    t.includes(sh, "'/c/Users/me/it'\\''s/claude.exe'", 'the shell script quotes awkward paths safely');
 
     t.section('off changes nothing');
     // Off with nothing set up: nothing to do, no PATH edit (which would be refused during the self-test anyway).

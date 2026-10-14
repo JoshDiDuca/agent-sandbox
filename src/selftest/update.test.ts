@@ -33,8 +33,13 @@ export const updateSuite: Suite = {
       ['1.0.0', '1.9.0', '1.10.0'],
       'installed versions sort by number, staging ignored',
     );
-    await t.throws(() => layout.versionDir('../evil'), 'not a version number', 'a version folder name is checked');
-    await t.throws(() => layout.nodeDir('22.3.0'), 'not a Node version', 'a Node folder name is checked');
+    const badVersion = await t.thrownMessage(() => layout.versionDir('../evil'));
+    const badNode = await t.thrownMessage(() => layout.nodeDir('22.3.0'));
+    t.check(
+      badVersion.includes('not a version number') && badNode.includes('not a Node version'),
+      'version and Node folder names are checked',
+      badVersion + ' / ' + badNode,
+    );
 
     // The private Node: a hard link to this process's node.exe (a copy when the volumes differ).
     const nodeExe = layout.nodeExe(NODE);
@@ -49,44 +54,38 @@ export const updateSuite: Suite = {
     await extractArchive(packTarball(t, '1.0.0', 'good'), layout.versionDir('1.0.0'));
     layout.setActive('1.0.0', NODE);
     writeShims(layout, { sandbox: 'dist/bin/sandbox.js' });
-    t.check(layout.activeVersion() === '1.0.0' && layout.activeNode() === NODE, 'the active pointers are read back');
-    await t.throws(
-      () => layout.setActive('9.9.9', NODE),
-      'is not installed',
-      'setActive refuses a version not installed',
+    const notInstalled = await t.thrownMessage(() => layout.setActive('9.9.9', NODE));
+    t.check(
+      layout.activeVersion() === '1.0.0' && layout.activeNode() === NODE && notInstalled.includes('is not installed'),
+      'the active pointers are read back; setActive refuses a version not installed',
+      notInstalled,
     );
 
     t.section('shims');
-    t.equal(
-      shimText('sandbox', 'cmd'),
-      [
-        '@echo off',
-        'setlocal',
-        'set /p V=<"%~dp0..\\active-version"',
-        'set /p N=<"%~dp0..\\active-node"',
-        '"%~dp0..\\node\\%N%\\node.exe" "%~dp0..\\versions\\%V%\\package\\dist\\bin\\sandbox.js" %*',
-        '',
-      ].join('\r\n'),
-      'the cmd shim has the exact text, with CRLF line endings',
-    );
     const sh = shimText('sandbox', 'sh');
     t.check(
-      sh.startsWith('#!/bin/sh\n') &&
+      shimText('sandbox', 'cmd') ===
+        [
+          '@echo off',
+          'setlocal',
+          'set /p V=<"%~dp0..\\active-version"',
+          'set /p N=<"%~dp0..\\active-node"',
+          '"%~dp0..\\node\\%N%\\node.exe" "%~dp0..\\versions\\%V%\\package\\dist\\bin\\sandbox.js" %*',
+          '',
+        ].join('\r\n') &&
+        sh.startsWith('#!/bin/sh\n') &&
         !sh.includes('\r') &&
         sh.includes(
           'exec "$root/node/$node_version/node.exe" "$root/versions/$version/package/dist/bin/sandbox.js" "$@"',
         ),
-      'the sh shim is a POSIX script with LF endings that execs the active node on the active version',
+      'the cmd shim has the exact text with CRLF; the sh shim is a POSIX script with LF that execs the active node and version',
     );
-    await t.throws(
-      () => shimText('bad name;', 'cmd'),
-      'not a command name',
-      'a shim name must be a plain command name',
-    );
-    await t.throws(
-      () => readBins({ bin: { 'a b': 'x.js' } }),
-      'invalid name',
-      'a bad bin name in package.json is refused',
+    const badShim = await t.thrownMessage(() => shimText('bad name;', 'cmd'));
+    const badBin = await t.thrownMessage(() => readBins({ bin: { 'a b': 'x.js' } }));
+    t.check(
+      badShim.includes('not a command name') && badBin.includes('invalid name'),
+      'a shim name must be a plain command name; a bad bin name in package.json is refused',
+      badShim + ' / ' + badBin,
     );
 
     t.section('the update decision');
@@ -96,70 +95,69 @@ export const updateSuite: Suite = {
     const none = { lastCheck: undefined };
     const kinds = (over: object, version: string | null, state: object = none): unknown =>
       decideUpdate({ ...base, ...over, latest: version ? latest(version) : null, state });
-    t.equal(
-      [kinds({}, '1.0.1'), kinds({}, null), kinds({}, '1.0.0'), kinds({}, '0.9.0')],
-      [
-        { kind: 'install', release: latest('1.0.1') },
-        { kind: 'skip', reason: 'no-release' },
-        { kind: 'skip', reason: 'up-to-date' },
-        { kind: 'skip', reason: 'up-to-date' },
-      ],
-      'a newer release installs; none, the same or an older one does not',
-    );
     const recent = { lastCheck: new Date(now.getTime() - 3600_000).toISOString() };
-    t.equal(
-      [kinds({ sandboxRunning: true }, '1.0.1'), kinds({}, '1.0.1', recent), kinds({ force: true }, '1.0.1', recent)],
-      [
-        { kind: 'skip', reason: 'sandbox-running' },
-        { kind: 'skip', reason: 'too-soon' },
-        { kind: 'install', release: latest('1.0.1') },
-      ],
-      'a running sandbox blocks, an hour after the last check is too soon, force passes the time gate',
-    );
     const failed = { failed: { version: '1.0.2', at: now.toISOString(), reason: 'x' } };
+    const install = (v: string): unknown => ({ kind: 'install', release: latest(v) });
+    const skip = (reason: string): unknown => ({ kind: 'skip', reason });
     t.equal(
-      [kinds({}, '1.0.2', failed), kinds({}, '1.0.1', failed), kinds({}, '1.0.3', failed)],
       [
-        { kind: 'skip', reason: 'failed-before' },
-        { kind: 'skip', reason: 'failed-before' },
-        { kind: 'install', release: latest('1.0.3') },
+        kinds({}, '1.0.1'),
+        kinds({}, null),
+        kinds({}, '1.0.0'),
+        kinds({}, '0.9.0'),
+        kinds({ sandboxRunning: true }, '1.0.1'),
+        kinds({}, '1.0.1', recent),
+        kinds({ force: true }, '1.0.1', recent),
+        kinds({}, '1.0.2', failed),
+        kinds({}, '1.0.1', failed),
+        kinds({}, '1.0.3', failed),
       ],
-      'the version that failed (and older ones) are not retried; a newer one installs',
+      [
+        install('1.0.1'),
+        skip('no-release'),
+        skip('up-to-date'),
+        skip('up-to-date'),
+        skip('sandbox-running'),
+        skip('too-soon'),
+        install('1.0.1'),
+        skip('failed-before'),
+        skip('failed-before'),
+        install('1.0.3'),
+      ],
+      'only a newer release installs; a running sandbox blocks; an hour after the last check is too soon unless forced; a failed version (and older) is not retried',
     );
     t.check(!isTooSoon({ lastCheck: 'not a date' }, now, 24), 'a damaged last-check time does not block updates');
 
     t.section('updater: install, failure, rollback');
     const clock = { at: new Date('2026-10-14T12:00:00Z') };
     const updater = new Updater(layout, new FolderFeed(feed), { now: () => clock.at, minHoursBetweenChecks: 0 });
-    t.equal(runShim(layout), '1.0.0', 'the shim runs the version the pointers name');
+    const firstRun = runShim(layout);
 
     publish(t, feed, '1.0.1', 'good');
-    t.equal(
-      await updater.run({ sandboxRunning: false }),
-      { kind: 'installed', version: '1.0.1', previous: '1.0.0' },
-      'a good release installs and becomes active',
-    );
+    const first = await updater.run({ sandboxRunning: false });
     t.check(
-      layout.activeVersion() === '1.0.1' &&
+      firstRun === '1.0.0' &&
+        JSON.stringify(first) === JSON.stringify({ kind: 'installed', version: '1.0.1', previous: '1.0.0' }) &&
+        layout.activeVersion() === '1.0.1' &&
         runShim(layout) === '1.0.1' &&
         new UpdateStateFile(root).read().previous === '1.0.0',
-      'the shim runs the new version and the replaced one is remembered for a rollback',
+      'the shim runs the pointed version; a good release installs, becomes active, and the old one is kept for a rollback',
+      JSON.stringify(first),
     );
 
     publish(t, feed, '1.0.2', 'broken');
     clock.at = new Date(clock.at.getTime() + 60 * 60 * 1000);
     const bad = await updater.run({ sandboxRunning: false });
     t.check(
-      bad.kind === 'failed' && bad.version === '1.0.2' && bad.reason.includes('did not start'),
-      'a version that does not start fails with the reason',
-      JSON.stringify(bad),
-    );
-    t.check(
-      layout.activeVersion() === '1.0.1' &&
+      bad.kind === 'failed' &&
+        bad.version === '1.0.2' &&
+        bad.reason.includes('did not start') &&
+        layout.activeVersion() === '1.0.1' &&
         runShim(layout) === '1.0.1' &&
         !fs.existsSync(layout.versionDir('1.0.2')) &&
         new UpdateStateFile(root).read().failed?.version === '1.0.2',
-      'after a failure the working version stays active, the failed one is deleted and recorded',
+      'a version that does not start fails with the reason; the working version stays active, the failed one is deleted and recorded',
+      JSON.stringify(bad),
     );
 
     const gated = new Updater(layout, new FolderFeed(feed), { now: () => clock.at, minHoursBetweenChecks: 24 });
@@ -178,44 +176,38 @@ export const updateSuite: Suite = {
     );
 
     publish(t, feed, '1.0.3', 'good');
-    t.equal(
-      await updater.run({ sandboxRunning: false }),
-      { kind: 'installed', version: '1.0.3', previous: '1.0.1' },
-      'a newer good release after a failure installs',
+    const third = await updater.run({ sandboxRunning: false });
+    t.check(
+      JSON.stringify(third) === JSON.stringify({ kind: 'installed', version: '1.0.3', previous: '1.0.1' }) &&
+        JSON.stringify(layout.installedVersions()) === JSON.stringify(['1.0.1', '1.0.3']),
+      'a newer good release after a failure installs; only the active and the previous version are kept',
+      JSON.stringify(third),
     );
-    t.equal(layout.installedVersions(), ['1.0.1', '1.0.3'], 'only the active and the previous version are kept');
 
     publish(t, feed, '1.0.4', 'good', undefined, 'some-other-package');
     const named = await updater.run({ sandboxRunning: false });
-    t.check(
-      named.kind === 'failed' && named.reason.includes('is not windows-development-sandbox'),
-      'a release of another package is refused',
-      JSON.stringify(named),
-    );
-
     publish(t, feed, '1.0.5', 'good', SHA_WRONG);
     const hash = await updater.run({ sandboxRunning: false });
     t.check(
-      hash.kind === 'failed' &&
+      named.kind === 'failed' &&
+        named.reason.includes('is not windows-development-sandbox') &&
+        hash.kind === 'failed' &&
         hash.reason.includes('Checksum mismatch') &&
         layout.activeVersion() === '1.0.3' &&
         new UpdateStateFile(root).read().failed?.version === '1.0.5',
-      'a wrong sha256 is refused before anything is extracted, changes nothing and is recorded',
-      JSON.stringify(hash),
+      'a release of another package is refused; a wrong sha256 is refused before extracting, changes nothing and is recorded',
+      JSON.stringify([named, hash]),
     );
 
-    t.check(
+    const rolledBack =
       updater.rollback() === '1.0.1' &&
-        layout.activeVersion() === '1.0.1' &&
-        runShim(layout) === '1.0.1' &&
-        new UpdateStateFile(root).read().previous === '1.0.3',
-      'rollback moves the pointers back, and a second rollback goes forward again',
-    );
-
+      layout.activeVersion() === '1.0.1' &&
+      runShim(layout) === '1.0.1' &&
+      new UpdateStateFile(root).read().previous === '1.0.3';
     publish(t, feed, '1.0.6', 'good');
     t.check(
-      (await updater.run({ sandboxRunning: false })).kind === 'installed' && runShim(layout) === '1.0.6',
-      'a newer release after a rollback installs',
+      rolledBack && (await updater.run({ sandboxRunning: false })).kind === 'installed' && runShim(layout) === '1.0.6',
+      'rollback moves the pointers back (a second one goes forward again); a newer release after a rollback installs',
     );
 
     t.section('updater: a failed download is retried, not blocked');
@@ -226,15 +218,12 @@ export const updateSuite: Suite = {
     fs.copyFileSync(tarball, copy);
     fs.rmSync(tarball);
     const missing = await updater.run({ sandboxRunning: false });
-    t.check(
+    const downloadHeld =
       missing.kind === 'failed' &&
-        missing.blocked === false &&
-        JSON.stringify(new UpdateStateFile(root).read().failed) === JSON.stringify(before) &&
-        new UpdateStateFile(root).read().lastResult?.ok === false &&
-        layout.activeVersion() === '1.0.6',
-      'a download that fails is reported but does not block the version or change anything',
-      JSON.stringify(missing),
-    );
+      missing.blocked === false &&
+      JSON.stringify(new UpdateStateFile(root).read().failed) === JSON.stringify(before) &&
+      new UpdateStateFile(root).read().lastResult?.ok === false &&
+      layout.activeVersion() === '1.0.6';
     fs.copyFileSync(copy, tarball);
     // A failure on this PC (a read-only shim) must not block the version either.
     const shim = path.join(layout.binDir, 'sandbox.cmd');
@@ -242,15 +231,16 @@ export const updateSuite: Suite = {
     const local = await updater.run({ sandboxRunning: false });
     fs.chmodSync(shim, 0o666);
     t.check(
-      local.kind === 'failed' && local.blocked === false && layout.activeVersion() === '1.0.6',
-      'a failure on this PC (a read-only shim) does not block the version',
-      JSON.stringify(local),
+      downloadHeld && local.kind === 'failed' && local.blocked === false && layout.activeVersion() === '1.0.6',
+      'a failed download or a failure on this PC (a read-only shim) is reported but does not block the version',
+      JSON.stringify([missing, local]),
     );
-    t.equal(
-      await updater.run({ sandboxRunning: false }),
-      { kind: 'installed', version: '1.0.7', previous: '1.0.6' },
-      'the next run retries the same version and installs it',
+    const retried = await updater.run({ sandboxRunning: false });
+    t.check(
+      JSON.stringify(retried) === JSON.stringify({ kind: 'installed', version: '1.0.7', previous: '1.0.6' }) &&
+        (await new FolderFeed(t.dir('empty-feed')).latest()) === null,
+      'the next run retries the same version and installs it; a folder with no feed.json has no release',
+      JSON.stringify(retried),
     );
-    t.equal(await new FolderFeed(t.dir('empty-feed')).latest(), null, 'a folder with no feed.json has no release');
   },
 };

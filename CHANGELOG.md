@@ -7,7 +7,7 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
-## Unreleased
+## 1.5.0
 
 - The installer asks "Just me" or "Everyone on this PC", and installs side by side versions with a private Node.js and
   commands that read two pointer files. It replaces npm and 1.x installs, brings your settings up to date, and can be
@@ -18,7 +18,22 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
 - Other Windows users of an all-users install can use the sandbox you started when `sharing.otherUsers` is on:
   `status`, `sessions`, `attach`, `exec`, `db` work for them, `stop` needs the owner's name typed, and the rest is the
   owner's alone. Their own logins and agent environment are never sent into your sandbox.
-- `sandbox migrate` brings your saved settings up to date after an upgrade, with a backup.
+- `sandbox migrate` brings your saved settings up to date after an upgrade, with a backup. A storage folder an old
+  `config init` wrote into your config no longer overrides the shared folder of an all-users install.
+- A new menu: the areas are tabs along the top, every command has its own screen, and Settings keeps unsaved changes
+  until you save (Ctrl+S) or discard them.
+- Saved logins for every agent, not just Claude: Codex, Gemini, OpenCode, Qwen, Copilot, Kilo, Amp, Cline, Continue,
+  Kimi, Reasonix, CodeWhale, Aider and the rest. `sandbox accounts --agent <name>` and the Accounts tab.
+- Any agent can join a running sandbox, from any project folder. When the sandbox lacks something the project needs:
+  Restart (the open sessions come back and continue their conversations), Continue without it, or Cancel.
+- `sandbox resume` reopens the sessions of the last sandbox, each in its own conversation. `resume.sessions` and
+  `resume.restartAfterCrash` choose what happens after a crash or restart.
+- Every boot tool can be `true`, `false` or `"auto"` (installed when the project uses it): Bun, uv, gh, pwsh, VS Code
+  and the rest.
+- Optional reverse-engineering tools in `apps.install`: REA (Reverse Engineer Anything), Ghidra, x64dbg, ILSpy,
+  dnSpyEx, Detect It Easy, PE-bear, Cutter, radare2 and JADX.
+- `sandbox host <agent>` runs an agent on this PC (not sandboxed) while your agent commands are forwarded to the
+  sandbox.
 
 ## 1.4.3
 

@@ -166,31 +166,24 @@ export const liveTerminalSuite: Suite = {
         );
         const mark = screen().length;
         const after = (): string => screen().slice(mark);
+        const lost: string[] = [];
+        const expectKey = async (what: string, expected: string): Promise<void> => {
+          if (!(await t.waitFor(() => after().includes(expected), WAIT.screen))) lost.push(what);
+        };
         send('\x1b[<64;10;5M');
-        t.check(
-          Boolean(await t.waitFor(() => after().includes('got <1b>[<64;10;5M'), WAIT.screen)),
-          'the mouse wheel reaches the agent while it tracks the mouse',
-          'screen: ' + tail(after(), 800),
-        );
+        await expectKey('mouse wheel', 'got <1b>[<64;10;5M');
         send('\x7f');
-        t.check(
-          Boolean(await t.waitFor(() => after().includes('got <7f>'), WAIT.screen)),
-          'Backspace reaches the agent as DEL (one character, not a word)',
-          'screen: ' + tail(after(), 800),
-        );
+        await expectKey('Backspace as DEL', 'got <7f>');
         send('\x08');
-        t.check(
-          Boolean(await t.waitFor(() => after().includes('got <08>'), WAIT.screen)),
-          'Ctrl+Backspace reaches the agent as ^H',
-          'screen: ' + tail(after(), 800),
-        );
+        await expectKey('Ctrl+Backspace as ^H', 'got <08>');
         send('\x1b[');
         await new Promise((r) => setTimeout(r, 5));
         send('C');
+        await expectKey('Right arrow sent in two pieces', 'got <1b>[C');
         t.check(
-          Boolean(await t.waitFor(() => after().includes('got <1b>[C'), WAIT.screen)),
-          'a Right arrow that reaches the client in two pieces arrives whole (no stray "C")',
-          'screen: ' + tail(after(), 800),
+          lost.length === 0,
+          'the mouse wheel, Backspace (DEL), Ctrl+Backspace (^H) and a Right arrow split in two pieces (no stray "C") reach the agent',
+          'lost: ' + lost.join(', ') + '\nscreen: ' + tail(after(), 800),
         );
 
         const before = screen().length;
@@ -208,14 +201,12 @@ export const liveTerminalSuite: Suite = {
         );
         // (The client clears the tab once when it starts; from then on nothing may take the scrollback away.)
         const session = screen().slice(screen().indexOf('AGENT-READY'));
-        for (const [sequence, what] of [
-          ['\x1b[?1049h', 'alternate screen'],
-          ['\x1b[?47h', 'alternate screen (47)'],
-          ['\x1b[?1047h', 'alternate screen (1047)'],
-          ['\x1b[3J', 'clear scrollback'],
-        ]) {
-          t.excludes(session, sequence, 'the terminal is never sent ' + what + ' (' + JSON.stringify(sequence) + ')');
-        }
+        const sent = ['\x1b[?1049h', '\x1b[?47h', '\x1b[?1047h', '\x1b[3J'].filter((s) => session.includes(s));
+        t.check(
+          sent.length === 0,
+          'the terminal is never sent an alternate screen (1049, 47, 1047) or a clear of its scrollback',
+          'sent: ' + JSON.stringify(sent),
+        );
 
         if (kind) {
           // A viewer that joins after the agent cleared its screen: the replay starts at the clear, the modes come
@@ -236,13 +227,11 @@ export const liveTerminalSuite: Suite = {
 
         send('q');
         const ended = await t.waitFor(() => screen().includes('CLIENT-DONE'), WAIT.exit);
-        t.check(Boolean(ended), 'the client ends with the agent', 'screen: ' + tail(screen()));
-        if (kind)
-          t.includes(
-            screen().slice(screen().lastIndexOf('got q')),
-            '\x1b[?1000l',
-            'leaving the session turns mouse tracking off in the terminal again',
-          );
+        t.check(
+          Boolean(ended) && (!kind || screen().slice(screen().lastIndexOf('got q')).includes('\x1b[?1000l')),
+          'the client ends with the agent' + (kind ? ' and turns mouse tracking off in the terminal again' : ''),
+          'screen: ' + tail(screen()),
+        );
       } finally {
         for (const v of viewers) v.close();
         for (const c of children) {

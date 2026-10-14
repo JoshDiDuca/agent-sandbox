@@ -71,21 +71,19 @@ export const liveProjectsSuite: Suite = {
         notRunning.map((s) => s?.id + ': ' + s?.phase + ' ' + s?.message).join('\n') + '\n' + daemon.diagnostics(),
       );
       if (notRunning.length > 0) return;
-      t.equal([a1!.project, b1!.project, b2!.project], ['work-a', 'projB', 'projB'], 'each session knows its project');
       const log = fs
         .readdirSync(path.join(data, 'logs'))
         .filter((n) => n.startsWith('daemon'))
         .map((n) => fs.readFileSync(path.join(data, 'logs', n), 'utf8'))
         .join('\n');
       t.equal(
-        (log.match(/Project projB: setting up/g) ?? []).length,
-        1,
-        'two sessions for the same new project at once share one setup (no second provisioning run)',
-      );
-      t.equal(
-        readJsonFile<{ phase: string }>(path.join(daemon.run, 'projects', 'projB.json'))?.phase,
-        'ready',
-        "the project's setup status is written for the host (sandbox status)",
+        {
+          projects: [a1!.project, b1!.project, b2!.project],
+          setups: (log.match(/Project projB: setting up/g) ?? []).length,
+          status: readJsonFile<{ phase: string }>(path.join(daemon.run, 'projects', 'projB.json'))?.phase,
+        },
+        { projects: ['work-a', 'projB', 'projB'], setups: 1, status: 'ready' },
+        'each session knows its project; two sessions for the same new project at once share one setup; the setup status is written for the host',
       );
 
       t.section('live: each session has its own folder and environment');
@@ -93,74 +91,67 @@ export const liveProjectsSuite: Suite = {
       for (const v of views) await sees(t, v, 'AGENT-READY');
       for (const v of views) v.type('echo P=%AGENT_PROJECT% W=%AGENT_WORKSPACE% B=[%LIVE_B%]');
       const bSees = await sees(t, views[2], 'P=projB W=' + projB + ' B=[b-env]');
+      const b2Sees = await sees(t, views[3], 'B=[b-env]');
+      views[2].type('echo CWD=%CD%.');
+      const inB = await sees(t, views[2], 'CWD=' + projB + '.');
       t.check(
-        Boolean(bSees),
-        "B's first session runs with B's workspace, project and variables",
-        tail(views[2].output()),
-      );
-      t.check(
-        Boolean(await sees(t, views[3], 'B=[b-env]')),
-        "B's second session runs with B's variables",
-        tail(views[3].output()),
+        Boolean(bSees && b2Sees && inB),
+        "B's sessions run in B's folder with B's workspace, project and variables",
+        tail(views[2].output()) + '\n' + tail(views[3].output()),
       );
       // (The daemon here runs without the boot's environment, so A's own AGENT_* variables are not set at all.)
+      const a1Clean = await sees(t, views[0], 'B=[%LIVE_B%]');
+      const a2Clean = await sees(t, views[1], 'B=[%LIVE_B%]');
       t.check(
-        Boolean(await sees(t, views[0], 'B=[%LIVE_B%]')),
-        "A's first session is untouched by B (B's variables never reach it)",
-        tail(views[0].output()),
-      );
-      t.check(
-        Boolean(await sees(t, views[1], 'B=[%LIVE_B%]')),
-        "A's second session is untouched by B",
-        tail(views[1].output()),
-      );
-      views[2].type('echo CWD=%CD%.');
-      t.check(
-        Boolean(await sees(t, views[2], 'CWD=' + projB + '.')),
-        "B's session starts in B's folder",
-        tail(views[2].output()),
+        Boolean(a1Clean && a2Clean),
+        "A's sessions are untouched by B (B's variables never reach them)",
+        tail(views[0].output()) + '\n' + tail(views[1].output()),
       );
 
       t.section('live: several viewers on one session');
       const second = await view(b1!.attach, 60);
       const two = await viewersWhen(t, b1!.attach!, (v) => v.viewers === 2);
-      t.check(two !== null, 'a second viewer attaches to the same session');
       second.socket.write(resizeFrame(90, 25));
       views[2].type('echo TWO-VIEWERS-OK');
-      t.check(
-        Boolean(await sees(t, views[2], 'TWO-VIEWERS-OK')),
-        'the first viewer sees what it typed (after the second one resized)',
-        tail(views[2].output()),
-      );
-      t.check(Boolean(await sees(t, second, 'TWO-VIEWERS-OK')), 'the second viewer sees it too', tail(second.output()));
+      const firstSees = await sees(t, views[2], 'TWO-VIEWERS-OK');
+      const secondSees = await sees(t, second, 'TWO-VIEWERS-OK');
       second.type('echo FROM-SECOND');
+      const fromSecond = await sees(t, views[2], 'FROM-SECOND');
       t.check(
-        Boolean(await sees(t, views[2], 'FROM-SECOND')),
-        'input from the second viewer reaches the agent and the first viewer',
-        tail(views[2].output()),
+        two !== null && Boolean(firstSees && secondSees && fromSecond),
+        'a second viewer attaches to the same session; both see what the first typed (after the second one resized), and its input reaches the agent',
+        tail(views[2].output()) + '\n' + tail(second.output()),
       );
       views[2].close();
       second.close();
       const none = await viewersWhen(t, b1!.attach!, (v) => v.viewers === 0);
-      t.check(none !== null, 'closing every viewer is noticed');
-      t.equal(daemon.status('b1')?.phase, 'running', 'closing every viewer never ends the session');
+      t.check(
+        none !== null && daemon.status('b1')?.phase === 'running',
+        'closing every viewer is noticed and never ends the session',
+      );
+      const reattached: string[] = [];
       for (let round = 1; round <= 3; round++) {
         const again = await view(b1!.attach);
         again.type('echo REATTACHED-' + round);
-        t.check(
-          Boolean(await sees(t, again, 'REATTACHED-' + round)),
-          'reattach ' + round + ': a new viewer works on the same session',
-          tail(again.output()),
-        );
+        if (!(await sees(t, again, 'REATTACHED-' + round)))
+          reattached.push('round ' + round + ': ' + tail(again.output()));
         again.close();
       }
+      t.check(
+        reattached.length === 0,
+        'three times in a row a new viewer works on the same session',
+        reattached.join('\n'),
+      );
 
       t.section('live: exec, restart and refusals follow the projects');
       daemon.request({ kind: 'exec', id: 'xb', command: ['echo', '%LIVE_B%'], cwd: projB, timeoutSeconds: 30 });
       daemon.request({ kind: 'exec', id: 'xa', command: ['echo', '[%LIVE_B%]'], cwd: f.workA, timeoutSeconds: 30 });
       const [xb, xa] = await Promise.all([daemon.response('xb'), daemon.response('xa')]);
-      t.check(Boolean(xb?.stdout?.includes('b-env')), "exec in B's folder gets B's environment", JSON.stringify(xb));
-      t.check(Boolean(xa?.stdout?.includes('[%LIVE_B%]')), "exec in A's folder gets A's", JSON.stringify(xa));
+      t.check(
+        Boolean(xb?.stdout?.includes('b-env') && xa?.stdout?.includes('[%LIVE_B%]')),
+        "exec in B's folder gets B's environment, in A's folder A's",
+        JSON.stringify([xb, xa]),
+      );
       daemon.request({
         kind: 'session',
         id: 'bad1',
@@ -188,13 +179,12 @@ export const liveProjectsSuite: Suite = {
         'restarted 2 session(s)',
         'restart scoped to a project restarts only its sessions',
       );
-      t.check(fs.existsSync(path.join(local, 'projects', 'projB', 'shell.cmd')), 'sbx-shell projB has a shell script');
-      t.includes(
-        fs.readFileSync(path.join(local, 'projects', 'projB', 'env.cmd'), 'utf8'),
-        'LIVE_B=b-env',
-        "sbx-shell projB opens with B's environment",
+      t.check(
+        fs.existsSync(path.join(local, 'projects', 'projB', 'shell.cmd')) &&
+          fs.readFileSync(path.join(local, 'projects', 'projB', 'env.cmd'), 'utf8').includes('LIVE_B=b-env') &&
+          fs.existsSync(path.join(local, 'bin', 'sbx-shell.cmd')),
+        "sbx-shell is on the sandbox's PATH, and projB has a shell script that opens with B's environment",
       );
-      t.check(fs.existsSync(path.join(local, 'bin', 'sbx-shell.cmd')), "sbx-shell is on the sandbox's PATH");
     } finally {
       for (const v of viewers) v.close();
       // End every agent: a fresh viewer types exit into each still-running session.
