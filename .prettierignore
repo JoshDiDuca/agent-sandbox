@@ -1,7 +1,8 @@
-dist/
-node_modules/
-schemas/
-sandbox/
-hooks/
+/dist/
+/node_modules/
+/schemas/
+/sandbox/
+/native/
+/hooks/
 *.md
 *.json

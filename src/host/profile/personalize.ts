@@ -2,7 +2,11 @@
 // regional formats) from HKCU as a .reg file the sandbox imports at logon. Only an allow-list of values is read.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureDir, errMsg, fileExists, isWin, runPowerShell } from '../../core/util/index.js';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { ensureDir, errMsg, fileExists, isWin } from '../../core/util/index.js';
+import { SYSTEM } from '../../shared/system.js';
+import { nativeScript } from '../native.js';
 import { toRegFile, type RegValue } from './reg-file.js';
 
 /** The HKCU values captured, by key. */
@@ -82,34 +86,31 @@ const VALUES = {
   'Control Panel\\Accessibility\\StickyKeys': ['Flags'],
 } as const satisfies Record<string, readonly string[]>;
 
-function captureScript(spec: Readonly<Record<string, readonly string[]>>): string {
-  return [
-    '$ErrorActionPreference = "SilentlyContinue"',
-    "$spec = '" + JSON.stringify(spec).replace(/'/g, "''") + "' | ConvertFrom-Json",
-    '$out = @()',
-    'foreach ($p in $spec.PSObject.Properties) {',
-    '  $key = Get-Item -LiteralPath ("HKCU:\\" + $p.Name)',
-    '  if (-not $key) { continue }',
-    '  foreach ($name in $p.Value) {',
-    '    $raw = $key.GetValue($name, $null, "DoNotExpandEnvironmentNames")',
-    '    if ($null -eq $raw) { continue }',
-    '    $kind = $key.GetValueKind($name).ToString()',
-    '    if ($kind -eq "Binary") { $raw = [Convert]::ToBase64String([byte[]]$raw) }',
-    '    $out += [pscustomobject]@{ key = $p.Name; name = $name; kind = $kind; value = $raw }',
-    '  }',
-    '}',
-    '$wall = (Get-ItemProperty -LiteralPath "HKCU:\\Control Panel\\Desktop").WallPaper',
-    '[pscustomobject]@{ values = $out; wallpaper = $wall } | ConvertTo-Json -Depth 5 -Compress',
-  ].join('\n');
+/** native\scripts\capture-look.ps1 with the spec in a temp file: the values found and the wallpaper path, as JSON. */
+function readLook(spec: Readonly<Record<string, readonly string[]>>): { status: number; stdout: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sbx-look-'));
+  try {
+    const file = path.join(dir, 'spec.json');
+    fs.writeFileSync(file, JSON.stringify(spec), 'utf8');
+    const result = spawnSync(SYSTEM.powershell(), nativeScript('capture-look.ps1', ['-SpecFile', file]), {
+      stdio: ['ignore', 'pipe', 'inherit'],
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (result.error) throw result.error;
+    return { status: result.status ?? 1, stdout: result.stdout ?? '' };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Writes personalize.reg (+ the wallpaper image) into `<launch>\personalize`. Returns a short summary. */
 export function capturePersonalization(launchPath: string): string {
   if (!isWin) return 'skipped (not Windows)';
   try {
-    const { status, stdout } = runPowerShell(captureScript(VALUES), true);
+    const { status, stdout } = readLook(VALUES);
     if (status !== 0) return 'skipped (registry read failed)';
-    // runPowerShell has PowerShell write UTF-8 (non-ASCII date formats and wallpaper paths survive); a BOM is allowed.
+    // The script writes UTF-8 (non-ASCII date formats and wallpaper paths survive); a BOM is allowed.
     const parsed = JSON.parse(stdout.replace(/^\uFEFF/, '').trim()) as {
       values: RegValue[] | RegValue | null;
       wallpaper?: string;

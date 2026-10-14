@@ -17,7 +17,17 @@ export function nativeFile(...parts: string[]): string {
 
 /** powershell.exe arguments that run native\scripts\<name> (a .ps1 shipped next to dist) with `args`. */
 export function nativeScript(name: string, args: readonly string[] = []): string[] {
-  return ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', nativeFile('scripts', name), ...args];
+  return [
+    '-NoProfile',
+    '-NonInteractive',
+    '-OutputFormat',
+    'Text',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    nativeFile('scripts', name),
+    ...args,
+  ];
 }
 
 /**

@@ -5,7 +5,7 @@ import { refuseInSelfTest } from '../test-guard.js';
 import { commandsDir, realAgent } from '../agent-commands/index.js';
 import { ensureDir, fail } from '../../core/util/index.js';
 
-export const hostClaude = (storageRoot: string, personal: boolean, args: string[]): number => {
+export function hostClaude(storageRoot: string, personal: boolean, args: string[]): number {
   refuseInSelfTest('run Claude Code on this PC');
   // Never this tool's own forwarding command (agentCommands), which would start a sandbox instead.
   const exe = realAgent('claude', commandsDir(storageRoot));
@@ -28,4 +28,4 @@ export const hostClaude = (storageRoot: string, personal: boolean, args: string[
     : spawnSync(exe, args, { stdio: 'inherit', env });
   if (result.error) throw result.error;
   return result.status ?? 1;
-};
+}

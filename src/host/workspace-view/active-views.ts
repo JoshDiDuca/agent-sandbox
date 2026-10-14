@@ -16,8 +16,8 @@ const ActiveViewSchema = z.object({
 const activeFile = (storageRoot: string, dataPath: string): JsonFile<z.output<typeof ActiveViewSchema>[]> =>
   new JsonFile(z.array(ActiveViewSchema).max(64), hostStateFile(storageRoot, dataPath, '-views.json'));
 
-export const saveActiveViews = (storageRoot: string, dataPath: string, views: ViewOptions[]): void =>
-  activeFile(storageRoot, dataPath).write(
+export function saveActiveViews(storageRoot: string, dataPath: string, views: ViewOptions[]): void {
+  return activeFile(storageRoot, dataPath).write(
     views.map((v) => ({
       host: v.host,
       view: v.view,
@@ -27,6 +27,8 @@ export const saveActiveViews = (storageRoot: string, dataPath: string, views: Vi
       guestGitDir: v.guestGitDir ?? null,
     })),
   );
+}
 
-export const readActiveViews = (storageRoot: string, dataPath: string): ViewOptions[] =>
-  activeFile(storageRoot, dataPath).read() ?? [];
+export function readActiveViews(storageRoot: string, dataPath: string): ViewOptions[] {
+  return activeFile(storageRoot, dataPath).read() ?? [];
+}

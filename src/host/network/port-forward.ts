@@ -17,21 +17,24 @@ const forwardsFile = (storageRoot: string, dataPath: string): JsonFile<PortForwa
   new JsonFile(ForwardsSchema, hostStateFile(storageRoot, dataPath, '-forwards.json'));
 
 /** Host-only: the forwards of the running sandbox (written at launch, read by the watcher). */
-export const saveForwards = (storageRoot: string, dataPath: string, forwards: PortForward[]): void =>
-  forwardsFile(storageRoot, dataPath).write(forwards);
-export const readForwards = (storageRoot: string, dataPath: string): PortForward[] =>
-  forwardsFile(storageRoot, dataPath).read() ?? [];
+export function saveForwards(storageRoot: string, dataPath: string, forwards: PortForward[]): void {
+  return forwardsFile(storageRoot, dataPath).write(forwards);
+}
+export function readForwards(storageRoot: string, dataPath: string): PortForward[] {
+  return forwardsFile(storageRoot, dataPath).read() ?? [];
+}
 
 /** The sandbox's address on this PC's Hyper-V network, from its status (null until it has one). */
-export const sandboxAddress = (dataPath: string): string | null =>
-  new RunDir(dataPath).readSandboxStatus()?.addresses?.find((a: string) => isSandboxAddress(a)) ?? null;
+export function sandboxAddress(dataPath: string): string | null {
+  return new RunDir(dataPath).readSandboxStatus()?.addresses?.find((a: string) => isSandboxAddress(a)) ?? null;
+}
 
 /** Starts one listener per forward; returns a function that stops them. */
-export const startPortForwards = (
+export function startPortForwards(
   forwards: PortForward[],
   address: () => string | null,
   note: (message: string) => void = () => undefined,
-): (() => void) => {
+): () => void {
   const servers = forwards.map((f, i) => {
     const server = net.createServer((client) => {
       const ip = address();
@@ -56,4 +59,4 @@ export const startPortForwards = (
     return server;
   });
   return () => servers.forEach((s) => s.close());
-};
+}

@@ -37,7 +37,7 @@ export interface MapperOptions {
 }
 
 /** Roots first (instant), then `wsb share` where the Windows Sandbox CLI exists, else NeedsRestart. */
-export const projectMapper = (o: MapperOptions): ProjectMapper => {
+export function projectMapper(o: MapperOptions): ProjectMapper {
   const store = new ProjectRegistry(o.storageRoot);
   const registry = (): Registry =>
     store.read() ??
@@ -108,4 +108,4 @@ export const projectMapper = (o: MapperOptions): ProjectMapper => {
       store.save({ ...reg, projects: reg.projects.filter((p) => p !== entry) });
     },
   };
-};
+}

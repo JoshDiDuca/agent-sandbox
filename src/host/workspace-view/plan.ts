@@ -4,7 +4,9 @@ import type { Config } from '../../core/types.js';
 import { WorkspaceView, type ViewOptions } from './view.js';
 
 /** The project's .git as the sandbox sees it: next to the workspace (C:\Workspace\app -> C:\Workspace\app.git). */
-export const guestGitDir = (guestWorkspace: string): string => guestWorkspace.replace(/[\\/]+$/, '') + '.git';
+export function guestGitDir(guestWorkspace: string): string {
+  return guestWorkspace.replace(/[\\/]+$/, '') + '.git';
+}
 
 export interface ViewPlan {
   options: ViewOptions;
@@ -16,7 +18,7 @@ export interface ViewPlan {
  * The view for a launch, or null when the folder itself is mapped: workspaceFilter off, or a git worktree (its .git is
  * a file pointing elsewhere, which a view cannot follow; then the folder is mapped as before and a note says so).
  */
-export const planView = (config: Config, storageRoot: string, workspaceHost: string): ViewPlan | null => {
+export function planView(config: Config, storageRoot: string, workspaceHost: string): ViewPlan | null {
   if (!config.workspaceFilter.enabled) return null;
   const git = path.join(workspaceHost, '.git');
   let gitIsDir = false;
@@ -38,10 +40,10 @@ export const planView = (config: Config, storageRoot: string, workspaceHost: str
     },
     hostGit,
   };
-};
+}
 
 /** Why a filtered launch maps the folder itself after all (for the launch notes). */
-export const viewSkipped = (config: Config, workspaceHost: string): string | null => {
+export function viewSkipped(config: Config, workspaceHost: string): string | null {
   if (!config.workspaceFilter.enabled) return null;
   try {
     if (fs.lstatSync(path.join(workspaceHost, '.git')).isFile())
@@ -54,4 +56,4 @@ export const viewSkipped = (config: Config, workspaceHost: string): string | nul
     /* fine */
   }
   return null;
-};
+}

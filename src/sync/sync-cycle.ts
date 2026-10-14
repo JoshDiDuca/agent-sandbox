@@ -25,7 +25,7 @@ const toPaths = (state: SyncState, dataPath: string): SyncPaths => {
  * A project registered while the sandbox runs: its history comes in now (the sandbox's copy only gains files), and
  * from now on syncs back to its own folder on this PC.
  */
-export const syncProjectIn = (dataPath: string, project: { hostWorkspace: string; guestWorkspace: string }): number => {
+export function syncProjectIn(dataPath: string, project: { hostWorkspace: string; guestWorkspace: string }): number {
   const state = readSyncState(dataPath);
   if (!state) return 0;
   const projects = [
@@ -38,7 +38,7 @@ export const syncProjectIn = (dataPath: string, project: { hostWorkspace: string
   return state.syncHistory
     ? syncHistoryIn(toPaths(next, dataPath), { promptHistory: false, scope: state.historyScope })
     : 0;
-};
+}
 
 const memSync = (dataPath: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
   assertNoLinks(dataPath, guestMem(dataPath));
@@ -51,7 +51,7 @@ export interface SyncSummary {
 }
 
 /** Before launch: finish syncing the previous run out, then bring this PC's history (and claude-mem) in. */
-export const syncBeforeLaunch = (config: Config, dataPath: string, hostWorkspace: string): SyncSummary => {
+export function syncBeforeLaunch(config: Config, dataPath: string, hostWorkspace: string): SyncSummary {
   const profile = config.claudeProfile;
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!config.storage.persistAgentState) return summary;
@@ -75,10 +75,10 @@ export const syncBeforeLaunch = (config: Config, dataPath: string, hostWorkspace
   }
   writeSyncState(dataPath, state);
   return summary;
-};
+}
 
 /** Syncs the sandbox's history (and, when `final`, claude-mem) back to this PC, as configured for the last launch. */
-export const syncBack = (dataPath: string, final: boolean): SyncSummary => {
+export function syncBack(dataPath: string, final: boolean): SyncSummary {
   const state = readSyncState(dataPath);
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!state) return summary;
@@ -86,4 +86,4 @@ export const syncBack = (dataPath: string, final: boolean): SyncSummary => {
   if (final && state.syncClaudeMem && state.syncClaudeMemBack) summary.claudeMem = memSync(dataPath, state, 'out');
   writeSyncState(dataPath, state);
   return summary;
-};
+}

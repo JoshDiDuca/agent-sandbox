@@ -31,10 +31,12 @@ const settingsFile = (storageRoot: string, dataPath: string): JsonFile<AuditSett
   new JsonFile(AuditSettingsSchema, hostStateFile(storageRoot, dataPath, '-audit.json'));
 
 /** Host-only: the audit settings of the running sandbox (written at launch, read by the watcher). */
-export const saveAuditSettings = (storageRoot: string, dataPath: string, settings: AuditSettings): void =>
-  settingsFile(storageRoot, dataPath).write(settings);
-export const readAuditSettings = (storageRoot: string, dataPath: string): AuditSettings | null =>
-  settingsFile(storageRoot, dataPath).read();
+export function saveAuditSettings(storageRoot: string, dataPath: string, settings: AuditSettings): void {
+  return settingsFile(storageRoot, dataPath).write(settings);
+}
+export function readAuditSettings(storageRoot: string, dataPath: string): AuditSettings | null {
+  return settingsFile(storageRoot, dataPath).read();
+}
 
 export class AuditCollector {
   private readonly log: AuditLog;

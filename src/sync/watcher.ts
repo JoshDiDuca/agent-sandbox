@@ -8,8 +8,7 @@ import { refuseInSelfTest } from '../host/test-guard.js';
 import { errMsg, sleep } from '../core/util/index.js';
 import { RepoGuardStore } from '../host/guard/index.js';
 import { isSandboxRunning } from '../host/sandbox/index.js';
-import { readActiveViews } from '../host/workspace-view/index.js';
-import { WorkspaceView } from '../host/workspace-view/index.js';
+import { readActiveViews, WorkspaceView, type ViewOptions } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/network/index.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
@@ -19,17 +18,30 @@ import { storageOf } from '../host/storage/index.js';
 import { syncBack } from './sync-cycle.js';
 
 const WATCH_INTERVAL_MS = 60 * 1000;
-
-const hostRunDir = (dataPath: string): string => path.join(storageOf(dataPath), 'run');
+/** The first sync waits this long: the sandbox is still booting. */
+const FIRST_SYNC_MS = 30000;
+const AUDIT_FLUSH_MS = 10000;
+/** After the sandbox closed: a moment for its last writes to land before the final sync. */
+const SETTLE_MS = 3000;
 /** The longest the watcher may take after the sandbox closed (final syncs) before it stops anyway. */
 const END_DEADLINE_MS = 3 * 60 * 1000;
+/** Measuring the data folder for storage.warnDataGb may take this long at most. */
+const SIZE_BUDGET_MS = 20000;
 
-const watcherPidFile = (dataPath: string): string =>
-  path.join(hostRunDir(dataPath), 'watcher-' + path.basename(dataPath) + '.pid');
-const watcherLog = (dataPath: string): string =>
-  path.join(storageOf(dataPath), 'logs', 'host-sync-' + path.basename(dataPath) + '.log');
-// Signal 0 only asks whether the process exists. pid 0 would mean "my own process group", so it never counts.
-const alive = (pid: number): boolean => {
+function hostRunDir(dataPath: string): string {
+  return path.join(storageOf(dataPath), 'run');
+}
+
+function watcherPidFile(dataPath: string): string {
+  return path.join(hostRunDir(dataPath), 'watcher-' + path.basename(dataPath) + '.pid');
+}
+
+function watcherLog(dataPath: string): string {
+  return path.join(storageOf(dataPath), 'logs', 'host-sync-' + path.basename(dataPath) + '.log');
+}
+
+/** Signal 0 only asks whether the process exists. pid 0 would mean "my own process group", so it never counts. */
+function alive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -37,131 +49,177 @@ const alive = (pid: number): boolean => {
   } catch {
     return false;
   }
-};
+}
 
-export const watcherRunning = (dataPath: string): boolean => {
+export function watcherRunning(dataPath: string): boolean {
   try {
     return alive(Number(fs.readFileSync(watcherPidFile(dataPath), 'utf8')));
   } catch {
     return false;
   }
-};
+}
 
-/** Body of the detached watcher process (`agent-sandbox _watch`). */
-export const watch = async (dataPath: string): Promise<void> => {
-  refuseInSelfTest('start the background sync');
-  if (watcherRunning(dataPath)) return;
-  fs.mkdirSync(hostRunDir(dataPath), { recursive: true });
-  fs.mkdirSync(path.dirname(watcherLog(dataPath)), { recursive: true });
-  writeFileAtomic(watcherPidFile(dataPath), String(process.pid));
-  const note = (message: string): void => {
+/**
+ * The background watcher of one data folder: while the sandbox runs it syncs history back every minute, guards the
+ * projects' git folders, keeps filtered workspaces in step, forwards ports, marks downloaded files, records the audit
+ * and keeps this PC awake; when the sandbox closes it records how it ended and syncs once more.
+ */
+export class Watcher {
+  private readonly storageRoot: string;
+  private readonly life: LifeRecord;
+  private audit: AuditCollector | null = null;
+  private auditTimer: NodeJS.Timeout | null = null;
+  private awake: KeepAwake | null = null;
+  private views: ViewOptions[] = [];
+  private stops: (() => void)[] = [];
+
+  constructor(private readonly dataPath: string) {
+    this.storageRoot = storageOf(dataPath);
+    this.life = new LifeRecord(this.storageRoot, dataPath);
+  }
+
+  /** Runs until the sandbox has closed and the final sync is done (or the end deadline passed). */
+  async run(): Promise<void> {
+    refuseInSelfTest('start the background sync');
+    if (watcherRunning(this.dataPath)) return;
+    fs.mkdirSync(hostRunDir(this.dataPath), { recursive: true });
+    fs.mkdirSync(path.dirname(watcherLog(this.dataPath)), { recursive: true });
+    writeFileAtomic(watcherPidFile(this.dataPath), String(process.pid));
+    this.start();
     try {
-      fs.appendFileSync(watcherLog(dataPath), new Date().toISOString() + ' ' + message + '\n');
+      await sleep(FIRST_SYNC_MS);
+      while (isSandboxRunning()) {
+        this.life.beat();
+        this.sync(false);
+        await sleep(WATCH_INTERVAL_MS);
+      }
+      this.recordEnd();
+      await sleep(SETTLE_MS);
+      // The sandbox is gone: this process ends within minutes whatever happens below (it must never outlive the
+      // sandbox).
+      setTimeout(() => {
+        this.note('final work took too long; stopped.');
+        fs.rmSync(watcherPidFile(this.dataPath), { force: true });
+        process.exit(0);
+      }, END_DEADLINE_MS).unref();
+      this.sync(true);
+    } finally {
+      this.stop();
+    }
+  }
+
+  private note(message: string): void {
+    try {
+      fs.appendFileSync(watcherLog(this.dataPath), new Date().toISOString() + ' ' + message + '\n');
     } catch {
       /* ignore */
     }
-  };
-  const sync = (final: boolean): void => {
+  }
+
+  /** Everything that runs alongside the sandbox, in this order. */
+  private start(): void {
+    const { dataPath, storageRoot } = this;
+    // audit.enabled: programs, files, sessions and guard findings into the host-only audit log.
+    const auditSettings = readAuditSettings(storageRoot, dataPath);
+    const audit = auditSettings?.enabled ? new AuditCollector(dataPath, storageRoot, auditSettings) : null;
+    this.audit = audit;
+    audit?.start();
+    this.auditTimer = audit
+      ? setInterval(() => {
+          try {
+            audit.flush();
+          } catch (e) {
+            this.note('audit: ' + errMsg(e));
+          }
+        }, AUDIT_FLUSH_MS)
+      : null;
+    // storage.markSandboxFiles: programs and scripts that appear in the projects get the "from the internet" mark.
+    const stopMarking = watchAndMark(readMarkedProjects(storageRoot, dataPath), (m) => this.note(m));
+    // network.forwardPorts: localhost on this PC reaches servers in the sandbox while it runs.
+    const stopForwards = startPortForwards(
+      readForwards(storageRoot, dataPath),
+      () => sandboxAddress(dataPath),
+      (m) => this.note('port forward: ' + m),
+    );
+    // workspaceFilter: each filtered project is kept in step with its view from now until the sandbox closes.
+    this.views = readActiveViews(storageRoot, dataPath);
+    const viewStops = this.views.flatMap((v) => {
+      try {
+        return [new WorkspaceView({ ...v, note: (m) => this.note('workspace ' + v.host + ': ' + m) }).watch()];
+      } catch (e) {
+        this.note('workspace ' + v.host + ': could not watch: ' + errMsg(e));
+        return [];
+      }
+    });
+    this.stops = [...viewStops, stopForwards, stopMarking];
+    // sandbox.keepAwake, and the life record that tells the next launch how this run ended (host/life).
+    this.awake = this.life.read()?.keepAwake ? KeepAwake.start(process.pid, storageRoot) : null;
+  }
+
+  /** The repo guard, then history and (at the end) claude-mem back to this PC. */
+  private sync(final: boolean): void {
     try {
-      for (const finding of new RepoGuardStore(dataPath).check()) {
-        note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail);
-        audit?.guard(finding.kind + ': ' + finding.detail);
+      for (const finding of new RepoGuardStore(this.dataPath).check()) {
+        this.note('SECURITY: neutralised a git ' + finding.kind + ' added inside the sandbox: ' + finding.detail);
+        this.audit?.guard(finding.kind + ': ' + finding.detail);
       }
     } catch (e) {
-      note('repo guard failed: ' + errMsg(e));
+      this.note('repo guard failed: ' + errMsg(e));
     }
     try {
-      const s = syncBack(dataPath, final);
+      const s = syncBack(this.dataPath, final);
       if (s.history || final)
-        note((final ? 'sandbox closed; final sync: ' : '') + 'history ' + s.history + ', claude-mem ' + s.claudeMem);
+        this.note(
+          (final ? 'sandbox closed; final sync: ' : '') + 'history ' + s.history + ', claude-mem ' + s.claudeMem,
+        );
     } catch (e) {
-      note('sync failed: ' + errMsg(e));
+      this.note('sync failed: ' + errMsg(e));
     }
-  };
-  // workspaceFilter: each filtered project is kept in step with its view from now until the sandbox closes.
-  // audit.enabled: programs, files, sessions and guard findings into the host-only audit log.
-  const auditSettings = readAuditSettings(storageOf(dataPath), dataPath);
-  const audit = auditSettings?.enabled ? new AuditCollector(dataPath, storageOf(dataPath), auditSettings) : null;
-  audit?.start();
-  const auditTimer = audit
-    ? setInterval(() => {
-        try {
-          audit.flush();
-        } catch (e) {
-          note('audit: ' + errMsg(e));
-        }
-      }, 10000)
-    : null;
-  // storage.markSandboxFiles: programs and scripts that appear in the projects get the "from the internet" mark.
-  const stopMarking = watchAndMark(readMarkedProjects(storageOf(dataPath), dataPath), (m) => note(m));
-  // network.forwardPorts: localhost on this PC reaches servers in the sandbox while it runs.
-  const stopForwards = startPortForwards(
-    readForwards(storageOf(dataPath), dataPath),
-    () => sandboxAddress(dataPath),
-    (m) => note('port forward: ' + m),
-  );
-  const views = readActiveViews(storageOf(dataPath), dataPath);
-  const stops = views.flatMap((v) => {
+  }
+
+  /** How the sandbox ended (and a crash report when it crashed), for the next launch. */
+  private recordEnd(): void {
     try {
-      return [new WorkspaceView({ ...v, note: (m) => note('workspace ' + v.host + ': ' + m) }).watch()];
+      const last = this.life.read();
+      const cause = last ? causeSince(last.lastSeen, this.storageRoot) : null;
+      const report = last && cause ? saveCrashReport(this.storageRoot, this.dataPath, last.lastSeen) : null;
+      this.life.end(cause, new Date(), report);
+      if (cause) this.note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));
     } catch (e) {
-      note('workspace ' + v.host + ': could not watch: ' + errMsg(e));
-      return [];
+      this.note('could not record how the sandbox ended: ' + errMsg(e));
     }
-  });
-  // sandbox.keepAwake, and the life record that tells the next launch how this run ended (host/stops.ts).
-  const life = new LifeRecord(storageOf(dataPath), dataPath);
-  const awake = life.read()?.keepAwake ? KeepAwake.start(process.pid, storageOf(dataPath)) : null;
-  try {
-    await sleep(30000);
-    while (isSandboxRunning()) {
-      life.beat();
-      sync(false);
-      await sleep(WATCH_INTERVAL_MS);
-    }
+  }
+
+  /** Stops what start() started, syncs the filtered workspaces a last time and records the data folder's size. */
+  private stop(): void {
+    this.awake?.stop();
+    this.stops.forEach((stop) => stop());
+    if (this.auditTimer) clearInterval(this.auditTimer);
     try {
-      const last = life.read();
-      const cause = last ? causeSince(last.lastSeen, storageOf(dataPath)) : null;
-      const report = last && cause ? saveCrashReport(storageOf(dataPath), dataPath, last.lastSeen) : null;
-      life.end(cause, new Date(), report);
-      if (cause) note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));
+      this.audit?.stop();
     } catch (e) {
-      note('could not record how the sandbox ended: ' + errMsg(e));
+      this.note('audit: ' + errMsg(e));
     }
-    await sleep(3000);
-    // The sandbox is gone: this process ends within minutes whatever happens below (it must never outlive the sandbox).
-    setTimeout(() => {
-      note('final work took too long; stopped.');
-      fs.rmSync(watcherPidFile(dataPath), { force: true });
-      process.exit(0);
-    }, END_DEADLINE_MS).unref();
-    sync(true);
-  } finally {
-    awake?.stop();
-    stops.forEach((stop) => stop());
-    stopForwards();
-    stopMarking();
-    if (auditTimer) clearInterval(auditTimer);
-    try {
-      audit?.stop();
-    } catch (e) {
-      note('audit: ' + errMsg(e));
-    }
-    for (const v of views) {
+    for (const v of this.views) {
       try {
         const s = new WorkspaceView(v).syncAll();
-        note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in');
+        this.note('workspace ' + v.host + ': final sync ' + s.toHost + ' out, ' + s.toView + ' in');
       } catch (e) {
-        note('workspace ' + v.host + ': final sync failed: ' + errMsg(e));
+        this.note('workspace ' + v.host + ': final sync failed: ' + errMsg(e));
       }
     }
     // For the next launch's storage.warnDataGb, only when it can be measured quickly (a big data folder takes minutes).
     try {
-      const bytes = sizeWithin(dataPath, 20000);
-      if (bytes !== null) saveDataSize(storageOf(dataPath), dataPath, bytes);
+      const bytes = sizeWithin(this.dataPath, SIZE_BUDGET_MS);
+      if (bytes !== null) saveDataSize(this.storageRoot, this.dataPath, bytes);
     } catch {
       /* best effort */
     }
-    fs.rmSync(watcherPidFile(dataPath), { force: true });
+    fs.rmSync(watcherPidFile(this.dataPath), { force: true });
   }
-};
+}
+
+/** Body of the detached watcher process (`agent-sandbox _watch`). */
+export function watch(dataPath: string): Promise<void> {
+  return new Watcher(dataPath).run();
+}

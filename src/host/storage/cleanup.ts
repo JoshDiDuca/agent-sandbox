@@ -38,12 +38,13 @@ const children = (dir: string): string[] =>
 
 /**
  * Deletes, under the storage root:
- *  - launch folders older than `launchDays` (a launch folder is only used by the sandbox it started; `keep` protects the running one)
+ *  - launch folders older than `launchDays` (a launch folder is only used by the sandbox it started; `keep` protects
+ *    the running one)
  *  - sandbox logs older than `logDays`
  *  - interrupted downloads/copies (*.staging-*, *.incoming, *.tmp) older than a day
  *  - claude-mem conflict copies older than `conflictDays`
  */
-export const pruneStorage = (storageRoot: string, options: Partial<PruneOptions> = {}): PruneResult => {
+export function pruneStorage(storageRoot: string, options: Partial<PruneOptions> = {}): PruneResult {
   const o = { ...DEFAULT_PRUNE, ...options };
   const now = o.now ?? Date.now();
   const result: PruneResult = { launches: 0, logs: 0, leftovers: 0, bytes: 0 };
@@ -75,16 +76,17 @@ export const pruneStorage = (storageRoot: string, options: Partial<PruneOptions>
     }
   }
   return result;
-};
+}
 
-export const describePrune = (r: PruneResult): string =>
-  r.launches + r.logs + r.leftovers === 0
+export function describePrune(r: PruneResult): string {
+  return r.launches + r.logs + r.leftovers === 0
     ? 'nothing to clean'
     : _.compact([
         r.launches && r.launches + ' launch folder(s)',
         r.logs && r.logs + ' log(s)',
         r.leftovers && r.leftovers + ' leftover(s)',
       ]).join(', ') +
-      ' removed (' +
-      Math.round(r.bytes / 1048576) +
-      ' MB)';
+        ' removed (' +
+        Math.round(r.bytes / 1048576) +
+        ' MB)';
+}

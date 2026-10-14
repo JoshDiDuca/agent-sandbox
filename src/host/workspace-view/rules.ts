@@ -23,7 +23,9 @@ export class IgnoreRules {
   private readonly extra: Ignore;
   private readonly forced: Ignore;
 
-  /** `root`: the project folder on this PC (its .gitignore files are the rules); `exclude` / `include`: your patterns. */
+  /**
+   * `root`: the project folder on this PC (its .gitignore files are the rules); `exclude` / `include`: your patterns.
+   */
   constructor(
     private readonly root: string,
     exclude: string[] = [],

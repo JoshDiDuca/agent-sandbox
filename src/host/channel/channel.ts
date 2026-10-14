@@ -65,7 +65,9 @@ export class SandboxChannel {
     }
   }
 
-  /** Waits until the sandbox finished provisioning, reporting each boot step (onStatus: every status read, validated). */
+  /**
+   * Waits until the sandbox finished provisioning, reporting each boot step (onStatus: every status read, validated).
+   */
   waitForReady(
     launchId: string | null,
     progress: Progress = (m) => printLine('  [sandbox] ' + m),

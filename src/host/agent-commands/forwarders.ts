@@ -4,8 +4,8 @@ import type { AgentCommand } from './commands.js';
 export const MARKER = 'windows-development-sandbox agent command';
 
 /** The .cmd file for one agent (cmd, PowerShell and Windows Terminal all run it). */
-export const forwardingCmd = (a: AgentCommand, node: string, entry: string): string =>
-  [
+export function forwardingCmd(a: AgentCommand, node: string, entry: string): string {
+  return [
     '@echo off',
     'rem ' + MARKER + ' (Beta). Turn off: sandbox agent-commands off. Run the real one: set SANDBOX_AGENT_DIRECT=1',
     'if "%SANDBOX_AGENT_DIRECT%"=="1" goto direct',
@@ -15,9 +15,10 @@ export const forwardingCmd = (a: AgentCommand, node: string, entry: string): str
     'call "' + a.real + '" %*',
     '',
   ].join('\r\n');
+}
 
 /** The same for Git Bash, which looks for a file without an extension. */
-export const forwardingSh = (a: AgentCommand, node: string, entry: string): string => {
+export function forwardingSh(a: AgentCommand, node: string, entry: string): string {
   const posix = (p: string): string =>
     p.replace(/^([A-Za-z]):/, (_m, d: string) => '/' + d.toLowerCase()).replace(/\\/g, '/');
   const q = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
@@ -34,4 +35,4 @@ export const forwardingSh = (a: AgentCommand, node: string, entry: string): stri
       ' --headless --terminal -- "$@"',
     '',
   ].join('\n');
-};
+}

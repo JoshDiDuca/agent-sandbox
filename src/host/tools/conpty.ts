@@ -9,7 +9,9 @@ import { assertNoLinks, errMsg, fileExists } from '../../core/util/index.js';
 // ---- conpty.dll -----------------------------------------------------------------------------------------------------
 
 /** Where the sandbox finds conpty.dll + OpenConsole.exe (guest/ptyhost.ts points ptyhost at it). */
-export const conptyDir = (dataPath: string): string => path.join(dataPath, 'tools', 'conpty');
+export function conptyDir(dataPath: string): string {
+  return path.join(dataPath, 'tools', 'conpty');
+}
 const NUGET_CONPTY = 'https://api.nuget.org/v3-flatcontainer/microsoft.windows.console.conpty/';
 const NugetVersionsSchema = z.object({ versions: z.array(z.string()) });
 const NugetLeafSchema = z.object({ catalogEntry: z.string().url() });
@@ -20,7 +22,7 @@ const NugetCatalogSchema = z.object({ packageHash: z.string(), packageHashAlgori
  * same one Windows Terminal and VS Code use), downloaded once and verified against the SHA-512 NuGet publishes. Agent
  * sessions use it instead of the one built into Windows, which re-renders the screen and garbles it after resizes.
  */
-export const ensureConpty = async (dataPath: string, refresh: boolean): Promise<string> => {
+export async function ensureConpty(dataPath: string, refresh: boolean): Promise<string> {
   const dir = conptyDir(dataPath);
   assertTestWritable(dir);
   assertNoLinks(dataPath, dir);
@@ -62,4 +64,4 @@ export const ensureConpty = async (dataPath: string, refresh: boolean): Promise<
   } finally {
     safeRemove(work, path.dirname(work));
   }
-};
+}

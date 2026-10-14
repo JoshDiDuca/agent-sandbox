@@ -8,8 +8,12 @@ import { assertTestWritable } from '../test-guard.js';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../../core/util/index.js';
 
-export const terminalDir = (dataPath: string): string => path.join(dataPath, 'tools', 'terminal');
-export const terminalExe = (dataPath: string): string => path.join(terminalDir(dataPath), 'WindowsTerminal.exe');
+export function terminalDir(dataPath: string): string {
+  return path.join(dataPath, 'tools', 'terminal');
+}
+export function terminalExe(dataPath: string): string {
+  return path.join(terminalDir(dataPath), 'WindowsTerminal.exe');
+}
 
 /**
  * Sandbox-friendly defaults; only written when there is no settings.json yet (first download), so edits made inside
@@ -47,10 +51,10 @@ const TerminalSettingsSchema = z.looseObject({
  * settings.json with the "PowerShell 7" profile shown when `visible`, else hidden (never deleted: a user's tweaks to it
  * survive turning pwsh off and on). Pure: returns null when nothing changes.
  */
-export const withPwshProfile = (
+export function withPwshProfile(
   settings: z.output<typeof TerminalSettingsSchema>,
   visible: boolean,
-): z.output<typeof TerminalSettingsSchema> | null => {
+): z.output<typeof TerminalSettingsSchema> | null {
   const profiles = Array.isArray(settings.profiles) ? { list: settings.profiles } : { ...settings.profiles };
   const list = [...(profiles.list ?? [])];
   const at = list.findIndex((p) => p.guid?.toLowerCase() === PWSH_PROFILE_GUID);
@@ -66,14 +70,14 @@ export const withPwshProfile = (
   else if ((list[at].hidden === true) === !visible) return null;
   else list[at] = { ...list[at], hidden: !visible };
   return { ...settings, profiles: { ...profiles, list } };
-};
+}
 
 /**
  * Shows the PowerShell 7 profile once pwsh is installed in this data folder (and `allowed`, i.e. toolchains.pwsh is
  * not off), hides it otherwise. settings.json is written by the sandbox too: read with a size cap, through no links,
  * shape-checked, only rewritten when the profile changes; a file that does not parse is left alone.
  */
-export const syncPwshProfile = (dataPath: string, allowed: boolean): void => {
+export function syncPwshProfile(dataPath: string, allowed: boolean): void {
   const file = path.join(terminalDir(dataPath), 'settings', 'settings.json');
   assertTestWritable(file);
   assertNoLinks(dataPath, file);
@@ -89,13 +93,13 @@ export const syncPwshProfile = (dataPath: string, allowed: boolean): void => {
   }
   const next = withPwshProfile(parsed, visible);
   if (next) writeJson(file, next);
-};
+}
 
-export const ensureTerminal = async (
+export async function ensureTerminal(
   dataPath: string,
   refresh: boolean,
   options: { pwsh?: boolean } = {},
-): Promise<{ exe: string | null; message: string }> => {
+): Promise<{ exe: string | null; message: string }> {
   const result = await installTerminal(dataPath, refresh);
   if (result.exe) {
     // The profile is a nicety: a settings problem never costs the sandbox its terminal.
@@ -106,7 +110,7 @@ export const ensureTerminal = async (
     }
   }
   return result;
-};
+}
 
 const installTerminal = async (
   dataPath: string,

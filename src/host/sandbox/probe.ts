@@ -28,7 +28,7 @@ const findGitRoot = (): string | null => {
 };
 
 /** What can be copied from this PC instead of downloaded inside the sandbox. */
-export const probeHost = (config: Config, harnessName: string): HostProbe => {
+export function probeHost(config: Config, harnessName: string): HostProbe {
   const nodeDir = isWin ? path.dirname(process.execPath) : null;
   const copy = config.provisioning.copyFromHost;
   const nvmHome = process.env.NVM_HOME;
@@ -47,4 +47,4 @@ export const probeHost = (config: Config, harnessName: string): HostProbe => {
     volta: Boolean(process.env.VOLTA_HOME),
     pyenv: Boolean(process.env.PYENV ?? process.env.PYENV_ROOT ?? process.env.PYENV_HOME),
   };
-};
+}

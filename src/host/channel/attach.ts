@@ -21,7 +21,7 @@ const ipToInt = (ip: string): number => ip.split('.').reduce((n: number, part: s
  * True only for IPv4 addresses inside the subnet of one of this PC's Hyper-V adapters ("vEthernet ..."), which is
  * where Windows Sandbox lives. Stops a compromised sandbox from pointing the host (and your keystrokes) anywhere else.
  */
-export const isSandboxAddress = (ip: string, interfaces = os.networkInterfaces()): boolean => {
+export function isSandboxAddress(ip: string, interfaces = os.networkInterfaces()): boolean {
   if (!net.isIPv4(ip)) return false;
   // WSL's adapter is a Hyper-V adapter too, but no sandbox lives there: keystrokes must never go to a WSL VM.
   return Object.entries(interfaces).some(
@@ -34,7 +34,7 @@ export const isSandboxAddress = (ip: string, interfaces = os.networkInterfaces()
         return mask !== 0 && (ipToInt(i.address) & mask) === (ipToInt(ip) & mask) && i.address !== ip;
       }),
   );
-};
+}
 
 /** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
 const hostEndpoint = (session: SessionStatus): Endpoint | null => {
@@ -46,20 +46,20 @@ const hostEndpoint = (session: SessionStatus): Endpoint | null => {
 };
 
 /** Who is watching a session right now (closed terminals do not count); null when it cannot be asked. */
-export const sessionViewers = (session: SessionStatus): Promise<Viewers | null> => {
+export function sessionViewers(session: SessionStatus): Promise<Viewers | null> {
   const endpoint = hostEndpoint(session);
   return endpoint ? queryViewers(endpoint) : Promise.resolve(null);
-};
+}
 
 /**
  * The newest running session of this agent in exactly this folder that no terminal on this PC is attached to, so
  * sandbox claude -t picks it back up instead of starting another. A session that cannot answer is never reused.
  */
-export const findUnwatchedSession = async (
+export async function findUnwatchedSession(
   dataPath: string,
   harness: string,
   cwd: string,
-): Promise<SessionStatus | null> => {
+): Promise<SessionStatus | null> {
   const candidates = new SandboxChannel(dataPath)
     .currentSessions()
     .filter((s) => s.harness === harness && s.cwd.toLowerCase() === cwd.toLowerCase())
@@ -67,10 +67,10 @@ export const findUnwatchedSession = async (
     .slice(0, 8);
   for (const session of candidates) if ((await sessionViewers(session))?.remote === 0) return session;
   return null;
-};
+}
 
 /** Bridges this terminal to a session. Returns the agent's exit code, or 0 when the user detaches. */
-export const attachTerminal = async (session: SessionStatus): Promise<number> => {
+export async function attachTerminal(session: SessionStatus): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     fail(
       '--terminal / attach needs an interactive terminal.',
@@ -117,4 +117,4 @@ export const attachTerminal = async (session: SessionStatus): Promise<number> =>
       console.log('Connection to the sandbox closed.');
       return 1;
   }
-};
+}

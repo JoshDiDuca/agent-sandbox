@@ -127,7 +127,7 @@ export class AuditLog {
  * Folds repeats: the same event (kind, program/path, command line, action, project) within one minute becomes one line
  * with n = how many times; after `cap` distinct lines a minute, the rest of that minute is one "note" line.
  */
-export const fold = (events: AuditEvent[], cap = 300): AuditEvent[] => {
+export function fold(events: AuditEvent[], cap = 300): AuditEvent[] {
   const out: AuditEvent[] = [];
   const index = new Map<string, AuditEvent>();
   const perMinute = new Map<string, number>();
@@ -153,4 +153,4 @@ export const fold = (events: AuditEvent[], cap = 300): AuditEvent[] => {
   for (const [minute, n] of dropped)
     out.push({ t: minute + ':59.999Z', k: 'note', p: n + ' more events in this minute were not listed (audit cap)' });
   return out;
-};
+}

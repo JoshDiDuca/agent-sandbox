@@ -33,7 +33,8 @@ export function collectMappings(
   assertGuestPath(config.guestWorkspace, 'guestWorkspace');
   // workspaceFilter: the sandbox gets the project's filtered view (no git-ignored files) and its real .git beside it.
   const view = planView(config, o.run.storageRoot, workspaceHost);
-  // A launch folder inside a project root is shown by the root, at the place it has whichever project starts the sandbox.
+  // A launch folder inside a project root is shown by the root, at the place it has whichever project starts the
+  // sandbox.
   const inRoot = !view && shownByRoot(boot.roots, workspaceHost, config.guestWorkspace);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
@@ -121,7 +122,8 @@ export function collectMappings(
     mappings.push({ host: probe.harnessExe.dir, guest: GUEST.hostTools + '\\agents\\' + harnessName, readOnly: true });
   if (probe.gitDir) mappings.push({ host: probe.gitDir, guest: GUEST.hostTools + '\\git', readOnly: true });
   if (probe.nvmDir) mappings.push({ host: probe.nvmDir, guest: GUEST.hostTools + '\\nvm', readOnly: true });
-  // Placement keeps extra folders apart; this guards the rest (and where the folders really are: F:\x is C:\Mirror\F\x).
+  // Placement keeps extra folders apart; this guards the rest (and where the folders really are: F:\x is
+  // C:\Mirror\F\x).
   assertNoGuestOverlap(mappings);
   assertNoGuestOverlap(mappings.map((m) => ({ guest: sandboxFolder(m.guest) })));
   return mappings;

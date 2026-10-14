@@ -31,12 +31,16 @@ export type SyncState = z.output<typeof SyncStateSchema>;
  * Host-only: <storage>\sync\<dataName>.json. It records which folder on this PC history flows back into, so it must
  * never live in the data folder the sandbox can write (a forged copy could redirect writes anywhere on this PC).
  */
-export const syncStatePath = (dataPath: string): string => hostStateFile(storageOf(dataPath), dataPath, '.json');
+export function syncStatePath(dataPath: string): string {
+  return hostStateFile(storageOf(dataPath), dataPath, '.json');
+}
 /**
  * A state file that is missing, oversized or not in this shape counts as no state (nothing syncs back until the next
  * launch).
  */
-export const readSyncState = (dataPath: string): SyncState | null =>
-  new JsonFile(SyncStateSchema, syncStatePath(dataPath)).read();
-export const writeSyncState = (dataPath: string, state: SyncState): void =>
-  new JsonFile(SyncStateSchema, syncStatePath(dataPath)).write(state);
+export function readSyncState(dataPath: string): SyncState | null {
+  return new JsonFile(SyncStateSchema, syncStatePath(dataPath)).read();
+}
+export function writeSyncState(dataPath: string, state: SyncState): void {
+  return new JsonFile(SyncStateSchema, syncStatePath(dataPath)).write(state);
+}

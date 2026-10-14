@@ -15,25 +15,31 @@ const GUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
 const MAX_OUTPUT = 1024 * 1024;
 
 /** Where wsb.exe can be: the Store app's alias, then System32 (never by bare name; cwd is often the workspace). */
-export const wsbCandidates = (env: NodeJS.ProcessEnv = process.env): string[] =>
-  [
+export function wsbCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [
     env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'wsb.exe') : '',
     path.join(env.SystemRoot ?? env.WINDIR ?? 'C:\\Windows', 'System32', 'wsb.exe'),
   ].filter(Boolean);
+}
 
-export const findWsb = (
+export function findWsb(
   env: NodeJS.ProcessEnv = process.env,
   exists: (p: string) => boolean = fs.existsSync,
-): string | null =>
-  process.platform === 'win32' || exists !== fs.existsSync ? (wsbCandidates(env).find((p) => exists(p)) ?? null) : null;
+): string | null {
+  return process.platform === 'win32' || exists !== fs.existsSync
+    ? (wsbCandidates(env).find((p) => exists(p)) ?? null)
+    : null;
+}
 
 // ---- parsing (pure; the tests feed it recorded output) ---------------------------------------------------------
 
 /** The version from `wsb --version` ("0.1.32.0", "wsb 1.2.3+abc"). */
-export const parseVersion = (out: string): string | null => /\d+\.\d+(?:\.\d+){0,2}/.exec(out)?.[0] ?? null;
+export function parseVersion(out: string): string | null {
+  return /\d+\.\d+(?:\.\d+){0,2}/.exec(out)?.[0] ?? null;
+}
 
 /** Subcommand names from `wsb --help` (the lines under "Commands:"). */
-export const parseCommands = (help: string): string[] => {
+export function parseCommands(help: string): string[] {
   const lines = help.split(/\r?\n/);
   const start = lines.findIndex((l) => /^\s*commands:\s*$/i.test(l));
   if (start < 0) return [];
@@ -44,7 +50,7 @@ export const parseCommands = (help: string): string[] => {
     if (m) names.push(m[1].toLowerCase());
   }
   return names;
-};
+}
 
 export interface WsbSandbox {
   id: string;
@@ -52,7 +58,7 @@ export interface WsbSandbox {
 }
 
 /** `wsb list --raw` (JSON: an array, or an object holding one) or the plain table: the sandboxes and their status. */
-export const parseList = (out: string): WsbSandbox[] => {
+export function parseList(out: string): WsbSandbox[] {
   const fromObject = (o: unknown): WsbSandbox | null => {
     if (!o || typeof o !== 'object') return null;
     const entries = Object.entries(o as Record<string, unknown>);
@@ -73,10 +79,12 @@ export const parseList = (out: string): WsbSandbox[] => {
     if (!id) return [];
     return [{ id, status: /\brunning\b/i.test(line) ? 'Running' : /\bstopped\b/i.test(line) ? 'Stopped' : 'unknown' }];
   });
-};
+}
 
 /** `wsb ip --id <id>`: the first IPv4 address in the output. */
-export const parseIp = (out: string): string | null => /\b(?:\d{1,3}\.){3}\d{1,3}\b/.exec(out)?.[0] ?? null;
+export function parseIp(out: string): string | null {
+  return /\b(?:\d{1,3}\.){3}\d{1,3}\b/.exec(out)?.[0] ?? null;
+}
 
 // ---- calls -------------------------------------------------------------------------------------------------------
 
@@ -110,7 +118,7 @@ export interface Wsb {
 }
 
 /** The CLI and what it offers, or null on Windows versions without it. */
-export const detectWsb = (env: NodeJS.ProcessEnv = process.env): Wsb | null => {
+export function detectWsb(env: NodeJS.ProcessEnv = process.env): Wsb | null {
   const exe = findWsb(env);
   if (!exe) return null;
   const version = parseVersion(call(exe, ['--version'], 15000).stdout);
@@ -119,10 +127,10 @@ export const detectWsb = (env: NodeJS.ProcessEnv = process.env): Wsb | null => {
   // An unreadable help text is not proof of anything: assume the documented commands.
   const known = commands.length ? commands : ['start', 'list', 'exec', 'stop', 'share', 'connect', 'ip'];
   return { exe, version, commands: known, has: (c) => known.includes(c) };
-};
+}
 
 /** The running sandbox's id: the only running one (with several, none is guessed). */
-export const runningSandboxId = (wsb: Wsb): { id: string | null; error?: string } => {
+export function runningSandboxId(wsb: Wsb): { id: string | null; error?: string } {
   const listed = call(wsb.exe, ['list', '--raw'], 20000);
   const all = parseList(listed.ok ? listed.stdout : call(wsb.exe, ['list'], 20000).stdout);
   const running = all.filter((s) => !/stopped/i.test(s.status));
@@ -133,16 +141,10 @@ export const runningSandboxId = (wsb: Wsb): { id: string | null; error?: string 
       ? running.length + ' sandboxes are running (wsb list); cannot tell which one is ours'
       : 'wsb list shows no running sandbox (one started from a .wsb file may not be listed)',
   };
-};
+}
 
 /** Shares a folder of this PC into the running sandbox at `sandboxPath` (read/write unless readOnly). */
-export const shareFolder = (
-  wsb: Wsb,
-  id: string,
-  hostPath: string,
-  sandboxPath: string,
-  readOnly = false,
-): WsbResult => {
+export function shareFolder(wsb: Wsb, id: string, hostPath: string, sandboxPath: string, readOnly = false): WsbResult {
   refuseInSelfTest('share a folder into Windows Sandbox');
   if (!GUID.test(id)) return { ok: false, stdout: '', stderr: '', error: 'not a sandbox id: ' + id };
   return call(wsb.exe, [
@@ -155,7 +157,8 @@ export const shareFolder = (
     sandboxPath,
     ...(readOnly ? [] : ['--allow-write']),
   ]);
-};
+}
 
-export const sandboxIp = (wsb: Wsb, id: string): string | null =>
-  GUID.test(id) ? parseIp(call(wsb.exe, ['ip', '--id', id], 15000).stdout) : null;
+export function sandboxIp(wsb: Wsb, id: string): string | null {
+  return GUID.test(id) ? parseIp(call(wsb.exe, ['ip', '--id', id], 15000).stdout) : null;
+}

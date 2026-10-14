@@ -32,17 +32,12 @@ export interface Reconciled {
  * Makes this PC match agentCommands: on = a forwarding file per installed agent and the folder first on your PATH;
  * off = no files, no PATH entry. Only touches files it wrote and its own PATH entry; does nothing when already right.
  */
-export const reconcileAgentCommands = (
-  config: Config,
-  storageRoot: string,
-  node: string,
-  entry: string,
-): Reconciled => {
+export function reconcileAgentCommands(config: Config, storageRoot: string, node: string, entry: string): Reconciled {
   const dir = commandsDir(storageRoot);
   if (!config.agentCommands.enabled) {
     if (!fs.existsSync(dir)) return { on: false, commands: [], changed: false };
     for (const f of ownFiles(dir)) fs.rmSync(f, { force: true });
-    editUserPath(dir, false);
+    editUserPath(dir, false, storageRoot);
     if (fs.readdirSync(dir).length === 0) safeRemove(dir, storageRoot);
     return { on: false, commands: [], changed: true };
   }
@@ -75,6 +70,6 @@ export const reconcileAgentCommands = (
   const onPath = (process.env.PATH ?? '')
     .split(path.delimiter)
     .some((d) => path.resolve(d).toLowerCase() === path.resolve(dir).toLowerCase());
-  if (changed || !onPath) editUserPath(dir, true);
+  if (changed || !onPath) editUserPath(dir, true, storageRoot);
   return { on: true, commands, changed: changed || !onPath };
-};
+}

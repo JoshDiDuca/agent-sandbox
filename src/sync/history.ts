@@ -124,7 +124,9 @@ const lineTime = (line: string): number => {
   }
 };
 
-/** Every workspace pair of the sandbox: the launch folder's, then the projects registered later (most specific first). */
+/**
+ * Every workspace pair of the sandbox: the launch folder's, then the projects registered later (most specific first).
+ */
 const pairsOf = (p: SyncPaths): WorkspacePair[] =>
   _.sortBy(
     [{ hostWorkspace: p.hostWorkspace, guestWorkspace: p.guestWorkspace }, ...(p.extra ?? [])],
@@ -134,10 +136,10 @@ const translateAll = (text: string, pairs: [string, string][]): string =>
   pairs.reduce((out, [from, to]) => translatePaths(out, from, to), text);
 
 /** Brings this PC's history into the sandbox state (run before the sandbox starts). Returns files copied. */
-export const syncHistoryIn = (
+export function syncHistoryIn(
   p: SyncPaths,
   options: { promptHistory?: boolean; scope?: 'project' | 'all' } = {},
-): number => {
+): number {
   const all = options.scope === 'all';
   assertTestWritable(p.guestClaudeDir);
   const pairs = pairsOf(p);
@@ -186,10 +188,10 @@ export const syncHistoryIn = (
     writeSafely(target, () => fs.writeFileSync(target, merged.join('\n') + '\n', 'utf8'));
   }
   return projects + sessions;
-};
+}
 
 /** Copies new sandbox history back to this PC (safe while the sandbox runs: transcripts are append-only). */
-export const syncHistoryOut = (p: SyncPaths): number => {
+export function syncHistoryOut(p: SyncPaths): number {
   assertTestWritable(p.hostClaudeDir);
   // A mirrored workspace on F: really lives at C:\Mirror\F\...; tools that resolve real paths record that one. A
   // project registered later is in the hub (C:\Projects\<name>) and goes back to its real folder on this PC.
@@ -203,7 +205,8 @@ export const syncHistoryOut = (p: SyncPaths): number => {
     dirExists(guestProjectsDir) && !isLink(guestProjectsDir)
       ? fs.readdirSync(guestProjectsDir).filter(isSafeFileName)
       : [];
-  // Only this sandbox's projects: a transcript under any other folder name would be planted into that project on this PC.
+  // Only this sandbox's projects: a transcript under any other folder name would be planted into that project on this
+  // PC.
   const projects = _.sumBy(
     names.filter((name) => byGuest.has(name)),
     (name) =>
@@ -231,4 +234,4 @@ export const syncHistoryOut = (p: SyncPaths): number => {
     fs.appendFileSync(hostFile, missing.join('\n') + '\n', 'utf8');
   }
   return projects + sessions + missing.length;
-};
+}

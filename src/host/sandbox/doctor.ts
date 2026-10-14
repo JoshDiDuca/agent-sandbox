@@ -6,12 +6,12 @@ import { dirExists, isWin } from '../../core/util/index.js';
 import { probeHost } from './probe.js';
 import { sandboxFeatureInstalled, isSandboxRunning } from './platform.js';
 
-export const doctorRows = (
+export function doctorRows(
   config: Config,
   harnessName: string,
   storageRoot: string,
   configPath: string | null,
-): [string, string][] => {
+): [string, string][] {
   const probe = probeHost(config, harnessName);
   return [
     ['Config file', configPath ?? '(none; built-in defaults; create one with: sandbox config init)'],
@@ -46,4 +46,4 @@ export const doctorRows = (
     ['Host Git for Windows', probe.gitDir ?? '(none with bash; PortableGit will be downloaded)'],
     ['Storage root', storageRoot + (dirExists(storageRoot) ? '' : ' (will be created)')],
   ];
-};
+}

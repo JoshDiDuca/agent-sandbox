@@ -1,9 +1,10 @@
 // claude-mem data (~/.claude-mem) between this PC and the sandbox's persistent store.
 //
-// IN (this PC -> sandbox): the whole folder is mirrored; nothing flows to your PC in that direction.
-// OUT (sandbox -> this PC), only with claudeProfile.syncClaudeMemBack: ONLY the SQLite database files come back. Never settings, never the Chroma vector store:
-// Chroma keeps Python pickle files, and a crafted pickle runs code when loaded, so copying it back would let a
-// compromised sandbox execute code on your PC. claude-mem rebuilds its vector index from the database by itself.
+// IN (this PC -> sandbox): the whole folder is mirrored; nothing flows to your PC in that direction. OUT (sandbox ->
+// this PC), only with claudeProfile.syncClaudeMemBack: ONLY the SQLite database files come back. Never settings, never
+// the Chroma vector store: Chroma keeps Python pickle files, and a crafted pickle runs code when loaded, so copying it
+// back would let a compromised sandbox execute code on your PC. claude-mem rebuilds its vector index from the database
+// by itself.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
@@ -21,7 +22,9 @@ const MAX_DB_BYTES = 2 * 1024 * 1024 * 1024;
 
 export type MemResult = 'none' | 'copied-in' | 'copied-out' | 'unchanged' | 'conflict';
 
-export const hostClaudeMemDir = (): string => process.env.CLAUDE_MEM_DATA_DIR ?? path.join(homeDir(), '.claude-mem');
+export function hostClaudeMemDir(): string {
+  return process.env.CLAUDE_MEM_DATA_DIR ?? path.join(homeDir(), '.claude-mem');
+}
 
 /** Plain database files at the top of a claude-mem folder (links and anything else are ignored). */
 const databaseFiles = (dir: string): string[] =>
@@ -69,7 +72,7 @@ const parkHostDatabases = (hostDir: string): void => {
  * Direction is decided by which side's database changed since the last sync. If BOTH changed, the side about to be
  * overwritten is kept as `<dir>.conflict-<time>` first, so nothing is ever lost.
  */
-export const syncClaudeMem = (hostDir: string, store: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
+export function syncClaudeMem(hostDir: string, store: string, state: SyncState, direction: 'in' | 'out'): MemResult {
   assertTestWritable(direction === 'in' ? store : hostDir);
   if (isLink(store)) throw new Error('Refusing to sync claude-mem: ' + store + ' is a link.');
   const hostStamp = stampOf(hostDir);
@@ -90,4 +93,4 @@ export const syncClaudeMem = (hostDir: string, store: string, state: SyncState, 
   state.memHostStamp = stampOf(hostDir);
   state.memGuestStamp = stampOf(store);
   return result;
-};
+}

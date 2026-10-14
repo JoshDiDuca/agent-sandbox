@@ -11,25 +11,29 @@ const SANDBOX_PROCESSES = ['WindowsSandboxClient.exe', 'WindowsSandboxRemoteSess
  * Running INSIDE a Windows Sandbox this tool started (its launch folder and data folder are mapped in): then the CLI
  * talks to the sandbox it is in, through C:\\AgentData and loopback, instead of looking for one on a PC.
  */
-export const insideSandbox = (): boolean =>
-  isWin &&
-  !process.env.AGENT_SANDBOX_HOST_ONLY &&
-  fs.existsSync('C:\\AgentLaunch\\session.json') &&
-  fs.existsSync('C:\\AgentData\\run');
+export function insideSandbox(): boolean {
+  return (
+    isWin &&
+    !process.env.AGENT_SANDBOX_HOST_ONLY &&
+    fs.existsSync('C:\\AgentLaunch\\session.json') &&
+    fs.existsSync('C:\\AgentData\\run')
+  );
+}
 export const GUEST_DATA_DIR = 'C:\\AgentData';
 
-export const isSandboxRunning = (): boolean => {
+export function isSandboxRunning(): boolean {
   if (!isWin) return false;
   if (insideSandbox()) return true;
   const result = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true });
   const out = (result.stdout ?? '').toLowerCase();
   return SANDBOX_PROCESSES.some((image: string) => out.includes('"' + image.toLowerCase() + '"'));
-};
+}
 
-export const sandboxFeatureInstalled = (): boolean =>
-  isWin && fileExists(path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'WindowsSandbox.exe'));
+export function sandboxFeatureInstalled(): boolean {
+  return isWin && fileExists(path.join(process.env.WINDIR ?? 'C:\\Windows', 'System32', 'WindowsSandbox.exe'));
+}
 
-export const assertCanLaunch = (): void => {
+export function assertCanLaunch(): void {
   if (!isWin) fail('Windows Sandbox only runs on Windows.', 'Use sandbox generate to only write the files.');
   if (!sandboxFeatureInstalled())
     fail(
@@ -41,18 +45,18 @@ export const assertCanLaunch = (): void => {
       'A Windows Sandbox is already running (Windows allows one at a time).',
       'Attach to it with sandbox claude -t, show it with sbx-show, or shut it down with sandbox stop.',
     );
-};
+}
 
 /** cmd.exe expands %VAR% and ^ even inside quotes, and a quote ends them: such a path could run something else. */
-export const assertCmdSafePath = (file: string): void => {
+export function assertCmdSafePath(file: string): void {
   if (/[%"^\r\n]/.test(file))
     fail(
       'The storage folder path has a character that cannot be started safely: ' + file,
       'Set storage.root to a folder without % " ^ in its path.',
     );
-};
+}
 
-export const startSandbox = (wsbPath: string): void => {
+export function startSandbox(wsbPath: string): void {
   refuseInSelfTest('start Windows Sandbox');
   assertCmdSafePath(wsbPath);
   const result = spawnSync(SYSTEM.cmd(), ['/d', '/c', 'start', '""', '"' + wsbPath + '"'], {
@@ -60,10 +64,10 @@ export const startSandbox = (wsbPath: string): void => {
     windowsVerbatimArguments: true,
   });
   if (result.error) throw result.error;
-};
+}
 
 /** Runs a detached copy of this CLI (used for the background history/claude-mem sync watcher). */
-export const spawnDetached = (entry: string, args: string[]): void => {
+export function spawnDetached(entry: string, args: string[]): void {
   refuseInSelfTest('start background programs');
   // cwd = the install folder: the caller's folder is the workspace, which the sandbox can write.
   spawn(process.execPath, [entry, ...args], {
@@ -72,4 +76,4 @@ export const spawnDetached = (entry: string, args: string[]): void => {
     stdio: 'ignore',
     windowsHide: true,
   }).unref();
-};
+}

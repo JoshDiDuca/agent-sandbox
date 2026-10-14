@@ -1,6 +1,9 @@
 // HostTools.exe: what the host side asks of Windows without PowerShell. Built on first use by host/native.ts (csc).
 //   keep-awake --owner-pid N    this PC stays awake until process N ends (sandbox.keepAwake)
 //   stop-events --since <iso>   the Windows events since then that can end a sandbox, as JSON (host/life)
+//   hide-window --wait S        hides the sandbox window once it appears; prints the hidden handles as JSON
+//   show-window --handles a,b   shows those windows (else any sandbox window); prints how many
+//   user-path --add|--remove D  D first on, or off, your PATH; exit 3 when PATH would be too long
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -36,6 +39,44 @@ static class Program
                 }
                 Console.Out.Write(StopEventsJson(since));
                 return 0;
+            case "hide-window":
+                int wait;
+                if (!options.TryGetValue("wait", out value) || !int.TryParse(value, out wait))
+                {
+                    return Usage();
+                }
+                Console.Out.Write("[" + string.Join(",", AgentSandbox.Win.Hide(wait)) + "]");
+                return 0;
+            case "show-window":
+                List<long> handles = new List<long>();
+                if (options.TryGetValue("handles", out value))
+                {
+                    foreach (string part in value.Split(','))
+                    {
+                        long handle;
+                        if (long.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out handle))
+                        {
+                            handles.Add(handle);
+                        }
+                    }
+                }
+                Console.Out.Write(AgentSandbox.Win.Show(handles).ToString(CultureInfo.InvariantCulture));
+                return 0;
+            case "user-path":
+                bool add = options.TryGetValue("add", out value);
+                if (!add && !options.TryGetValue("remove", out value))
+                {
+                    return Usage();
+                }
+                try
+                {
+                    return AgentSandbox.UserPath.Edit(value, add);
+                }
+                catch (Exception e)
+                {
+                    Console.Error.WriteLine(e.Message);
+                    return 1;
+                }
             default:
                 return Usage();
         }
@@ -43,7 +84,7 @@ static class Program
 
     static int Usage()
     {
-        Console.Error.WriteLine("Usage: HostTools keep-awake --owner-pid N | stop-events --since <ISO time>");
+        Console.Error.WriteLine("Usage: HostTools keep-awake --owner-pid N | stop-events --since <ISO time> | hide-window --wait S | show-window [--handles a,b] | user-path --add|--remove <folder>");
         return 2;
     }
 

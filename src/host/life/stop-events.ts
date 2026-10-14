@@ -43,7 +43,7 @@ const UPDATERS =
  * holds its message with the stop code), a restart or shutdown, a crash or power loss, sleep, low memory. Switching
  * user does not end it (seen on 13 Oct 2026: the sandbox ran on after a switch).
  */
-export const explainStop = (events: StopEvent[]): StopCause | null => {
+export function explainStop(events: StopEvent[]): StopCause | null {
   const causes = events.flatMap((e): StopCause[] => {
     const p = e.provider.toLowerCase();
     if (e.id === 1074 && p.includes('user32')) {
@@ -93,7 +93,7 @@ export const explainStop = (events: StopEvent[]): StopCause | null => {
     return [];
   });
   return causes.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))[0] ?? null;
-};
+}
 
 /**
  * System log and Hyper-V events since `since` that can end a sandbox (Windows only; empty when the logs cannot be
