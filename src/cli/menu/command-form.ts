@@ -14,9 +14,12 @@ import { askedWhen, type CommandSpec, type OptionSpec } from '../manifest.js';
 import { Text, Theme, type App, type ListItem } from '../tui/index.js';
 import { type Field, optionProblem } from './command-fields.js';
 
-const RUN = '@run';
+const MORE = '@more';
 
 export class CommandForm {
+  /** Advanced options stay folded away until asked for. */
+  private showAdvanced = false;
+
   /** Answers by field id (arg:<name>, opt:<flag>, json, extra). */
   private readonly values = new Map<string, string[] | boolean>();
 
@@ -53,19 +56,27 @@ export class CommandForm {
     return (this.values.get('arg:' + this.spec.args[0]?.name) as string[] | undefined)?.[0] ?? '';
   }
 
+  /** Options the form may ask for at all (advanced ones included). */
+  private askable(): OptionSpec[] {
+    const first = this.first();
+    return this.spec.options.filter(
+      (o) =>
+        !o.noMenu && askedWhen(o.when, first) && !(typeof o.choices === 'string' && !this.choices(o.choices).length),
+    );
+  }
+
+  private hiddenCount(): number {
+    return this.showAdvanced ? 0 : this.askable().filter((o) => o.advanced && !this.values.has('opt:' + o.flag)).length;
+  }
+
   private fields(): Field[] {
     const first = this.first();
     return [
       ...this.spec.args
         .map((spec, index): Field => ({ kind: 'arg', spec, index }))
         .filter((f) => f.kind === 'arg' && (f.index === 0 || askedWhen(f.spec.when, first))),
-      ...this.spec.options
-        .filter(
-          (o) =>
-            !o.noMenu &&
-            askedWhen(o.when, first) &&
-            !(typeof o.choices === 'string' && !this.choices(o.choices).length),
-        )
+      ...this.askable()
+        .filter((o) => this.showAdvanced || !o.advanced || this.values.has('opt:' + o.flag))
         .map((spec): Field => ({ kind: 'option', spec })),
       ...(this.spec.json && !(this.spec.name === 'data' && first === 'clean') ? [{ kind: 'json' } as Field] : []),
       ...(this.spec.passthrough ? [{ kind: 'extra' } as Field] : []),
@@ -149,10 +160,12 @@ export class CommandForm {
       };
     return {
       value: this.id(f),
-      label: f.spec.flag
-        .replace(/^--/, '')
-        .replace(/-/g, ' ')
-        .replace(/^./, (c) => c.toUpperCase()),
+      label:
+        f.spec.label ??
+        f.spec.flag
+          .replace(/^--/, '')
+          .replace(/-/g, ' ')
+          .replace(/^./, (c) => c.toUpperCase()),
       hint: shown,
       description: f.spec.description,
       section: f.spec.advanced ? 'Advanced' : 'Options',
@@ -167,34 +180,37 @@ export class CommandForm {
     const path = [Text.humanize(this.spec.name)];
     for (;;) {
       const fields = this.fields();
+      const hidden = this.hiddenCount();
       const line = commandLine(this.argv());
       const picked = await this.app.list<string>({
         path,
         intro: this.spec.summary.replace(/^./, (c) => c.toUpperCase()) + '.',
         status: Theme.muted('$ ') + Theme.accent(line),
         items: [
-          {
-            value: RUN,
-            label: Theme.ok('▶ Run'),
-            hint: Theme.muted(Text.truncate(line, 60)),
-            description: 'Runs: ' + line,
-            section: 'Run',
-          },
           ...fields.map((f) => this.item(f)),
+          ...(hidden
+            ? [{ value: MORE, label: Theme.muted('More options…'), hint: Theme.muted(hidden + ' more') }]
+            : []),
         ],
         startAt: focus,
-        actions: [{ key: 'r', label: 'clear' }],
+        actions: [
+          { key: 'r', label: 'start', ctrl: true },
+          { key: 'r', label: 'clear' },
+        ],
         notice,
       });
       notice = undefined;
       if (picked.kind === 'back') return null;
-      if (picked.kind === 'pick' && picked.value === RUN) {
+      if (picked.kind === 'action' && picked.key === 'ctrl+r') {
         const missing = this.missing();
-        if (missing) {
-          notice = Theme.warn(missing + ' is required.');
-          continue;
-        }
-        return this.argv();
+        if (!missing) return this.argv();
+        notice = Theme.warn(missing + ' is required.');
+        continue;
+      }
+      if (picked.kind === 'pick' && picked.value === MORE) {
+        this.showAdvanced = true;
+        focus = undefined;
+        continue;
       }
       if (picked.kind !== 'pick' && picked.kind !== 'action') continue;
       const field = fields.find((f) => this.id(f) === picked.value);
@@ -205,6 +221,9 @@ export class CommandForm {
         continue;
       }
       await this.edit(field, path);
+      // Enter on the last field starts it (a switch only flips).
+      const isSwitch = field.kind === 'json' || (field.kind === 'option' && field.spec.type === 'boolean');
+      if (field === fields[fields.length - 1] && !isSwitch && !hidden && !this.missing()) return this.argv();
     }
   }
 
