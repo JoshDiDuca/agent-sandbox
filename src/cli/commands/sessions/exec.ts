@@ -1,14 +1,13 @@
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import type { GuestResponse } from '../../../core/types.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
-import { insideSandbox } from '../../../host/sandbox/index.js';
 import { NeedsRestart } from '../../../host/projects/index.js';
 import { fail, safeText } from '../../../core/util/index.js';
 import { printJson, working } from '../../output/index.js';
 import { requireOnPc, requireRunning, type Context } from '../context.js';
 import { readySandbox } from '../launch/index.js';
 import { hereDir, joinHere, provisionJoined } from '../projects/index.js';
+import { DatabasesService } from '../../services/index.js';
 
 /** What a command run in the sandbox printed (text from the sandbox: through safeText), or why it failed. */
 function printExecResult(result: GuestResponse): void {
@@ -52,32 +51,19 @@ export async function exec(ctx: Context): Promise<number> {
  * `sandbox db`: runs the sandbox's own `sbx-db` in this folder's project, which knows its database versions and ports.
  */
 export async function db(ctx: Context): Promise<number> {
-  const [action = 'list', name] = ctx.options.positionals;
-  if (!['list', 'start', 'stop'].includes(action))
-    fail(
-      'Unknown db action "' + action + '".',
-      'Use: sandbox db  (list)  or  sandbox db start|stop <postgres|mysql|mongodb|redis|dynamodb>',
-    );
-  if (action !== 'list' && !name)
-    fail('Which database?', 'Usage: sandbox db ' + action + ' <postgres|mysql|mongodb|redis|dynamodb>');
+  const [rawAction = 'list', name] = ctx.options.positionals;
+  const databases = new DatabasesService(ctx);
+  const action = databases.validate(rawAction, name);
   // Already inside the sandbox: run the database tool here instead of asking the sandbox from outside.
-  if (insideSandbox())
-    return (
-      spawnSync(
-        process.execPath,
-        [path.join(ctx.packageRoot, 'dist', 'runtime', 'db.js'), action, ...(name ? [name] : [])],
-        { stdio: 'inherit', windowsHide: true },
-      ).status ?? 1
-    );
+  if (databases.isInsideSandbox()) return databases.runInside(action, name);
   requireRunning('Start one with: sandbox start --database <name>');
   const cwd = await guestFolderHere(ctx, 'db');
-  // Starting can download the database the first time.
   const result = await working(
     (action === 'list' ? 'Asking' : action === 'start' ? 'Starting' : 'Stopping') +
       ' the database' +
       (name ? ' ' + name : 's') +
       ' in the sandbox',
-    () => new SandboxChannel(ctx.dataPath).exec(['sbx-db', action, ...(name ? [name] : [])], cwd, 1800),
+    () => databases.run(action, name, cwd),
   );
   printExecResult(result);
   return result.exitCode ?? 1;

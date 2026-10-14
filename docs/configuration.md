@@ -38,7 +38,7 @@ Commonly changed:
 | `toolchains.rust.linker`, `.linkSlots` | GNU host: `"lld"` (default, far less memory than GNU ld) or `"gnu"`, and how many programs may link at once in the whole sandbox (`"auto"` = one per 8 GB, 2 to 4) |
 | `toolchains.cli.gh`, `.zstd`, `.openssl` | small command-line tools |
 | `toolchains.mesa.enabled`, `.vulkan` | software OpenGL / Vulkan when there is no GPU |
-| `harnesses` | agents and how to install them |
+| `harnesses` | agents and how to install them; `home` says where an agent keeps its login (variable -> folder in the saved state, the login files, the folder on this PC) so logins can be saved and switched |
 
 ## Paths
 

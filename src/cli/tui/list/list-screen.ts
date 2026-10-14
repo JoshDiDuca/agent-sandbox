@@ -2,11 +2,12 @@
 // value column, a details pane for the highlighted entry, search (/), ticking several entries, and extra keys a screen
 // can add (r = reset, d = delete ...). Arrow keys move; Enter opens; Esc goes back.
 import type { FrameParts } from '../frame.js';
+import type { KeyHint } from '../key-bar.js';
 import type { Screen, Size, Step } from '../screen.js';
 import type { Key } from '../terminal.js';
 import { Text } from '../text.js';
 import { Theme } from '../theme.js';
-import type { ListResult, ListOptions } from './list-types.js';
+import type { ListAction, ListResult, ListOptions } from './list-types.js';
 
 type Row = { kind: 'section'; text: string } | { kind: 'item'; index: number };
 
@@ -191,8 +192,15 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (!this.o.categories) return [];
     return this.o.categories.map((cat, i) => {
       const count = this.o.items.filter((it) => it.category === cat.id).length;
-      const text = ' ' + Text.fit(cat.label, width - 6) + ' ' + Text.fit(String(count), 3, 'right') + ' ';
-      if (i !== this.category) return Theme.muted(text);
+      const open = i === this.category;
+      // The open category has a marker, so it shows without colour.
+      const text =
+        (open ? Theme.glyph.pointer : ' ') +
+        Text.fit(cat.label, width - 6) +
+        ' ' +
+        Text.fit(String(count), 3, 'right') +
+        ' ';
+      if (!open) return Theme.muted(text);
       return this.focus === 'side' ? Theme.selected(text) : Theme.accentBold(text);
     });
   }
@@ -216,30 +224,35 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     ];
   }
 
-  private keys(): [string, string][] {
+  /** The keys that work now, most important first (a narrow footer drops the later ones). */
+  private keys(): KeyHint[] {
     if (this.searching)
       return [
-        ['type', 'to search'],
-        ['↑↓', 'move'],
-        ['↵', this.o.multi ? 'done' : 'open'],
-        ['esc', 'clear search'],
+        ['type', 'to search', 1],
+        ['↵', this.o.multi ? 'done' : (this.o.enterLabel ?? 'open'), 1],
+        ['esc', 'clear search', 0],
+        ['↑↓', 'move', 4],
       ];
+    const current = this.visible()[this.cursor];
+    const flips = current !== undefined && this.o.items[current].flip;
     return [
-      ['↑↓', 'move'],
-      ...(this.o.tabs
-        ? [['tab', 'switch ' + this.o.tabs.items.map((t) => t.label.toLowerCase()).join(' / ')] as [string, string]]
-        : []),
-      ...(this.o.categories ? [['←→', 'categories'] as [string, string]] : []),
       ...(this.o.multi
         ? ([
-            ['space', 'tick'],
-            ['a', 'tick all shown'],
-            ['↵', 'done'],
-          ] as [string, string][])
-        : [['↵', 'open'] as [string, string]]),
-      ['/', 'search'],
-      ...(this.o.actions ?? []).map((a) => [a.key, a.label] as [string, string]),
-      ['esc', this.o.escapeLabel ?? 'back'],
+            ['space', 'tick', 1],
+            ...(this.o.enterTicks ? [] : [['↵', 'done', 1]]),
+            ['a', 'tick all shown', 6],
+          ] as KeyHint[])
+        : ([['↵', this.o.enterLabel ?? 'open', 1], ...(flips ? [['space', 'flip', 1]] : [])] as KeyHint[])),
+      ...this.actionsNow().map((a): KeyHint => [
+        a.ctrl ? 'ctrl+' + a.key : a.key,
+        a.label,
+        a.ctrl ? 0 : (a.importance ?? 2),
+      ]),
+      ...(this.o.tabs ? ([['tab', 'scope', 3]] as KeyHint[]) : []),
+      ...(this.o.categories ? ([['←→', 'categories', 3]] as KeyHint[]) : []),
+      ['↑↓', 'move', 5],
+      ['/', 'search', 6],
+      ['esc', this.o.escapeLabel ?? 'back', 0],
     ];
   }
 
@@ -248,10 +261,40 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     this.notice = text;
   }
 
+  /** The id of the category open in the sidebar (undefined without a sidebar). */
+  get currentCategory(): string | undefined {
+    return this.o.categories?.[this.category]?.id;
+  }
+
+  /** The extra keys that work now (they may depend on the category). */
+  private actionsNow(): ListAction[] {
+    const actions = this.o.actions;
+    return typeof actions === 'function' ? actions(this.currentCategory) : (actions ?? []);
+  }
+
+  /** Keys are going into the search box (digits and letters are text, not shortcuts). */
+  get isSearching(): boolean {
+    return this.searching;
+  }
+
+  /** The entries ticked now (multi-select). */
+  ticked(): T[] {
+    return this.o.items.filter((_, i) => this.checked.has(i)).map((it) => it.value);
+  }
+
   handle(key: Key): Step<ListResult<T>> {
     const visible = this.visible();
     const current = visible[this.cursor];
     this.notice = undefined;
+    const ctrlAction = key.ctrl ? this.actionsNow().find((a) => a.ctrl && a.key === key.name) : undefined;
+    if (ctrlAction)
+      return {
+        done: {
+          kind: 'action',
+          key: 'ctrl+' + ctrlAction.key,
+          value: current === undefined ? undefined : this.o.items[current].value,
+        },
+      };
     const move = (by: number): void => {
       this.cursor = Math.max(0, Math.min(visible.length - 1, this.cursor + by));
     };
@@ -339,10 +382,11 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
         all.forEach((i) => (tick ? this.checked.add(i) : this.checked.delete(i)));
         return;
       }
-      if (key.name === 'return')
-        return {
-          done: { kind: 'multi', values: this.o.items.filter((_, i) => this.checked.has(i)).map((it) => it.value) },
-        };
+      if (key.name === 'return' && this.o.enterTicks) {
+        if (current !== undefined) this.toggle(current);
+        return;
+      }
+      if (key.name === 'return') return { done: { kind: 'multi', values: this.ticked() } };
     }
     if (
       (key.name === 'return' || key.name === 'right' || (key.name === 'space' && !this.searching)) &&
@@ -356,7 +400,8 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       }
       return { done: { kind: 'pick', value: it.value } };
     }
-    const action = !this.searching && key.text ? this.o.actions?.find((a) => a.key === key.text) : undefined;
+    const action =
+      !this.searching && key.text ? this.actionsNow().find((a) => !a.ctrl && a.key === key.text) : undefined;
     if (action)
       return {
         done: {

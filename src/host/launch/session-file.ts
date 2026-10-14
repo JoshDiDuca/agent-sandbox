@@ -85,6 +85,7 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
     pageFileMb: config.sandbox.pageFileMb,
     apps: config.apps,
     auditProcesses: config.audit.enabled && config.audit.processes,
+    agentHomes: Object.assign({}, ...Object.values(config.harnesses).map((h) => h.home?.env ?? {})),
   };
 }
 

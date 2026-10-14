@@ -245,7 +245,13 @@ export const liveTerminalSuite: Suite = {
           );
       } finally {
         for (const v of viewers) v.close();
-        for (const c of children) if (c.exitCode === null) c.kill();
+        for (const c of children) {
+          try {
+            if (c.exitCode === null) c.kill();
+          } catch {
+            /* it exited between the check and the kill (Windows says EPERM): nothing left to stop */
+          }
+        }
       }
     }
   },

@@ -1,24 +1,42 @@
-// The apps catalogue in the menu: every app by category, searchable, ticked = installed in every sandbox. VS Code and
-// Windows Terminal are listed too (they have settings of their own, which ticking changes). Your own programs
-// (apps.custom) are edited as a list of small forms. Saved to your config file (or, for catalogue apps only, the
-// project's .sandbox-config.json).
+// The apps catalogue as data for the Apps tab: every app by category, ticked = installed in every sandbox. VS Code and
+// Windows Terminal are listed too (they have settings of their own, which ticking changes). Ticks are staged in the
+// Draft and written with Ctrl+S, to your config file or (catalogue apps only) the project's .sandbox-config.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { APP_CATEGORIES, APPS, type AppEntry } from '../../shared/apps/index.js';
-import { type App, Text, Theme, type ListItem } from '../tui/index.js';
-import type { ConfigFile } from './settings/index.js';
-// Direct, not the barrel: settings/settings-editor.ts imports this file.
-import { ValueEditor } from './settings/value-editor.js';
+import { Text, Theme, type Category, type ListItem } from '../tui/index.js';
+import type { ConfigFile } from './settings/config-file.js';
+import type { Draft } from './settings/draft.js';
 
-const CUSTOM = '@custom';
+export const CUSTOM = '@custom:';
+const INSTALL = ['apps', 'install'];
 
-export class AppsCatalogue {
+export class AppsModel {
   constructor(
-    private readonly app: App,
     private readonly file: ConfigFile,
     private readonly dataPath: string,
   ) {}
+
+  /** The catalogue entries this file can change (a project cannot change an app that has a setting of its own). */
+  entries(): AppEntry[] {
+    return APPS.filter((a) => !(this.file.isProject && a.setting));
+  }
+
+  categories(): Category[] {
+    return [
+      ...APP_CATEGORIES,
+      ...(this.file.isProject
+        ? []
+        : [
+            {
+              id: 'custom',
+              label: 'Your own programs',
+              description: 'Programs you added yourself (c to add or change them).',
+            },
+          ]),
+    ];
+  }
 
   /** Downloaded already (into this data folder), so the next sandbox starts it without a download. */
   private installed(entry: AppEntry): boolean {
@@ -28,12 +46,43 @@ export class AppsCatalogue {
     return fs.existsSync(path.join(this.dataPath, 'tools', 'apps', entry.id, '.agent-sandbox-app'));
   }
 
-  /** Is this entry on now (its setting, or listed in apps.install)? */
-  private chosen(entry: AppEntry, install: string[]): boolean {
-    return entry.setting ? _.get(this.file.userConfig(), entry.setting) === true : install.includes(entry.id);
+  private savedInstall(): string[] {
+    return (
+      ((this.file.isProject ? this.file.valueInFile(INSTALL) : this.file.userConfig().apps.install) as
+        string[] | undefined) ?? []
+    );
   }
 
-  private item(entry: AppEntry, install: string[]): ListItem<string> {
+  /** Is the entry on in the saved file? */
+  private savedOn(entry: AppEntry): boolean {
+    return entry.setting
+      ? _.get(this.file.userConfig(), entry.setting) === true
+      : this.savedInstall().includes(entry.id);
+  }
+
+  /** Is the entry on once the staged changes are saved? */
+  isOn(entry: AppEntry, draft: Draft): boolean {
+    if (entry.setting) {
+      const key = entry.setting.split('.');
+      return draft.has(this.file, key) ? draft.value(this.file, key) === true : this.savedOn(entry);
+    }
+    const staged = draft.has(this.file, INSTALL)
+      ? (draft.value(this.file, INSTALL) as string[] | undefined)
+      : undefined;
+    return draft.has(this.file, INSTALL) ? (staged ?? []).includes(entry.id) : this.savedOn(entry);
+  }
+
+  /** Your own programs (apps.custom), staged or saved. */
+  custom(draft: Draft): Record<string, { name: string; github?: string; url?: string; cli?: boolean }> {
+    if (this.file.isProject) return {};
+    const key = ['apps', 'custom'];
+    return (draft.has(this.file, key) ? draft.value(this.file, key) : this.file.userConfig().apps.custom) as Record<
+      string,
+      { name: string; github?: string; url?: string; cli?: boolean }
+    >;
+  }
+
+  private item(entry: AppEntry, draft: Draft): ListItem<string> {
     const notes = [
       Theme.muted('Download  ') +
         '~' +
@@ -57,116 +106,42 @@ export class AppsCatalogue {
       details: notes,
       keywords: entry.id,
       hint: (this.installed(entry) ? Theme.ok('installed ') : '') + Theme.muted(entry.size),
-      checked: this.chosen(entry, install),
-      ...(this.file.isProject && entry.setting
-        ? { disabled: 'A project cannot change this; it is in your own settings.' }
-        : {}),
+      checked: this.isOn(entry, draft),
     };
   }
 
-  /** Shows the catalogue until you save (Enter) or leave it (Esc); returns the notice to show afterwards. */
-  async run(): Promise<string | undefined> {
-    for (;;) {
-      const install =
-        ((this.file.isProject ? this.file.valueInFile(['apps', 'install']) : this.file.userConfig().apps.install) as
-          string[] | undefined) ?? [];
-      const custom = this.file.isProject ? {} : this.file.userConfig().apps.custom;
-      const entries = APPS.filter((a) => !(this.file.isProject && a.setting));
-      const picked = await this.app.list<string>({
-        path: [this.file.isProject ? 'Project settings' : 'Apps'],
-        intro:
-          'Tick the apps every sandbox should have (space), then Enter to save. Each is downloaded once and kept; c = your own programs.',
-        multi: true,
-        categories: [
-          ...APP_CATEGORIES,
-          ...(this.file.isProject
-            ? []
-            : [
-                {
-                  id: 'custom',
-                  label: 'Your own programs',
-                  description: 'Programs you added yourself (c to add or change them).',
-                },
-              ]),
-        ],
-        items: [
-          ...entries.map((a) => this.item(a, install)),
-          ...Object.entries(custom).map(([id, a]) => ({
-            value: CUSTOM + id,
-            label: a.name,
-            category: 'custom',
-            description: a.github ? 'From the latest ' + a.github + ' release.' : 'From ' + a.url,
-            hint: Theme.muted(a.cli ? 'command line' : 'desktop'),
-            checked: true,
-            disabled: 'Your own programs are always installed; c to change or remove them.',
-          })),
-        ],
-        actions: this.file.isProject ? [] : [{ key: 'c', label: 'your own programs' }],
-      });
-      if (picked.kind === 'back') return undefined;
-      if (picked.kind === 'action') {
-        const notice = await this.editCustom();
-        if (notice) return notice;
-        continue;
-      }
-      if (picked.kind !== 'multi') continue;
-      return this.save(picked.values.filter((v) => !v.startsWith(CUSTOM)));
-    }
+  items(draft: Draft): ListItem<string>[] {
+    return [
+      ...this.entries().map((a) => this.item(a, draft)),
+      ...Object.entries(this.custom(draft)).map(([id, a]) => ({
+        value: CUSTOM + id,
+        label: a.name,
+        category: 'custom',
+        description: a.github ? 'From the latest ' + a.github + ' release.' : 'From ' + a.url,
+        hint: Theme.muted(a.cli ? 'command line' : 'desktop'),
+        checked: true,
+        disabled: 'Your own programs are always installed; c to change or remove them.',
+      })),
+    ];
   }
 
-  private save(ids: string[]): string {
-    const problems: string[] = [];
-    let changed = 0;
-    for (const entry of APPS.filter((a) => a.setting && !this.file.isProject)) {
-      const on = ids.includes(entry.id);
-      if (on === this.chosen(entry, [])) continue;
-      const result = this.file.set(entry.setting!.split('.'), on);
-      if (typeof result === 'object') problems.push(...result.problems);
-      else if (result === 'saved') changed++;
+  /** Stages the ticks of the list: only what differs from the saved file is kept in the draft. */
+  stageTicks(draft: Draft, ticked: readonly string[]): void {
+    for (const entry of this.entries().filter((a) => a.setting)) {
+      const key = entry.setting!.split('.');
+      const on = ticked.includes(entry.id);
+      if (on === this.savedOn(entry)) draft.unstage(this.file, key);
+      else draft.stage(this.file, key, on);
     }
-    const install = APPS.filter((a) => !a.setting && ids.includes(a.id)).map((a) => a.id);
-    const result = this.file.set(['apps', 'install'], install.length || this.file.isProject ? install : undefined);
-    if (typeof result === 'object') problems.push(...result.problems);
-    else if (result === 'saved') changed++;
-    if (problems.length) return Theme.error(Theme.glyph.cross + ' Not saved: ' + problems.join('; '));
-    if (!changed) return Theme.muted('Apps unchanged.');
-    return (
-      Theme.ok(
-        Theme.glyph.ok +
-          ' Saved: ' +
-          (install.length ? install.length + ' app' + (install.length === 1 ? '' : 's') : 'no apps') +
-          '.',
-      ) +
-      Theme.muted(
-        this.file.isProject
-          ? ' The next launch asks you to approve the project file again.'
-          : ' The next sandbox installs what it does not have yet.',
-      )
-    );
-  }
-
-  /**
-   * Your own programs: the apps.custom map, each entry a form (GitHub release or link, program, command line or not).
-   */
-  private async editCustom(): Promise<string | undefined> {
-    const node = this.file.schema.child('apps')?.child('custom');
-    if (!node) return undefined;
-    const edited = await new ValueEditor(this.app).edit(
-      ['Apps', 'Your own programs'],
-      ['apps', 'custom'],
-      node,
-      this.file.userConfig().apps.custom,
-    );
-    if (!edited) return undefined;
-    const result = this.file.set(['apps', 'custom'], edited.value);
-    if (typeof result === 'object') return Theme.error(Theme.glyph.cross + ' Not saved: ' + result.problems.join('; '));
-    return result === 'saved'
-      ? Theme.ok(Theme.glyph.ok + ' Saved your programs (' + Object.keys(edited.value as object).length + ').')
-      : undefined;
+    const wanted = this.entries()
+      .filter((a) => !a.setting && ticked.includes(a.id))
+      .map((a) => a.id);
+    if (_.isEqual([...wanted].sort(), [...this.savedInstall()].sort())) draft.unstage(this.file, INSTALL);
+    else draft.stage(this.file, INSTALL, wanted.length || this.file.isProject ? wanted : undefined);
   }
 }
 
-/** For the home screen: "12 apps chosen". */
+/** For the Start tab and notices: "12 apps chosen". */
 export function appsSummary(file: ConfigFile): string {
   const config = file.userConfig();
   const n = config.apps.install.length + Object.keys(config.apps.custom).length;

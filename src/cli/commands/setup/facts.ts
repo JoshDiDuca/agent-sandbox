@@ -4,6 +4,7 @@ import _ from 'lodash';
 import { z } from 'zod';
 import { freeBytesAt } from '../../../core/disk.js';
 import { captureOutput, fileExists } from '../../../core/util/index.js';
+import { nativeScript } from '../../../host/native.js';
 import { SYSTEM, system32 } from '../../../shared/system.js';
 
 export type FeatureState = 'enabled' | 'pending' | 'disabled' | 'unknown';
@@ -50,18 +51,6 @@ export function featureFromInstallState(state: number | null | undefined): Featu
   return state === 1 ? 'enabled' : state === 2 || state === 3 ? 'disabled' : 'unknown';
 }
 
-// Fixed script (no outside data): CPU/hypervisor facts and the feature state, readable without admin rights.
-const PROBE = [
-  '$ErrorActionPreference = "SilentlyContinue"',
-  '$cpu = @(Get-CimInstance Win32_Processor)',
-  '$cs = Get-CimInstance Win32_ComputerSystem',
-  '$f = Get-CimInstance Win32_OptionalFeature -Filter "Name=\'' + FEATURE + '\'"',
-  '$v = $null; if ($cpu.Count) { $v = [bool]($cpu | Where-Object { $_.VirtualizationFirmwareEnabled }) }',
-  '$h = $null; if ($cs) { $h = [bool]$cs.HypervisorPresent }',
-  '$s = $null; if ($f) { $s = [int]$f.InstallState }',
-  '@{ virtualizationFirmware = $v; hypervisorPresent = $h; installState = $s } | ConvertTo-Json -Compress',
-].join('; ');
-
 const ProbeSchema = z
   .object({
     virtualizationFirmware: z.boolean().nullable(),
@@ -82,7 +71,9 @@ export function gatherFacts(storageRoot: string): MachineFacts {
   const reg = parseRegQuery(
     captureOutput(SYSTEM.reg(), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion']),
   );
-  const probe = parseProbe(captureOutput(SYSTEM.powershell(), ['-NoProfile', '-NonInteractive', '-Command', PROBE]));
+  const probe = parseProbe(
+    captureOutput(SYSTEM.powershell(), nativeScript('scripts/sandbox-probe.ps1', ['-Feature', FEATURE])),
+  );
   // DISM knows about a pending restart but needs admin rights; the CIM state works for everyone.
   const dism = parseDismState(
     captureOutput(SYSTEM.dism(), ['/English', '/Online', '/Get-FeatureInfo', '/FeatureName:' + FEATURE]),

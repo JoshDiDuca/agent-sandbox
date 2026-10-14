@@ -18,6 +18,8 @@ export const OptionSpecSchema = z.strictObject({
   type: z.enum(['boolean', 'string', 'number', 'list']).describe('list = repeatable string option.'),
   value: z.string().optional().describe('Placeholder shown in help, e.g. name for --account <name>.'),
   description: z.string(),
+  /** Plain words for the menu form (the flag is shown when there is none). */
+  label: z.string().optional(),
   default: z.union([z.string(), z.number()]).optional(),
   choices: ChoicesSchema.optional(),
   /** Advanced options are only asked in the menu after "Show advanced options". */
@@ -81,7 +83,28 @@ function text(flag: string, value: string, description: string, extra: Partial<O
   };
 }
 
-const SANDBOX_OPTIONS: OptionSpec[] = [
+/** Plain words for the start form's options (the command line keeps the flags). */
+const LABELS: Readonly<Record<string, string>> = {
+  '--harness': 'Agent',
+  '--account': 'Claude account',
+  '--terminal': 'Attach this terminal',
+  '--headless': 'Hide the sandbox window',
+  '--window': 'Show the sandbox window',
+  '--new': 'Always start a new session',
+  '--workspace': 'Folder',
+  '--node': 'Node version',
+  '--python': 'Python version',
+  '--database': 'Databases to start',
+  '--script': 'Scripts to run first',
+  '--trust-config': "Approve the folder's config",
+  '--no-local-config': "Ignore the folder's config",
+  '--no-agent': 'Start no agent',
+};
+function labelled(options: OptionSpec[]): OptionSpec[] {
+  return options.map((o) => (LABELS[o.flag] ? { ...o, label: LABELS[o.flag] } : o));
+}
+
+const SANDBOX_OPTIONS: OptionSpec[] = labelled([
   bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", { short: '-t' }),
   bool('--headless', 'hide the sandbox window (sbx-show brings it back)'),
   bool('--new', 'always start a new session, even if this folder has an unattached one'),
@@ -115,8 +138,8 @@ const SANDBOX_OPTIONS: OptionSpec[] = [
     'when this folder is not in the running sandbox, or wants what it started without (vGPU, folders), restart without asking',
     { noMenu: true },
   ),
-];
-const AGENT_OPTIONS: OptionSpec[] = [
+]);
+const AGENT_OPTIONS: OptionSpec[] = labelled([
   text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
   {
     flag: '--session',
@@ -129,7 +152,7 @@ const AGENT_OPTIONS: OptionSpec[] = [
   text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts' }),
   ...SANDBOX_OPTIONS,
   bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true }),
-];
+]);
 const json = true;
 
 /** A spec as written below (`as const` makes every array readonly). */
@@ -265,11 +288,16 @@ const COMMAND_LIST = [
         name: 'action',
         description: 'what to do',
         required: false,
-        choices: ['list', 'save', 'use', 'default', 'remove'],
+        choices: ['list', 'save', 'use', 'default', 'rename', 'remove'],
       },
       { name: 'name', description: 'account name', required: false, choices: 'accounts' },
     ],
     options: [
+      text('--to', 'name', '(rename) the new name', { when: 'rename', label: 'New name' }),
+      text('--agent', 'name', 'whose login: an agent that keeps one (default: claude)', {
+        choices: 'harnesses',
+        label: 'Agent',
+      }),
       bool('--from-host', "(save) save this PC's login instead of the sandbox's", { when: 'save' }),
       bool('--no-restart', '(use) do not restart running sessions', { when: 'use' }),
     ],
@@ -391,6 +419,15 @@ const COMMAND_LIST = [
     group: 'Agents',
     args: [],
     options: [bool('--personal', 'use your normal Claude profile')],
+    passthrough: 'agent',
+    interactive: true,
+  },
+  {
+    name: 'host',
+    summary: 'run an agent on this PC, NOT sandboxed (sandbox host <agent> -- <arguments>)',
+    group: 'Agents',
+    args: [{ name: 'agent', description: 'the agent to run here', required: true, choices: 'harnesses' }],
+    options: [bool('--personal', '(claude) use your normal Claude profile')],
     passthrough: 'agent',
     interactive: true,
   },

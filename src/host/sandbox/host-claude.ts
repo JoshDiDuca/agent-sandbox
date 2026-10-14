@@ -2,8 +2,38 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { refuseInSelfTest } from '../test-guard.js';
-import { commandsDir, realAgent } from '../agent-commands/index.js';
+import { agentCommands, commandsDir, realAgent } from '../agent-commands/index.js';
+import type { Config } from '../../core/types.js';
 import { ensureDir, fail } from '../../core/util/index.js';
+
+/** Runs any agent's own program on this PC, NOT sandboxed (`sandbox host <agent>`). */
+export function hostAgent(
+  config: Config,
+  storageRoot: string,
+  agent: string,
+  personal: boolean,
+  args: string[],
+): number {
+  if (agent === 'claude') return hostClaude(storageRoot, personal, args);
+  refuseInSelfTest('run an agent on this PC');
+  // Every installed agent, whatever agentCommands.agents lists; never this tool's own forwarding files.
+  const all: Config = { ...config, agentCommands: { ...config.agentCommands, agents: 'auto' } };
+  const found = agentCommands(all, storageRoot).find((a) => a.harness === agent);
+  if (!found)
+    fail(
+      agent in config.harnesses
+        ? agent + ' is not installed on this PC (its command is not on PATH).'
+        : 'Unknown agent "' + agent + '".',
+      'Install it on this PC first, or start it in the sandbox with: sandbox ' + agent,
+    );
+  const env: NodeJS.ProcessEnv = { ...process.env, SANDBOX_AGENT_DIRECT: '1' };
+  console.warn(agent + ' on this PC is NOT sandboxed.');
+  const result = found.real.toLowerCase().endsWith('.cmd')
+    ? spawnSync(SYSTEM.cmd(), ['/d', '/c', found.real, ...args], { stdio: 'inherit', env })
+    : spawnSync(found.real, args, { stdio: 'inherit', env });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
 
 export function hostClaude(storageRoot: string, personal: boolean, args: string[]): number {
   refuseInSelfTest('run Claude Code on this PC');

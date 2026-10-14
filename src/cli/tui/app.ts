@@ -3,7 +3,8 @@
 import { ConfirmScreen, type ConfirmOptions } from './dialogs/confirm-screen.js';
 import { MessageScreen } from './dialogs/message-screen.js';
 import { TextScreen, type TextOptions } from './dialogs/text-screen.js';
-import { Frame } from './frame.js';
+import { OverlayScreen, type OverlayOptions } from './dialogs/overlay.js';
+import { Frame, type TabsState } from './frame.js';
 import { ListScreen } from './list/list-screen.js';
 import { type ListOptions, type ListResult } from './list/list-types.js';
 import { Terminal } from './terminal.js';
@@ -13,17 +14,33 @@ import type { Screen } from './screen.js';
 export class App {
   /** The status line for screens that do not set their own (refreshed on every draw). */
   status: () => string = () => '';
+  /** The tabs shown across the top of every screen (none: no tab row). */
+  tabs: () => TabsState | undefined = () => undefined;
+  /** The screens being shown, innermost last: a dialog is drawn over the one below it. */
+  private readonly shown: Screen<unknown>[] = [];
+  private redrawNow: (() => void) | null = null;
 
   constructor(readonly terminal: Terminal = new Terminal()) {}
+
+  /** Draws the screen on top again now (before a slow piece of work, so its notice is visible). */
+  redraw(): void {
+    this.redrawNow?.();
+  }
 
   /** Shows `screen` until its handler says it is done, and returns what it returned. */
   async show<T>(screen: Screen<T>): Promise<T> {
     this.terminal.start();
+    this.shown.push(screen);
+    const outer = this.redrawNow;
     const draw = (): void => {
       const { width, height } = this.terminal;
-      const parts = screen.render({ width, height: Frame.bodyHeight(height) });
-      this.terminal.render(Frame.render({ ...parts, status: parts.status ?? this.status() }, width, height));
+      const tabs = this.tabs();
+      const parts = screen.render({ width, height: Frame.bodyHeight(height, Boolean(tabs)) });
+      this.terminal.render(
+        Frame.render({ ...parts, status: parts.status ?? this.status(), tabs: parts.tabs ?? tabs }, width, height),
+      );
     };
+    this.redrawNow = draw;
     this.terminal.onResized(draw);
     try {
       for (;;) {
@@ -32,8 +49,30 @@ export class App {
         if (step) return step.done;
       }
     } finally {
-      this.terminal.onResized(null);
+      this.shown.pop();
+      this.redrawNow = outer;
+      this.terminal.onResized(outer);
     }
+  }
+
+  /** A dialog over the screen below (Save / Discard / Cancel, Yes / No ...). */
+  dialog<T>(o: OverlayOptions<T>): Promise<T> {
+    const below = this.shown[this.shown.length - 1];
+    return this.show(new OverlayScreen(below ?? { render: () => ({ path: [], body: [], keys: [] }) }, o));
+  }
+
+  /** Yes or no over the current screen; Esc is no. */
+  ask(title: string, lines: readonly string[], yes = 'Yes', danger = false): Promise<boolean> {
+    return this.dialog<boolean>({
+      title,
+      lines,
+      choices: [
+        { value: true, label: yes, key: 'y', danger },
+        { value: false, label: 'Cancel', key: 'n' },
+      ],
+      initial: danger ? 1 : 0,
+      escape: false,
+    });
   }
 
   list<T>(o: ListOptions<T>): Promise<ListResult<T>> {
