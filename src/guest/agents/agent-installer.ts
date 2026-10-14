@@ -12,6 +12,7 @@ import { exists, mkdirp } from '../runtime/fs.js';
 import { log, warn } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
 import { addMachineEnvironment } from '../setup/environment.js';
+import { linkHarnessProfile } from './profile-links.js';
 
 /** Where an agent comes from: copied from this PC, or installed with npm or uv. */
 export type AgentSource = 'host' | 'npm' | 'uv';
@@ -88,6 +89,7 @@ export class AgentInstaller {
   ): Promise<void> {
     const current = this.installing.get(name);
     if (current) return current;
+    linkHarnessProfile(name, harness);
     const work = this.install(name, harness, env, refresh)
       .then(() => putOnPath(agentPaths(name, harness).dir, env))
       .finally(() => this.installing.delete(name));

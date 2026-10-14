@@ -306,6 +306,16 @@
       "npmBin": "opencode",
       "arguments": [],
       "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".local/share/opencode",
+          ".config/opencode"
+        ],
+        "loginFiles": [
+          "profile/.local/share/opencode/auth.json"
+        ]
+      },
       "resumeArguments": [
         "--continue"
       ]
@@ -315,6 +325,15 @@
       "npmBin": "qwen",
       "arguments": [],
       "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".qwen"
+        ],
+        "loginFiles": [
+          "profile/.qwen/oauth_creds.json"
+        ]
+      },
       "resumeArguments": [
         "--continue"
       ]
@@ -360,6 +379,17 @@
       "npmBin": "kilo",
       "arguments": [],
       "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".config/kilo",
+          ".local/share/kilo"
+        ],
+        "loginFiles": [
+          "profile/.local/share/kilo/auth.json",
+          "profile/.config/kilo/kilo.jsonc"
+        ]
+      },
       "resumeArguments": [
         "--continue"
       ]
@@ -368,13 +398,32 @@
       "npmPackage": "@ampcode/cli@latest",
       "npmBin": "amp",
       "arguments": [],
-      "environment": {}
+      "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".config/amp",
+          ".local/share/amp"
+        ],
+        "loginFiles": [
+          "profile/.local/share/amp/secrets.json"
+        ]
+      }
     },
     "cline": {
       "npmPackage": "cline@latest",
       "npmBin": "cline",
       "arguments": [],
-      "environment": {}
+      "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".cline"
+        ],
+        "loginFiles": [
+          "profile/.cline/data/settings/providers.json"
+        ]
+      }
     },
     "continue": {
       "npmPackage": "@continuedev/cli@latest",
@@ -390,6 +439,15 @@
       "npmBin": "kimi",
       "arguments": [],
       "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".kimi-code"
+        ],
+        "loginFiles": [
+          "profile/.kimi-code/config.toml"
+        ]
+      },
       "resumeArguments": [
         "-c"
       ]
@@ -404,7 +462,16 @@
       "npmPackage": "codewhale@latest",
       "npmBin": "codewhale",
       "arguments": [],
-      "environment": {}
+      "environment": {},
+      "home": {
+        "env": {},
+        "profileDirs": [
+          ".codewhale"
+        ],
+        "loginFiles": [
+          "profile/.codewhale/config.toml"
+        ]
+      }
     },
     "aider": {
       "uvPackage": "aider-chat",

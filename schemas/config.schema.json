@@ -1467,6 +1467,15 @@
                 },
                 "description": "Environment variable -> folder (below the sandbox state folder) the agent keeps its data in."
               },
+              "profileDirs": {
+                "description": "Folders below the sandbox's user profile (e.g. .qwen, .config/opencode) the agent keeps its data in: each becomes a link to state\\<agent>\\profile\\<folder>, so it survives between sandboxes.",
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
+                }
+              },
               "loginFiles": {
                 "type": "array",
                 "items": {

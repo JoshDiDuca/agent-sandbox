@@ -12,6 +12,13 @@ export const HarnessHomeSchema = z.strictObject({
   env: z
     .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), SubfolderSchema)
     .describe('Environment variable -> folder (below the sandbox state folder) the agent keeps its data in.'),
+  profileDirs: z
+    .array(SubfolderSchema.refine((d) => !d.split(/[\\/]/).includes('.'), 'a plain relative folder'))
+    .max(8)
+    .optional()
+    .describe(
+      "Folders below the sandbox's user profile (e.g. .qwen, .config/opencode) the agent keeps its data in: each becomes a link to state\\<agent>\\profile\\<folder>, so it survives between sandboxes.",
+    ),
   loginFiles: z
     .array(SubfolderSchema)
     .describe("Files that make up the login, relative to the agent's own state folder (state\\<agent>)."),

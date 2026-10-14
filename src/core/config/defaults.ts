@@ -142,6 +142,12 @@ export const DEFAULTS: Config = {
       npmBin: 'opencode',
       arguments: [],
       environment: {},
+      // Docs: opencode.ai/docs/providers (~/.local/share/opencode/auth.json, ~/.config/opencode).
+      home: {
+        env: {},
+        profileDirs: ['.local/share/opencode', '.config/opencode'],
+        loginFiles: ['profile/.local/share/opencode/auth.json'],
+      },
       resumeArguments: ['--continue'],
     },
     qwen: {
@@ -149,6 +155,8 @@ export const DEFAULTS: Config = {
       npmBin: 'qwen',
       arguments: [],
       environment: {},
+      // Docs: qwenlm.github.io/qwen-code-docs (settings in ~/.qwen); oauth_creds.json is the cached browser login.
+      home: { env: {}, profileDirs: ['.qwen'], loginFiles: ['profile/.qwen/oauth_creds.json'] },
       resumeArguments: ['--continue'],
     },
     crush: {
@@ -175,10 +183,35 @@ export const DEFAULTS: Config = {
       npmBin: 'kilo',
       arguments: [],
       environment: {},
+      // Docs: kilo.ai/docs/getting-started/settings (~/.config/kilo/kilo.jsonc); a fork of opencode, so its data
+      // folder is assumed to be the same kind as opencode's.
+      home: {
+        env: {},
+        profileDirs: ['.config/kilo', '.local/share/kilo'],
+        loginFiles: ['profile/.local/share/kilo/auth.json', 'profile/.config/kilo/kilo.jsonc'],
+      },
       resumeArguments: ['--continue'],
     },
-    amp: { npmPackage: '@ampcode/cli@latest', npmBin: 'amp', arguments: [], environment: {} },
-    cline: { npmPackage: 'cline@latest', npmBin: 'cline', arguments: [], environment: {} },
+    // Docs: ampcode.com/docs/cli/settings (~/.config/amp); the key file is from the amped tool's notes.
+    amp: {
+      npmPackage: '@ampcode/cli@latest',
+      npmBin: 'amp',
+      arguments: [],
+      environment: {},
+      home: {
+        env: {},
+        profileDirs: ['.config/amp', '.local/share/amp'],
+        loginFiles: ['profile/.local/share/amp/secrets.json'],
+      },
+    },
+    // Docs: docs.cline.bot/cline-cli/configuration (~/.cline/data/settings/providers.json).
+    cline: {
+      npmPackage: 'cline@latest',
+      npmBin: 'cline',
+      arguments: [],
+      environment: {},
+      home: { env: {}, profileDirs: ['.cline'], loginFiles: ['profile/.cline/data/settings/providers.json'] },
+    },
     continue: {
       npmPackage: '@continuedev/cli@latest',
       npmBin: 'cn',
@@ -191,11 +224,20 @@ export const DEFAULTS: Config = {
       npmBin: 'kimi',
       arguments: [],
       environment: {},
+      // Docs: kimi.com/code/docs (data root ~/.kimi-code, config.toml; the OAuth file name is not documented).
+      home: { env: {}, profileDirs: ['.kimi-code'], loginFiles: ['profile/.kimi-code/config.toml'] },
       resumeArguments: ['-c'],
     },
     // DeepSeek has no official coding CLI; these two community agents are built for it.
     reasonix: { npmPackage: 'reasonix@latest', npmBin: 'reasonix', arguments: [], environment: {} },
-    deepseek: { npmPackage: 'codewhale@latest', npmBin: 'codewhale', arguments: [], environment: {} },
+    // ~/.codewhale/config.toml is from third-party guides (instagit.com/Hmbown/CodeWhale).
+    deepseek: {
+      npmPackage: 'codewhale@latest',
+      npmBin: 'codewhale',
+      arguments: [],
+      environment: {},
+      home: { env: {}, profileDirs: ['.codewhale'], loginFiles: ['profile/.codewhale/config.toml'] },
+    },
     aider: {
       uvPackage: 'aider-chat',
       uvBin: 'aider',

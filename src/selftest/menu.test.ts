@@ -6,6 +6,8 @@ import { Draft } from '../cli/menu/settings/draft.js';
 import { hostAgentsToShow, startArgv } from '../cli/menu/pages/start-page.js';
 import { TAB_LABELS } from '../cli/menu/shell.js';
 import { DEFAULTS } from '../core/config/index.js';
+import { HarnessSchema } from '../core/schema/index.js';
+import { profileLinkPairs } from '../shared/paths/index.js';
 import { AccountsService, parseDatabaseList } from '../cli/services/index.js';
 import { dialogBox, KeyBar, overlayBox, TabBar, Text, type KeyHint } from '../cli/tui/index.js';
 import { renderScreens } from './menu-screens.js';
@@ -163,9 +165,44 @@ export const menuSuite: Suite = {
       'Claude is listed first, then the agents that keep a login',
     );
     t.check(
-      service.agents().some((a) => a.name === 'opencode' && !a.kept),
+      service.agents().some((a) => a.name === 'reasonix' && !a.kept),
       'an agent without a known login folder is listed as not kept',
     );
+    t.check(
+      service.agents().some((a) => a.name === 'qwen' && a.kept && !a.canSavePc),
+      'an agent that keeps its login in the profile counts as kept',
+    );
+    t.write(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), '{"token":"Q"}');
+    service.save('q', false, 'qwen');
+    t.write(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), '{"token":"Q2"}');
+    service.activate('q', 'qwen');
+    t.equal(
+      fs.readFileSync(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), 'utf8'),
+      '{"token":"Q"}',
+      'login files below profile/ are saved and restored',
+    );
+    t.equal(
+      profileLinkPairs('qwen', ['.qwen', '.config/x', '.QWEN'], 'C:\\Users\\u', 'C:\\AgentData\\state'),
+      [
+        { link: 'C:\\Users\\u\\.qwen', target: 'C:\\AgentData\\state\\qwen\\profile\\.qwen' },
+        { link: 'C:\\Users\\u\\.config\\x', target: 'C:\\AgentData\\state\\qwen\\profile\\.config\\x' },
+      ],
+      'the profile links: one pair per folder, below state\\<agent>\\profile, without repeats',
+    );
+    const home = (profileDirs: string[]): boolean =>
+      HarnessSchema.safeParse({
+        npmPackage: 'x',
+        npmBin: 'x',
+        arguments: [],
+        environment: {},
+        home: { env: {}, loginFiles: [], profileDirs },
+      }).success;
+    t.check(home(['.qwen', '.local/share/opencode', '.config\\opencode']), 'profile folders: relative paths are fine');
+    t.check(
+      !home(['..\\x']) && !home(['C:\\x']) && !home(['a/../b']) && !home(['./a']) && !home(['a|b']),
+      'profile folders: no "..", no drive, no ".", no odd characters',
+    );
+    t.check(!home(Array.from({ length: 9 }, (_, i) => 'd' + i)), 'profile folders: at most 8');
     t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"A"}');
     t.equal(service.save('main', false, 'codex'), { name: 'main', email: null }, 'saving the sandbox login works');
     t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"B"}');
@@ -203,7 +240,7 @@ export const menuSuite: Suite = {
     );
     service.remove('main', 'codex');
     t.equal(service.list('codex').length, 1, 'remove deletes the saved login');
-    await t.throws(() => service.save('x', false, 'opencode'), 'does not keep its login', 'no login folder: refused');
+    await t.throws(() => service.save('x', false, 'reasonix'), 'does not keep its login', 'no login folder: refused');
     await t.throws(() => service.save('bad name', false, 'codex'), 'Invalid account name', 'bad names are refused');
     t.write(
       t.at('acc', 'storage', 'accounts', 'old.json'),

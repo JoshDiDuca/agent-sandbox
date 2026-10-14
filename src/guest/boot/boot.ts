@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { writeGuides } from './guide.js';
 import { setupToolchains, type ToolchainResult } from '../toolchains/index.js';
 import { agents } from '../agents/agent-installer.js';
+import { linkProfileDirs } from '../agents/profile-links.js';
 import { restoreClaudeMem } from '../setup/claude-mem.js';
 import { syncClaudeProfile } from '../setup/claude-profile.js';
 import { agentEnv, persistEnvironment } from '../setup/environment.js';
@@ -208,6 +209,7 @@ export class Boot {
 
   private async agent(env: NodeJS.ProcessEnv): Promise<void> {
     step(6, 'Agent: ' + session.harnessName);
+    linkProfileDirs(session.agentProfileDirs ?? {});
     if (session.harness) await agents.provision(session.harnessName, session.harness, env);
   }
 
