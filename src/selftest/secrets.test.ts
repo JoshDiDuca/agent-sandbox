@@ -1,5 +1,5 @@
-// What reaches the sandbox from this PC's Claude files, and what is stripped first: API keys, cloud credentials, tokens in
-// MCP server definitions. Also the secret-looking files in a workspace that the launch warns about.
+// What reaches the sandbox from this PC's Claude files, and what is stripped first: API keys, cloud credentials, tokens
+// in MCP server definitions. Also the secret-looking files in a workspace that the launch warns about.
 import path from 'node:path';
 import { findSecretFiles, sandboxGlobalState, stripMcpServers, stripSettings } from '../host/profile/index.js';
 import type { Suite } from './support/suite.js';

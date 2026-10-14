@@ -13,7 +13,10 @@ import { encodeFrame, FrameType } from '../shared/pty/index.js';
 import { CSC, openViewer, tail, WAIT, type Viewer } from './support/live.js';
 import type { Suite } from './support/suite.js';
 
-/** The stand-in agent: VT input and SGR mouse tracking on, echoes what it reads ("got <1b>[<0;10;5M"). L prints 500 lines, K clears the screen, q quits. */
+/**
+ * The stand-in agent: VT input and SGR mouse tracking on, echoes what it reads ("got <1b>[<0;10;5M"). L prints 500
+ * lines, K clears the screen, q quits.
+ */
 const AGENT_CS = String.raw`
 using System;
 using System.Runtime.InteropServices;
@@ -70,7 +73,10 @@ const compile = (source: string, exe: string): string => {
     : ((result.stdout ?? '') + (result.stderr ?? '')).trim().slice(0, 1500) || 'csc failed';
 };
 
-/** conpty.dll as a sandbox has it (C:\AgentData\tools\conpty), when this machine has one; else only Windows' own is tested. */
+/**
+ * conpty.dll as a sandbox has it (C:\AgentData\tools\conpty), when this machine has one; else only Windows' own is
+ * tested.
+ */
 const conptyDll = (): string | null => {
   const dll = path.join(process.env.AGENT_DATA_DIR ?? 'C:\\AgentData', 'tools', 'conpty', 'conpty.dll');
   return fs.existsSync(dll) && fs.existsSync(path.join(path.dirname(dll), 'OpenConsole.exe')) ? dll : null;
@@ -212,7 +218,8 @@ export const liveTerminalSuite: Suite = {
         }
 
         if (kind) {
-          // A viewer that joins after the agent cleared its screen: the replay starts at the clear, the modes come first.
+          // A viewer that joins after the agent cleared its screen: the replay starts at the clear, the modes come
+          // first.
           send('K');
           await t.waitFor(() => screen().includes('CLEARED'), WAIT.screen);
           const late = await openViewer({ addresses: ['127.0.0.1'], port: innerPort, token: 'tok' });

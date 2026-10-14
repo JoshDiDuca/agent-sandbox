@@ -1,5 +1,5 @@
-// How the sandbox builds command lines for npm-installed agents (.cmd files run through cmd.exe): & | < > ^ % and quotes
-// must reach the agent unchanged.
+// How the sandbox builds command lines for npm-installed agents (.cmd files run through cmd.exe): & | < > ^ % and
+// quotes must reach the agent unchanged.
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,7 +28,8 @@ export const cmdlineSuite: Suite = {
   title: 'cmd.exe quoting for npm-installed agents',
   run: async (t) => {
     t.section('command lines');
-    // guest/cmdline.ts is loaded in a child process with a throwaway launch/data folder (it reads session.json on load).
+    // guest/cmdline.ts is loaded in a child process with a throwaway launch/data folder (it reads session.json on
+    // load).
     const quoteDir = t.at('quote');
     t.write(path.join(quoteDir, 'launch', 'session.json'), '{}');
     const agentCmd = t.write(

@@ -11,7 +11,9 @@ import type { Harness } from './harness.js';
 export const HOST_NODE_VERSION = 'v22.3.0';
 
 /** Colour codes are removed from captured output, so tests can match plain text. */
-export const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
+export function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
 
 export interface NodeRun {
   status: number | null;
@@ -24,9 +26,12 @@ export interface NodeRunOptions {
   timeoutMs?: number;
 }
 
-/** Runs `node <args>` and collects stdout + stderr (colours removed). Never throws; a hung process is killed at the timeout. */
-export const runNode = (args: string[], options: NodeRunOptions = {}): Promise<NodeRun> =>
-  new Promise((resolve) => {
+/**
+ * Runs `node <args>` and collects stdout + stderr (colours removed). Never throws; a hung process is killed at the
+ * timeout.
+ */
+export function runNode(args: string[], options: NodeRunOptions = {}): Promise<NodeRun> {
+  return new Promise((resolve) => {
     const child = spawn(process.execPath, args, {
       cwd: options.cwd,
       env: options.env ?? process.env,
@@ -52,11 +57,15 @@ export const runNode = (args: string[], options: NodeRunOptions = {}): Promise<N
       resolve({ status: timedOut ? null : status, out: stripAnsi(out), timedOut });
     });
   });
+}
 
-export const createFixtures = (t: Harness) => {
+// The fixtures type is inferred from this function (Fixtures below), so it has no written return type.
+// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+export function createFixtures(t: Harness) {
   const { at, write } = t;
 
-  // The PC: Node with npm, Claude Code, a ~/.claude profile (with a login that must never be copied) and ~/.claude.json.
+  // The PC: Node with npm, Claude Code, a ~/.claude profile (with a login that must never be copied) and
+  // ~/.claude.json.
   const hostNode = at('host-node');
   write(path.join(hostNode, 'node.exe'), 'x');
   write(path.join(hostNode, 'node_modules', 'npm', 'bin', 'npm-cli.js'), '');
@@ -76,7 +85,8 @@ export const createFixtures = (t: Harness) => {
     mcpServers: { github: { command: 'npx' } },
   });
 
-  // The install folder, two workspaces (B has a setup script), a folder to share, the storage root, and tools "from this PC".
+  // The install folder, two workspaces (B has a setup script), a folder to share, the storage root, and tools "from
+  // this PC".
   const install = at('install');
   t.dir('install', 'sub');
   const workA = t.dir('work-a');
@@ -90,7 +100,9 @@ export const createFixtures = (t: Harness) => {
   );
   write(at('host-tools', 'agents', 'claude', 'claude.exe'), 'fake-claude');
 
-  /** The default config, pointed at the fake PC. `copyFromHost = false` makes the sandbox download everything instead. */
+  /**
+   * The default config, pointed at the fake PC. `copyFromHost = false` makes the sandbox download everything instead.
+   */
   const makeConfig = (copyFromHost = true): Config => {
     const c = structuredClone(DEFAULTS);
     c.storage.root = at('storage');
@@ -207,6 +219,6 @@ export const createFixtures = (t: Harness) => {
     runBin,
     readJson,
   };
-};
+}
 
 export type Fixtures = ReturnType<typeof createFixtures>;

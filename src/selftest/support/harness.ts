@@ -40,6 +40,8 @@ export interface Harness {
   write: (file: string, content: string) => string;
   /** Writes `value` as JSON and returns the path. */
   writeJson: (file: string, value: unknown) => string;
+  // Tests read fields of known files directly; their shapes are checked by the assertions.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readJson: <T = any>(file: string) => T;
   /**
    * Sets a file's modified time to `secondsFromNow` (default: 10 s ahead). Sync decides what changed by comparing
@@ -76,7 +78,7 @@ const indent = (text: string): string =>
 const clip = (text: string, max = 800): string =>
   text.length > max ? text.slice(0, max) + ' ... (' + text.length + ' characters)' : text;
 
-export const createHarness = (packageRoot: string): RunningHarness => {
+export function createHarness(packageRoot: string): RunningHarness {
   let failed = 0;
   let total = 0;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-sandbox-test-'));
@@ -163,4 +165,4 @@ export const createHarness = (packageRoot: string): RunningHarness => {
     },
     dispose: () => fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }),
   };
-};
+}

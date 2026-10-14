@@ -40,10 +40,15 @@ See [docs/development.md](docs/development.md).
 
 ## Rules in short
 
-- TypeScript, arrow functions, lodash where it shortens code, zod for every shape read from disk.
+- TypeScript to the standard in [CLAUDE.md](CLAUDE.md#coding-standard): classes for state with behaviour, module
+  functions as `function` declarations, `interface` for shapes, string unions (no `enum`), zod for every shape read
+  from disk. `npm run lint` and `npm run format:check` pass.
+- No PowerShell or C# inside TypeScript strings: scripts are files in `sandbox/scripts` (in the sandbox) or
+  `native/scripts` (on this PC), run by path with parameters; C# lives in `sandbox/csharp` and `native/csharp` (C# 5).
 - The sandbox is hostile. Code on the PC never runs, follows or trusts what the sandbox wrote.
 - Messages are short, plain English. Errors the user can fix use `fail(message, fix)`.
-- New settings go in `src/core/schema.ts` and `DEFAULTS`, plus `config.example.json` and the docs.
+- New settings go in `src/core/schema/` and `DEFAULTS` (`src/core/config/defaults.ts`), plus `config.example.json`
+  and the docs.
 - New commands go in `src/cli/manifest.ts` (flags and menu both come from it), plus `docs/commands.md`.
 - Add a test in `src/selftest/` for what you change. Tests may only use temp folders they create: never your real
   config, the registry, PATH, your profile or global git config.

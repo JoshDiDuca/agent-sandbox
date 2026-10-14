@@ -1,6 +1,6 @@
 // Network rules: which addresses the sandbox may reach (LAN block with the gateway and DNS kept), reading the
 // gateway/DNS from Windows output, and which addresses count as "the sandbox" for attach.
-import os from 'node:os';
+import type os from 'node:os';
 import { isSandboxAddress } from '../host/channel/index.js';
 import {
   buildFirewallCommands,

@@ -1,6 +1,6 @@
-// `agent-sandbox self-test [suite...]`: offline logic and security tests, plus live tests of the session daemon, ptyhost
-// and the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11).
-// They start real processes (the guest runtime, the daemon, csc, git), so they only run on a throwaway machine.
+// `agent-sandbox self-test [suite...]`: offline logic and security tests, plus live tests of the session daemon,
+// ptyhost and the git guard when running on Windows (they need csc.exe and ConPTY, both part of Windows 10/11). They
+// start real processes (the guest runtime, the daemon, csc, git), so they only run on a throwaway machine.
 //
 // Each area is one suite in its own *.test.ts file; the list below is the order they run in. Give suite names (or a
 // comma-separated list) to run only those: `sandbox self-test config`, `npm test -- live-daemon`.
@@ -94,8 +94,9 @@ export const SUITES: Suite[] = [
 ];
 
 /** Windows Sandbox (its user is always WDAGUtilityAccount) or a GitHub Actions runner: never someone's PC. */
-export const onThrowawayMachine = (): boolean =>
-  os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
+export function onThrowawayMachine(): boolean {
+  return os.userInfo().username.toLowerCase() === 'wdagutilityaccount' || process.env.GITHUB_ACTIONS === 'true';
+}
 
 interface Result {
   suite: Suite;
@@ -178,7 +179,7 @@ const printSummary = (results: Result[]): void => {
 };
 
 /** Resolves "a,b" / ["a", "b"] to suites; throws with the list of valid names for an unknown one. */
-export const pickSuites = (names: string[]): Suite[] => {
+export function pickSuites(names: string[]): Suite[] {
   const wanted = names
     .flatMap((n) => n.split(','))
     .map((n) => n.trim())
@@ -188,9 +189,9 @@ export const pickSuites = (names: string[]): Suite[] => {
   if (unknown.length)
     throw new Error('No test suite called ' + unknown.join(', ') + '. Suites: ' + SUITES.map((s) => s.name).join(', '));
   return SUITES.filter((s) => wanted.includes(s.name));
-};
+}
 
-export const selfTest = async (packageRoot: string, suiteNames: string[] = []): Promise<number> => {
+export async function selfTest(packageRoot: string, suiteNames: string[] = []): Promise<number> {
   if (!onThrowawayMachine()) {
     console.error(
       "The self-test only runs inside a Windows Sandbox, so it can never change this PC.\nRun it there: `sandbox start` in this folder, then `npm test` in the sandbox's terminal.",
@@ -226,4 +227,4 @@ export const selfTest = async (packageRoot: string, suiteNames: string[] = []): 
   const failures = t.failures();
   console.log(failures === 0 ? '\nALL TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
   return failures === 0 ? 0 : 1;
-};
+}

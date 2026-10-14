@@ -26,16 +26,19 @@ import type { Harness } from './harness.js';
 const WINDIR = process.env.WINDIR ?? 'C:\\Windows';
 export const CSC = path.join(WINDIR, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
 /** Live suites need Windows (ConPTY) and the .NET Framework compiler that ships with it. */
-export const liveTestsAvailable = (): boolean => process.platform === 'win32' && fs.existsSync(CSC);
+export function liveTestsAvailable(): boolean {
+  return process.platform === 'win32' && fs.existsSync(CSC);
+}
 
 /** Deadlines, in ms. Generous on purpose: they only matter when something is really wrong. */
 export const WAIT = { start: 120000, screen: 45000, response: 60000, viewers: 45000, exit: 45000 } as const;
 
-export const tail = (text: string, chars = 500): string =>
-  (text.length > chars ? '...' + text.slice(-chars) : text).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+export function tail(text: string, chars = 500): string {
+  return (text.length > chars ? '...' + text.slice(-chars) : text).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+}
 
 /** Connects, retrying until `ms`: a connection attempt can time out while the machine is busy. */
-export const connectPatiently = async (endpoint: Endpoint, ms = 60000): Promise<net.Socket> => {
+export async function connectPatiently(endpoint: Endpoint, ms = 60000): Promise<net.Socket> {
   const end = Date.now() + ms;
   for (;;) {
     try {
@@ -45,7 +48,7 @@ export const connectPatiently = async (endpoint: Endpoint, ms = 60000): Promise<
       await sleep(250);
     }
   }
-};
+}
 
 /** One connection to a session's ptyhost, collecting what the server sends. */
 export interface Viewer {
@@ -63,10 +66,10 @@ export interface Viewer {
 }
 
 /** Connects like a terminal tab would (`token` can be wrong on purpose) and says hello. */
-export const openViewer = async (
+export async function openViewer(
   attach: Endpoint,
   options: { token?: string; cols?: number; rows?: number } = {},
-): Promise<Viewer> => {
+): Promise<Viewer> {
   const socket = await connectPatiently({ ...attach, addresses: ['127.0.0.1'] });
   const reader = new FrameReader();
   let output = '';
@@ -96,31 +99,39 @@ export const openViewer = async (
     },
     close: () => socket.destroy(),
   };
-};
+}
 
 /** Polls until the viewer's screen shows `needle`. */
-export const sees = (t: Harness, viewer: Viewer, needle: string, ms: number = WAIT.screen): Promise<true | null> =>
-  t.waitFor(() => viewer.output().includes(needle), ms);
+export function sees(t: Harness, viewer: Viewer, needle: string, ms: number = WAIT.screen): Promise<true | null> {
+  return t.waitFor(() => viewer.output().includes(needle), ms);
+}
 
-/** Polls the session's viewer count until `accept` is satisfied; null when it never was. A query that gets no answer is retried. */
-export const viewersWhen = (
+/**
+ * Polls the session's viewer count until `accept` is satisfied; null when it never was. A query that gets no answer is
+ * retried.
+ */
+export function viewersWhen(
   t: Harness,
   attach: Endpoint,
   accept: (v: Viewers) => boolean,
   ms: number = WAIT.viewers,
-): Promise<Viewers | null> =>
-  t.waitFor(async () => {
+): Promise<Viewers | null> {
+  return t.waitFor(async () => {
     const v = await queryViewers({ ...attach, addresses: ['127.0.0.1'] }, 5000);
     return v && accept(v) ? v : null;
   }, ms);
+}
 
-export const copyCmdAsFakeAgent = (dataPath: string): void => {
+export function copyCmdAsFakeAgent(dataPath: string): void {
   const agentDir = path.join(dataPath, 'tools', 'agents', 'claude');
   ensureDir(agentDir);
   fs.copyFileSync(path.join(WINDIR, 'System32', 'cmd.exe'), path.join(agentDir, 'claude.exe'));
-};
+}
 
-/** A real session daemon (guest runtime) working on a generated launch folder, driven through the run folder like the host does. */
+/**
+ * A real session daemon (guest runtime) working on a generated launch folder, driven through the run folder like the
+ * host does.
+ */
 export interface LiveDaemon {
   run: string;
   child: ChildProcess;
@@ -135,11 +146,11 @@ export interface LiveDaemon {
   stop: () => Promise<void>;
 }
 
-export const startDaemon = (
+export function startDaemon(
   t: Harness,
   f: Fixtures,
   options: { launchPath: string; data: string; workspace: string; env?: Record<string, string> },
-): LiveDaemon => {
+): LiveDaemon {
   const { launchPath, data } = options;
   const output = t.at(path.basename(data) + '-daemon.out');
   const fd = fs.openSync(output, 'w');
@@ -194,4 +205,4 @@ export const startDaemon = (
       }
     },
   };
-};
+}

@@ -1,5 +1,5 @@
-// Live: the real guest session daemon + ptyhost (ConPTY), driven through the run folder exactly like the host does, with
-// cmd.exe standing in for the agent. One daemon serves all the checks below, in order (compiling ptyhost is slow).
+// Live: the real guest session daemon + ptyhost (ConPTY), driven through the run folder exactly like the host does,
+// with cmd.exe standing in for the agent. One daemon serves all the checks below, in order (compiling ptyhost is slow).
 import fs from 'node:fs';
 import path from 'node:path';
 import { queryViewers } from '../shared/pty/index.js';
@@ -67,7 +67,8 @@ export const liveDaemonSuite: Suite = {
       );
 
       t.section('live: counting viewers');
-      // Each count is polled: a query that gets no answer yet is asked again, and the number must settle on the expected value.
+      // Each count is polled: a query that gets no answer yet is asked again, and the number must settle on the
+      // expected value.
       const one = await viewersWhen(t, attach, (v) => v.viewers === 1);
       t.check(
         one !== null,

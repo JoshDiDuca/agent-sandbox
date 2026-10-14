@@ -1,4 +1,5 @@
-// Git access modes ("full", "readonly", "none"): which git commands the guard allows and the matching Claude deny rules.
+// Git access modes ("full", "readonly", "none"): which git commands the guard allows and the matching Claude deny
+// rules.
 import { gitDecision } from '../guest/git/decision.js';
 import { gitDenyRules } from '../guest/setup/git-rules.js';
 import type { Suite } from './support/suite.js';

@@ -6,61 +6,82 @@ repo, a host folder) and `C:\AgentData` (tools/state/logs) survive the wipe: put
 Downloads for testing go in your scratchpad. User docs: README.md and docs/. Contributor summary: CONTRIBUTING.md.
 
 ## Layout
-- `src/cli/`: `manifest.ts` defines every command, argument and option once (zod). `args.ts` builds the commander
-  parser from it (pure `parseCli`), `index.ts` dispatches (no args: menu, `sandbox <agent>`: launch), `history.ts`
-  remembers the last commands, `colors.ts` is the colour policy. `tui/` is the screen toolkit every menu screen uses
-  (`App` shows one `Screen` at a time; `Terminal` = alternate screen, raw keys, diffed redraws; `Frame`, `ListScreen`
-  with sidebar/search/details/tick lists/tabs, `dialogs.ts` text field/confirm/message, `Theme`, `Text`). `menu/` is
-  the menu: `index.ts` (`Menu`, home screen), `command-form.ts` (a command as a form), `several.ts`, `apps.ts` (the
-  apps catalogue screen), `settings/` (`SchemaNode` reads the zod schemas, `ConfigFile` jsonc-preserving edits,
-  `ValueEditor` + collection editors, `categories.ts`, `index.ts` `SettingsEditor` with the two scope tabs).
-  `commands/`: one file per area (`launch`, `sessions` incl. `db`, `accounts`, `maintenance`) or a folder when an area
-  has several parts: `repair/` (`checks.ts` the checks, `finders.ts` pure finders, `types.ts`), `data/` (`collect.ts`
-  what is stored, `clean.ts` targets and removal, `remove.ts` link-safe delete), `setup/` (`facts.ts` what the PC has,
-  `checks.ts` the checklist). `context.ts` has what commands share (context, `table`, `printJson`, `requireOnPc`).
-  Several projects: `project.ts` is the ONE helper every command uses to find "the project this folder is in"
-  (`locateHere` looks, `joinHere` registers); `restart.ts` the consented restart that adds folders; `projects.ts` the
-  `sandbox projects` command; `user-config.ts` edits your config file.
-- `src/core/`: `schema.ts` re-exports `schema/` (zod, split by area: `common`, `sandbox`, `toolchains`, `databases`,
-  `profile`, `harness`, `config` = user config + project overrides, `json-schema`; JSON Schemas in `schemas/` are
-  generated from it), `config.ts` (`DEFAULTS`, loading), `local-config.ts` (`.sandbox-config.json`, tighten-only rules,
-  hash-based approvals), `workspace.ts` (run resolution, version files), `safe-paths.ts` (which folders may be mapped),
-  `detect-*.ts` (pure: project files to databases / toolchains / pwsh), `disk.ts` (sizes, free space, `humanBytes`),
-  `prompt.ts` (y/N and typed confirmations), `util.ts`, `types.ts`.
-- `src/host/`: runs on the PC. `generate.ts` (launch folder + session.json) with `launch/` (`wsb.ts` the .wsb,
-  `mappings.ts` mapped folders, `stage.ts` hooks, runtime and git identity), `project-scan.ts` (bounded reads of the
-  project), `pc-scan.ts` (what this PC has), `database-plan.ts`, `secrets.ts` (strips credentials from everything copied
-  in), `claude-profile.ts`, `channel.ts` (run-folder requests and waiting), `attach.ts` (terminal attach, Hyper-V
-  address check), `repo-guard.ts` (quarantines what the sandbox planted), `platform.ts`, `terminal.ts`, `window.ts`,
-  `accounts.ts`, `personalize.ts`, `cleanup.ts`, `test-guard.ts`. Several projects: `projects.ts` (host-only registry
-  of the running sandbox's projects + known projects, and `ProjectMapper`: roots, then `wsb share`, else
-  `NeedsRestart`), `join.ts` (resolve + check + register a folder, build its `ProjectSpec`), `launch/projects.ts`
-  (roots and projects mapped at boot), `wsb.ts` (the Windows Sandbox CLI adapter, untested). `workspace-view/`
-  (workspaceFilter: `IgnoreRules` reads .gitignore like git, `WorkspaceView` the filtered copy with three-way sync and
-  file watching, `index.ts` the launch plan, the `.git` mapping and the views the watcher keeps in step).
-- `src/guest/`: runs in the sandbox (bundled by esbuild into `dist/runtime/*.js`): `main.ts` (boot), `daemon.ts`
-  (request loop) with `daemon/` (`session`, `exec`, `shutdown`, shared `state`, `project` = provisioning a project
-  that joined after boot, per-session env), `project-context.ts` (AsyncLocalStorage: which project a toolchain step
-  is for, and `duringSession()`: never switch machine-wide state then), `boot-env.ts` / `project-env.ts` (the boot's
-  base environment, pure part separate), `project-status.ts`, `view.ts`, `gitguard.ts`, `db.ts`, `apps/` (installs the apps catalogue: `index.ts`,
-  `resolvers.ts` for vendor download pages),
-  `ports.ts`, `cmdline.ts` (agent command-line quoting), `helpers.ts` (compiles the C# helpers), `ptyhost.ts`,
-  `setup/*`, and `toolchains/*`: `index.ts` is the parallel install scheduler, `plan.ts` lists the steps, `common.ts`
-  shared helpers (resolveCached, installOnce, installFromGithub, downloadFile, `auto` detection), `versions.ts` (pure
-  version pickers), `leftovers.ts`; one module per area: `node`, `python`, `go`, `java`, `managers`, `runtimes`, `git`,
-  `cli`, `pwsh`, `vscode` (+ pure `vscode-profile.ts`: its settings and extensions); `scripting/` (ruby, php, vcruntime); `native/` (cpp, rust, binstall, dotnet, mesa, msvc/);
-  `databases/` (index, server, one file per database).
-- `src/shared/`: both sides. Channel `schema.ts`, `rundir.ts`, `pty-client.ts` (+ `console-input.ts`: the console passes mouse reports through), `download.ts` (streamed to `.part`,
-  hashed; `downloads.requireChecksum`; GitHub page fallback for the API rate limit), `netrules.ts`, `system.ts`,
-  `apps.ts` (pure: the apps catalogue, and which apps to install),
-  `guest-paths.ts`, `projects.ts` (pure: project ids, host <-> guest folders, `C:\Projects`), `safe-remove.ts`,
+Feature folders, each with an `index.ts` barrel (re-exports only). Other folders import the barrel; inside a folder,
+import siblings directly, never your own barrel. Guest code imports files directly, except the `guest/toolchains`,
+`guest/databases` and `guest/apps` barrels.
+- `src/cli/`: `manifest.ts` defines every command, argument and option once (zod; `as const satisfies`, `CommandName`).
+  `args.ts` builds the commander parser from it (pure `parseCli`), `argv.ts` the `--config` handling, `index.ts`
+  dispatches (no args: menu, `sandbox <agent>`: launch) through `commands/registry.ts` (`HANDLERS`), `report.ts`,
+  `history.ts` (the last commands), `validate.ts`. `output/` (colours, progress lines and `follow()`, `table`,
+  `printJson`). `tui/` is the screen toolkit and `menu/` the menu (owned by the menu work; see their files).
+  `commands/`: `launch/` (`Launcher`, `running.ts` sessions in the running sandbox, `prepare.ts`, `summary.ts` the
+  launch table, `boot-wants.ts`, `boot-progress.ts`, `first-start.ts`, `add-root.ts`), `sessions/` (attach, list, status,
+  exec + db, control, window), `projects/` (`here.ts` is the ONE helper every command uses to find "the project this
+  folder is in": `locateHere` looks, `joinHere` registers; `restart.ts` the consented restart with a `Relauncher`;
+  `projects.ts` the `sandbox projects` command), `maintenance/` (sync, logs, clean, config, doctor, host-claude, watch,
+  audit), `repair/`, `data/`, `setup/`, `accounts.ts`, `agent-commands.ts`, `user-config.ts`, `context.ts`.
+- `src/core/` (pure or host-side basics): `schema/` (zod by area, constants `XxxSchema`, types `Xxx`; JSON Schemas in
+  `schemas/` are generated from it), `config/` (`defaults.ts` = `DEFAULTS`, `loader.ts`), `local-config/`
+  (`.sandbox-config.json`: `file.ts`, `overrides.ts` tighten-only rules, `trust.ts` hash approvals and answers,
+  `policy.ts` joining a running sandbox, `boot-wants.ts` what a project wants at boot), `run/` (`resolveRun`, the guest
+  workspace, versions), `detect/` (pure: project files to databases / toolchains / pwsh, version pickers), `util/`
+  (`errors.ts` `UserError`/`fail`/`errMsg`, fs, links, paths, text, jsonc, process), `safe-paths.ts`, `disk.ts`,
+  `prompt.ts`, `package-info.ts` (`PACKAGE_ROOT`), `types.ts`.
+- `src/shared/` (host and guest): `channel/` (zod message schemas, `RunDir`), `io/` (`JsonFile`, atomic writes,
+  `safeRemove`), `download/` (`Downloader`: streamed, hashed, `requireChecksum`, progress; GitHub page fallback),
+  `pty/` (the ptyhost protocol, client, `runTerminalClient`, `InputJoiner`, console VT input), `paths/` (guest paths,
+  project ids and host <-> guest folders, `C:\Projects`), `network/`, `apps/` (the apps catalogue), `scripts.ts`
+  (`scriptArgs`: run `sandbox\scripts\*.ps1` by path), `system.ts` (`SYSTEM.*`), `test-guard.ts`.
+- `src/host/` (on the PC): `launch/` (`generateSandbox`, `wsb-file.ts`, `mappings.ts`, `session-file.ts`, `stage.ts`,
+  `boot-projects.ts`, project/PC scans, database plan), `channel/` (`SandboxChannel`, attach), `projects/`
+  (`ProjectRegistry`, `KnownProjects`, `ProjectMapper` with `NeedsRestart`, `join.ts`), `guard/` (`RepoGuard` with its
+  `GuardRule`s, `RepoGuardStore`, quarantine, mark of the web), `profile/` (secrets stripping, Claude profile and
+  logins, `AccountStore`, desktop look), `sandbox/` (platform, probe, doctor rows, the window, the `wsb` CLI adapter),
+  `life/` (`LifeRecord`, stop events, crash reports, `KeepAwake`, Windows Update), `workspace-view/` (workspaceFilter:
+  `IgnoreRules`, `WorkspaceView`), `agent-commands/`, `audit/`, `network/` (port forwards), `storage/` (cleanup,
+  `hostStateFile`), `tools/` (Windows Terminal, conpty.dll), `native.ts` (HostTools.exe and `native\scripts`),
   `test-guard.ts`.
-- `src/sync/`: history, claude-mem and the background watcher.
-- `sandbox/`: boot scripts (`logon.cmd`, `trust.cmd`, `bootstrap.ps1`, then `runtime\main.js`) and C# helpers compiled
-  in the sandbox by csc: `ptyhost.cs` (ConPTY bridge), `gitshim.cs`, `vswhere.cs`, `openssl.cs`.
-- `scripts/`: `install.ps1` (the `irm | iex` installer, PowerShell 5.1), `bundle.mjs`, `schemas.mjs`,
-  `install-global.mjs`, `publish-npm.mjs`.
-- `src/selftest/`: `npm test`, split by area. Live tests need Windows (csc + ConPTY).
+- `src/sync/`: history and claude-mem sync, `sync-cycle.ts`, `sync-state.ts`, and the background `Watcher`.
+- `src/guest/` (in the sandbox; bundled by esbuild into `dist/runtime/*.js` from `entries/`): `entries/` (main,
+  daemon, view, gitguard, db, netproxy), `runtime/` (paths; `session.ts` and `log.ts` have side effects on import;
+  process helpers incl. `runScript`, `csc.ts` compiles the C# helpers, project context), `boot/` (`Boot`: the steps as
+  methods), `daemon/` (`Daemon`, `SessionManager`, `ProjectProvisioner`, `IdleShutdown`, exec, relays), `sessions/`
+  (ptyhost, viewer, command lines), `agents/` (`AgentInstaller`), `setup/`, `network/`, `git/` (the git guard's
+  decision), `audit/`, `toolchains/` (`ToolchainStep`s from `plan.ts`, `StepScheduler`, one module per toolchain under
+  `languages/`, `native/`, `tools/`), `databases/` (`DatabaseServer` subclasses, `sbx-db`), `apps/` (`AppInstaller`).
+  Portable core: guest code imports only `core/types.ts`, `core/schema/**`, `core/detect/{toolchains,versions}.ts` and
+  `core/util/errors.ts` from core. Host code and tests may import only these guest files (no side effects):
+  `git/decision`, `setup/git-rules`, `boot/project-env`, `audit/parse`, `sessions/cmdline`, `toolchains/catalogue`,
+  `toolchains/tools/vscode-profile`. The `layout` suite checks all of this on the compiled output.
+- `sandbox/` (copied into every launch folder): `boot/` (`logon.cmd` -> `trust.cmd`, SandboxTools, then
+  `bootstrap.ps1` with its functions in `boot/bootstrap/`, then `runtime\main.js`), `scripts/` (verb-noun `.ps1` run by
+  path), `csharp/` (C# 5, compiled in the sandbox by csc: `PtyHost.cs` the ConPTY bridge, `GitShim.cs`, `VsWhere.cs`,
+  `OpenSsl.cs`, `CargoShim.cs`, `LinkGate.cs`; `SandboxTools/` built by logon.cmd: cpu-cap, page-file, memory-log;
+  `Desktop.cs`, `VtInput.cs` loaded by scripts with Add-Type).
+- `native/` (on the PC, shipped in the package): `csharp/HostTools/` (HostTools.exe, built on first use into
+  `<storage>\bin`: keep-awake, stop-events, hide-window, show-window, user-path) and `scripts/` (the PowerShell
+  fallbacks when it cannot be built, and `capture-look.ps1`).
+- `scripts/`: `install.ps1` (the `irm | iex` installer, PowerShell 5.1, keeps its inline C#), `bundle.mjs`,
+  `schemas.mjs`, `install-global.mjs`, `publish-npm.mjs`.
+- `src/selftest/`: `npm test`, one suite per area (`<area>.test.ts`), helpers in `support/`. Live tests need Windows
+  (csc + ConPTY).
+
+## Coding standard
+- Classes for state with behaviour or an identity with a lifecycle (a store file, a channel, a scheduler, a screen);
+  pure helpers stay module functions. Composition; inheritance only for abstract bases with template methods.
+  Constructor parameters `private readonly`; no `public` keyword; alternate constructors are static factories.
+- Exported module functions are `function` declarations with explicit return types; arrows for callbacks.
+- `interface` for object shapes, `type` for unions; `readonly` on data and inputs; constant tables `as const` /
+  `satisfies`. No `enum` or `namespace`: string-literal unions, runtime lists as `as const` arrays.
+- Errors the user can act on: `fail(message, fix)` (`core/util/errors.ts`). An empty `catch` says why in a comment.
+- zod for every shape read from disk (`JsonFile` or `readValid`). lodash only in cli/, host/, sync/ and host-side core/.
+- Prettier, 120 columns. Comments: a short file header, one-line `/** */` where a name is not enough, no banners.
+- `node:` prefix for built-ins, `import type` for types. Only cli/ prints (existing host prints keep their order).
+- No PowerShell or C# inside TypeScript strings: scripts are `.ps1` files run by path with parameters (JSON through a
+  temp file), C# is in `.cs` files. C# 5 only (no interpolation, `?.`, `nameof`, expression bodies), Allman braces,
+  P/Invoke in a nested `NativeMethods` class with `SetLastError`, failures as `Win32Exception`, named constants,
+  handles closed in `finally`. PowerShell: `#Requires -Version 5.1`, `param()`, approved verbs, CRLF.
+- `npm run lint` (ESLint, also the layer boundaries) and `npm run format:check` pass.
 
 ## Rules
 - `npm run build` = tsc + esbuild bundle + schema generation. Commit changed `schemas/*.json`.
@@ -71,27 +92,27 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
 - Inside a sandbox, commands that control the sandbox from outside (`launch`, `attach`, `exec`, `stop` ...) fail with a
   clear message (`requireOnPc`); `db` runs `dist/runtime/db.js` directly.
 - Tests use only temp folders they create. Never the real `~/.agent-sandbox`, registry, PATH, profile or global git config.
-- Arrow functions, lodash where it shortens code, zod for every shape read from disk. Keep the compact style.
 - Messages are short, plain English with no jargon. Errors the user can act on use `fail(message, fix)`.
 - The guest is hostile. Host code never executes guest data, never follows links under the data folder
   (`assertNoLinks`), keeps its own state outside it, validates everything read from `run/`, prints guest text through
   `safeText`, and reads workspace files with bounded effort (no unbounded regexes on them).
 - A repo's `.sandbox-config.json` is untrusted: it needs a hash-based approval, and may only make protections stricter
-  (`NEVER_LOOSER` in `local-config.ts`). Never add storage, executables, secrets or host folders to `LocalOverrides`.
-- Host code must never import guest modules with side effects (`guest/env.ts` reads session.json on load). Pure
-  helpers live in side-effect-free files (`versions.ts`, `gitrules.ts`, `detect-databases.ts`).
+  (`NEVER_LOOSER` in `core/local-config/overrides.ts`). Never add storage, executables, secrets or host folders to `LocalOverrides`.
+- Host code must never import guest modules with side effects (`guest/runtime/session.ts` reads session.json and
+  `runtime/log.ts` creates the logs folder on load). Pure helpers live in side-effect-free files (the allowlist above).
 - Never spawn programs by bare name: use `SYSTEM.*` or absolute paths (cwd is often the workspace).
-- New toolchain: a module, a step in `toolchains/index.ts`, schema + `DEFAULTS` + `config.example.json`, markers in
-  `common.ts` for `auto`. Long-running work uses `execAsync` / async downloads so parallel steps keep going. Update docs.
-- New setting or command: schema.ts / manifest.ts first (flags, menu and JSON Schema follow), then docs. The self-test
+- New toolchain: a module, a step in `toolchains/plan.ts`, schema + `DEFAULTS` + `config.example.json`, markers in
+  `toolchains/catalogue.ts` / `core/detect` for `auto`. Long-running work uses `execAsync` / async downloads so parallel steps keep going. Update docs.
+- New setting or command: `core/schema/` / `cli/manifest.ts` first (flags, menu and JSON Schema follow), then docs. The self-test
   checks that `config.example.json` equals `DEFAULTS`.
 - Several projects: the launch folder is the primary workspace. A project's guest path never depends on which project
   started the sandbox (git worktrees store absolute paths): inside a root it is `C:\Projects\<root>\<name>` (the launch
   folder too: the root shows it, no own mapping), otherwise `C:\Workspace\<name>` (launch, boot mapped, wsb shares),
-  all decided in `shared/projects.ts`. Anything that assumed ONE workspace must take the project from `ProjectSpec` / the registry.
+  all decided in `shared/paths/projects.ts`. Anything that assumed ONE workspace must take the project from `ProjectSpec` / the registry.
   Toolchain steps read the project folder through `projectWorkspace()`, and with `duringSession()` must not change
-  machine-wide state that running sessions use. Machine-wide protections are never loosened (`core/project-policy.ts`).
-- C# helpers: C# 5 only (the compiler that ships with Windows).
+  machine-wide state that running sessions use. Machine-wide protections are never loosened (`core/local-config/policy.ts`).
+- C#: C# 5 only (the compiler that ships with Windows): every csc helper compiles with
+  `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, every Add-Type file loads in powershell.exe 5.1.
 - Host Node may be 22.0.0 (CI tests it): no APIs or dependencies that need newer (commander 14, @inquirer/prompts 7).
 
 ## Gotchas
@@ -111,9 +132,9 @@ Downloads for testing go in your scratchpad. User docs: README.md and docs/. Con
   unit tests, `--help`, `config`, `data` and `doctor`.
 
 ## Databases on demand
-`sbx-db` is `src/guest/db.ts` (bundled to `dist/runtime/db.js`). It reads `session.json`: `databases` are the plans for
-this project, `databaseCatalog` lists every database it may start later. `sandbox db` runs it directly inside a sandbox
-and through the exec channel from the PC; `--database <name>` adds plans at launch.
+`sbx-db` is `src/guest/entries/db.ts` with `guest/databases/sbx-db.ts` (bundled to `dist/runtime/db.js`). It reads
+`session.json`: `databases` are the plans for this project, `databaseCatalog` lists every database it may start
+later. `sandbox db` runs it directly inside a sandbox and through the exec channel from the PC; `--database <name>` adds plans at launch.
 
 ## Workflows
 - In `release.yml` / `ci.yml`, a `pwsh` step ends with the exit code of its last native command. End steps with

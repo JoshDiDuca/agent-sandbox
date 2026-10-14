@@ -4,7 +4,14 @@
 npm install               # dependencies + build
 npm test                  # offline, security and live ConPTY/daemon/git tests; ends with ALL TESTS PASSED
 npm run install:global    # install this checkout globally as a COPY
+npm run lint              # ESLint (typescript-eslint): the coding standard and the architecture boundaries
+npm run format            # Prettier (120 columns); npm run format:check only checks
 ```
+
+`npm run lint` and `npm run format:check` must pass before a pull request. ESLint also enforces the layers: guest code
+never imports host, CLI or sync code, core and shared import neither, and only the CLI, `api.ts` and `bin/` sit on top.
+C# (`sandbox/csharp`, `native/csharp`) is C# 5 and must compile with
+`C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`; `.ps1` and `.cmd` files are CRLF.
 
 The self-test refuses to run on a normal PC: it only runs inside a Windows Sandbox (run `sandbox start`, then `npm test`
 in it) or on GitHub Actions, because the live tests create files, links and processes. `sandbox self-test` is the same
@@ -21,17 +28,22 @@ node dist/bin/agent-sandbox.js self-test cli,sync     # several, without buildin
 node dist/bin/agent-sandbox.js self-test nope         # prints the list of suite names
 ```
 
-- One file per area in `src/selftest/`, named `<area>.test.ts`, exporting a `Suite` (`suite.ts`). `index.ts` lists the
-  suites in run order. A suite that throws or hangs (default 2 minutes, `timeoutMs`) fails alone; the rest still run.
-- `harness.ts`: `t.equal(actual, expected, name)` (failures show both), `t.includes`, `t.excludes`, `t.matches`,
+- One file per area in `src/selftest/`, named `<area>.test.ts`, exporting a `Suite` (`support/suite.ts`). `index.ts`
+  lists the suites in run order. A suite that throws or hangs (default 2 minutes, `timeoutMs`) fails alone; the rest
+  still run.
+- `support/harness.ts`: `t.equal(actual, expected, name)` (failures show both), `t.includes`, `t.excludes`, `t.matches`,
   `t.throws(fn, 'text' | /regex/, name)` (message and fix hint), `t.check(ok, name, detail)`, `t.waitFor(read, ms)`,
   `t.touch(file)` (make a change clearly newer instead of sleeping), temp helpers `t.at`, `t.dir`, `t.write`,
   `t.writeJson`, `t.readJson`.
-- `fixtures.ts`: a fake PC (Node, Claude Code, a profile, workspaces) with `f.makeConfig()`, `f.run()`, `f.launch()`
-  (resolve + generate), `f.runGuest()` and `f.runBin()` (a built command as its own process).
-- Live suites (`live-*.test.ts`, helpers in `live.ts`) start the real daemon, ptyhost and git shim. They never sleep for a
+- `support/fixtures.ts`: a fake PC (Node, Claude Code, a profile, workspaces) with `f.makeConfig()`, `f.run()`,
+  `f.launch()` (resolve + generate), `f.runGuest()` and `f.runBin()` (a built command as its own process).
+- Live suites (`live-*.test.ts`, helpers in `support/live.ts`) start the real daemon, ptyhost and git shim, and
+  compile SandboxTools and HostTools. They never sleep for a
   fixed time: they poll until the condition holds, with long deadlines, and print the viewer's screen and the daemon log
   when a check fails. Keep it that way; a flaky test is a bug in the test or the product.
+- The `layout` suite checks the compiled imports: guest code reaches only the portable core, nothing imports an entry
+  point, there are no import cycles, and the pure guest files host code and tests may load never pull in the guest
+  runtime's side effects.
 - Slowest suites: `host-sim` (every command as its own Node process, two at a time), then the live ones.
 
 CI builds on Node 22 and on the official Node 22.0.0 zip (the oldest Node users run it on, so dependencies must not
