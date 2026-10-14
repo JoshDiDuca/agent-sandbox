@@ -173,7 +173,7 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
   if (!parsed) return { ...defaults(), command: '' };
   const { name, cmd } = parsed as { name: string; cmd: Command };
   const o = { ...program.opts(), ...cmd.opts() } as Record<string, unknown>;
-  const forAgent = ['launch', 'start', 'generate', 'host-claude'].includes(name);
+  const forAgent = ['launch', 'start', 'generate', 'host-claude', 'host'].includes(name);
   // Commander keeps our `--` separator among the operands when unknown options are allowed; it is ours, not the
   // agent's.
   const separator = forAgent ? cmd.args.indexOf('--') : -1;

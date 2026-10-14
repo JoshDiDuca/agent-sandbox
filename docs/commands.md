@@ -132,6 +132,7 @@ Changes to what is mapped apply from the next start.
 | `sandbox config show` / `path` / `init` / `schema` | all settings with defaults filled in as JSON / the file / create it / editor schemas |
 | `sandbox config check [--workspace <dir>]` | check a project's `.sandbox-config.json` and list what it changes, without starting anything |
 | `sandbox agent-commands [status\|on\|off]` | **(Beta)** typing an agent's own command on this PC (`claude`, `codex` ...) starts it in a hidden sandbox for the folder you are in and attaches that terminal. See [agent commands](configuration.md#agent-commands-beta) |
+| `sandbox host <agent> [-- arguments]` | any agent installed on this PC, run here, **not** sandboxed (`SANDBOX_AGENT_DIRECT=1` is set for it) |
 | `sandbox host-claude` (or `claude-host`) | Claude on this PC, **not** sandboxed, with its own profile (`--personal` uses your normal one) |
 
 `sandbox --version` (or `-v`) prints the version. Inside a sandbox, commands that control it from outside (`launch`,

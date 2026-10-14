@@ -110,7 +110,7 @@ export class Menu {
       process.stdout.write('\x1b[2J\x1b[3J\x1b[H' + Theme.muted('$ ' + commandLine(argv)) + '\n\n');
       return this.runArgv(argv);
     });
-    const attaches = argv[0] === 'attach' || argv.includes('--terminal') || argv.includes('-t');
+    const attaches = argv[0] === 'attach' || argv[0] === 'host' || argv.includes('--terminal') || argv.includes('-t');
     if (commandSpec(argv[0])?.interactive && attaches) return code;
     await pressAnyKey(
       (code === 0 ? Theme.ok('Done.') : Theme.warn('Exit code ' + code + '.')) +

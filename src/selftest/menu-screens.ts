@@ -209,6 +209,7 @@ export function renderScreens(dir: string): string {
               last: ['launch', '--harness', 'claude', '--terminal'],
               attach: true,
               window: 'config',
+              hostAgents: ['codex'],
             },
             'C:\\Projects\\api',
           ),

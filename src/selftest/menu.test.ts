@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import { ConfigFile } from '../cli/menu/settings/config-file.js';
 import { Draft } from '../cli/menu/settings/draft.js';
-import { startArgv } from '../cli/menu/pages/start-page.js';
+import { hostAgentsToShow, startArgv } from '../cli/menu/pages/start-page.js';
 import { TAB_LABELS } from '../cli/menu/shell.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { AccountsService, parseDatabaseList } from '../cli/services/index.js';
@@ -115,12 +115,22 @@ export const menuSuite: Suite = {
           last: undefined,
           attach: true,
           window: 'hide',
+          hostAgents: [],
         },
         'codex',
         'C:\\code\\other',
       ),
       ['launch', '--harness', 'codex', '--terminal', '--headless', '--workspace', 'C:\\code\\api'],
       'the start tab builds the same command line the form would',
+    );
+    t.equal(
+      [
+        hostAgentsToShow(false, [{ harness: 'claude' }]),
+        hostAgentsToShow(true, [{ harness: 'claude' }, { harness: 'codex' }]),
+        hostAgentsToShow(true, []),
+      ],
+      [[], ['claude', 'codex'], []],
+      'not-sandboxed entries show only while agent commands are on, one per installed agent',
     );
     t.equal(
       parseDatabaseList(

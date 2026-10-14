@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Context } from '../../commands/context.js';
 import { commandLine, readHistory } from '../../history.js';
+import { AgentCommandsService } from '../../services/index.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
 import { Text, Theme, type App, type ListOptions, type ListResult } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
@@ -19,6 +20,16 @@ export interface StartModel {
   readonly last: string[] | undefined;
   readonly attach: boolean;
   readonly window: WindowChoice;
+  /** Agents that can be run on this PC without the sandbox (see hostAgentsToShow). */
+  readonly hostAgents: readonly string[];
+}
+
+/**
+ * The "not sandboxed" entries: only while agent commands are on (typing the agent then starts the sandbox, so a way to
+ * run the real one is needed), one per agent found installed on this PC.
+ */
+export function hostAgentsToShow(enabled: boolean, found: readonly { harness: string }[]): string[] {
+  return enabled ? found.map((a) => a.harness) : [];
 }
 
 const WINDOW_TEXT: Record<WindowChoice, string> = { config: 'as configured', hide: 'hidden', show: 'shown' };
@@ -84,6 +95,12 @@ export function startOptions(m: StartModel, cwd: string = process.cwd()): ListOp
         hint: Text.middle(m.folder, 40),
         description: 'The project folder to work on.',
       },
+      ...m.hostAgents.map((agent) => ({
+        value: 'host:' + agent,
+        label: 'Run ' + agent + ' on this PC (not sandboxed)',
+        section: 'Not sandboxed',
+        description: 'Runs the real ' + agent + ' on this PC, with no sandbox around it.',
+      })),
       {
         value: 'more',
         label: 'More options…',
@@ -136,6 +153,7 @@ export class StartPage extends ListPage<string> {
 
   private current(): StartModel {
     const config = this.ctx.loaded.config;
+    const commands = new AgentCommandsService(this.ctx).status();
     return {
       folder: this.folder,
       defaultAgent: config.defaultHarness,
@@ -143,6 +161,7 @@ export class StartPage extends ListPage<string> {
       last: readHistory()[0]?.argv,
       attach: this.attach,
       window: this.window,
+      hostAgents: hostAgentsToShow(commands.enabled, commands.found),
     };
   }
 
@@ -160,6 +179,7 @@ export class StartPage extends ListPage<string> {
     if (result.kind !== 'pick') return {};
     const id = result.value;
     const model = this.current();
+    if (id.startsWith('host:')) return { exit: { kind: 'run', argv: ['host', id.slice(5)] } };
     if (id.startsWith('agent:')) return { exit: { kind: 'run', argv: startArgv(model, id.slice(6), process.cwd()) } };
     switch (id) {
       case 'repeat':

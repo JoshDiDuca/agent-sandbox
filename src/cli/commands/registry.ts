@@ -6,7 +6,7 @@ import { data } from './data/index.js';
 import { attach, db, exec, hide, restart, sessions, show, status, stop } from './sessions/index.js';
 import { account } from './accounts.js';
 import { projects } from './projects/index.js';
-import { audit, claudeHost, clean, config, doctor, logs, sync, watcher } from './maintenance/index.js';
+import { audit, claudeHost, clean, config, doctor, hostCommand, logs, sync, watcher } from './maintenance/index.js';
 import { agentCommandsCommand } from './agent-commands.js';
 
 export type Handler = (ctx: Context) => number | Promise<number | void>;
@@ -35,5 +35,6 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   setup: setup,
   data: data,
   'host-claude': claudeHost,
+  host: hostCommand,
   _watch: watcher,
 } satisfies Partial<Record<CommandName, Handler>>;

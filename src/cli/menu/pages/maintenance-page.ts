@@ -44,7 +44,7 @@ const CATEGORIES = [
   { id: 'more', label: 'More commands', description: 'Less common commands.' },
 ];
 
-const MORE_COMMANDS = ['sync', 'audit', 'config', 'generate', 'exec', 'agent-commands', 'host-claude'];
+const MORE_COMMANDS = ['sync', 'audit', 'config', 'generate', 'exec', 'agent-commands'];
 
 const REPAIR_LABEL: Record<RepairStatus, [string, (t: string) => string]> = {
   ok: ['OK', Theme.ok],

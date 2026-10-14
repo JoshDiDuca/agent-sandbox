@@ -423,6 +423,15 @@ const COMMAND_LIST = [
     interactive: true,
   },
   {
+    name: 'host',
+    summary: 'run an agent on this PC, NOT sandboxed (sandbox host <agent> -- <arguments>)',
+    group: 'Agents',
+    args: [{ name: 'agent', description: 'the agent to run here', required: true, choices: 'harnesses' }],
+    options: [bool('--personal', '(claude) use your normal Claude profile')],
+    passthrough: 'agent',
+    interactive: true,
+  },
+  {
     name: 'menu',
     summary: 'the interactive menu (what `sandbox` opens with no arguments)',
     group: 'Config',
