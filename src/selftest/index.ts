@@ -18,6 +18,7 @@ import { cliSuite } from './cli.test.js';
 import { cmdlineSuite } from './cmdline.test.js';
 import { configSuite } from './config.test.js';
 import { migrateSuite } from './migrate.test.js';
+import { updateSuite } from './update.test.js';
 import { dataSuite } from './data.test.js';
 import { detectSuite } from './detect.test.js';
 import { generateSuite } from './generate.test.js';
@@ -54,6 +55,7 @@ export const SUITES: Suite[] = [
   // settings and project files
   configSuite,
   migrateSuite,
+  updateSuite,
   workspaceSuite,
   localConfigSuite,
   // the generated sandbox and the guest that boots it
