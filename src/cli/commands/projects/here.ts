@@ -113,12 +113,12 @@ export async function joinHere(ctx: Context, status: SandboxStatus, o: { noResta
       console.log(c.yellow(describeMissing(name, missing)));
       shown = true;
       const sessions = new SandboxChannel(dataPath).currentSessions();
-      const ending = sessions.length ? describeSessions(sessions) + ' will end' : 'no session is running';
+      if (sessions.length) console.log(describeSessions(sessions) + ' will be reopened after the restart.');
       return select<MissingChoice>({
         message: 'What now?',
         choices: [
-          { name: 'Continue anyway (join without them)', value: 'continue' },
-          { name: 'Restart with them (' + ending + ')', value: 'restart' },
+          { name: 'Restart with them (sessions reopen and continue)', value: 'restart' },
+          { name: 'Continue without them', value: 'continue' },
           { name: 'Cancel', value: 'cancel' },
         ],
         default: 'continue',

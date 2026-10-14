@@ -45,6 +45,11 @@ export interface CliOptions {
   /** audit: only events of this kind, and containing this text. */
   kind?: string;
   grep?: string;
+  /** migrate --dry-run, and --restore <backup folder>. */
+  dryRun: boolean;
+  restore?: string;
+  /** resume --auto: called by the background watcher after a crash. */
+  auto: boolean;
 }
 
 /** One session to start: an agent in a folder, with arguments of its own (after the ones given after --). */
@@ -215,6 +220,9 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
     days: (o.days as number | undefined) ?? (name === 'audit' ? 1 : 7),
     kind: o.kind as string | undefined,
     grep: o.grep as string | undefined,
+    dryRun: Boolean(o.dryRun),
+    auto: Boolean(o.auto),
+    restore: o.restore as string | undefined,
   };
 }
 
@@ -234,6 +242,8 @@ function defaults(): CliOptions {
     fromHost: false,
     noRestart: false,
     follow: false,
+    dryRun: false,
+    auto: false,
     json: false,
     yes: false,
     all: false,

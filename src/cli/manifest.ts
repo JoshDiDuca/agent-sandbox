@@ -197,6 +197,15 @@ const COMMAND_LIST = [
     interactive: true,
   },
   {
+    name: 'resume',
+    summary: 'reopen the sessions from the last sandbox',
+    group: 'Sessions',
+    args: [],
+    options: [
+      bool('--auto', 'used by the background sync after a crash: no questions', { noMenu: true, advanced: true }),
+    ],
+  },
+  {
     name: 'sessions',
     summary: 'list agent sessions and who is attached',
     group: 'Sessions',
@@ -370,6 +379,18 @@ const COMMAND_LIST = [
     group: 'Health',
     args: [],
     options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })],
+  },
+  {
+    name: 'migrate',
+    summary: 'bring your saved settings up to date with this version',
+    group: 'Health',
+    args: [],
+    options: [
+      bool('--dry-run', 'only list what would change'),
+      text('--restore', 'backup', 'put back the files saved before an update (a folder under <storage>\\backups)', {
+        advanced: true,
+      }),
+    ],
   },
   {
     name: 'repair',

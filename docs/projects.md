@@ -22,7 +22,7 @@ without a restart when it can:
    start.
 2. On Windows 11 24H2+ with the updated Windows Sandbox: `wsb share` (untested; any error falls back to 3).
 3. Otherwise you are offered a **restart** that maps it too. It lists the sessions that will end, keeps your files,
-   tools, databases and logins, and can reopen those sessions (continuing their conversations). `--yes` skips the
+   tools, databases and logins, and reopens those sessions afterwards (each continuing its conversation). `--yes` skips the
    question; without a terminal it is never done without `--yes`.
 
 The project is then set up on demand: its toolchains, versions, databases and its `.sandbox-config.json`, approved as
@@ -59,9 +59,14 @@ is changed without your answer (or `--yes` for a restart).
 you allowed for the project, a larger fixed `memoryMb`, its approved mappings) cannot be added to a running sandbox.
 When the project joins one started without them, each missing item is named and you choose:
 
-- **Continue anyway**: join without them.
-- **Restart with them**: lists the sessions that end, then restarts.
+- **Restart with them (sessions reopen and continue)**: lists the sessions that end, restarts, and reopens them, each
+  continuing its conversation.
+- **Continue without them**: join as the sandbox is.
 - **Cancel**.
+
+A project whose own settings are stricter than the running sandbox's (for example vGPU off while it is on) asks
+"Join with the sandbox's settings?" instead; `--yes` accepts. Any agent can join this way: `sandbox codex` next to a
+running Claude works the same.
 
 Without a terminal it continues and prints the restart command. A sandbox that starts with several projects (a restart,
 `--session`, `projects.all`, the known projects in your roots) boots with what each of them wants and you allowed. A

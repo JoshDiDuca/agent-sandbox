@@ -167,6 +167,7 @@ export function renderScreens(dir: string): string {
       { name: 'Stale run folders', status: 'fixed', detail: 'removed 2' },
       { name: 'Toolchain cache', status: 'needs-you', detail: 'close the sandbox first' },
     ],
+    settings: { pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'] },
     setup: {
       facts: {} as never,
       canEnable: true,
@@ -276,7 +277,7 @@ export function renderScreens(dir: string): string {
         size,
       ),
     );
-    for (const category of ['data', 'logs', 'doctor', 'repair', 'setup', 'more'])
+    for (const category of ['data', 'logs', 'doctor', 'repair', 'settings', 'setup', 'more'])
       out.push(
         block(
           '7 Maintenance · ' + category,

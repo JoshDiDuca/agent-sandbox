@@ -38,7 +38,7 @@ Commonly changed:
 | `toolchains.rust.linker`, `.linkSlots` | GNU host: `"lld"` (default, far less memory than GNU ld) or `"gnu"`, and how many programs may link at once in the whole sandbox (`"auto"` = one per 8 GB, 2 to 4) |
 | `toolchains.cli.gh`, `.zstd`, `.openssl` | small command-line tools |
 | `toolchains.mesa.enabled`, `.vulkan` | software OpenGL / Vulkan when there is no GPU |
-| `harnesses` | agents and how to install them; `home` says where an agent keeps its login (variable -> folder in the saved state, the login files, the folder on this PC) so logins can be saved and switched |
+| `harnesses` | agents and how to install them; `home` says where an agent keeps its login (variable -> folder in the saved state, the login files, the folder on this PC) so logins can be saved and switched. An agent with no variable for it lists `profileDirs` (folders in the sandbox's user profile, such as `.qwen`): each is linked to `state\<agent>\profile\<folder>`, so its login survives the sandbox, and its `loginFiles` start with `profile/` |
 
 ## Paths
 
@@ -178,6 +178,19 @@ A repo can ship this file, so it is treated as untrusted:
   (`<storage>\allowed-requests.json`, which no repo or sandbox can write) for that project file only; `--trust-config`
   never allows one. Otherwise the launch names what was not used. Or set it in your own settings for every project.
 - It can never change storage, agent executables, secrets handling or any host folder used for tools or Claude settings.
+
+## Reopening sessions
+Your own settings only (a project's file cannot set them: they start sandboxes on this PC).
+
+| Setting | Default | What it does |
+|---|---|---|
+| `resume.sessions` | `"ask"` | when a sandbox starts after one that had agent sessions: `"ask"` lists them ("Last time: claude in api, codex in web (2 sessions). Reopen them?"; without a terminal it only names `sandbox resume`), `"always"` reopens them, `"afterCrash"` reopens them only when the last sandbox ended unexpectedly (and asks nothing otherwise), `"never"` leaves it to `sandbox resume` |
+| `resume.restartAfterCrash` | `false` | when Windows Sandbox crashes or runs out of memory, the background sync starts the sandbox again and reopens its sessions (`"ask"` counts as `"always"` there: nobody is at the PC). At most 3 times in 6 hours; then the next launch says it stopped trying |
+
+Each session reopens in its own folder, continuing its own conversation when the agent can open one by its id
+(`harnesses.<agent>.resumeOneArguments`, with `{id}`; Claude: `--resume {id}`), else the agent's last one
+(`resumeArguments`). Only sessions this tool started are reopened: terminal tabs you opened yourself inside the sandbox
+are not. What ran is noted every minute while the sandbox runs, on this PC (`<storage>\sync\<data>-sessions.json`).
 
 ## Accounts
 

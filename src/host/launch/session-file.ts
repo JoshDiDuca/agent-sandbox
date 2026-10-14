@@ -86,6 +86,11 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
     apps: config.apps,
     auditProcesses: config.audit.enabled && config.audit.processes,
     agentHomes: Object.assign({}, ...Object.values(config.harnesses).map((h) => h.home?.env ?? {})),
+    agentProfileDirs: Object.fromEntries(
+      Object.entries(config.harnesses).flatMap(([name, h]) =>
+        h.home?.profileDirs?.length ? [[name, h.home.profileDirs]] : [],
+      ),
+    ),
   };
 }
 

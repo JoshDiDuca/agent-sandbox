@@ -7,13 +7,23 @@ import { writeFileAtomic } from '../shared/io/index.js';
 import { refuseInSelfTest } from '../host/test-guard.js';
 import { errMsg, sleep } from '../core/util/index.js';
 import { RepoGuardStore } from '../host/guard/index.js';
-import { isSandboxRunning } from '../host/sandbox/index.js';
+import { isSandboxRunning, spawnDetached } from '../host/sandbox/index.js';
 import { readActiveViews, WorkspaceView, type ViewOptions } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/network/index.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
 import { readMarkedProjects, saveDataSize, watchAndMark } from '../host/guard/index.js';
 import { sizeWithin } from '../core/disk.js';
-import { causeSince, KeepAwake, LifeRecord, saveCrashReport } from '../host/life/index.js';
+import {
+  autoRestartAllowed,
+  causeSince,
+  KeepAwake,
+  LifeRecord,
+  saveCrashReport,
+  SessionLedger,
+  type StopCause,
+} from '../host/life/index.js';
+import { SandboxChannel } from '../host/channel/index.js';
+import { ProjectRegistry } from '../host/projects/registry.js';
 import { storageOf } from '../host/storage/index.js';
 import { syncBack } from './sync-cycle.js';
 
@@ -59,6 +69,16 @@ export function watcherRunning(dataPath: string): boolean {
   }
 }
 
+/** What the watcher may do about a crash: start the sandbox again (resume.restartAfterCrash), with this CLI. */
+export interface WatcherResume {
+  readonly restartAfterCrash: boolean;
+  readonly entry?: string;
+  readonly config?: string;
+}
+
+/** The ways the sandbox itself ends badly (the PC going down takes the watcher with it, so it never gets here). */
+const RESTARTABLE: readonly StopCause['kind'][] = ['sandboxCrash', 'memory'];
+
 /**
  * The background watcher of one data folder: while the sandbox runs it syncs history back every minute, guards the
  * projects' git folders, keeps filtered workspaces in step, forwards ports, marks downloaded files, records the audit
@@ -67,15 +87,21 @@ export function watcherRunning(dataPath: string): boolean {
 export class Watcher {
   private readonly storageRoot: string;
   private readonly life: LifeRecord;
+  private readonly ledger: SessionLedger;
+  private cause: StopCause | null = null;
   private audit: AuditCollector | null = null;
   private auditTimer: NodeJS.Timeout | null = null;
   private awake: KeepAwake | null = null;
   private views: ViewOptions[] = [];
   private stops: (() => void)[] = [];
 
-  constructor(private readonly dataPath: string) {
+  constructor(
+    private readonly dataPath: string,
+    private readonly resume: WatcherResume = { restartAfterCrash: false },
+  ) {
     this.storageRoot = storageOf(dataPath);
     this.life = new LifeRecord(this.storageRoot, dataPath);
+    this.ledger = new SessionLedger(this.storageRoot, dataPath);
   }
 
   /** Runs until the sandbox has closed and the final sync is done (or the end deadline passed). */
@@ -90,6 +116,7 @@ export class Watcher {
       await sleep(FIRST_SYNC_MS);
       while (isSandboxRunning()) {
         this.life.beat();
+        this.noteSessions();
         this.sync(false);
         await sleep(WATCH_INTERVAL_MS);
       }
@@ -106,6 +133,8 @@ export class Watcher {
     } finally {
       this.stop();
     }
+    // After stop(): its pid file is gone, so the sandbox started again gets a watcher of its own.
+    this.restartAfterCrash();
   }
 
   private note(message: string): void {
@@ -177,6 +206,37 @@ export class Watcher {
     }
   }
 
+  /** The running sessions and their conversations, for the next launch (resume.sessions). */
+  private noteSessions(): void {
+    try {
+      this.ledger.recordSessions(
+        new SandboxChannel(this.dataPath).currentSessions(),
+        new ProjectRegistry(this.storageRoot).read(),
+      );
+    } catch (e) {
+      this.note('could not note the running sessions: ' + errMsg(e));
+    }
+  }
+
+  /** resume.restartAfterCrash: it crashed or ran out of memory: start it again (3 times in 6 hours at most). */
+  private restartAfterCrash(): void {
+    try {
+      const { entry, config, restartAfterCrash } = this.resume;
+      if (!restartAfterCrash || !entry || !this.cause || !RESTARTABLE.includes(this.cause.kind)) return;
+      const now = new Date();
+      if (!autoRestartAllowed(this.ledger.read()?.autoRestarts ?? [], now)) {
+        this.ledger.giveUp(now);
+        this.note('not starting the sandbox again: it ended unexpectedly 3 times in 6 hours.');
+        return;
+      }
+      this.ledger.recordAutoRestart(now);
+      this.note('starting the sandbox again (resume.restartAfterCrash).');
+      spawnDetached(entry, ['resume', '--auto', ...(config ? ['--config', path.resolve(config)] : [])]);
+    } catch (e) {
+      this.note('could not start the sandbox again: ' + errMsg(e));
+    }
+  }
+
   /** How the sandbox ended (and a crash report when it crashed), for the next launch. */
   private recordEnd(): void {
     try {
@@ -184,6 +244,9 @@ export class Watcher {
       const cause = last ? causeSince(last.lastSeen, this.storageRoot) : null;
       const report = last && cause ? saveCrashReport(this.storageRoot, this.dataPath, last.lastSeen) : null;
       this.life.end(cause, new Date(), report);
+      this.cause = cause;
+      // Ended with nothing wrong (its window closed, or it shut itself down idle): on purpose.
+      if (!cause) this.ledger.markClosedOnPurpose();
       if (cause) this.note('sandbox ended: ' + cause.text + (report ? '; crash report: ' + report : ''));
     } catch (e) {
       this.note('could not record how the sandbox ended: ' + errMsg(e));
@@ -220,6 +283,6 @@ export class Watcher {
 }
 
 /** Body of the detached watcher process (`agent-sandbox _watch`). */
-export function watch(dataPath: string): Promise<void> {
-  return new Watcher(dataPath).run();
+export function watch(dataPath: string, resume?: WatcherResume): Promise<void> {
+  return new Watcher(dataPath, resume).run();
 }

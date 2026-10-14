@@ -20,7 +20,9 @@ import { guestAddresses } from '../network/addresses.js';
 import { dataDir, toolsDir } from '../runtime/paths.js';
 import { exists } from '../runtime/fs.js';
 import { log, warn } from '../runtime/log.js';
-import { session, workspace } from '../runtime/session.js';
+import { claudeDir, session, workspace } from '../runtime/session.js';
+import { findConversation } from '../sessions/conversation.js';
+import { isConversationId } from '../../shared/paths/conversation.js';
 import { errMsg } from '../../core/util/errors.js';
 import { provisioner } from './project-provisioner.js';
 import { IdleShutdown } from './idle-shutdown.js';
@@ -118,6 +120,16 @@ const placeFor = async (req: SessionRequest, say: (m: string) => void): Promise<
   };
 };
 
+/** How often a running Claude session is checked for its conversation, and for how long. */
+const CONVERSATION_CHECK_MS = 30 * 1000;
+const CONVERSATION_CHECKS = 120;
+
+/** The conversation a reopened Claude session starts in (--resume <id> among its arguments), if it names one. */
+const resumedConversation = (args: readonly string[]): string | undefined => {
+  const at = args.indexOf('--resume');
+  return at >= 0 && isConversationId(args[at + 1] ?? '') ? args[at + 1] : undefined;
+};
+
 /** The agent sessions of this sandbox: the running ones, the ones starting, and what happens when one ends. */
 export class SessionManager {
   private readonly live = new Map<string, { status: SessionStatus; child: ChildProcess }>();
@@ -157,8 +169,10 @@ export class SessionManager {
       const place = await placeFor(req, say);
       const remote = session.networking && session.attach.enabled;
       const { child, port, token } = await launchPtyHost(req, remote, place.env, say);
+      const resumed = req.harness === 'claude' ? resumedConversation(req.args) : undefined;
       const running: SessionStatus = {
         ...status,
+        ...(resumed ? { conversation: resumed } : {}),
         project: place.project,
         phase: 'running',
         message: req.harness + ' is running',
@@ -167,6 +181,7 @@ export class SessionManager {
       this.live.set(req.id, { status: running, child });
       child.once('exit', (code: number | null) => this.onExit(running, place, code));
       saveStatus(running);
+      if (req.harness === 'claude') this.trackConversation(running.id, resumed);
       log(
         'Session ' +
           req.id +
@@ -225,7 +240,40 @@ export class SessionManager {
     respond(req.id, { ok: true, message: 'restarted ' + targets.length + ' session(s)' });
   }
 
-  private onExit(running: SessionStatus, place: Place, code: number | null): void {
+  /**
+   * Finds out which of Claude's conversation files this session writes (it appears with the first message) and puts
+   * it in the status, so the host can reopen this very conversation. A reopened session starts with the one it was
+   * given and changes to a new file if Claude forks one.
+   */
+  private trackConversation(id: string, given: string | undefined): void {
+    let checks = 0;
+    const timer = setInterval(() => {
+      const entry = this.live.get(id);
+      if (!entry || ++checks > CONVERSATION_CHECKS) {
+        clearInterval(timer);
+        return;
+      }
+      const claimed = new Set(
+        [...this.live.values()].flatMap((s) => (s.status.conversation ? [s.status.conversation] : [])),
+      );
+      if (given) claimed.add(given);
+      let found: string | null = null;
+      try {
+        found = findConversation(claudeDir, entry.status.cwd, Date.parse(entry.status.startedAt), claimed);
+      } catch (e) {
+        warn('Looking for the conversation of session ' + id + ' failed: ' + errMsg(e));
+      }
+      if (!found) return;
+      clearInterval(timer);
+      entry.status = { ...entry.status, conversation: found, updatedAt: now() };
+      saveStatus(entry.status);
+    }, CONVERSATION_CHECK_MS);
+    timer.unref();
+  }
+
+  private onExit(started: SessionStatus, place: Place, code: number | null): void {
+    // The status as it is now (it may have learned its conversation since it started).
+    const running = this.live.get(started.id)?.status ?? started;
     this.live.delete(running.id);
     const tail = code === 0 ? '' : ptyHostLogTail(running.id, 6);
     saveStatus({

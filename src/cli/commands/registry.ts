@@ -6,7 +6,19 @@ import { data } from './data/index.js';
 import { attach, db, exec, hide, restart, sessions, show, status, stop } from './sessions/index.js';
 import { account } from './accounts.js';
 import { projects } from './projects/index.js';
-import { audit, claudeHost, clean, config, doctor, hostCommand, logs, sync, watcher } from './maintenance/index.js';
+import {
+  audit,
+  claudeHost,
+  clean,
+  config,
+  doctor,
+  hostCommand,
+  logs,
+  migrate,
+  sync,
+  watcher,
+} from './maintenance/index.js';
+import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
 
 export type Handler = (ctx: Context) => number | Promise<number | void>;
@@ -21,6 +33,7 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   'agent-commands': agentCommandsCommand,
   db: db,
   restart: restart,
+  resume: resume,
   stop: stop,
   show: show,
   hide: hide,
@@ -32,6 +45,7 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   clean: clean,
   config: config,
   doctor: doctor,
+  migrate: migrate,
   setup: setup,
   data: data,
   'host-claude': claudeHost,

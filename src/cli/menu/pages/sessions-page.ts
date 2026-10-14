@@ -40,6 +40,7 @@ export function sessionsOptions(m: SessionsModel): ListOptions<string> {
     empty: 'No sessions yet.',
     actions: [
       { key: 'r', label: 'restart agents', importance: 1 },
+      { key: 'o', label: 'reopen last sessions', importance: 2 },
       { key: 'l', label: 'refresh', importance: 3 },
     ],
     enterLabel: 'attach',
@@ -76,6 +77,7 @@ export class SessionsPage extends ListPage<string> {
     if (result.kind === 'pick') return { exit: { kind: 'run', argv: ['attach', result.value] } };
     if (result.kind !== 'action') return {};
     if (result.key === 'l') return { reload: true };
+    if (result.key === 'o') return { exit: { kind: 'run', argv: ['resume'] } };
     if (!this.model.sandboxRunning) return { notice: Theme.warn('No sandbox is running.') };
     const scope = this.service.restartScope(false);
     const what = scope.guest ? 'the agents of ' + scope.projectName : 'every agent';

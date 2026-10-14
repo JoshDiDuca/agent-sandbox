@@ -49,6 +49,7 @@ import { liveTerminalSuite } from './live-terminal.test.js';
 import { auditSuite } from './audit.test.js';
 import { layoutSuite } from './layout.test.js';
 import { menuSuite } from './menu.test.js';
+import { resumeSuite } from './resume.test.js';
 
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
@@ -63,6 +64,7 @@ export const SUITES: Suite[] = [
   guestBootSuite,
   mirrorSuite,
   projectsSuite,
+  resumeSuite,
   // syncing with this PC
   syncSuite,
   accountsSuite,

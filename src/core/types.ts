@@ -230,4 +230,6 @@ export interface GuestSession {
   auditProcesses?: boolean;
   /** Every agent's home variables (CODEX_HOME ...) -> folder below the state folder; older launch folders lack it. */
   agentHomes?: Record<string, string>;
+  /** Per agent: folders of the user profile (.qwen ...) linked into the persistent state at boot. */
+  agentProfileDirs?: Record<string, string[]>;
 }
