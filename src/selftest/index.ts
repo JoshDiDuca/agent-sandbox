@@ -19,6 +19,7 @@ import { cmdlineSuite } from './cmdline.test.js';
 import { configSuite } from './config.test.js';
 import { migrateSuite } from './migrate.test.js';
 import { updateSuite } from './update.test.js';
+import { installSuite } from './install.test.js';
 import { sharingSuite } from './sharing.test.js';
 import { dataSuite } from './data.test.js';
 import { detectSuite } from './detect.test.js';
@@ -58,6 +59,7 @@ export const SUITES: Suite[] = [
   configSuite,
   migrateSuite,
   updateSuite,
+  installSuite,
   sharingSuite,
   workspaceSuite,
   localConfigSuite,

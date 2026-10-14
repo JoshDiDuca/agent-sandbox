@@ -21,6 +21,7 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  attestations: write
 
 concurrency:
   group: release
@@ -74,7 +75,16 @@ jobs:
           $file = (Get-ChildItem windows-development-sandbox-*.tgz | Select-Object -First 1).Name
           Copy-Item $file windows-development-sandbox.tgz
           Copy-Item scripts/install.ps1 install.ps1
+          # The checksum the installer and the updater fall back to when the API lists no digest for the asset.
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower()
+          [IO.File]::WriteAllText("$PWD/SHA256SUMS", "$hash  $file`n")
           "file=$file" >> $env:GITHUB_OUTPUT
+      - name: Provenance
+        if: steps.version.outputs.release == 'true'
+        uses: actions/attest-build-provenance@v2
+        continue-on-error: true   # a signed record of how the package was built; the installer does not need it
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
       - name: GitHub release
         if: steps.version.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
@@ -85,6 +95,7 @@ jobs:
             ${{ steps.pack.outputs.file }}
             windows-development-sandbox.tgz
             install.ps1
+            SHA256SUMS
           generate_release_notes: true
           body: |
             Install or update (in a normal PowerShell; it checks your PC and installs Node.js if needed):

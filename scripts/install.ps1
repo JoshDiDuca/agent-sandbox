@@ -1,17 +1,41 @@
-# windows-development-sandbox installer. Run in a normal (not admin) PowerShell:
+# windows-development-sandbox installer. Run it in PowerShell:
 #   irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1 | iex
-# It checks this PC can run Windows Sandbox, offers to turn the feature on, then installs the CLI with npm: with your
-# Node.js 20+ if you have it, else with a private Node.js used only by this tool (nothing installed system-wide). Only enabling the Windows feature asks for admin rights. Set WDS_PACKAGE to install another build.
-# The release package must match the SHA-256 GitHub lists for it; with none listed the install is refused unless WDS_ALLOW_UNVERIFIED=1.
-# Windows PowerShell 5.1 compatible. Wrapped in a script block so `return` never closes the user's window under iex.
+# It asks "1) Just me  2) Everyone on this PC (needs admin)", checks this PC can run Windows Sandbox (and offers to turn
+# the feature on), then installs the tool with a private Node.js used only by it (nothing else is installed system-wide).
+# With options (the file is run as a script block, since irm | iex cannot pass options):
+#   & ([scriptblock]::Create((irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1))) -Scope AllUsers -AutoUpdate
+#   -Scope CurrentUser|AllUsers   Where to install (env WDS_SCOPE). AllUsers needs an admin PowerShell.
+#   -AutoUpdate / -NoAutoUpdate   Install new versions by itself (env WDS_AUTOUPDATE=1 / 0); asked once when neither is given.
+#   -AddUsers a,b                 AllUsers: also put these Windows users in the group "Agent Sandbox Users" (env WDS_ADDUSERS).
+#   -Uninstall [-RemoveData]      Remove the program (and, with -RemoveData, the saved data, after you type DELETE; or
+#                                 pass -Confirm:$false). Env WDS_UNINSTALL=1, WDS_REMOVEDATA=1.
+# Other environment variables: WDS_PACKAGE (install this tgz or URL instead of the latest release), WDS_SHA256 (its
+# checksum), WDS_ALLOW_UNVERIFIED=1 (install a release GitHub lists no checksum for), WDS_INSTALL_ROOT (CurrentUser: the
+# install folder, default %LOCALAPPDATA%\WindowsDevelopmentSandbox).
+# The release package must match the SHA-256 GitHub lists for it; with none listed the install is refused.
+# Windows PowerShell 5.1 compatible. The work runs in a script block so `return` never closes the user's window under iex.
+[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+param(
+  # '' is allowed so that a missing WDS_SCOPE is not an error when this file is run with iex (it checks defaults too).
+  [ValidateSet('', 'CurrentUser', 'AllUsers')][string]$Scope = $env:WDS_SCOPE,
+  [switch]$AutoUpdate,
+  [switch]$NoAutoUpdate,
+  [string[]]$AddUsers,
+  [switch]$Uninstall,
+  [switch]$RemoveData,
+  # Test aid: prints the text of one shim as kind:name:target (cmd:sandbox:dist/bin/sandbox.js) and stops.
+  [string]$PrintShim
+)
 & {
-  # Not 'Stop': Windows PowerShell 5.1 would turn npm's and winget's warnings on stderr into fatal errors.
+  # Not 'Stop': Windows PowerShell 5.1 would turn warnings on stderr into fatal errors.
   $ErrorActionPreference = 'Continue'
-  $package = 'https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/windows-development-sandbox.tgz'
-  if ($env:WDS_PACKAGE) { $package = $env:WDS_PACKAGE }
+  $repo = 'JoshDiDuca/windows-development-sandbox'
+  $packageName = 'windows-development-sandbox'
+  $groupName = 'Agent Sandbox Users'
   $feature = 'Containers-DisposableClientVM'
   $enableCommand = "Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart"
   $powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $tarExe = Join-Path $env:SystemRoot 'System32\tar.exe'
   $interactive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
   $problems = New-Object System.Collections.Generic.List[string]
   $rebootNeeded = $false
@@ -25,8 +49,12 @@
     $answer = Read-Host "   $question [y/N]"
     return $answer -match '^(y|yes)$'
   }
+  function Test-Admin {
+    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  }
   function Refresh-Path {
-    # Keep what this session already had (a portable Node, for example) and add what installers registered.
+    # Keep what this session already had and add what installers registered.
     $parts = @($env:Path -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') + @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';')
     $env:Path = ($parts | Where-Object { $_ } | Select-Object -Unique) -join ';'
   }
@@ -37,10 +65,83 @@
     if (-not $full.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "refusing to delete $full (not inside $base)" }
     if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue }
   }
-  function Add-UserPath($dir) {
-    # Adds this one folder to YOUR PATH and touches nothing else in it. The value is read and written back unexpanded (so
-    # entries such as %USERPROFILE%\bin stay as they are), and a PATH that would get too long is left alone.
-    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+  function Write-TextAtomic($path, $text, $encoding) {
+    # Written next to the target, then renamed over it: a reader sees the old file or the new one, never half of one.
+    New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
+    $temp = $path + '.tmp-' + [guid]::NewGuid().ToString('N')
+    [IO.File]::WriteAllText($temp, $text, $encoding)
+    Move-Item -LiteralPath $temp -Destination $path -Force
+  }
+  function Write-AsciiAtomic($path, $text) { Write-TextAtomic $path $text (New-Object Text.ASCIIEncoding) }
+  function Write-JsonAtomic($path, $object) { Write-TextAtomic $path (($object | ConvertTo-Json -Depth 6) + "`r`n") (New-Object Text.UTF8Encoding($false)) }
+  function Write-Pointer($path, $value, $pattern) {
+    if ($value -notmatch $pattern) { throw "refusing to write '$value' to $path" }
+    Write-AsciiAtomic $path ($value + "`r`n")
+  }
+  function Read-Pointer($path, $pattern) {
+    try { $value = ([IO.File]::ReadAllText($path)).Trim() } catch { return $null }
+    if ($value -match $pattern) { return $value }
+    return $null
+  }
+  function Get-ShimText($kind, $name, $target) {
+    # The same text as shimText() in src/host/install/shims.ts (a self-test compares them): change both together.
+    if ($name -notmatch '^[a-z0-9][a-z0-9-]*$') { throw "$name is not a command name" }
+    if ($target -notmatch '^[A-Za-z0-9_./-]+$' -or $target -match '\.\.') { throw "$target is not a program path inside the package" }
+    if ($kind -eq 'sh') {
+      return (@(
+        '#!/bin/sh',
+        '# Generated by windows-development-sandbox. Runs the version that active-version points to.',
+        'root=$(cd "$(dirname "$0")/.." && pwd)',
+        'node_version=$(tr -d "\r\n" < "$root/active-node")',
+        'version=$(tr -d "\r\n" < "$root/active-version")',
+        ('exec "$root/node/$node_version/node.exe" "$root/versions/$version/package/' + $target + '" "$@"'),
+        ''
+      ) -join "`n")
+    }
+    return (@(
+      '@echo off',
+      'setlocal',
+      'set /p V=<"%~dp0..\active-version"',
+      'set /p N=<"%~dp0..\active-node"',
+      ('"%~dp0..\node\%N%\node.exe" "%~dp0..\versions\%V%\package\' + $target.Replace('/', '\') + '" %*'),
+      ''
+    ) -join "`r`n")
+  }
+
+  if ($PrintShim) {
+    $parts = $PrintShim -split ':', 3
+    $shimTarget = if ($parts.Count -ge 3) { $parts[2] } else { 'dist/bin/' + $parts[1] + '.js' }
+    [Console]::Out.Write((Get-ShimText $parts[0] $parts[1] $shimTarget))
+    return
+  }
+
+  # Environment fallbacks, for irm | iex where no options can be passed.
+  if ($env:WDS_UNINSTALL -eq '1') { $Uninstall = [switch]$true }
+  if ($env:WDS_REMOVEDATA -eq '1') { $RemoveData = [switch]$true }
+  if ($env:WDS_AUTOUPDATE -eq '1') { $AutoUpdate = [switch]$true }
+  if ($env:WDS_AUTOUPDATE -eq '0') { $NoAutoUpdate = [switch]$true }
+  if ($env:WDS_ADDUSERS -and -not $AddUsers) { $AddUsers = @($env:WDS_ADDUSERS -split ',') }
+  $addUsers = @($AddUsers | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+  function Open-PathKey($machine) {
+    if ($machine) { return [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment') }
+    return [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+  }
+  function Send-EnvironmentChange {
+    # Tell running programs (Explorer, so new terminals) that the environment changed.
+    try {
+      Add-Type -Namespace WdsInstall -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint msg, System.UIntPtr wParam, string lParam, uint flags, uint timeout, out System.UIntPtr result);' -ErrorAction Stop
+    } catch { }
+    try {
+      $ignored = [UIntPtr]::Zero
+      [void][WdsInstall.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$ignored)
+    } catch { Warn 'Open a new terminal (or sign out and in) to pick up the new PATH.' }
+  }
+  function Add-PathEntry($dir, $machine) {
+    # Adds this one folder to the PATH (yours, or the whole PC's) and touches nothing else in it. The value is read and
+    # written back unexpanded (so entries such as %USERPROFILE%\bin stay as they are), and a PATH that would get too
+    # long is left alone.
+    $key = Open-PathKey $machine
     try {
       $raw = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
       if (@($raw -split ';') | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { return }
@@ -49,21 +150,121 @@
       $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
       $key.SetValue('Path', $new, $kind)
     } finally { $key.Close() }
-    # Tell running programs (Explorer, so new terminals) that the environment changed.
-    try {
-      Add-Type -Namespace WdsInstall -Name Native -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint msg, System.UIntPtr wParam, string lParam, uint flags, uint timeout, out System.UIntPtr result);'
-      $ignored = [UIntPtr]::Zero
-      [void][WdsInstall.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$ignored)
-    } catch { Warn 'Open a new terminal (or sign out and in) to pick up the new PATH.' }
+    Send-EnvironmentChange
   }
-  function Node-Major {
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 0 }
-    $version = (& node --version) -replace '^v', ''
-    return [int]($version.Split('.')[0])
+  function Remove-PathEntry($dir, $machine) {
+    $key = Open-PathKey $machine
+    try {
+      $raw = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      $kept = @($raw -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $dir.TrimEnd('\') })
+      if ($kept.Count -eq @($raw -split ';' | Where-Object { $_ }).Count) { return }
+      $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+      $key.SetValue('Path', ($kept -join ';'), $kind)
+    } finally { $key.Close() }
+    Send-EnvironmentChange
+  }
+  function Set-Shortcut($file, $target) {
+    New-Item -ItemType Directory -Force (Split-Path -Parent $file) | Out-Null
+    $shell = New-Object -ComObject WScript.Shell
+    $link = $shell.CreateShortcut($file)
+    $link.TargetPath = $target
+    $link.Description = 'Windows Development Sandbox'
+    $link.Save()
+  }
+  function Download-File($url, $file) {
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest $url -OutFile $file -UseBasicParsing
+  }
+  function Test-Sha256($file, $expected) {
+    return $expected -match '^[0-9a-fA-F]{64}$' -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ieq $expected
+  }
+  function Test-SandboxRunning { return [bool](Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue) }
+  function Stop-Watchers {
+    # A background watcher left by an older version (it outlived its sandbox) holds files that must be replaced. Stopped
+    # only when no Windows Sandbox runs: while one does, its watcher is still needed.
+    if (Test-SandboxRunning) { return }
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandLine -match '(windows-development-sandbox|agent-sandbox).*\s_watch(\s|$)' } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Ok "stopped a leftover background watcher (process $($_.ProcessId))" }
   }
 
   Write-Host 'windows-development-sandbox installer' -ForegroundColor White
   Write-Host 'Runs AI coding agents in Windows Sandbox, a throwaway Windows that is wiped when it closes.'
+
+  # Where to install -----------------------------------------------------------------------------------------------
+  $scopeName = $Scope
+  if (-not $scopeName) {
+    if ($interactive -and -not $Uninstall) {
+      Write-Host ''
+      Write-Host '   Install for:'
+      Write-Host '     1) Just me'
+      Write-Host '     2) Everyone on this PC (needs admin)'
+      $choice = Read-Host '   Choose 1 or 2 [1]'
+      $scopeName = if ($choice -match '^\s*2') { 'AllUsers' } else { 'CurrentUser' }
+    } else { $scopeName = 'CurrentUser' }
+  }
+  $machine = $scopeName -eq 'AllUsers'
+  if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) { Problem 'LOCALAPPDATA is not set, so there is nowhere safe to install.'; return }
+  if ($machine) {
+    if (-not $env:ProgramFiles -or -not [IO.Path]::IsPathRooted($env:ProgramFiles)) { Problem 'ProgramFiles is not set, so there is nowhere safe to install.'; return }
+    $toolFolder = Join-Path $env:ProgramFiles 'WindowsDevelopmentSandbox'
+  } elseif ($env:WDS_INSTALL_ROOT) {
+    if (-not [IO.Path]::IsPathRooted($env:WDS_INSTALL_ROOT)) { Problem 'WDS_INSTALL_ROOT must be a full path.'; return }
+    $toolFolder = [IO.Path]::GetFullPath($env:WDS_INSTALL_ROOT).TrimEnd('\')
+  } else {
+    # This tool's own folder, always under LOCALAPPDATA, never anything that could resolve to a profile or the current folder.
+    $toolFolder = Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'
+  }
+  $binFolder = Join-Path $toolFolder 'bin'
+  $machineData = Join-Path $(if ($env:ProgramData) { $env:ProgramData } else { 'C:\ProgramData' }) 'AgentSandbox'
+  $shortcutFolder = [Environment]::GetFolderPath($(if ($machine) { 'CommonPrograms' } else { 'Programs' }))
+  $shortcutFile = Join-Path $shortcutFolder 'Windows Development Sandbox.lnk'
+  if ($machine -and -not (Test-Admin)) {
+    Problem 'Installing for everyone needs admin rights.'
+    Write-Host '   Run this in an admin PowerShell (right-click Start > Terminal (Admin)), or install for just you with -Scope CurrentUser.'
+    return
+  }
+
+  # Uninstall ------------------------------------------------------------------------------------------------------
+  if ($Uninstall) {
+    Step "Removing windows-development-sandbox ($scopeName) from $toolFolder"
+    Stop-Watchers
+    $active = Read-Pointer (Join-Path $toolFolder 'active-version') '^\d+\.\d+\.\d+$'
+    $taskScript = if ($active) { Join-Path $toolFolder "versions\$active\package\native\scripts\set-update-task.ps1" } else { $null }
+    if ($machine -and $taskScript -and (Test-Path -LiteralPath $taskScript)) {
+      & $powershellExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $taskScript -Remove | Out-Null
+      if ($LASTEXITCODE -eq 0) { Ok 'automatic updates removed' } else { Warn "Could not remove the scheduled task \WindowsDevelopmentSandbox\Update (exit $LASTEXITCODE)." }
+    }
+    Remove-PathEntry $binFolder $machine
+    Ok 'taken off the PATH'
+    if (Test-Path -LiteralPath $shortcutFile) { Remove-Item -LiteralPath $shortcutFile -Force -ErrorAction SilentlyContinue; Ok 'Start menu shortcut removed' }
+    foreach ($name in 'bin', 'node', 'versions', 'staging', 'active-version', 'active-node', 'install.json', 'update-state.json', 'update.lock') {
+      Remove-Inside (Join-Path $toolFolder $name) $toolFolder
+    }
+    if ((Test-Path -LiteralPath $toolFolder) -and -not (Get-ChildItem -LiteralPath $toolFolder -Force)) { Remove-Item -LiteralPath $toolFolder -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $toolFolder) { Warn "$toolFolder still has files in it (something may be using them); delete it when nothing runs." } else { Ok 'program removed' }
+    $dataFolder = if ($machine) { $machineData } else { Join-Path $env:LOCALAPPDATA 'AgentSandbox' }
+    if (-not $RemoveData) {
+      Write-Host "   Your saved data is kept in $dataFolder. Run the uninstall again with -RemoveData to delete it too."
+    } elseif (Test-Path -LiteralPath $dataFolder) {
+      $approved = $ConfirmPreference -eq 'None'
+      if (-not $approved -and $interactive) {
+        if ($machine) { Write-Host "   This deletes the saved data of EVERY user of this PC (accounts, history, sandbox settings) in $dataFolder." }
+        else { Write-Host "   This deletes your saved data (accounts, history, sandbox settings) in $dataFolder." }
+        $approved = (Read-Host '   Type DELETE to continue') -ceq 'DELETE'
+      }
+      if (-not $approved) { Warn 'Saved data was not deleted (nothing typed, or no terminal; use -Confirm:$false in scripts).' }
+      else {
+        if (Test-SandboxRunning) { Warn 'A Windows Sandbox is running; close it first for everything to be deleted.' }
+        Remove-Item -LiteralPath $dataFolder -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $dataFolder) { Warn "Some files in $dataFolder could not be deleted." } else { Ok "saved data removed ($dataFolder)" }
+        if ($machine) {
+          try { Remove-LocalGroup -Name $groupName -ErrorAction Stop; Ok "group $groupName removed" } catch { }
+        }
+      }
+    } else { Ok 'there was no saved data' }
+    return
+  }
 
   # 1. Windows edition -------------------------------------------------------------------------------------------
   Step 'Checking your Windows edition'
@@ -125,120 +326,307 @@
     }
   }
 
-  # 4. Node.js ---------------------------------------------------------------------------------------------------
-  # Your own Node is used when it is new enough. Otherwise nothing is installed system-wide: a private Node (the
-  # official zip, checksum-verified) runs only this tool, and only its commands go on your PATH, not node itself.
-  Step 'Checking Node.js (20 or newer)'
-  # This tool's own folder, always under LOCALAPPDATA, never anything that could resolve to a profile or the current folder.
-  if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) { Problem 'LOCALAPPDATA is not set, so there is nowhere safe to put the private Node.js.'; return }
-  $toolFolder = Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'
-  $privateNode = Join-Path $toolFolder 'node'
-  $npm = 'npm.cmd'
-  $major = Node-Major
-  if ($major -ge 20) { Ok "using your Node.js $(& node --version)" }
-  elseif (Test-Path (Join-Path $privateNode 'node.exe')) { $npm = Join-Path $privateNode 'npm.cmd'; Ok "using the private Node.js in $privateNode" }
-  else {
-    if ($major -gt 0) { Write-Host "   Your Node.js $(& node --version) is too old; it is left alone." } else { Write-Host '   No Node.js on this PC.' }
-    Write-Host "   Downloading a private Node.js LTS just for this tool (into $privateNode; nothing is installed system-wide) ..."
-    try {
-      # A loop, not a pipeline: Windows PowerShell 5.1 passes a JSON array down the pipeline as ONE object.
-      $lts = $null
-      foreach ($release in (Invoke-RestMethod 'https://nodejs.org/dist/index.json' -UseBasicParsing)) { if ($release.lts) { $lts = $release.version; break } }
-      if ($lts -notmatch '^v\d+\.\d+\.\d+$') { throw 'no Node.js LTS release found' }
+  # 4. What is installed now -------------------------------------------------------------------------------------
+  Step 'Looking for an earlier install'
+  $oldVersion = Read-Pointer (Join-Path $toolFolder 'active-version') '^\d+\.\d+\.\d+$'
+  $oldNode = Read-Pointer (Join-Path $toolFolder 'active-node') '^v\d+\.\d+\.\d+$'
+  $record = $null
+  try { $record = Get-Content -LiteralPath (Join-Path $toolFolder 'install.json') -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
+  # npm globals (the package under either name) and the 1.x private Node that ran them.
+  $legacyNode = Join-Path $toolFolder 'node'
+  $legacyNpms = New-Object System.Collections.Generic.List[string]
+  $userNpm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if ($userNpm) { $legacyNpms.Add($userNpm.Source) }
+  if (Test-Path -LiteralPath (Join-Path $legacyNode 'npm.cmd')) { $legacyNpms.Add((Join-Path $legacyNode 'npm.cmd')) }
+  $npmGlobals = New-Object System.Collections.Generic.List[object]
+  foreach ($npm in ($legacyNpms | Select-Object -Unique)) {
+    foreach ($pkg in 'windows-development-sandbox', 'agent-sandbox') {
+      $listed = (& $npm ls -g --depth=0 $pkg 2>$null | Out-String)
+      if ($listed -match "$([regex]::Escape($pkg))@") { $npmGlobals.Add(@{ npm = $npm; package = $pkg }) }
+    }
+  }
+  $legacyWrappers = @()
+  if (Test-Path -LiteralPath $binFolder) {
+    $legacyWrappers = @(Get-ChildItem -LiteralPath $binFolder -Filter '*.cmd' -File -ErrorAction SilentlyContinue | Where-Object {
+      (Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue) -match '^@"[^"]+\.cmd" %\*\s*$'
+    })
+  }
+  if ($oldVersion) { Ok "version $oldVersion is installed in $toolFolder; it is replaced by this one (and kept for a rollback)" }
+  if ($npmGlobals.Count) { Write-Host "   Found the older npm install: $((@($npmGlobals | ForEach-Object { $_.package }) | Select-Object -Unique) -join ', '); it is removed once the new one works." }
+  if ($legacyWrappers.Count) { Write-Host "   Found $($legacyWrappers.Count) command wrapper(s) of version 1.x in $binFolder; they are replaced." }
+  if (-not $oldVersion -and -not $npmGlobals.Count -and -not $legacyWrappers.Count) { Ok 'nothing installed yet' }
+
+  # 5. Private Node.js -------------------------------------------------------------------------------------------
+  # Nothing is installed system-wide: a private Node (the official zip, checksum-verified) lives next to the tool and
+  # runs only it. Only its commands go on the PATH, not node itself.
+  Step 'Getting the private Node.js'
+  $nodeVersion = $null
+  try {
+    New-Item -ItemType Directory -Force $toolFolder | Out-Null
+    # A loop, not a pipeline: Windows PowerShell 5.1 passes a JSON array down the pipeline as ONE object.
+    $lts = $null
+    foreach ($release in (Invoke-RestMethod 'https://nodejs.org/dist/index.json' -UseBasicParsing)) { if ($release.lts) { $lts = $release.version; break } }
+    if ($lts -notmatch '^v\d+\.\d+\.\d+$') { throw 'no Node.js LTS release found' }
+    $nodeTarget = Join-Path $toolFolder "node\$lts"
+    if (Test-Path -LiteralPath (Join-Path $nodeTarget 'node.exe')) { Ok "Node.js $lts is already here" }
+    else {
+      Write-Host "   Downloading Node.js $lts just for this tool (into $nodeTarget; nothing is installed system-wide) ..."
       $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
       $name = "node-$lts-win-$arch"
-      $ProgressPreference = 'SilentlyContinue'
       # A fresh folder of our own for the download, so the only things deleted are folders made here.
       $work = Join-Path $toolFolder ('download-' + [guid]::NewGuid().ToString('N'))
       New-Item -ItemType Directory -Force $work | Out-Null
       try {
         $zip = Join-Path $work "$name.zip"
-        Invoke-WebRequest "https://nodejs.org/dist/$lts/$name.zip" -OutFile $zip -UseBasicParsing
+        Download-File "https://nodejs.org/dist/$lts/$name.zip" $zip
         $sums = (Invoke-WebRequest "https://nodejs.org/dist/$lts/SHASUMS256.txt" -UseBasicParsing).Content
         $expected = @($sums -split "`n" | Where-Object { $_ -match " $name\.zip\s*$" } | ForEach-Object { ($_ -split '\s+')[0] })
-        if ($expected.Count -ne 1 -or $expected[0] -notmatch '^[0-9a-fA-F]{64}$' -or (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $expected[0].ToUpper()) { throw "checksum mismatch for $name.zip" }
+        if ($expected.Count -ne 1 -or -not (Test-Sha256 $zip $expected[0])) { throw "checksum mismatch for $name.zip" }
         $staging = Join-Path $work 'x'
         Expand-Archive -LiteralPath $zip -DestinationPath $staging -Force
         if (-not (Test-Path -LiteralPath (Join-Path $staging "$name\node.exe"))) { throw 'node.exe is not in the download' }
-        Remove-Inside $privateNode $toolFolder
-        Move-Item -LiteralPath (Join-Path $staging $name) -Destination $privateNode
+        New-Item -ItemType Directory -Force (Split-Path -Parent $nodeTarget) | Out-Null
+        Move-Item -LiteralPath (Join-Path $staging $name) -Destination $nodeTarget
       } finally { Remove-Inside $work $toolFolder }
-    } catch {
+      Ok "Node.js $lts in $nodeTarget"
+    }
+    $nodeVersion = $lts
+  } catch {
+    if ($oldNode -and (Test-Path -LiteralPath (Join-Path $toolFolder "node\$oldNode\node.exe"))) {
+      Warn "Could not download Node.js ($_); keeping $oldNode."
+      $nodeVersion = $oldNode
+    } else {
       Problem "Could not download Node.js: $_"
-      Write-Host '   Check your internet connection and run this again (or install Node.js 20+ yourself from https://nodejs.org).'
+      Write-Host '   Check your internet connection and run this again.'
       return
     }
-    $npm = Join-Path $privateNode 'npm.cmd'
-    Ok "private Node.js $lts in $privateNode"
   }
+  $nodeExe = Join-Path $toolFolder "node\$nodeVersion\node.exe"
 
-  # 5. The CLI ---------------------------------------------------------------------------------------------------
-  Step 'Installing windows-development-sandbox'
-  # The release package is downloaded first and checked against the SHA-256 GitHub publishes for it. A package you named
-  # yourself with WDS_PACKAGE is installed as given.
-  $installFrom = $package
-  $download = $null
-  if (-not $env:WDS_PACKAGE) {
-    $download = Join-Path $toolFolder ('download-' + [guid]::NewGuid().ToString('N'))
-    try {
-      $release = Invoke-RestMethod 'https://api.github.com/repos/JoshDiDuca/windows-development-sandbox/releases/latest' -UseBasicParsing -Headers @{ 'User-Agent' = 'windows-development-sandbox-installer' }
-      $asset = @($release.assets | Where-Object { $_.name -eq 'windows-development-sandbox.tgz' })[0]
-      $expected = if ($asset -and "$($asset.digest)" -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null }
-      if (-not $asset) { throw 'the release has no windows-development-sandbox.tgz' }
+  # 6. The release package ---------------------------------------------------------------------------------------
+  # Downloaded first and checked against the SHA-256 GitHub publishes for it. A package you named yourself with
+  # WDS_PACKAGE is installed as given (and checked against WDS_SHA256 when you set it).
+  Step 'Getting windows-development-sandbox'
+  $download = Join-Path $toolFolder ('download-' + [guid]::NewGuid().ToString('N'))
+  $tgz = $null
+  try {
+    New-Item -ItemType Directory -Force $download | Out-Null
+    if ($env:WDS_PACKAGE) {
+      if ($env:WDS_PACKAGE -match '^https?://') {
+        $tgz = Join-Path $download 'package.tgz'
+        Download-File $env:WDS_PACKAGE $tgz
+      } elseif (Test-Path -LiteralPath $env:WDS_PACKAGE -PathType Leaf) { $tgz = (Resolve-Path -LiteralPath $env:WDS_PACKAGE).ProviderPath }
+      else { throw "WDS_PACKAGE ($env:WDS_PACKAGE) is not a file or an https address" }
+      if ($env:WDS_SHA256) {
+        if (-not (Test-Sha256 $tgz $env:WDS_SHA256)) { throw 'the package does not match WDS_SHA256' }
+        Ok 'package found and its SHA-256 matches WDS_SHA256'
+      } else { Warn 'Installing the package named in WDS_PACKAGE as given (no WDS_SHA256 to check it against).' }
+    } else {
+      $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing -Headers @{ 'User-Agent' = 'windows-development-sandbox-installer' }
+      $asset = @($release.assets | Where-Object { $_.name -match '^windows-development-sandbox-\d+\.\d+\.\d+\.tgz$' })[0]
+      if (-not $asset) { throw 'the release has no windows-development-sandbox-x.y.z.tgz' }
+      $expected = if ("$($asset.digest)" -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null }
+      if (-not $expected) {
+        # Without a digest in the API, the release's SHA256SUMS file lists it.
+        $sumsAsset = @($release.assets | Where-Object { $_.name -eq 'SHA256SUMS' })[0]
+        if ($sumsAsset) {
+          $sumsText = (Invoke-WebRequest $sumsAsset.browser_download_url -UseBasicParsing).Content
+          if ($sumsText -is [byte[]]) { $sumsText = [Text.Encoding]::UTF8.GetString($sumsText) }
+          foreach ($line in ($sumsText -split "`n")) { if ($line.Trim() -match "^([0-9a-fA-F]{64})\s+\*?$([regex]::Escape($asset.name))$") { $expected = $Matches[1] } }
+        }
+      }
+      $tgz = Join-Path $download $asset.name
+      Download-File $asset.browser_download_url $tgz
       if ($expected) {
-        New-Item -ItemType Directory -Force $download | Out-Null
-        $file = Join-Path $download 'windows-development-sandbox.tgz'
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest $asset.browser_download_url -OutFile $file -UseBasicParsing
-        if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected.ToUpper()) { throw 'the download does not match the SHA-256 GitHub lists for it' }
-        $installFrom = $file
+        if (-not (Test-Sha256 $tgz $expected)) { throw 'the download does not match the SHA-256 GitHub lists for it' }
         Ok 'package downloaded and its SHA-256 matches'
       } elseif ($env:WDS_ALLOW_UNVERIFIED -eq '1') { Warn 'GitHub lists no SHA-256 for this package; installing it unverified because WDS_ALLOW_UNVERIFIED=1.' }
       else { throw 'GitHub lists no SHA-256 for this package, so it cannot be checked, and it is not installed. To install it anyway, set $env:WDS_ALLOW_UNVERIFIED = "1" and run the installer again.' }
-    } catch {
-      Problem "Could not check the package: $_"
-      Remove-Inside $download $toolFolder
-      return
     }
-  }
-  # A background watcher left by an older version (it outlived its sandbox) holds files npm must replace. Stopped only
-  # when no Windows Sandbox runs: while one does, its watcher is still needed.
-  if (-not (Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue)) {
-    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-      Where-Object { $_.CommandLine -match '(windows-development-sandbox|agent-sandbox).*\s_watch(\s|$)' } |
-      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Ok "stopped a leftover background watcher (process $($_.ProcessId))" }
-  }
-  Write-Host "   npm install -g $installFrom"
-  # npm.cmd, not npm: the npm.ps1 shim is blocked when scripts are disabled on this PC.
-  # The old agent-sandbox package ships the same commands; npm will not install over it.
-  if ((& $npm ls -g --depth=0 agent-sandbox 2>$null) -match 'agent-sandbox@') { Write-Host '   Removing the old agent-sandbox package (it is now windows-development-sandbox) ...'; & $npm uninstall -g agent-sandbox | Out-Null }
-  & $npm install -g $installFrom
-  $npmExit = $LASTEXITCODE
-  if ($download) { Remove-Inside $download $toolFolder }
-  if ($npmExit -ne 0) {
-    Problem "npm could not install the package (exit code $npmExit)."
-    Write-Host '   Check your internet connection and try again. Details are in the npm output above.'
+  } catch {
+    Problem "Could not get the package: $_"
+    Remove-Inside $download $toolFolder
     return
   }
-  Refresh-Path
-  $prefix = ((& $npm prefix -g 2>$null) | Select-Object -Last 1)
-  if ($prefix) { $prefix = $prefix.Trim() }
-  if ($npm -ne 'npm.cmd') {
-    # With the private Node, put small wrappers for our commands on your PATH (not node.exe itself).
-    $bin = Join-Path $toolFolder 'bin'
-    New-Item -ItemType Directory -Force $bin | Out-Null
-    $commands = 'sandbox', 'windows-development-sandbox', 'agent-sandbox', 'claude-sandbox', 'codex-sandbox', 'gemini-sandbox', 'claude-sbx', 'codex-sbx', 'gemini-sbx', 'claude-host', 'sbx-show', 'sbx-hide'
-    foreach ($c in $commands) { if (Test-Path (Join-Path $prefix "$c.cmd")) { Set-Content -Path (Join-Path $bin "$c.cmd") -Value "@`"$prefix\$c.cmd`" %*" -Encoding ASCII } }
-    Add-UserPath $bin
-    $env:Path = "$bin;$env:Path"
-    $prefix = $bin
-  }
-  $cli = if ($prefix) { Join-Path $prefix 'sandbox.cmd' } else { $null }
-  if (-not $cli -or -not (Test-Path $cli)) { $cli = 'sandbox.cmd' }
-  Ok 'Installed'
 
-  Step 'Checking everything with sandbox doctor'
-  if (Get-Command $cli -ErrorAction SilentlyContinue) { & $cli doctor } else { Warn 'Open a new terminal and run: sandbox doctor' }
+  # 7. Put the version in place, then switch to it ------------------------------------------------------------------
+  Step "Installing into $toolFolder"
+  $newVersion = $null
+  $createdVersion = $false
+  $activated = $false
+  try {
+    Stop-Watchers
+    $stage = Join-Path $toolFolder ('staging\' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force $stage | Out-Null
+    try {
+      & $tarExe -xf $tgz -C $stage
+      if ($LASTEXITCODE -ne 0) { throw "tar could not unpack the package (exit code $LASTEXITCODE)" }
+      $packageJson = Join-Path $stage 'package\package.json'
+      if (-not (Test-Path -LiteralPath $packageJson)) { throw 'the package has no package/package.json' }
+      $meta = Get-Content -LiteralPath $packageJson -Raw | ConvertFrom-Json
+      if ($meta.name -ne $packageName) { throw "the package is $($meta.name), not $packageName" }
+      if ("$($meta.version)" -notmatch '^\d+\.\d+\.\d+$') { throw "the package has no x.y.z version ($($meta.version))" }
+      $newVersion = "$($meta.version)"
+      $versionDir = Join-Path $toolFolder "versions\$newVersion"
+      if (Test-Path -LiteralPath $versionDir) {
+        Remove-Inside $versionDir (Join-Path $toolFolder 'versions')
+        if (Test-Path -LiteralPath $versionDir) { throw "version $newVersion is installed and in use; close the sandbox and every terminal running it, then try again" }
+      }
+      New-Item -ItemType Directory -Force (Join-Path $toolFolder 'versions') | Out-Null
+      Move-Item -LiteralPath $stage -Destination $versionDir
+      $createdVersion = $true
+    } finally { Remove-Inside (Join-Path $toolFolder 'staging') $toolFolder }
+    $packageDir = Join-Path $versionDir 'package'
+    $entry = Join-Path $packageDir 'dist\bin\sandbox.js'
+    $started = (& $nodeExe $entry --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $started -ne $newVersion) { throw "version $newVersion did not start: $started" }
+    Ok "version $newVersion starts"
+
+    # The commands: one shim pair per bin entry of the package, then the pointers they read.
+    $bins = @{}
+    if ($meta.bin) { foreach ($property in $meta.bin.PSObject.Properties) { $bins[$property.Name] = [string]$property.Value } }
+    if (-not $bins.ContainsKey('sandbox')) { throw 'the package has no sandbox command' }
+    New-Item -ItemType Directory -Force $binFolder | Out-Null
+    foreach ($command in $bins.Keys) {
+      Write-AsciiAtomic (Join-Path $binFolder "$command.cmd") (Get-ShimText 'cmd' $command $bins[$command])
+      Write-AsciiAtomic (Join-Path $binFolder $command) (Get-ShimText 'sh' $command $bins[$command])
+    }
+    foreach ($wrapper in $legacyWrappers) { if (-not $bins.ContainsKey([IO.Path]::GetFileNameWithoutExtension($wrapper.Name))) { Remove-Item -LiteralPath $wrapper.FullName -Force -ErrorAction SilentlyContinue } }
+    Write-Pointer (Join-Path $toolFolder 'active-node') $nodeVersion '^v\d+\.\d+\.\d+$'
+    Write-Pointer (Join-Path $toolFolder 'active-version') $newVersion '^\d+\.\d+\.\d+$'
+    $activated = $true
+    $through = (& (Join-Path $binFolder 'sandbox.cmd') --version 2>&1 | Out-String).Trim()
+    if ($through -ne $newVersion) { throw "the sandbox command did not run version $newVersion ($through)" }
+    Ok "the sandbox command runs version $newVersion"
+  } catch {
+    Problem "Could not install: $_"
+    if ($activated) {
+      if ($oldVersion -and $oldNode) {
+        try { Write-Pointer (Join-Path $toolFolder 'active-node') $oldNode '^v\d+\.\d+\.\d+$'; Write-Pointer (Join-Path $toolFolder 'active-version') $oldVersion '^\d+\.\d+\.\d+$'; Write-Host "   Went back to version $oldVersion." } catch { Warn "Could not go back to version ${oldVersion}: $_" }
+      }
+    }
+    if ($createdVersion -and -not ($oldVersion -and $oldVersion -eq $newVersion)) { Remove-Inside (Join-Path $toolFolder "versions\$newVersion") (Join-Path $toolFolder 'versions') }
+    Remove-Inside $download $toolFolder
+    return
+  }
+  Remove-Inside $download $toolFolder
+  # Keep this version and the one it replaced (a rollback); older ones go.
+  if (Test-Path -LiteralPath (Join-Path $toolFolder 'versions')) {
+    Get-ChildItem -LiteralPath (Join-Path $toolFolder 'versions') -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' -and $_.Name -ne $newVersion -and $_.Name -ne $oldVersion } | ForEach-Object { Remove-Inside $_.FullName (Join-Path $toolFolder 'versions') }
+  }
+
+  # PATH and Start menu.
+  Add-PathEntry $binFolder $machine
+  $env:Path = "$binFolder;$env:Path"
+  Ok "$binFolder is on the PATH"
+  try { Set-Shortcut $shortcutFile (Join-Path $binFolder 'sandbox.cmd'); Ok 'Start menu shortcut' } catch { Warn "Could not make the Start menu shortcut: $_" }
+
+  # 8. Everyone: the group, the machine folders and the machine settings --------------------------------------------
+  $groupSid = $null
+  if ($machine) {
+    Step 'Setting up this PC for several users'
+    try {
+      if (-not (Get-LocalGroup -Name $groupName -ErrorAction SilentlyContinue)) { New-LocalGroup -Name $groupName -Description 'Windows users who may use a shared Windows Development Sandbox' | Out-Null }
+      $groupSid = (Get-LocalGroup -Name $groupName).SID.Value
+      $members = @([Security.Principal.WindowsIdentity]::GetCurrent().Name) + $addUsers
+      foreach ($member in ($members | Select-Object -Unique)) {
+        try { Add-LocalGroupMember -Group $groupName -Member $member -ErrorAction Stop; Ok "$member is in the group $groupName" }
+        catch { if ("$_" -match 'already a member') { Ok "$member is already in the group $groupName" } else { Warn "Could not add $member to $groupName ($_)." } }
+      }
+
+      # The machine tree. Each folder's permissions are written whole on every run, so a changed one is put right.
+      $systemSid = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
+      $adminsSid = New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')
+      $ownerSid = New-Object Security.Principal.SecurityIdentifier('S-1-3-0')
+      $groupId = New-Object Security.Principal.SecurityIdentifier($groupSid)
+      function New-Rule($sid, $rights, $inherit, $propagation) {
+        return New-Object Security.AccessControl.FileSystemAccessRule($sid, [Security.AccessControl.FileSystemRights]$rights, [Security.AccessControl.InheritanceFlags]$inherit, [Security.AccessControl.PropagationFlags]$propagation, [Security.AccessControl.AccessControlType]::Allow)
+      }
+      function Set-FolderAcl($path, $rules) {
+        New-Item -ItemType Directory -Force $path | Out-Null
+        $item = Get-Item -LiteralPath $path -Force
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "refusing a link: $path" }
+        $acl = Get-Acl -LiteralPath $path
+        $acl.SetAccessRuleProtection($true, $false)
+        foreach ($existing in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($existing) }
+        foreach ($rule in $rules) { $acl.AddAccessRule($rule) }
+        Set-Acl -LiteralPath $path -AclObject $acl
+      }
+      $both = 'ContainerInherit, ObjectInherit'
+      $adminRules = @((New-Rule $systemSid 'FullControl' $both 'None'), (New-Rule $adminsSid 'FullControl' $both 'None'))
+      # Root: administrators change it, the group reads (config.json, migrations.json).
+      Set-FolderAcl $machineData ($adminRules + (New-Rule $groupId 'ReadAndExecute' $both 'None'))
+      # users\: the group lists and creates folders here (this folder only); whoever creates a folder owns it alone.
+      Set-FolderAcl (Join-Path $machineData 'users') ($adminRules + @((New-Rule $groupId 'ReadAndExecute, CreateDirectories' 'None' 'None'), (New-Rule $ownerSid 'FullControl' $both 'InheritOnly')))
+      # active\: the group lists and creates files here, and reads every file; only the creator changes its own.
+      Set-FolderAcl (Join-Path $machineData 'active') ($adminRules + @((New-Rule $groupId 'ReadAndExecute, CreateFiles' 'None' 'None'), (New-Rule $groupId 'Read' 'ObjectInherit' 'InheritOnly'), (New-Rule $ownerSid 'FullControl' 'ObjectInherit' 'InheritOnly')))
+      Ok "$machineData and its permissions are in place"
+
+      # The machine settings: where each user's data goes, and whether a sandbox is shared. Asked once.
+      $machineConfig = Join-Path $machineData 'config.json'
+      if (Test-Path -LiteralPath $machineConfig) { Ok "keeping the machine settings in $machineConfig" }
+      else {
+        $share = Ask 'Let other users of this PC use a sandbox you start?'
+        $settings = [ordered]@{ storage = [ordered]@{ root = '%ProgramData%\AgentSandbox\users\%USERNAME%' }; sharing = [ordered]@{ otherUsers = [bool]$share } }
+        Write-JsonAtomic $machineConfig $settings
+        Ok "machine settings written to $machineConfig (sharing with other users: $(if ($share) { 'on' } else { 'off' }))"
+      }
+      Write-Host '   Users added to the group must sign out and in once.' -ForegroundColor Yellow
+    } catch {
+      Problem "Could not set up this PC for several users: $_"
+      Write-Host '   The program is installed; fix the problem and run the installer again.'
+    }
+  }
+
+  # 9. Automatic updates: asked once ----------------------------------------------------------------------------------
+  $autoUpdate = $false
+  if ($AutoUpdate) { $autoUpdate = $true }
+  elseif ($NoAutoUpdate) { $autoUpdate = $false }
+  elseif ($record -and $null -ne $record.autoUpdate) { $autoUpdate = [bool]$record.autoUpdate }
+  else {
+    Step 'Automatic updates'
+    $autoUpdate = Ask 'Install new versions by itself when no sandbox is running?'
+  }
+  $installedAt = if ($record -and $record.installedAt) { [string]$record.installedAt } else { (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+  Write-JsonAtomic (Join-Path $toolFolder 'install.json') ([ordered]@{ scope = $(if ($machine) { 'machine' } else { 'user' }); groupSid = $groupSid; autoUpdate = [bool]$autoUpdate; installedAt = $installedAt })
+  $cli = Join-Path $binFolder 'sandbox.cmd'
+  if ($machine -and ($autoUpdate -or $NoAutoUpdate)) {
+    # The new version creates (or removes) the scheduled task itself.
+    & $cli update --auto $(if ($autoUpdate) { 'on' } else { 'off' })
+    if ($LASTEXITCODE -ne 0) { Warn 'Could not set up automatic updates; run sandbox update --auto on in an admin terminal.' }
+  }
+  if ($autoUpdate) { Ok 'automatic updates are on' }
+
+  # 10. Remove what the new install replaces --------------------------------------------------------------------------
+  if ($npmGlobals.Count -or (Test-Path -LiteralPath (Join-Path $legacyNode 'node.exe'))) {
+    Step 'Removing the older install'
+    foreach ($global in $npmGlobals) {
+      & $global.npm uninstall -g $global.package 2>&1 | Out-Null
+      if ($LASTEXITCODE -eq 0) { Ok "removed the npm package $($global.package)" } else { Warn "Could not remove the npm package $($global.package); run: npm uninstall -g $($global.package)" }
+    }
+    # The 1.x private Node sat straight in node\; the new ones are in node\v22.x.y\.
+    if (Test-Path -LiteralPath $legacyNode) {
+      Get-ChildItem -LiteralPath $legacyNode -Force | Where-Object { $_.Name -notmatch '^v\d+\.\d+\.\d+$' } | ForEach-Object { Remove-Inside $_.FullName $legacyNode }
+    }
+  }
+  if ($machine -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox\bin'))) {
+    Warn "An install for just you is still in $(Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'). Remove it with: install.ps1 -Uninstall -Scope CurrentUser"
+  }
+  if ($machine -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'AgentSandbox'))) {
+    Warn "Your earlier saved data in $(Join-Path $env:LOCALAPPDATA 'AgentSandbox') is not used by the all-users install (it keeps data in $machineData\users\<name>); copy what you want to keep."
+  }
+
+  # 11. Settings and check ---------------------------------------------------------------------------------------------
+  if ($machine) {
+    # This window runs as administrator: folders it made would belong to Administrators, not to you.
+    Write-Host ''
+    Write-Host 'Open a normal terminal and run sandbox doctor: the first run sets up your saved settings.'
+  } else {
+    Step 'Bringing your saved settings up to date'
+    & $cli migrate
+    Step 'Checking everything with sandbox doctor'
+    & $cli doctor
+  }
 
   # Summary ------------------------------------------------------------------------------------------------------
   Write-Host ''
@@ -251,5 +639,5 @@
   Write-Host 'What next:' -ForegroundColor Cyan
   Write-Host '  1. Open a new terminal and cd into a project folder.'
   Write-Host '  2. Run sandbox for the menu, claude-sbx for Claude Code, or sandbox start for a sandbox with no agent.'
-  Write-Host '  3. Run sandbox setup or sandbox doctor any time to check this PC again.'
+  Write-Host '  3. Run sandbox setup or sandbox doctor any time to check this PC again; sandbox update to get a newer version.'
 }
