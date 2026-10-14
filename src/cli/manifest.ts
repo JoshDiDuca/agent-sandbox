@@ -393,6 +393,29 @@ const COMMAND_LIST = [
     ],
   },
   {
+    name: 'update',
+    summary: 'install the newest version, or check, go back, or switch automatic updates',
+    group: 'Health',
+    args: [],
+    options: [
+      bool('--check', 'only look whether a newer version exists'),
+      bool('--rollback', 'go back to the version before the last update'),
+      text(
+        '--auto',
+        'on|off',
+        'install new versions by themselves (for everyone on this PC: needs an admin terminal)',
+        {
+          choices: ['on', 'off'],
+        },
+      ),
+      bool('--unattended', 'used by automatic updates: no questions, short output', { noMenu: true, advanced: true }),
+      text('--feed', 'folder', 'take the release from this folder (a feed.json and the package) instead of GitHub', {
+        noMenu: true,
+        advanced: true,
+      }),
+    ],
+  },
+  {
     name: 'repair',
     summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)',
     group: 'Health',

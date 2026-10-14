@@ -50,6 +50,12 @@ export interface CliOptions {
   restore?: string;
   /** resume --auto: called by the background watcher after a crash. */
   auto: boolean;
+  /** update: --check (only look), --rollback, --unattended (no questions), --feed <folder>, --auto on|off. */
+  check: boolean;
+  rollback: boolean;
+  unattended: boolean;
+  feed?: string;
+  autoUpdate?: 'on' | 'off';
 }
 
 /** One session to start: an agent in a folder, with arguments of its own (after the ones given after --). */
@@ -221,9 +227,21 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
     kind: o.kind as string | undefined,
     grep: o.grep as string | undefined,
     dryRun: Boolean(o.dryRun),
-    auto: Boolean(o.auto),
+    auto: o.auto === true,
     restore: o.restore as string | undefined,
+    check: Boolean(o.check),
+    rollback: Boolean(o.rollback),
+    unattended: Boolean(o.unattended),
+    feed: o.feed as string | undefined,
+    autoUpdate: updateAuto(o.auto),
   };
+}
+
+/** `update --auto on|off` (the same flag is a switch for resume): anything else is refused. */
+function updateAuto(value: unknown): 'on' | 'off' | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (value === 'on' || value === 'off') return value;
+  return fail('--auto needs on or off.', 'Use sandbox update --auto on, or --auto off.');
 }
 
 function defaults(): CliOptions {
@@ -244,6 +262,9 @@ function defaults(): CliOptions {
     follow: false,
     dryRun: false,
     auto: false,
+    check: false,
+    rollback: false,
+    unattended: false,
     json: false,
     yes: false,
     all: false,

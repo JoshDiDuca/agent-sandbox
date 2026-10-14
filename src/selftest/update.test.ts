@@ -1,59 +1,13 @@
 // The managed install layout, the shims, the update decision and the updater (installs, failures, rollback), all in
 // temp folders. The updater runs real packages: a tiny tarball per version whose sandbox.js prints its version, started
 // through the shim with a real cmd.exe. Releases come from a folder feed, never from the network.
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { extractArchive } from '../shared/download/index.js';
-import { SYSTEM } from '../shared/system.js';
 import { InstallLayout, compareVersions, readBins, shimText, writeShims } from '../host/install/index.js';
 import { FolderFeed, Updater, UpdateStateFile, decideUpdate, isTooSoon } from '../host/update/index.js';
+import { NODE, SHA_WRONG, packTarball, publish, runShim } from './support/releases.js';
 import type { Suite } from './support/suite.js';
-import type { Harness } from './support/harness.js';
-
-const NODE = 'v22.3.0';
-const SHA_WRONG = '0'.repeat(64);
-
-/** A release tarball: package/package.json and package/dist/bin/sandbox.js, which prints its version (or fails). */
-function packTarball(t: Harness, version: string, behaviour: 'good' | 'broken', name = 'windows-development-sandbox') {
-  const stage = t.dir('pack', name + '-' + version + '-' + behaviour);
-  t.writeJson(path.join(stage, 'package', 'package.json'), {
-    name,
-    version,
-    bin: { sandbox: 'dist/bin/sandbox.js' },
-  });
-  const body =
-    behaviour === 'good'
-      ? "if (process.argv.includes('--version')) console.log('" + version + "');"
-      : "console.error('broken build'); process.exit(1);";
-  t.write(path.join(stage, 'package', 'dist', 'bin', 'sandbox.js'), body + '\n');
-  const tgz = t.at('pack', name + '-' + version + '-' + behaviour + '.tgz');
-  const made = spawnSync(SYSTEM.tar(), ['-czf', tgz, '-C', stage, 'package'], { encoding: 'utf8' });
-  if (made.status !== 0) throw new Error('could not pack the test release: ' + made.stderr);
-  return tgz;
-}
-
-/** Makes `version` the feed's latest release (feed.json points at its tarball). */
-function publish(t: Harness, feed: string, version: string, behaviour: 'good' | 'broken', sha?: string, name?: string) {
-  const tgz = packTarball(t, version, behaviour, name);
-  const file = 'windows-development-sandbox-' + version + '.tgz';
-  fs.mkdirSync(feed, { recursive: true });
-  fs.copyFileSync(tgz, path.join(feed, file));
-  const hash = sha ?? crypto.createHash('sha256').update(fs.readFileSync(tgz)).digest('hex');
-  t.writeJson(path.join(feed, 'feed.json'), { version, file, sha256: hash });
-}
-
-/** What a user gets by running the command: the shim, through cmd.exe. */
-function runShim(layout: InstallLayout): string {
-  const shim = path.join(layout.binDir, 'sandbox.cmd');
-  const run = spawnSync(SYSTEM.cmd(), ['/d', '/s', '/c', '"' + shim + '" --version'], {
-    encoding: 'utf8',
-    windowsVerbatimArguments: true,
-    windowsHide: true,
-  });
-  return (run.stdout ?? '').trim() + (run.status === 0 ? '' : ' (exit ' + run.status + ')');
-}
 
 export const updateSuite: Suite = {
   name: 'update',

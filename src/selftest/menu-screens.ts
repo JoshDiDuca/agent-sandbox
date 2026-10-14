@@ -168,6 +168,17 @@ export function renderScreens(dir: string): string {
       { name: 'Toolchain cache', status: 'needs-you', detail: 'close the sandbox first' },
     ],
     settings: { pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'] },
+    updates: {
+      managed: true,
+      version: '1.4.3',
+      scope: 'user',
+      autoUpdate: true,
+      state: {
+        previous: '1.4.2',
+        failed: { version: '1.4.4', at: '2026-10-13T03:00:00Z', reason: 'it did not start' },
+      },
+    },
+    latest: '1.5.0',
     setup: {
       facts: {} as never,
       canEnable: true,
@@ -277,7 +288,7 @@ export function renderScreens(dir: string): string {
         size,
       ),
     );
-    for (const category of ['data', 'logs', 'doctor', 'repair', 'settings', 'setup', 'more'])
+    for (const category of ['data', 'logs', 'doctor', 'repair', 'settings', 'updates', 'setup', 'more'])
       out.push(
         block(
           '7 Maintenance · ' + category,

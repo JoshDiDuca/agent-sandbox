@@ -10,6 +10,15 @@ export {
   type MigrateContext,
   type MigrateResult,
 } from './migrate-service.js';
+export {
+  NPM_UPDATE_COMMAND,
+  UpdateService,
+  runsAsSystem,
+  type CheckResult,
+  type UpdateServiceOptions,
+  type UpdateStatus,
+  type UpdateTaskPort,
+} from './update-service.js';
 export { LogsService, type LogFile } from './logs-service.js';
 export { HealthService, runChecks, type SetupReport } from './health-service.js';
 export { ProjectsService, type ProjectRow, type ProjectSettings, type ProjectsListing } from './projects-service.js';

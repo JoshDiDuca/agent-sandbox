@@ -55,6 +55,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
   if (options.command === 'menu') {
     const menuCtx = commands.createContext(PACKAGE_ROOT, entry, options);
     await commands.migrateBeforeCommand(menuCtx, options.command);
+    commands.updatesBeforeCommand(entry, options.command);
     return menu(menuCtx, runFromMenu(options.config));
   }
   // Loaded only when asked for: normal commands never load test code.
@@ -65,6 +66,8 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     recordHistory(withoutConfig(typed));
     return commands.repairCommand(PACKAGE_ROOT, entry, options);
   }
+  // update works on the install, not on a sandbox: it needs no settings (and a broken file must not stop it).
+  if (options.command === 'update') return commands.update(options);
   const handler = HANDLERS[options.command];
   if (!handler)
     return fail(
@@ -74,6 +77,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
   const ctx = commands.createContext(PACKAGE_ROOT, entry, options);
   validateOptions(ctx);
   await commands.migrateBeforeCommand(ctx, options.command);
+  commands.updatesBeforeCommand(entry, options.command);
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));
   return (await handler(ctx)) ?? 0;

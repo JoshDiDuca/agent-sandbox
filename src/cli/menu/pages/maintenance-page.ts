@@ -15,9 +15,13 @@ import {
   HealthService,
   LogsService,
   MigrateService,
+  NPM_UPDATE_COMMAND,
+  UpdateService,
   type LogFile,
   type SetupReport,
+  type UpdateStatus,
 } from '../../services/index.js';
+import { describeResult } from '../../commands/maintenance/update.js';
 import {
   Text,
   Theme,
@@ -41,6 +45,10 @@ export interface MaintenanceModel {
   readonly setup: SetupReport | { error: string } | null;
   /** The changes still to make to your saved settings (or why they cannot be read). */
   readonly settings: { readonly pending: readonly string[] } | { readonly error: string };
+  /** The program's own updates: what is installed and what an update did. */
+  readonly updates: UpdateStatus | { readonly error: string };
+  /** A newer version found by "Check now" (null: not looked yet, or none). */
+  readonly latest: string | null;
   /** The commands listed under "More commands". */
   readonly more: readonly { name: string; summary: string }[];
 }
@@ -51,6 +59,7 @@ const CATEGORIES = [
   { id: 'doctor', label: 'Doctor', description: 'Checks this PC and your settings.' },
   { id: 'repair', label: 'Repair', description: 'Finds common problems and fixes what it can.' },
   { id: 'settings', label: 'Saved settings', description: 'Brings your saved settings up to date with this version.' },
+  { id: 'updates', label: 'Updates', description: 'Which version is installed, and installing a newer one.' },
   { id: 'setup', label: 'Set up this PC', description: 'Can this PC run Windows Sandbox?' },
   { id: 'more', label: 'More commands', description: 'Less common commands.' },
 ];
@@ -104,6 +113,58 @@ function dataItems(m: MaintenanceModel): ListItem<string>[] {
       details: [Theme.muted('Folder  ') + e.path],
     })),
   ];
+}
+
+function updateItems(m: MaintenanceModel): ListItem<string>[] {
+  const row = (
+    id: string,
+    label: string,
+    hint: string,
+    description?: string,
+    details?: string[],
+  ): ListItem<string> => ({
+    value: 'updates:' + id,
+    label,
+    category: 'updates',
+    hint,
+    description,
+    details,
+  });
+  if ('error' in m.updates) return [row('error', m.updates.error, '')];
+  const u = m.updates;
+  if (!u.managed)
+    return [
+      row('version', 'Version', u.version, 'Installed with npm, so npm updates it: ' + NPM_UPDATE_COMMAND),
+      row('npm', 'Update', Theme.muted('with npm'), 'Run ' + NPM_UPDATE_COMMAND + ' in a terminal.'),
+    ];
+  const scope = u.scope === 'machine' ? 'for everyone on this PC' : 'for you';
+  const rows = [
+    row('version', 'Version', u.version, 'Installed ' + scope + '.'),
+    row(
+      'latest',
+      'Newest version',
+      m.latest ? Theme.warn(m.latest) : Theme.muted('press c to look'),
+      m.latest ? 'Enter or u installs it.' : 'c looks on GitHub for a newer version.',
+    ),
+    row(
+      'auto',
+      'Automatic updates',
+      u.autoUpdate ? Theme.ok('on') : Theme.muted('off'),
+      'a switches them. ' +
+        (u.scope === 'machine'
+          ? 'For everyone: needs an admin terminal.'
+          : 'A new version installs when no sandbox runs.'),
+    ),
+  ];
+  if (u.state.previous) rows.push(row('previous', 'Previous version', u.state.previous, 'r goes back to it.'));
+  if (u.state.failed)
+    rows.push(
+      row('failed', 'Last failed update', Theme.error(u.state.failed.version), u.state.failed.reason, [
+        u.state.failed.reason,
+        'It is not tried again until a newer version is released.',
+      ]),
+    );
+  return rows;
 }
 
 /** The list for the maintenance tab. Pure. */
@@ -180,6 +241,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
               description: 'Nothing to update.',
             },
           ];
+  const updates = updateItems(m);
   const more: ListItem<string>[] = m.more.map((c) => ({
     value: 'more:' + c.name,
     label: Text.humanize(c.name),
@@ -190,7 +252,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...dataItems(m), ...logs, ...doctor, ...repair, ...settings, ...setup, ...more],
+    items: [...dataItems(m), ...logs, ...doctor, ...repair, ...settings, ...updates, ...setup, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
     escapeLabel: 'quit',
@@ -210,6 +272,15 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         return [{ key: 'f', label: 'check and fix' }];
       case 'settings':
         return [{ key: 'u', label: 'update now' }];
+      case 'updates':
+        return 'error' in m.updates || !m.updates.managed
+          ? []
+          : [
+              { key: 'c', label: 'check now' },
+              { key: 'u', label: 'update now' },
+              { key: 'r', label: 'roll back' },
+              { key: 'a', label: 'automatic on/off' },
+            ];
       case 'setup': {
         const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
         return [
@@ -235,12 +306,15 @@ export class MaintenancePage extends ListPage<string> {
   private readonly migrate: MigrateService;
   private readonly health: HealthService;
   private readonly dataService: DataService;
+  private readonly updateService: UpdateService;
+  private latest: string | null = null;
 
   constructor(
     app: App,
     private readonly ctx: Context,
   ) {
     super(app);
+    this.updateService = UpdateService.forPackage(ctx.packageRoot, undefined, { userDir: userDir() });
     this.health = new HealthService(ctx);
     this.migrate = new MigrateService({
       storageRoot: ctx.storageRoot,
@@ -258,6 +332,8 @@ export class MaintenancePage extends ListPage<string> {
       repair: this.repairRows,
       setup: this.setupReport,
       settings: this.settings,
+      updates: this.updateStatus(),
+      latest: this.latest,
       more: MORE_COMMANDS.flatMap((name) => {
         const spec = commandSpec(name);
         return spec ? [{ name, summary: spec.summary }] : [];
@@ -297,6 +373,58 @@ export class MaintenancePage extends ListPage<string> {
     } catch (e) {
       this.settings = { error: errMsg(e) };
     }
+  }
+
+  private updateStatus(): MaintenanceModel['updates'] {
+    try {
+      return this.updateService.status();
+    } catch (e) {
+      return { error: errMsg(e) };
+    }
+  }
+
+  /** The Updates category: look, install, go back, switch automatic updates. */
+  private async updates(key: string | undefined): Promise<Outcome<string>> {
+    const service = this.updateService;
+    if (!service.managed)
+      return { notice: Theme.muted('Installed with npm: update it with ' + NPM_UPDATE_COMMAND + '.') };
+    if (key === 'a') {
+      const on = !service.status().autoUpdate;
+      this.busy(on ? 'Turning automatic updates on…' : 'Turning automatic updates off…');
+      service.setAuto(on);
+      return { notice: Theme.ok(Theme.glyph.ok + ' Automatic updates are ' + (on ? 'on.' : 'off.')) };
+    }
+    if (key === 'r') {
+      const target = service.status().state.previous;
+      if (!target) return { notice: Theme.muted('There is no earlier version to go back to.') };
+      if (
+        !(await this.app.ask(
+          'Go back to version ' + target + '?',
+          ['Takes effect the next time you start it.'],
+          'Go back',
+        ))
+      )
+        return {};
+      return { notice: Theme.ok(Theme.glyph.ok + ' Went back to version ' + service.rollback() + '.') };
+    }
+    if (key === 'c') {
+      this.busy('Looking for a newer version…');
+      const found = await service.check();
+      this.latest = found.available && found.latest ? found.latest.version : null;
+      return {
+        notice: this.latest
+          ? Theme.warn('Version ' + this.latest + ' is available.')
+          : Theme.ok(Theme.glyph.ok + ' You have the newest version.'),
+      };
+    }
+    if (key !== 'u') return {};
+    this.busy('Installing the newest version…');
+    const done = describeResult(await service.run(), false);
+    this.latest = null;
+    return {
+      notice:
+        done.code === 0 ? Theme.ok(Theme.glyph.ok + ' ' + done.line) : Theme.error(Theme.glyph.cross + ' ' + done.line),
+    };
   }
 
   private async updateSettings(): Promise<Outcome<string>> {
@@ -344,6 +472,7 @@ export class MaintenancePage extends ListPage<string> {
         const file = this.logs.find((l) => l.name === id.slice(4));
         return file ? { exit: { kind: 'view', file: file.path } } : {};
       }
+      if (this.category === 'updates') return await this.updates(key ?? (id === 'updates:latest' ? 'u' : undefined));
       if (key === 'u' || (result.kind === 'pick' && id?.startsWith('settings:'))) return await this.updateSettings();
       if (key === 'f' || id === 'repair:run') return this.repair();
       if (key === 'l' && this.category === 'doctor') {

@@ -18,7 +18,10 @@ export {
   migrate,
   migrateBeforeCommand,
   runMigrate,
+  runUpdate,
   sync,
+  update,
+  updatesBeforeCommand,
   watcher,
 } from './maintenance/index.js';
 export { agentCommandsCommand, syncAgentCommands } from './agent-commands.js';
