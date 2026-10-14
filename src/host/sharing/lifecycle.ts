@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { RunDir } from '../../shared/channel/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { InstallLayout, InstallRecordFile } from '../install/index.js';
 import { storageOf } from '../storage/index.js';
@@ -40,8 +41,11 @@ export function sharingDeps(packageRoot: string): SharingDeps | null {
 export function beginSharing(deps: SharingDeps, start: SharingStart, now: Date = new Date()): void {
   deps.records.write({ ...start, startedAt: start.startedAt ?? now.toISOString() });
   if (!deps.groupSid) return;
-  // The run folder exists once a sandbox has been generated; make sure, so the permissions have a folder to land on.
-  fs.mkdirSync(path.join(start.dataPath, 'run'), { recursive: true });
+  // The owner creates the run folder and every channel folder in it before others may write there: a folder another
+  // user created would stay theirs, and writable by them, after sharing is turned off.
+  const run = new RunDir(start.dataPath);
+  for (const dir of [run.root, run.requestsDir, run.responsesDir, run.sessionsDir, run.projectsDir, run.auditDir])
+    fs.mkdirSync(dir, { recursive: true });
   deps.apply(
     sharingAclPlan({
       storageUserDir: storageOf(start.dataPath),

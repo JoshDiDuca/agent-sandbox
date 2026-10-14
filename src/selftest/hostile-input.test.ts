@@ -52,6 +52,11 @@ export const hostileInputSuite: Suite = {
       removeRefusal('C:\\Program Files\\x\\y', 'C:\\Program Files\\x') !== null,
       'a delete is refused inside Program Files',
     );
+    t.check(
+      removeRefusal('C:\\Program Files\\App\\versions\\1.0.0', 'C:\\Program Files\\App\\versions') === null &&
+        removeRefusal('C:\\Program Files\\App\\versions', 'C:\\Program Files\\App') !== null,
+      "an all-users install may delete inside its own folders, never a whole program's",
+    );
     const allowedTarget = path.join(root, 'tools', 'go');
     t.write(path.join(allowedTarget, 'go.exe'), 'x');
     safeRemove(allowedTarget, root);

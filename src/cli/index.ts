@@ -8,6 +8,7 @@ import { loadConfig } from '../core/config/index.js';
 import * as commands from './commands/index.js';
 import { fail } from '../core/util/index.js';
 import { PACKAGE_ROOT } from '../core/package-info.js';
+import { dropInheritedModulePath } from '../shared/system.js';
 import { withConfig, hoistConfig, withoutConfig } from './argv.js';
 import { report } from './report.js';
 import { HANDLERS } from './commands/index.js';
@@ -84,6 +85,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
 }
 
 export function run(argv: string[], preset?: Preset): void {
+  dropInheritedModulePath();
   main(argv, preset).then(
     (code) => {
       process.exitCode = code;

@@ -121,7 +121,7 @@ param(
   if ($env:WDS_AUTOUPDATE -eq '1') { $AutoUpdate = [switch]$true }
   if ($env:WDS_AUTOUPDATE -eq '0') { $NoAutoUpdate = [switch]$true }
   if ($env:WDS_ADDUSERS -and -not $AddUsers) { $AddUsers = @($env:WDS_ADDUSERS -split ',') }
-  $addUsers = @($AddUsers | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  $usersToAdd = @($AddUsers | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
   function Open-PathKey($machine) {
     if ($machine) { return [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment') }
@@ -526,9 +526,9 @@ param(
   if ($machine) {
     Step 'Setting up this PC for several users'
     try {
-      if (-not (Get-LocalGroup -Name $groupName -ErrorAction SilentlyContinue)) { New-LocalGroup -Name $groupName -Description 'Windows users who may use a shared Windows Development Sandbox' | Out-Null }
+      if (-not (Get-LocalGroup -Name $groupName -ErrorAction SilentlyContinue)) { New-LocalGroup -Name $groupName -Description 'May use a shared Windows Development Sandbox' | Out-Null }
       $groupSid = (Get-LocalGroup -Name $groupName).SID.Value
-      $members = @([Security.Principal.WindowsIdentity]::GetCurrent().Name) + $addUsers
+      $members = @([Security.Principal.WindowsIdentity]::GetCurrent().Name) + $usersToAdd
       foreach ($member in ($members | Select-Object -Unique)) {
         try { Add-LocalGroupMember -Group $groupName -Member $member -ErrorAction Stop; Ok "$member is in the group $groupName" }
         catch { if ("$_" -match 'already a member') { Ok "$member is already in the group $groupName" } else { Warn "Could not add $member to $groupName ($_)." } }
@@ -579,23 +579,24 @@ param(
   }
 
   # 9. Automatic updates: asked once ----------------------------------------------------------------------------------
-  $autoUpdate = $false
-  if ($AutoUpdate) { $autoUpdate = $true }
-  elseif ($NoAutoUpdate) { $autoUpdate = $false }
-  elseif ($record -and $null -ne $record.autoUpdate) { $autoUpdate = [bool]$record.autoUpdate }
+  # PowerShell names ignore case: this must not be called $autoUpdate, which IS the -AutoUpdate switch.
+  $updatesOn = $false
+  if ($AutoUpdate) { $updatesOn = $true }
+  elseif ($NoAutoUpdate) { $updatesOn = $false }
+  elseif ($record -and $null -ne $record.autoUpdate) { $updatesOn = [bool]$record.autoUpdate }
   else {
     Step 'Automatic updates'
-    $autoUpdate = Ask 'Install new versions by itself when no sandbox is running?'
+    $updatesOn = Ask 'Install new versions by itself when no sandbox is running?'
   }
   $installedAt = if ($record -and $record.installedAt) { [string]$record.installedAt } else { (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
-  Write-JsonAtomic (Join-Path $toolFolder 'install.json') ([ordered]@{ scope = $(if ($machine) { 'machine' } else { 'user' }); groupSid = $groupSid; autoUpdate = [bool]$autoUpdate; installedAt = $installedAt })
+  Write-JsonAtomic (Join-Path $toolFolder 'install.json') ([ordered]@{ scope = $(if ($machine) { 'machine' } else { 'user' }); groupSid = $groupSid; autoUpdate = [bool]$updatesOn; installedAt = $installedAt })
   $cli = Join-Path $binFolder 'sandbox.cmd'
-  if ($machine -and ($autoUpdate -or $NoAutoUpdate)) {
+  if ($machine -and ($updatesOn -or $NoAutoUpdate)) {
     # The new version creates (or removes) the scheduled task itself.
-    & $cli update --auto $(if ($autoUpdate) { 'on' } else { 'off' })
+    & $cli update --auto $(if ($updatesOn) { 'on' } else { 'off' })
     if ($LASTEXITCODE -ne 0) { Warn 'Could not set up automatic updates; run sandbox update --auto on in an admin terminal.' }
   }
-  if ($autoUpdate) { Ok 'automatic updates are on' }
+  if ($updatesOn) { Ok 'automatic updates are on' }
 
   # 10. Remove what the new install replaces --------------------------------------------------------------------------
   if ($npmGlobals.Count -or (Test-Path -LiteralPath (Join-Path $legacyNode 'node.exe'))) {

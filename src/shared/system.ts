@@ -27,3 +27,12 @@ export const SYSTEM = {
   /** The .NET Framework C# compiler that ships with Windows (C# 5). */
   csc: (): string => path.join(systemRoot(), 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
 } as const;
+
+/**
+ * Started from a PowerShell 7 terminal, this process inherits PowerShell 7's PSModulePath, and every Windows PowerShell
+ * 5.1 it runs then fails to load its own modules (Get-Acl, Get-ScheduledTask ...). Without the variable each PowerShell
+ * builds its usual one, so entry points that a user starts from a terminal drop it once.
+ */
+export function dropInheritedModulePath(env: NodeJS.ProcessEnv = process.env): void {
+  delete env.PSModulePath;
+}

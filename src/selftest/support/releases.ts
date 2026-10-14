@@ -86,7 +86,7 @@ export async function installFirst(
 /** What a user gets by running the command: the shim, through cmd.exe. */
 export function runShim(layout: InstallLayout): string {
   const shim = path.join(layout.binDir, 'sandbox.cmd');
-  const run = spawnSync(SYSTEM.cmd(), ['/d', '/s', '/c', '"' + shim + '" --version'], {
+  const run = spawnSync(SYSTEM.cmd(), ['/d', '/s', '/c', '""' + shim + '" --version"'], {
     encoding: 'utf8',
     windowsVerbatimArguments: true,
     windowsHide: true,

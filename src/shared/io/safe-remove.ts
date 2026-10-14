@@ -15,6 +15,9 @@ const isAncestorOrSame = (parent: string, child: string): boolean => {
   const b = norm(child);
   return a === b || b.startsWith(a + path.sep);
 };
+/** How many folders `child` is below `parent` (0 when the same). */
+const depthBelow = (parent: string, child: string): number =>
+  path.relative(norm(parent), norm(child)).split(path.sep).filter(Boolean).length;
 
 /** Folders no delete may ever reach, or contain: profiles, Windows, program folders. */
 const protectedFolders = (): string[] =>
@@ -34,17 +37,18 @@ const protectedFolders = (): string[] =>
     'C:\\Windows',
   ].filter((p): p is string => typeof p === 'string' && p.trim() !== '');
 
-/** Folders nothing of ours lives in, so nothing below them may be deleted either. */
-const systemFolders = (): string[] =>
-  [
-    process.env.SystemRoot,
-    process.env.WINDIR,
-    process.env.ProgramFiles,
-    process.env['ProgramFiles(x86)'],
-    'C:\\Windows',
-    'C:\\Program Files',
-    'C:\\Program Files (x86)',
-  ].filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+const present = (paths: (string | undefined)[]): string[] =>
+  paths.filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+
+/** Windows itself: nothing below it is ever deleted. */
+const windowsFolders = (): string[] => present([process.env.SystemRoot, process.env.WINDIR, 'C:\\Windows']);
+
+/**
+ * Program folders: only an all-users install of ours lives there, so only a root inside a program's own folder
+ * (Program Files\<program>\<folder>, such as its versions) opens it, never a whole program.
+ */
+const programFolders = (): string[] =>
+  present([process.env.ProgramFiles, process.env['ProgramFiles(x86)'], 'C:\\Program Files', 'C:\\Program Files (x86)']);
 
 /**
  * Why `target` may not be deleted, or null when it may. Refused: a relative path, a drive root, a protected folder or
@@ -58,8 +62,10 @@ export function removeRefusal(target: string, root: string): string | null {
   if (t === norm(path.parse(t).root)) return 'a drive root';
   const hit = protectedFolders().find((p) => isAncestorOrSame(t, p));
   if (hit) return 'it is, or contains, ' + hit;
-  const system = systemFolders().find((p) => isAncestorOrSame(p, t));
-  if (system) return 'it is inside ' + system;
+  const windows = windowsFolders().find((p) => isAncestorOrSame(p, t));
+  if (windows) return 'it is inside ' + windows;
+  const program = programFolders().find((p) => isAncestorOrSame(p, t));
+  if (program && !(isAncestorOrSame(program, root) && depthBelow(program, root) >= 2)) return 'it is inside ' + program;
   if (!t.startsWith(norm(root) + path.sep)) return 'it is not inside ' + root;
   return null;
 }

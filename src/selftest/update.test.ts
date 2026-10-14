@@ -14,7 +14,8 @@ export const updateSuite: Suite = {
   title: 'install layout, shims, update decision, updater with rollback',
   run: async (t) => {
     t.section('install layout');
-    const root = t.dir('install');
+    // A space in the path, as in Program Files.
+    const root = t.dir('install root');
     const layout = InstallLayout.at(root, 'user');
     const detected = InstallLayout.detect(path.join(root, 'versions', '1.2.3', 'package'));
     t.check(detected !== null, 'a managed package folder (versions\\x.y.z\\package) is detected');
@@ -279,6 +280,16 @@ export const updateSuite: Suite = {
     t.equal(new UpdateStateFile(root).read().lastResult?.ok, false, 'the last result says the attempt failed');
     t.equal(layout.activeVersion(), '1.0.6', 'a failed download changes nothing');
     fs.copyFileSync(copy, tarball);
+    const shim = path.join(layout.binDir, 'sandbox.cmd');
+    fs.chmodSync(shim, 0o444);
+    const local = await updater.run({ sandboxRunning: false });
+    fs.chmodSync(shim, 0o666);
+    t.check(
+      local.kind === 'failed' && local.blocked === false,
+      'a failure on this PC (a read-only shim) does not block the version',
+      JSON.stringify(local),
+    );
+    t.equal(layout.activeVersion(), '1.0.6', 'and changes nothing');
     const retried = await updater.run({ sandboxRunning: false });
     t.equal(
       retried,

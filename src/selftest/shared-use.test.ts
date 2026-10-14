@@ -1,6 +1,7 @@
 // Sharing wired into the commands: what each user may do with the running sandbox (pure rules), the launch writing and
 // clearing the record, the shared data folder taken from a record, and a borrowed project list. Temp folders only; the
 // folder permissions go to a fake.
+import fs from 'node:fs';
 import path from 'node:path';
 import { BorrowedRegistry } from '../host/projects/index.js';
 import {
@@ -92,6 +93,10 @@ function lifecycle(t: Harness): void {
   t.equal(records.readAll().length, 1, 'the record is written');
   t.equal(records.readAll()[0].shared, true, 'and says it is shared');
   t.check(calls[0].length === 4 && calls[0].every((c) => c.add), 'sharing on grants the group its four entries');
+  t.check(
+    ['requests', 'responses', 'sessions'].every((d) => fs.existsSync(path.join(dataPath, 'run', d))),
+    'the owner creates the channel folders before others may write there',
+  );
   endSharing(deps, dataPath);
   t.equal(records.readAll().length, 0, 'the end removes the record');
   t.check(calls[1].length === 4 && calls[1].every((c) => !c.add), 'and takes the entries away');
