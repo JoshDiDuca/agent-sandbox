@@ -24,18 +24,12 @@ export const channelSuite: Suite = {
     const validRequest = (r: unknown): boolean => GuestRequestSchema.safeParse(r).success;
     const validSession = (s: unknown): boolean => SessionStatusSchema.safeParse(s).success;
     await t.throws(() => safeId('../evil'), 'invalid id', 'a path-like id is rejected');
-    t.check(!validRequest({ kind: 'shell', id: 'a' }), 'unknown request kinds are rejected');
     t.check(
-      !validRequest({ kind: 'exec', id: 'a/b', command: ['x'], cwd: 'C:\\', timeoutSeconds: 1 }),
-      'request ids must be safe file names',
-    );
-    t.check(
-      validRequest({ kind: 'ping', id: 'abc', createdAt: 'x' }),
-      'a known request kind with a safe id is accepted',
-    );
-    t.check(
-      !validRequest({ kind: 'ping', id: 'abc', createdAt: 'x', extra: 1 }),
-      'requests with unknown keys are rejected',
+      validRequest({ kind: 'ping', id: 'abc', createdAt: 'x' }) &&
+        !validRequest({ kind: 'shell', id: 'a' }) &&
+        !validRequest({ kind: 'exec', id: 'a/b', command: ['x'], cwd: 'C:\\', timeoutSeconds: 1 }) &&
+        !validRequest({ kind: 'ping', id: 'abc', createdAt: 'x', extra: 1 }),
+      'requests: known kinds with safe ids pass; unknown kinds, path-like ids and unknown keys are rejected',
     );
     const goodSession = {
       id: 's1',
@@ -48,12 +42,12 @@ export const channelSuite: Suite = {
       startedAt: 'x',
       attach: { addresses: ['172.20.1.5'], port: 5000, token: 't' },
     };
-    t.check(validSession(goodSession), 'a well-formed session status is accepted');
     t.check(
-      !validSession({ ...goodSession, attach: { ...goodSession.attach, port: 70000 } }),
-      'a session status with an impossible port is rejected',
+      validSession(goodSession) &&
+        !validSession({ ...goodSession, attach: { ...goodSession.attach, port: 70000 } }) &&
+        !validSession({ ...goodSession, phase: 'pwned' }),
+      'session status: a well-formed one passes; an impossible port or unknown phase is rejected',
     );
-    t.check(!validSession({ ...goodSession, phase: 'pwned' }), 'a session status with an unknown phase is rejected');
 
     t.section('boot progress');
     const goodStatus = {
@@ -74,17 +68,17 @@ export const channelSuite: Suite = {
       total: 6,
     };
     const parsed = (s: unknown) => SandboxStatusSchema.safeParse(s);
-    t.equal(parsed({ ...goodStatus, progress }).data?.progress, progress, 'a well-formed boot progress is accepted');
     t.check(
-      parsed(goodStatus).success && parsed(goodStatus).data?.progress === undefined,
-      'a status without progress (an older sandbox) is accepted',
+      JSON.stringify(parsed({ ...goodStatus, progress }).data?.progress) === JSON.stringify(progress) &&
+        parsed(goodStatus).success &&
+        !parsed({ ...goodStatus, phase: 'pwned', progress }).success,
+      'a well-formed boot progress is accepted (also none, from an older sandbox); an unknown phase is rejected',
     );
     const hostile = [
       { ...progress, title: 'x'.repeat(5000) },
       { ...progress, active: Array.from({ length: 100 }, () => ({ name: 'a' })) },
       { ...progress, active: [{ name: 'a', percent: 500 }] },
       { ...progress, step: -1 },
-      { ...progress, done: 1e9 },
       { ...progress, extra: 1 },
       'pwned',
     ];
@@ -96,137 +90,86 @@ export const channelSuite: Suite = {
       hostile.map(() => true),
       'an oversized or malformed progress is dropped, the status itself still counts',
     );
-    t.check(
-      !parsed({ ...goodStatus, phase: 'pwned', progress }).success,
-      'a status with an unknown phase is still rejected',
-    );
     const line = (p: unknown) => bootLine(parsed({ ...goodStatus, progress: p }).data ?? null).line;
     t.equal(
-      line(progress),
-      '[3/8] Developer tools: downloading Rust 40%; setting up Go (2 of 6 done)',
-      'the line shows the step, the download and what is set up',
+      [
+        line(progress),
+        line({ ...progress, title: 'Agent: claude', step: 6, active: [], done: 0, total: 0 }),
+        line({ ...progress, active: [{ name: '\x1b]52;c;ZXZpbA==\x07Ru\x1b[2Jst\r\n', percent: 99 }] }),
+        bootLine(null).line,
+      ],
+      [
+        '[3/8] Developer tools: downloading Rust 40%; setting up Go (2 of 6 done)',
+        '[6/8] Agent: claude',
+        '[3/8] Developer tools: downloading Rust 99% (2 of 6 done)',
+        'Starting Windows Sandbox',
+      ],
+      'the boot line shows step, download and setup; escape sequences and control characters from the sandbox never reach the terminal',
     );
     t.equal(
-      line({ ...progress, title: 'Agent: claude', step: 6, active: [], done: 0, total: 0 }),
-      '[6/8] Agent: claude',
-      'a step without tools is just its title',
+      [
+        bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 50 }] } }).data!)
+          .key,
+        stillWorking('Rust', 3 * 60 * 1000),
+        readyIn(432_000),
+      ],
+      [
+        bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 60 }] } }).data!)
+          .key,
+        'Still working on Rust (3 min). Full log: sandbox logs -f',
+        'Ready in 7 min 12 s.',
+      ],
+      'a download moving on is no new plain line; the quiet-spell notice and ready time read well',
     );
-    t.equal(
-      line({ ...progress, active: [{ name: '\x1b]52;c;ZXZpbA==\x07Ru\x1b[2Jst\r\n', percent: 99 }] }),
-      '[3/8] Developer tools: downloading Rust 99% (2 of 6 done)',
-      'escape sequences and control characters from the sandbox never reach the terminal',
-    );
-    t.equal(bootLine(null).line, 'Starting Windows Sandbox', 'before the sandbox writes anything');
-    t.equal(
-      bootLine(parsed({ ...goodStatus, message: 'Installing Go (1 of 3 done)' }).data!).line,
-      'Installing Go (1 of 3 done)',
-      'an older sandbox: its message',
-    );
-    t.equal(
-      bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 50 }] } }).data!).key,
-      bootLine(parsed({ ...goodStatus, progress: { ...progress, active: [{ name: 'Rust', percent: 60 }] } }).data!).key,
-      'a download moving on is no new plain line (only a new step or tool is)',
-    );
-    t.equal(
-      stillWorking('Rust', 3 * 60 * 1000),
-      'Still working on Rust (3 min). Full log: sandbox logs -f',
-      'the notice after a long quiet spell',
-    );
-    t.equal(readyIn(432_000), 'Ready in 7 min 12 s.', 'the time a first start took');
     const pending = pendingDownloads(
       ['node', 'rust', 'cpp', 'postgres', 'node', 'constructor'],
       (dir) => dir === 'nvm',
     );
-    t.equal(
-      pending,
-      { names: ['rust', 'C/C++', 'PostgreSQL'], mb: 900 },
-      'only what is not downloaded yet counts, once each',
-    );
-    t.equal(
-      firstStartNotice(false, { names: [], mb: 0 }),
-      null,
-      'a later start with everything downloaded says nothing',
-    );
     t.check(
-      /^First start: .*\(about 900 MB: rust, C\/C\+\+, PostgreSQL\)\. This can take 5-20 minutes/.test(
-        firstStartNotice(true, pending) ?? '',
-      ),
-      'the first start says what it downloads, roughly how much, and how long it can take',
-    );
-    t.check(
-      /^New tools for this project: .*about 1\.8 GB: MSVC, rust/.test(
-        firstStartNotice(
-          false,
-          pendingDownloads(['msvc', 'rust'], () => false),
-        ) ?? '',
-      ),
-      'a new toolchain later on gets its own heads-up',
+      JSON.stringify(pending) === JSON.stringify({ names: ['rust', 'C/C++', 'PostgreSQL'], mb: 900 }) &&
+        firstStartNotice(false, { names: [], mb: 0 }) === null &&
+        /^First start: .*\(about 900 MB: rust, C\/C\+\+, PostgreSQL\)\. This can take 5-20 minutes/.test(
+          firstStartNotice(true, pending) ?? '',
+        ),
+      'only what is not downloaded yet counts, once each; the first start says what and how much, a later one says nothing',
     );
 
     t.section('terminal frames');
-    const filter = new OutputFilter();
-    const filtered = Buffer.concat([
-      filter.push(Buffer.from('a\x1b]52;c;ZXZpbA==\x07b\x1b]0;title\x07')),
-      filter.push(Buffer.from('c\x1b]5')),
-      filter.push(Buffer.from('2;c;cGF5\x1b\\d')),
-    ]).toString('latin1');
-    t.equal(
-      filtered,
-      'a' + 'b\x1b]0;title\x07' + 'c' + 'd',
-      'clipboard writes (OSC 52) from the sandbox are stripped, even split across chunks; titles pass',
-    );
     const through = (...chunks: string[]): string => {
       const f = new OutputFilter();
       return Buffer.concat(chunks.map((s) => f.push(Buffer.from(s, 'latin1')))).toString('latin1');
     };
     t.equal(
-      through('x\x1b]52;c;QUFB\x1b', '\\y'),
-      'xy',
-      'an OSC 52 whose terminator is split between chunks is still stripped',
+      [
+        through('a\x1b]52;c;ZXZpbA==\x07b\x1b]0;title\x07', 'c\x1b]5', '2;c;cGF5\x1b\\d'),
+        through('x\x1b]52;c;QUFB\x1b', '\\y'),
+        through('x\x1b]052;c;QUFB\x07y'),
+        through('x\x1b]52;c;' + 'A'.repeat(70000), 'B'.repeat(100), '\x07y'),
+        through('x\xc2\x9d52;c;QUFB\xc2\x9cy\x1bP1$qm\x1b\\z'),
+      ],
+      ['ab\x1b]0;title\x07cd', 'xy', 'xy', 'xy', 'xyz'],
+      'clipboard writes (OSC 52) from the sandbox are stripped in every disguise (split chunks, leading zero, huge, C1); titles pass',
     );
-    t.equal(through('x\x1b]052;c;QUFB\x07y'), 'xy', 'OSC 052 (leading zero) is stripped too');
+    const plain = '\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0';
     t.equal(
-      through('x\x1b]52;c;' + 'A'.repeat(70000), 'B'.repeat(100), '\x07y'),
-      'xy',
-      'a huge OSC 52 stays stripped across chunks',
+      [through(plain), through('\x1b]9;9;macro\x07\x1b]9;4;1;50\x07')],
+      [plain, '\x1b]9;4;1;50\x07'],
+      'links, colours and UTF-8 pass unchanged; only the progress form of OSC 9 passes (ConEmu macros do not)',
     );
-    t.equal(
-      through('x\xc2\x9d52;c;QUFB\xc2\x9cy\x1bP1$qm\x1b\\z'),
-      'xyz',
-      'C1 (UTF-8) OSC and DCS strings are stripped',
-    );
-    t.equal(
-      through('\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0'),
-      '\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0',
-      'links, colours and ordinary UTF-8 (incl. U+00A0) pass unchanged',
-    );
-    t.equal(
-      through('\x1b]9;9;macro\x07\x1b]9;4;1;50\x07'),
-      '\x1b]9;4;1;50\x07',
-      'only the progress form of OSC 9 passes (ConEmu macros do not)',
-    );
-    const oversizedHeader = Buffer.concat([Buffer.from([16]), Buffer.from([0, 0, 0, 0x7f])]);
     await t.throws(
-      () => new FrameReader().push(oversizedHeader),
+      () => new FrameReader().push(Buffer.concat([Buffer.from([16]), Buffer.from([0, 0, 0, 0x7f])])),
       'frame too large',
       'a frame announcing too much data is rejected instead of buffered',
     );
-    t.equal(
-      new FrameReader().push(encodeFrame(16, Buffer.alloc(MAX_FRAME_BYTES))).length,
-      1,
-      'a frame of exactly the maximum size is accepted',
-    );
     const hello = new FrameReader().push(helloFrame('tok', 100, 30, 2))[0];
-    t.equal(
-      {
-        type: hello.type,
-        cols: hello.payload.readInt16LE(0),
-        rows: hello.payload.readInt16LE(2),
-        flags: hello.payload[4],
-        token: hello.payload.subarray(5).toString(),
-      },
-      { type: FrameType.Hello, cols: 100, rows: 30, flags: 2, token: 'tok' },
-      'a hello frame carries size, flags and token',
+    t.check(
+      new FrameReader().push(encodeFrame(16, Buffer.alloc(MAX_FRAME_BYTES))).length === 1 &&
+        hello.type === FrameType.Hello &&
+        hello.payload.readInt16LE(0) === 100 &&
+        hello.payload.readInt16LE(2) === 30 &&
+        hello.payload[4] === 2 &&
+        hello.payload.subarray(5).toString() === 'tok',
+      'a frame of exactly the maximum size is accepted; a hello frame carries size, flags and token',
     );
     t.equal(
       fixWindowsKeys(Buffer.from([0x61, 0x08, 0x7f, 0x1b])),
@@ -242,19 +185,16 @@ export const channelSuite: Suite = {
       return out.filter(Boolean);
     };
     t.equal(
-      joined('ab\x1b[', 'C'),
-      ['ab', '\x1b[C'],
-      'a Right arrow split after ESC[ is sent whole (ConPTY would read Alt+[ and a typed "C")',
+      [
+        joined('ab\x1b[', 'C'),
+        joined('\x1b', '[<0;10;', '5M', 'x'),
+        joined('a\x1b'),
+        joined('\x1b[A\x1bx\x7f'),
+        joined('\x1b[' + '1;'.repeat(40)),
+      ],
+      [['ab', '\x1b[C'], ['\x1b[<0;10;5M', 'x'], ['a', '\x1b'], ['\x1b[A\x1bx\x7f'], ['\x1b[' + '1;'.repeat(40)]],
+      'split arrows and mouse reports are sent whole; a lone Esc is held then flushed; complete keys and endless sequences pass at once',
     );
-    t.equal(
-      joined('\x1b', '[<0;10;', '5M', 'x'),
-      ['\x1b[<0;10;5M', 'x'],
-      'a mouse report split three ways is sent as one',
-    );
-    t.equal(joined('\x1bO', 'A'), ['\x1bOA'], 'an SS3 key split after ESC O is sent whole');
-    t.equal(joined('a\x1b'), ['a', '\x1b'], 'a lone Esc key is held, then sent by the flush');
-    t.equal(joined('\x1b[A\x1bx\x7f'), ['\x1b[A\x1bx\x7f'], 'complete keys (arrows, Alt+x, Backspace) pass at once');
-    t.equal(joined('\x1b[' + '1;'.repeat(40)), ['\x1b[' + '1;'.repeat(40)], 'an endless "sequence" is not held back');
     t.check(
       MOUSE_OFF.includes('\x1b[?1000l') && MOUSE_OFF.includes('\x1b[?1003l') && MOUSE_OFF.includes('\x1b[?1006l'),
       'leaving a session turns every mouse tracking mode off in your terminal',

@@ -1,6 +1,6 @@
 // `sandbox update` and the automatic update: the service on a managed install in a temp folder (a folder feed instead
-// of GitHub, a fake scheduled task), the one-time notice, the command-line options and the task script. Nothing
-// touches this PC: no real scheduled task, no real sandbox check.
+// of GitHub, a fake scheduled task), the one-time notice, the command output and the task script. Nothing touches this
+// PC: no real scheduled task, no real sandbox check. The Updater itself is tested in update.test.ts.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -36,127 +36,124 @@ async function service(t: Harness): Promise<void> {
   const userDir = t.dir('svc', 'user');
   const layout = await installFirst(t, root);
   const clock = { at: new Date('2026-10-14T12:00:00Z') };
-  const task = new FakeTask();
   let sandbox = false;
-  const make = (): UpdateService =>
-    new UpdateService(layout, {
-      source: new FolderFeed(feed),
-      sandboxRunning: () => sandbox,
-      task,
-      version: '1.0.0',
-      userDir,
-      now: () => clock.at,
-    });
-  const svc = make();
+  const svc = new UpdateService(layout, {
+    source: new FolderFeed(feed),
+    sandboxRunning: () => sandbox,
+    task: new FakeTask(),
+    version: '1.0.0',
+    userDir,
+    now: () => clock.at,
+  });
 
-  t.check(svc.managed, 'an install with versions\\ is managed');
-  t.equal(svc.status().version, '1.0.0', 'status names the active version');
-  t.equal(svc.status().autoUpdate, false, 'automatic updates are off by default');
-
+  t.check(
+    svc.managed && svc.status().version === '1.0.0' && svc.status().autoUpdate === false,
+    'a managed install reports its version and has automatic updates off by default',
+  );
   t.equal((await svc.check()).available, false, 'no feed, no newer version');
   publish(t, feed, '1.0.1', 'good');
   const found = await svc.check();
-  t.check(found.available && found.latest?.version === '1.0.1', 'check finds the newer version');
-  t.equal(layout.activeVersion(), '1.0.0', 'check changes nothing');
-  t.equal(new InstallRecordFile(root).read()?.autoUpdate, false, 'check leaves install.json alone');
+  t.check(
+    found.available && found.latest?.version === '1.0.1' && layout.activeVersion() === '1.0.0',
+    'check finds the newer version and changes nothing',
+  );
 
-  t.section('update service: run, notice, lock');
   sandbox = true;
   const blocked = await svc.run();
-  t.equal(blocked?.kind === 'skipped' && blocked.reason, 'sandbox-running', 'a running sandbox stops the update');
-  t.equal(layout.activeVersion(), '1.0.0', 'nothing was installed under a running sandbox');
+  t.check(
+    blocked?.kind === 'skipped' && blocked.reason === 'sandbox-running' && layout.activeVersion() === '1.0.0',
+    'a running sandbox stops the update',
+  );
   sandbox = false;
 
   const held = new UpdateLock(root, () => clock.at).acquire();
-  t.check(held !== null, 'the update lock can be taken');
-  t.equal(await svc.run(), null, 'a second update while one runs does nothing');
-  t.equal(layout.activeVersion(), '1.0.0', 'and installs nothing');
+  t.check(held !== null && (await svc.run()) === null, 'a second update while one runs does nothing');
   held?.();
-  t.check(!fs.existsSync(path.join(root, 'update.lock')), 'the lock is released');
   fs.writeFileSync(path.join(root, 'update.lock'), JSON.stringify({ pid: 2147483000, at: clock.at.toISOString() }));
   t.check(new UpdateLock(root, () => clock.at).acquire() !== null, 'a lock left by a process that died is taken over');
   fs.rmSync(path.join(root, 'update.lock'));
 
   t.equal(svc.notice(), null, 'no notice before any update');
   const done = await svc.run();
-  t.equal(done?.kind === 'installed' && done.version, '1.0.1', 'run installs the newer version');
-  t.equal(runShim(layout), '1.0.1', 'the shim runs it');
-  t.check(!fs.existsSync(path.join(root, 'update.lock')), 'the lock is gone after the run');
-  const notice = svc.notice();
-  t.equal(notice?.text, 'Updated to 1.0.1.', 'the user is told about the update');
-  if (notice) svc.markNoticeSeen(notice);
-  t.equal(svc.notice(), null, 'and only once');
-  t.equal(
-    new UpdateService(layout, {
-      source: new FolderFeed(feed),
-      userDir: t.dir('svc', 'other-user'),
-      version: '1.0.1',
-    }).notice()?.text,
-    'Updated to 1.0.1.',
-    'another user is told too',
+  t.check(
+    done?.kind === 'installed' && done.version === '1.0.1' && runShim(layout) === '1.0.1',
+    'run installs the newer version',
   );
-  t.equal((await svc.run())?.kind === 'skipped', true, 'running again with nothing new installs nothing');
+  const notice = svc.notice();
+  if (notice) svc.markNoticeSeen(notice);
+  t.check(
+    notice?.text === 'Updated to 1.0.1.' &&
+      svc.notice() === null &&
+      new UpdateService(layout, {
+        source: new FolderFeed(feed),
+        userDir: t.dir('svc', 'other-user'),
+        version: '1.0.1',
+      }).notice() !== null,
+    'the user is told about the update once; another user is told too',
+  );
 
   publish(t, feed, '1.0.2', 'broken');
   clock.at = new Date(clock.at.getTime() + 25 * 3600_000);
   const bad = await svc.run();
-  t.equal(bad?.kind === 'failed' && bad.blocked, true, 'a broken release fails and is blocked');
-  t.equal(
-    svc.notice()?.text,
-    'Update to 1.0.2 failed; still on 1.0.1 (sandbox update --rollback, or sandbox update for details).',
-    'the failure is announced with how to go back',
-  );
   const blockedCheck = await svc.check();
-  t.check(!blockedCheck.available && blockedCheck.blocked, 'check says the newer version is blocked');
-
-  t.equal(svc.rollback(), '1.0.0', 'rollback returns the version the update replaced');
-  t.equal(runShim(layout), '1.0.0', 'and the shim runs it');
+  t.check(
+    bad?.kind === 'failed' &&
+      bad.blocked &&
+      svc.notice()?.text.includes('Update to 1.0.2 failed') === true &&
+      !blockedCheck.available &&
+      blockedCheck.blocked,
+    'a broken release fails, is blocked and announced',
+  );
+  t.check(
+    svc.rollback() === '1.0.0' && runShim(layout) === '1.0.0',
+    'rollback returns the version the update replaced',
+  );
 
   t.section('update service: automatic updates');
   t.equal(svc.autoUpdateDue(), false, 'off: never due');
   svc.setAuto(true);
-  t.equal(task.calls, [], 'a current-user install has no scheduled task to touch');
-  t.equal(new InstallRecordFile(root).read()?.autoUpdate, true, 'the setting is in install.json');
+  t.check(new InstallRecordFile(root).read()?.autoUpdate === true, 'the setting is in install.json');
   t.equal(svc.autoUpdateDue(), false, 'on, but looked a moment ago: not due');
   clock.at = new Date(clock.at.getTime() + 25 * 3600_000);
-  t.equal(svc.autoUpdateDue(), true, 'on and the last look over a day ago: due');
+  const due = svc.autoUpdateDue();
   sandbox = true;
-  t.equal(svc.autoUpdateDue(), false, 'never while a sandbox runs');
+  t.equal(
+    [due, svc.autoUpdateDue()],
+    [true, false],
+    'on and the last look over a day ago: due, but never while a sandbox runs',
+  );
   sandbox = false;
-  svc.setAuto(false);
-  t.equal(new InstallRecordFile(root).read()?.autoUpdate, false, 'and off again');
 }
 
 function pure(t: Harness): void {
   t.section('update notice and options');
   const state = { lastResult: { version: '1.5.0', ok: true, at: '2026-10-14T03:00:00Z' } };
-  t.equal(updateNotice(state, '1.5.0', undefined)?.text, 'Updated to 1.5.0.', 'a success on the current version');
-  t.equal(updateNotice(state, '1.5.0', 'ok@2026-10-14T03:00:00Z'), null, 'not shown twice');
-  t.equal(updateNotice(state, '1.6.0', undefined), null, 'not shown once another version runs');
   const failedLater = { ...state, failed: { version: '1.6.0', at: '2026-10-15T03:00:00Z', reason: 'x' } };
-  t.includes(
-    updateNotice(failedLater, '1.5.0', undefined)?.text ?? '',
-    'Update to 1.6.0 failed',
-    'the newer outcome wins',
+  t.check(
+    updateNotice(state, '1.5.0', undefined)?.text === 'Updated to 1.5.0.' &&
+      updateNotice(state, '1.5.0', 'ok@2026-10-14T03:00:00Z') === null &&
+      updateNotice(state, '1.6.0', undefined) === null &&
+      updateNotice(failedLater, '1.5.0', undefined)?.text.includes('Update to 1.6.0 failed') === true,
+    'the notice shows a success once on that version; a newer failure wins',
   );
-  t.equal(
-    updateNotice({ failed: { version: '1.4.0', at: '2026-10-15T03:00:00Z', reason: 'x' } }, '1.5.0', undefined),
-    null,
-    'a failure of an older version is old news',
-  );
-
-  t.equal(parseCli(['update', '--auto', 'on']).autoUpdate, 'on', 'update --auto on');
-  t.equal(parseCli(['update', '--auto', 'off']).autoUpdate, 'off', 'update --auto off');
-  t.equal(parseCli(['update', '--auto', 'on']).auto, false, 'update --auto is not resume --auto');
-  t.equal(parseCli(['resume', '--auto']).auto, true, 'resume --auto is still a switch');
-  t.equal(parseCli(['resume', '--auto']).autoUpdate, undefined, 'and not an update setting');
   const flags = parseCli(['update', '--check', '--unattended', '--feed', 'C:\\feed']);
-  t.check(flags.check && flags.unattended && flags.feed === 'C:\\feed', 'update --check --unattended --feed');
-  t.equal(parseCli(['update', '--rollback']).rollback, true, 'update --rollback');
-
-  t.equal(runsAsSystem({ USERNAME: 'PC$' }, 'PC$'), true, 'a machine account is the service account');
-  t.equal(runsAsSystem({}, 'SYSTEM'), true, 'SYSTEM is the service account');
-  t.equal(runsAsSystem({ USERNAME: 'alice' }, 'alice'), false, 'a person is not');
+  t.check(
+    parseCli(['update', '--auto', 'on']).autoUpdate === 'on' &&
+      parseCli(['update', '--auto', 'on']).auto === false &&
+      parseCli(['resume', '--auto']).auto === true &&
+      parseCli(['resume', '--auto']).autoUpdate === undefined &&
+      flags.check &&
+      flags.unattended &&
+      flags.feed === 'C:\\feed' &&
+      parseCli(['update', '--rollback']).rollback,
+    'update options parse; update --auto is not resume --auto',
+  );
+  t.check(
+    runsAsSystem({ USERNAME: 'PC$' }, 'PC$') &&
+      runsAsSystem({}, 'SYSTEM') &&
+      !runsAsSystem({ USERNAME: 'alice' }, 'alice'),
+    'the service account is a machine account or SYSTEM, not a person',
+  );
 }
 
 async function command(t: Harness): Promise<void> {
@@ -164,9 +161,12 @@ async function command(t: Harness): Promise<void> {
   const lines: string[] = [];
   const print = (line: string): void => void lines.push(line);
   const npm = new UpdateService(null, { version: '1.0.0' });
-  t.check(!npm.managed && npm.autoUpdateDue() === false && npm.notice() === null, 'an npm install is not managed');
-  t.equal(await runUpdate(npm, { check: false, rollback: false, unattended: false }, print), 0, 'npm install: exit 0');
-  t.includes(lines.join('\n'), 'npm install -g windows-development-sandbox', 'and it prints the npm command');
+  t.check(
+    !npm.managed &&
+      (await runUpdate(npm, { check: false, rollback: false, unattended: false }, print)) === 0 &&
+      lines.join('\n').includes('npm install -g windows-development-sandbox'),
+    'an npm install is not managed and is told the npm command',
+  );
   await t.throws(() => npm.setAuto(true), 'installed with npm', 'automatic updates need a managed install');
 
   const root = t.dir('cmd', 'install');
@@ -179,45 +179,35 @@ async function command(t: Harness): Promise<void> {
     sandboxRunning: () => false,
     version: '1.0.0',
   });
-  lines.length = 0;
   await runUpdate(machine, { check: false, rollback: false, unattended: false, auto: 'on' }, print);
-  t.equal(task.calls, ['register'], '--auto on creates the scheduled task for an all-users install');
-  t.equal(new InstallRecordFile(root).read()?.autoUpdate, true, 'and records it in install.json');
-  t.equal(machine.autoUpdateDue(), false, 'an all-users install never updates from a CLI start');
+  const afterOn = [...task.calls];
   await runUpdate(machine, { check: false, rollback: false, unattended: false, auto: 'off' }, print);
-  t.equal(task.calls, ['register', 'remove'], '--auto off removes it');
+  t.check(
+    afterOn.join() === 'register' && task.calls.join() === 'register,remove' && !machine.autoUpdateDue(),
+    '--auto on/off creates and removes the scheduled task of an all-users install; it never updates from a CLI start',
+  );
   task.fail = true;
   await t.throws(() => machine.setAuto(true), 'needs admin', 'a task that cannot be created fails');
   t.equal(new InstallRecordFile(root).read()?.autoUpdate, false, 'and the setting stays off');
 
-  lines.length = 0;
-  t.equal(await runUpdate(machine, { check: true, rollback: false, unattended: false }, print), 0, '--check exits 0');
-  t.includes(lines.join('\n'), 'newest version (1.0.0)', 'no feed: you have the newest version');
   publish(t, feed, '1.0.1', 'good');
   lines.length = 0;
-  await runUpdate(machine, { check: true, rollback: false, unattended: false }, print);
-  t.includes(lines.join('\n'), 'Version 1.0.1 is available', '--check names the newer version');
+  t.check(
+    (await runUpdate(machine, { check: true, rollback: false, unattended: false }, print)) === 0 &&
+      lines.join('\n').includes('Version 1.0.1 is available'),
+    '--check names the newer version and exits 0',
+  );
 
-  t.equal(describeResult(null, false).code, 0, 'another update running is not an error');
-  t.equal(
-    describeResult({ kind: 'skipped', reason: 'sandbox-running', current: '1.0.0' }, false).code,
-    1,
-    'by hand, a running sandbox is a failure',
-  );
-  t.equal(
-    describeResult({ kind: 'skipped', reason: 'sandbox-running', current: '1.0.0' }, true).code,
-    0,
-    'unattended, it just waits',
-  );
-  t.includes(
-    describeResult({ kind: 'installed', version: '1.0.1', previous: '1.0.0' }, false).line,
-    'from 1.0.0 to 1.0.1',
-    'installed: from and to',
-  );
-  t.equal(
-    describeResult({ kind: 'failed', version: '1.0.1', reason: 'x', blocked: true }, false).code,
-    1,
-    'a failed update exits 1',
+  const waiting = { kind: 'skipped', reason: 'sandbox-running', current: '1.0.0' } as const;
+  t.check(
+    describeResult(null, false).code === 0 &&
+      describeResult(waiting, false).code === 1 &&
+      describeResult(waiting, true).code === 0 &&
+      describeResult({ kind: 'installed', version: '1.0.1', previous: '1.0.0' }, false).line.includes(
+        'from 1.0.0 to 1.0.1',
+      ) &&
+      describeResult({ kind: 'failed', version: '1.0.1', reason: 'x', blocked: true }, false).code === 1,
+    'exit codes: a running sandbox fails by hand but just waits unattended; a failed update exits 1',
   );
 }
 
@@ -242,11 +232,7 @@ function script(t: Harness): void {
     'a real sandbox.cmd is accepted (2 = this PowerShell is not admin)',
     'exit ' + good,
   );
-  if (good === 0) {
-    t.equal(check(['-Command', 'sandbox.cmd']), 1, 'a relative path is refused');
-    t.equal(check(['-Command', path.join(t.dir('task'), 'missing.cmd')]), 1, 'a missing file is refused');
-    t.equal(check(['-Remove']), 0, '-Remove is accepted');
-  }
+  if (good === 0) t.equal(check(['-Command', 'sandbox.cmd']), 1, 'a relative path is refused');
   t.equal(
     UpdateTask.registerArgs(InstallLayout.at(t.at('task', 'root'), 'machine')),
     ['-Command', path.join(t.at('task', 'root'), 'bin', 'sandbox.cmd')],

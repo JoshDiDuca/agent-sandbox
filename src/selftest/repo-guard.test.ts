@@ -30,16 +30,23 @@ export const repoGuardSuite: Suite = {
       '[core]\n\tfsmonitor = calc.exe\n\tsshCommand = evil\n[include]\n\tpath = C:/evil.cfg\n[branch "feature"]\n\tremote = origin\n',
     );
     const findings = repoGuard.guard(repo, before);
-    t.check(!fs.existsSync(path.join(repo, '.git', 'hooks', 'post-checkout')), 'a new git hook is quarantined');
-    t.check(!fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-push')), 'a changed git hook is quarantined');
-    t.check(fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit.sample')), 'hook samples are left alone');
-    t.equal(findings.filter((x) => x.kind === 'hook').length, 2, 'both hooks are reported');
+    t.check(
+      !fs.existsSync(path.join(repo, '.git', 'hooks', 'post-checkout')) &&
+        !fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-push')) &&
+        fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit.sample')) &&
+        findings.filter((x) => x.kind === 'hook').length === 2,
+      'new and changed git hooks are quarantined and reported; samples are left alone',
+    );
     const config = readConfig(repo);
-    t.matches(config, disabled('fsmonitor'), 'git config: fsmonitor (runs a program) is disabled');
-    t.matches(config, disabled('sshCommand'), 'git config: sshCommand is disabled');
-    t.matches(config, disabled('path = C:/evil'), 'git config: [include] of an outside file is disabled');
-    t.matches(config, /^\tremote = origin$/m, 'git config: a harmless change stays');
-    t.matches(config, /^\turl = https/m, 'git config: existing lines stay');
+    t.check(
+      disabled('fsmonitor').test(config) &&
+        disabled('sshCommand').test(config) &&
+        disabled('path = C:/evil').test(config) &&
+        /^\tremote = origin$/m.test(config) &&
+        /^\turl = https/m.test(config),
+      'git config: fsmonitor, sshCommand and an [include] of an outside file are disabled; harmless lines stay',
+      config,
+    );
     t.equal(repoGuard.guard(repo, before).length, 0, 'the guard is idempotent');
 
     t.section('planted commands and tricks');
@@ -47,23 +54,19 @@ export const repoGuardSuite: Suite = {
     t.write(path.join(repo2, '.git', 'config'), '[core]\n\tbare = false\n');
     t.write(path.join(repo2, 'build.cmd'), 'echo legit');
     const before2 = repoGuard.snapshot(repo2);
-    for (const name of ['node.exe', 'git.cmd', 'sandbox.cmd', 'opencode.ps1'])
-      t.write(path.join(repo2, name), name === 'node.exe' ? 'MZ' : 'calc');
+    const planted = ['node.exe', 'git.cmd', 'sandbox.cmd', 'opencode.ps1'];
+    for (const name of planted) t.write(path.join(repo2, name), name === 'node.exe' ? 'MZ' : 'calc');
     t.write(path.join(repo2, '.git', 'commondir'), 'C:/evil');
     fs.appendFileSync(path.join(repo2, '.git', 'config'), '[core] fsmonitor = calc.exe\n');
     const found2 = repoGuard.guard(repo2, before2);
-    const gone = ['node.exe', 'git.cmd', 'sandbox.cmd', 'opencode.ps1'].filter(
-      (name) => !fs.existsSync(path.join(repo2, name)),
+    t.check(
+      planted.every((name) => !fs.existsSync(path.join(repo2, name))) &&
+        fs.existsSync(path.join(repo2, 'build.cmd')) &&
+        found2.filter((x) => x.kind === 'command').length === 4 &&
+        !fs.existsSync(path.join(repo2, '.git', 'commondir')) &&
+        disabled('fsmonitor').test(readConfig(repo2)),
+      'executables planted under command names are quarantined (other scripts stay), a planted commondir is removed, a key on a [section] line is neutralised',
     );
-    t.equal(
-      gone,
-      ['node.exe', 'git.cmd', 'sandbox.cmd', 'opencode.ps1'],
-      'executables planted under command names are quarantined',
-    );
-    t.check(fs.existsSync(path.join(repo2, 'build.cmd')), 'other scripts stay');
-    t.equal(found2.filter((x) => x.kind === 'command').length, 4, 'every planted command is reported');
-    t.check(!fs.existsSync(path.join(repo2, '.git', 'commondir')), 'a planted commondir is removed');
-    t.matches(readConfig(repo2), disabled('fsmonitor'), 'a key on the same line as its [section] is neutralised');
 
     t.section('a replaced or oversized .git');
     const victim = t.dir('repo-victim');
@@ -72,17 +75,14 @@ export const repoGuardSuite: Suite = {
     const before3 = repoGuard.snapshot(repo3);
     fs.rmSync(path.join(repo3, '.git'), { recursive: true });
     fs.symlinkSync(victim, path.join(repo3, '.git'), 'junction');
-    t.check(
-      repoGuard.guard(repo3, before3).some((x) => x.kind === 'git' && x.detail.includes('replaced')),
-      '.git replaced by a link is reported loudly',
-    );
     const repo4 = t.at('repo4');
     t.write(path.join(repo4, '.git', 'config'), '[core]\n');
     const before4 = repoGuard.snapshot(repo4);
     fs.appendFileSync(path.join(repo4, '.git', 'config'), '#'.repeat(5 * 1024 * 1024));
     t.check(
-      repoGuard.guard(repo4, before4).some((x) => x.kind === 'git' && x.detail.includes('over 4 MB')),
-      'a git config too big to check is reported instead of passing',
+      repoGuard.guard(repo3, before3).some((x) => x.kind === 'git' && x.detail.includes('replaced')) &&
+        repoGuard.guard(repo4, before4).some((x) => x.kind === 'git' && x.detail.includes('over 4 MB')),
+      '.git replaced by a link, or a git config too big to check, is reported instead of passing',
     );
 
     t.section('more git config that runs programs');
@@ -95,10 +95,14 @@ export const repoGuardSuite: Suite = {
     );
     repoGuard.guard(repo5, before5);
     const config5 = readConfig(repo5);
-    t.matches(config5, disabled('lg = !calc'), 'git config: an alias that runs a program (!) is disabled');
-    t.matches(config5, /^\tco = checkout$/m, 'git config: a plain alias stays');
-    t.matches(config5, disabled('log = calc'), 'git config: [pager] entries are disabled');
-    t.matches(config5, disabled('external = calc'), 'git config: diff.external is disabled');
+    t.check(
+      disabled('lg = !calc').test(config5) &&
+        /^\tco = checkout$/m.test(config5) &&
+        disabled('log = calc').test(config5) &&
+        disabled('external = calc').test(config5),
+      'git config: aliases that run a program (!), [pager] and diff.external are disabled; a plain alias stays',
+      config5,
+    );
 
     t.section('submodules and nested repositories');
     const repo6 = t.at('repo6');
@@ -112,21 +116,11 @@ export const repoGuardSuite: Suite = {
     t.write(path.join(repo6, 'other', '.git', 'hooks', 'pre-commit'), 'calc.exe');
     const findings6 = repoGuard.guard(repo6, before6);
     t.check(
-      !fs.existsSync(path.join(repo6, '.git', 'modules', 'lib', 'hooks', 'post-checkout')),
-      'a hook planted in a submodule is quarantined',
-    );
-    t.matches(
-      fs.readFileSync(path.join(repo6, 'tools', 'inner', '.git', 'config'), 'utf8'),
-      disabled('fsmonitor'),
-      'git config of a nested repository is checked too',
-    );
-    t.check(
-      !fs.existsSync(path.join(repo6, 'other', '.git', 'hooks', 'pre-commit')),
-      'a repository created inside the sandbox has no trusted hooks',
-    );
-    t.check(
-      findings6.some((f) => f.detail.startsWith('tools/inner/.git: ')),
-      'findings say which repository they are in',
+      !fs.existsSync(path.join(repo6, '.git', 'modules', 'lib', 'hooks', 'post-checkout')) &&
+        disabled('fsmonitor').test(fs.readFileSync(path.join(repo6, 'tools', 'inner', '.git', 'config'), 'utf8')) &&
+        !fs.existsSync(path.join(repo6, 'other', '.git', 'hooks', 'pre-commit')) &&
+        findings6.some((f) => f.detail.startsWith('tools/inner/.git: ')),
+      'hooks in submodules, config of nested repositories and hooks of repositories created in the sandbox are handled, findings name the repository',
     );
     const legacy = { ...before6, repos: undefined, agent: undefined };
     t.write(path.join(repo6, 'third', '.git', 'hooks', 'pre-commit'), 'yours');
@@ -158,15 +152,11 @@ export const repoGuardSuite: Suite = {
     );
     t.write(path.join(repo7, '.vscode', 'settings.json'), '{ "python.defaultInterpreterPath": "C:\\\\evil.exe" }');
     const findings7 = repoGuard.guard(repo7, before7);
-    t.equal(
-      findings7.filter((f) => f.kind === 'agent').length,
-      4,
-      'Claude hooks, MCP servers, folder-open tasks and program paths in VS Code settings are quarantined',
-    );
     t.check(
-      !fs.existsSync(path.join(repo7, '.mcp.json')) &&
+      findings7.filter((f) => f.kind === 'agent').length === 4 &&
+        !fs.existsSync(path.join(repo7, '.mcp.json')) &&
         fs.existsSync(path.join(repo7, '.claude', 'settings.local.json')),
-      '... and nothing else is moved',
+      'Claude hooks, MCP servers, folder-open tasks and program paths in VS Code settings are quarantined, nothing else',
     );
 
     t.section('programs from the sandbox are marked');
@@ -174,17 +164,12 @@ export const repoGuardSuite: Suite = {
     t.write(path.join(marked, 'setup.ps1'), 'calc');
     t.write(path.join(marked, 'src', 'app.ts'), 'code');
     t.check(
-      markFromSandbox(path.join(marked, 'setup.ps1')) && isMarked(path.join(marked, 'setup.ps1')),
-      'a script gets the "from the internet" mark (SmartScreen / PowerShell ask before it runs)',
-    );
-    t.check(
-      !markFromSandbox(path.join(marked, 'src', 'app.ts')) && !isMarked(path.join(marked, 'src', 'app.ts')),
-      'source files are left alone',
-    );
-    t.equal(
-      fs.readFileSync(path.join(marked, 'setup.ps1'), 'utf8'),
-      'calc',
-      'only the mark is written, never the file',
+      markFromSandbox(path.join(marked, 'setup.ps1')) &&
+        isMarked(path.join(marked, 'setup.ps1')) &&
+        !markFromSandbox(path.join(marked, 'src', 'app.ts')) &&
+        !isMarked(path.join(marked, 'src', 'app.ts')) &&
+        fs.readFileSync(path.join(marked, 'setup.ps1'), 'utf8') === 'calc',
+      'a script gets the "from the internet" mark (the file itself is never written); source files are left alone',
     );
     const stop = watchAndMark([marked]);
     t.write(path.join(marked, 'bin', 'tool.exe'), 'MZ');

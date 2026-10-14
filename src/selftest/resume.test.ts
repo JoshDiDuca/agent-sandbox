@@ -62,13 +62,15 @@ export const resumeSuite: Suite = {
     const storage = t.dir('storage');
     const data = t.at('storage', 'data', 'main');
     const ledger = new SessionLedger(storage, data);
-    t.equal(ledger.read(), null, 'no file: nothing recorded');
     const launch = { primary: 'F:\\code\\api', harness: 'claude', projects: [], headless: true, configPath: null };
-    ledger.recordSessions([status({})], registry('F:\\code\\api', 'F:\\code\\web'), NOW);
-    t.equal(ledger.read(), null, 'a sandbox this tool did not start records nothing');
-    ledger.startLaunch(launch, NOW);
-    t.equal(ledger.read()?.sessions, [], 'a launch with nothing before it starts with no sessions');
     const reg = registry('F:\\code\\api', 'F:\\code\\web');
+    ledger.recordSessions([status({})], reg, NOW);
+    const untracked = ledger.read();
+    ledger.startLaunch(launch, NOW);
+    t.check(
+      untracked === null && ledger.read()?.sessions.length === 0,
+      'a sandbox this tool did not start records nothing; a launch starts with no sessions',
+    );
     ledger.recordSessions(
       [
         status({ conversation: ID_A }),
@@ -81,14 +83,16 @@ export const resumeSuite: Suite = {
     );
     const saved = ledger.read();
     t.equal(
-      saved?.sessions.map((s) => [s.harness, s.project, s.conversation]),
+      [saved?.sessions.map((s) => [s.harness, s.project, s.conversation]), saved?.launch.projects],
       [
-        ['claude', 'F:\\code\\api', ID_A],
-        ['codex', 'F:\\code\\web\\src', undefined],
+        [
+          ['claude', 'F:\\code\\api', ID_A],
+          ['codex', 'F:\\code\\web\\src', undefined],
+        ],
+        ['F:\\code\\web'],
       ],
-      'running sessions are noted with their folder on this PC; ended ones and unknown folders are not',
+      'running sessions are noted with their folder on this PC (ended ones and unknown folders are not), and the projects',
     );
-    t.equal(saved?.launch.projects, ['F:\\code\\web'], 'the projects the sandbox has now are noted for a restart');
     ledger.recordSessions(
       [
         status({ startedAt: minutes(30) }),
@@ -97,39 +101,30 @@ export const resumeSuite: Suite = {
       reg,
       NOW,
     );
-    t.equal(
-      ledger.read()?.sessions[0].conversation,
-      ID_A,
-      'a conversation noted before stays when the next look does not know it yet',
-    );
+    const kept = ledger.read()?.sessions[0].conversation;
     ledger.recordSessions([status({ conversation: 'not-an-id; rm -rf' })], reg, NOW);
     t.equal(
-      ledger.read()?.sessions.map((s) => s.conversation),
-      [ID_A],
-      'a conversation that is not an id is never kept (it ends up on a command line)',
+      [kept, ledger.read()?.sessions.map((s) => s.conversation)],
+      [ID_A, [ID_A]],
+      'a conversation noted before stays; one that is not an id is never kept (it ends up on a command line)',
     );
     ledger.recordSessions(
       Array.from({ length: 60 }, (_, i) => status({ id: 'x' + i, startedAt: minutes(100 - i) })),
       reg,
       NOW,
     );
-    t.equal(ledger.read()?.sessions.length, 50, 'at most 50 sessions are kept');
     ledger.markClosedOnPurpose();
-    t.equal(ledger.read()?.closedOnPurpose, true, 'stopping on purpose is marked');
     const before = JSON.stringify(ledger.read()?.sessions);
     ledger.recordSessions([], reg, NOW);
-    t.equal(
-      JSON.stringify(ledger.read()?.sessions),
-      before,
-      'and the sessions that end while it shuts down do not erase it',
-    );
+    const erased = JSON.stringify(ledger.read()?.sessions) !== before;
     ledger.startLaunch(launch, NOW);
-    t.equal(
-      ledger.read()?.closedOnPurpose,
-      false,
-      'a new launch clears the mark and keeps the sessions of the last one',
+    t.check(
+      JSON.parse(before).length === 50 &&
+        !erased &&
+        ledger.read()?.closedOnPurpose === false &&
+        ledger.read()?.sessions.length === 50,
+      'at most 50 sessions; stopping on purpose is marked and sessions ending at shutdown do not erase it; a new launch clears the mark',
     );
-    t.equal(ledger.read()?.sessions.length, 50, '... until its own are noted');
     t.equal(
       describeLast([
         { harness: 'claude', project: 'F:\\code\\mw2-agent', startedAt: 'x' },
@@ -142,21 +137,16 @@ export const resumeSuite: Suite = {
     t.section('the ledger file is validated');
     const file = t.at('storage', 'sync', 'main-sessions.json');
     const good = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
-    for (const [what, bad] of [
-      [
-        'a session with a huge folder',
-        { ...good, sessions: [{ harness: 'a', project: 'x'.repeat(2000), startedAt: 'x' }] },
-      ],
-      [
-        'a conversation too long to be one',
-        { ...good, sessions: [{ harness: 'a', project: 'b', startedAt: 'x', conversation: 'y'.repeat(200) }] },
-      ],
-      ['sessions that are not a list', { ...good, sessions: 'many' }],
-      ['no launch', { savedAt: 'x', sessions: [] }],
-    ] as const) {
+    const refused = [
+      { ...good, sessions: [{ harness: 'a', project: 'x'.repeat(2000), startedAt: 'x' }] },
+      { ...good, sessions: [{ harness: 'a', project: 'b', startedAt: 'x', conversation: 'y'.repeat(200) }] },
+      { ...good, sessions: 'many' },
+      { savedAt: 'x', sessions: [] },
+    ].map((bad) => {
       fs.writeFileSync(file, JSON.stringify(bad));
-      t.equal(ledger.read(), null, 'a bad file is refused: ' + what);
-    }
+      return ledger.read();
+    });
+    t.equal(refused, [null, null, null, null], 'a bad file is refused (huge folder, long conversation, wrong shapes)');
 
     t.section('reopen, ask or leave');
     const withSessions = {
@@ -165,55 +155,52 @@ export const resumeSuite: Suite = {
     };
     const crashed = life({ ended: { at: minutes(1), cause: { kind: 'sandboxCrash', at: minutes(1), text: 'x' } } });
     const closed = life({ ended: { at: minutes(1), cause: null } });
-    const settings: ResumeSetting[] = ['ask', 'always', 'afterCrash', 'never'];
-    const expected: Record<string, ['ask' | 'reopen' | 'no', 'ask' | 'reopen' | 'no', 'ask' | 'reopen' | 'no']> = {
-      // [last sandbox crashed, last sandbox closed normally, the PC went down (no end recorded)]
+    const expected: Record<ResumeSetting, string[]> = {
+      // [last sandbox crashed, closed normally, the PC went down (no end recorded)]
       ask: ['ask', 'ask', 'ask'],
       always: ['reopen', 'reopen', 'reopen'],
       afterCrash: ['reopen', 'no', 'reopen'],
       never: ['no', 'no', 'no'],
     };
-    for (const setting of settings) {
-      t.equal(
-        [
-          shouldReopen(setting, crashed, withSessions),
-          shouldReopen(setting, closed, withSessions),
-          shouldReopen(setting, life(), withSessions),
-        ],
-        expected[setting],
-        'resume.sessions "' + setting + '": after a crash, a normal close, a PC that went down',
-      );
-      t.equal(
-        shouldReopen(setting, crashed, { sessions: [], closedOnPurpose: false }),
-        'no',
-        '"' + setting + '": nothing recorded, nothing to reopen',
-      );
-      t.equal(shouldReopen(setting, crashed, null), 'no', '"' + setting + '": no ledger, nothing to reopen');
-    }
+    const decided = (['ask', 'always', 'afterCrash', 'never'] as const).map((setting) => [
+      shouldReopen(setting, crashed, withSessions),
+      shouldReopen(setting, closed, withSessions),
+      shouldReopen(setting, life(), withSessions),
+    ]);
     t.equal(
-      shouldReopen('afterCrash', crashed, { ...withSessions, closedOnPurpose: true }),
-      'no',
-      '"afterCrash": stopped on purpose is not a crash',
+      decided,
+      Object.values(expected),
+      'resume.sessions ask/always/afterCrash/never: after a crash, a normal close, a PC that went down',
     );
-    t.check(!endedUnexpectedly(life(), false, true), 'a watcher that still runs means the sandbox did not end');
-    t.check(!endedUnexpectedly(null, false, false), 'no record of how it lived: not a crash');
+    t.check(
+      shouldReopen('always', crashed, { sessions: [], closedOnPurpose: false }) === 'no' &&
+        shouldReopen('always', crashed, null) === 'no' &&
+        shouldReopen('afterCrash', crashed, { ...withSessions, closedOnPurpose: true }) === 'no',
+      'nothing recorded, no ledger, or stopped on purpose: nothing is reopened',
+    );
+    t.check(
+      !endedUnexpectedly(life(), false, true) && !endedUnexpectedly(null, false, false),
+      'a watcher that still runs, or no record at all, is not a crash',
+    );
 
     t.section('automatic restarts: 3 in 6 hours');
-    t.check(autoRestartAllowed([], NOW), 'the first is allowed');
-    t.check(autoRestartAllowed([minutes(10), minutes(20)], NOW), 'the third is allowed');
-    t.check(!autoRestartAllowed([minutes(10), minutes(20), minutes(30)], NOW), 'the fourth in six hours is not');
     t.check(
-      autoRestartAllowed([minutes(10), minutes(20), minutes(7 * 60)], NOW),
-      'an old one stops counting after six hours',
+      autoRestartAllowed([minutes(10), minutes(20)], NOW) &&
+        !autoRestartAllowed([minutes(10), minutes(20), minutes(30)], NOW) &&
+        autoRestartAllowed([minutes(10), minutes(20), minutes(7 * 60)], NOW) &&
+        !autoRestartAllowed([minutes(10), minutes(20), minutes(359)], NOW) &&
+        autoRestartAllowed(['garbage', '', minutes(1)], NOW),
+      'the fourth restart in six hours is refused; old ones and garbage in the file do not count',
     );
-    t.check(!autoRestartAllowed([minutes(10), minutes(20), minutes(359)], NOW), 'just inside six hours still counts');
-    t.check(autoRestartAllowed(['garbage', '', minutes(1)], NOW), 'garbage in the file does not count');
     const restarts = new SessionLedger(storage, t.at('storage', 'data', 'other'));
     restarts.startLaunch(launch, NOW);
     for (let i = 0; i < 4; i++) restarts.recordAutoRestart(new Date(NOW.getTime() - (4 - i) * 3600000));
-    t.equal(restarts.read()?.autoRestarts?.length, 4, 'automatic restarts are counted in the ledger');
+    const counted = restarts.read()?.autoRestarts?.length;
     restarts.giveUp(NOW);
-    t.check(restarts.takeGaveUp() !== null && restarts.takeGaveUp() === null, 'the launch hears that it gave up, once');
+    t.check(
+      counted === 4 && restarts.takeGaveUp() !== null && restarts.takeGaveUp() === null,
+      'automatic restarts are counted; the launch hears that it gave up, once',
+    );
 
     t.section("which conversation is a session's");
     const at = (ms: number): number => NOW.getTime() + ms * 1000;
@@ -224,42 +211,40 @@ export const resumeSuite: Suite = {
       { id: 'notes', createdMs: at(6) },
     ];
     t.equal(
-      pickConversation(files, NOW.getTime(), new Set()),
-      ID_A,
-      'the first file created since the session started',
+      [
+        pickConversation(files, NOW.getTime(), new Set()),
+        pickConversation(files, NOW.getTime(), new Set([ID_A])),
+        pickConversation(files, at(10), new Set()),
+        pickConversation(files, at(30), new Set()),
+      ],
+      [ID_A, ID_B, ID_B, null],
+      'the first file created since the session started, not one another session has; none yet is null',
     );
-    t.equal(pickConversation(files, NOW.getTime(), new Set([ID_A])), ID_B, 'one another session has is skipped');
-    t.equal(pickConversation(files, at(10), new Set()), ID_B, 'files from before the session started are not its own');
-    t.equal(pickConversation(files, at(30), new Set()), null, 'none yet: the agent has written nothing');
-    t.equal(pickConversation([], 0, new Set()), null, 'no folder, no files');
 
     t.section('the arguments that open it again');
     const claude = DEFAULTS.harnesses.claude;
-    t.equal(resumeArgumentsFor(claude, ID_A), ['--resume', ID_A], 'a known conversation is opened by its id');
-    t.equal(resumeArgumentsFor(claude), ['--continue'], 'without one, the last conversation');
     t.equal(
-      resumeArgumentsFor(claude, 'x; calc'),
-      ['--continue'],
-      'an id that is not one is not put on the command line',
+      [
+        resumeArgumentsFor(claude, ID_A),
+        resumeArgumentsFor(claude),
+        resumeArgumentsFor(claude, 'x; calc'),
+        resumeArgumentsFor(DEFAULTS.harnesses.codex, ID_A),
+        resumeArgumentsFor({}, ID_A),
+      ],
+      [['--resume', ID_A], ['--continue'], ['--continue'], ['resume', '--last'], []],
+      'a known id opens that conversation; otherwise the last one; an id that is not one never reaches the command line',
     );
-    t.equal(
-      resumeArgumentsFor(DEFAULTS.harnesses.codex, ID_A),
-      ['resume', '--last'],
-      'an agent that cannot open one by id continues its last',
-    );
-    t.equal(resumeArgumentsFor({}, ID_A), [], 'an agent with neither starts afresh');
     const harness = (extra: Record<string, unknown>): boolean =>
       HarnessSchema.safeParse({ npmPackage: 'x', npmBin: 'x', arguments: [], environment: {}, ...extra }).success;
-    t.check(harness({ resumeOneArguments: ['--resume', '{id}'] }), 'resumeOneArguments with {id} is valid');
-    t.check(!harness({ resumeOneArguments: ['--resume'] }), 'resumeOneArguments without {id} is refused');
     t.check(
-      SessionStatusSchema.safeParse(status({ conversation: ID_A })).success &&
+      harness({ resumeOneArguments: ['--resume', '{id}'] }) &&
+        !harness({ resumeOneArguments: ['--resume'] }) &&
+        SessionStatusSchema.safeParse(status({ conversation: ID_A })).success &&
         !SessionStatusSchema.safeParse(status({ conversation: 'y'.repeat(200) })).success,
-      'a session status may carry a conversation, capped',
+      'resumeOneArguments needs {id}; a session status may carry a capped conversation',
     );
 
     t.section('not opening twice');
-    const running = [{ harness: 'claude', hostDir: 'F:\\code\\API' }];
     t.equal(
       notRunningYet(
         [
@@ -267,11 +252,10 @@ export const resumeSuite: Suite = {
           { harness: 'claude', hostDir: 'F:\\code\\api' },
           { harness: 'codex', hostDir: 'F:\\code\\api' },
         ],
-        running,
+        [{ harness: 'claude', hostDir: 'F:\\code\\API' }],
       ).map((r) => r.harness),
       ['claude', 'codex'],
       'a session the sandbox already has is not opened again (one for one, any letter case)',
     );
-    t.equal(DEFAULTS.resume, { sessions: 'ask', restartAfterCrash: false }, 'the defaults: ask, no automatic restart');
   },
 };

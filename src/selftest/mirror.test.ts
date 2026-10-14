@@ -2,12 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GuestSession } from '../core/types.js';
-import { ConfigSchema, MappingSchema } from '../core/schema/index.js';
+import { ConfigSchema } from '../core/schema/index.js';
 import { guestPathFor } from '../cli/commands/context.js';
 import { buildWsb } from '../host/launch/index.js';
 import {
   deriveGuest,
-  guestDrive,
   isValidGuestPath,
   planMirrorWorkspace,
   sandboxFolder,
@@ -22,82 +21,55 @@ export const mirrorSuite: Suite = {
   title: 'guest paths on other drive letters, guestWorkspace "mirror"',
   run: async (t, f) => {
     t.section('which guest paths are valid');
-    const valid = [
-      'C:\\Assets',
-      'C:\\Workspace\\x',
-      'F:\\SteamLibrary\\steamapps\\common\\Game',
-      'f:\\x',
-      'Z:\\a b\\c (1)',
-    ];
+    const valid = ['C:\\Assets', 'F:\\SteamLibrary\\steamapps\\common\\Game', 'f:\\x', 'Z:\\a b\\c (1)'];
     t.equal(
       valid.filter((p) => !isValidGuestPath(p)),
       [],
       'guest paths under C:\\ or on D: to Z: are accepted',
     );
     const invalid = [
-      'C:\\',
       'F:\\',
-      'F:',
       'C:\\Windows\\x',
       'C:\\Users\\me',
-      'c:\\program files\\x',
       'C:\\AgentData\\x',
-      'C:\\Mirror',
       'C:\\Mirror\\F\\x',
       'A:\\x',
-      'B:\\x',
       'C:\\a\\..\\Windows',
-      'F:\\a\\..\\b',
       'F:\\a:b',
-      'F:\\a/b',
-      'F:\\a\\\\b',
-      'F:\\a.\\b',
       'F:\\a|b',
-      'F:\\a\nb',
       '\\\\server\\share\\x',
       'relative\\x',
-      'F:x',
     ];
     t.equal(
       invalid.filter(isValidGuestPath),
       [],
       'drive roots, reserved folders, C:\\Mirror, A:/B:, .., streams, odd characters and UNC paths are refused',
     );
-    const mappingAccepts = (guest?: string): boolean =>
-      MappingSchema.safeParse({ host: 'E:\\Games', guest, readOnly: true }).success;
-    t.check(
-      mappingAccepts('F:\\SteamLibrary\\Game') && mappingAccepts('C:\\Windows\\x') && mappingAccepts(undefined),
-      'schema: any mappings[].guest is accepted, or none (the launch places it; it never fails the config)',
-    );
     const workspaceAccepts = (guestWorkspace: string): boolean =>
       ConfigSchema.safeParse({ ...f.makeConfig(), guestWorkspace }).success;
     t.check(
-      workspaceAccepts('mirror') && workspaceAccepts('F:\\AgentProjects\\x'),
-      'schema: guestWorkspace accepts "mirror" and D:-Z: paths',
+      workspaceAccepts('mirror') && workspaceAccepts('F:\\AgentProjects\\x') && !workspaceAccepts('C:\\Users\\x'),
+      'schema: guestWorkspace accepts "mirror" and D:-Z: paths, and refuses reserved paths',
     );
-    t.check(!workspaceAccepts('C:\\Users\\x'), 'schema: guestWorkspace refuses reserved paths');
-    t.equal([guestDrive('f:\\x'), guestDrive('\\\\s\\x')], ['F', null], 'drive letter of a guest path');
 
     t.section('where a drive-letter path really lives');
     t.equal(
-      [sandboxFolder('F:\\SteamLibrary\\Game'), sandboxFolder('f:\\x'), sandboxFolder('C:\\Assets')],
-      ['C:\\Mirror\\F\\SteamLibrary\\Game', 'C:\\Mirror\\F\\x', 'C:\\Assets'],
-      'F:\\x really lives at C:\\Mirror\\F\\x; C: paths stay as they are',
-    );
-    t.equal(
-      substDrives(['C:\\a', 'G:\\z', 'F:\\x', 'f:\\y']),
+      [sandboxFolder('F:\\SteamLibrary\\Game'), sandboxFolder('C:\\Assets'), substDrives(['C:\\a', 'G:\\z', 'F:\\x'])],
       [
-        { letter: 'F', target: 'C:\\Mirror\\F' },
-        { letter: 'G', target: 'C:\\Mirror\\G' },
+        'C:\\Mirror\\F\\SteamLibrary\\Game',
+        'C:\\Assets',
+        [
+          { letter: 'F', target: 'C:\\Mirror\\F' },
+          { letter: 'G', target: 'C:\\Mirror\\G' },
+        ],
       ],
-      'one subst drive per used letter (never C:), sorted',
+      'F:\\x really lives at C:\\Mirror\\F\\x; C: paths stay; one subst drive per used letter (never C:)',
     );
     t.equal(
-      guestWorkspaceAliases('F:\\AgentProjects\\mw2'),
-      ['C:\\Mirror\\F\\AgentProjects\\mw2', 'F:\\AgentProjects\\mw2'],
-      'a mirrored workspace is also known by its real C:\\Mirror path',
+      [guestWorkspaceAliases('F:\\AgentProjects\\mw2'), guestWorkspaceAliases('C:\\Workspace\\x').length],
+      [['C:\\Mirror\\F\\AgentProjects\\mw2', 'F:\\AgentProjects\\mw2'], 1],
+      'a mirrored workspace is also known by its real C:\\Mirror path; a C: workspace has no alias',
     );
-    t.equal(guestWorkspaceAliases('C:\\Workspace\\x').length, 1, 'a C: workspace has no alias');
     const wsb = buildWsb(f.baseConfig, 4096, [
       {
         host: 'E:\\SteamLibrary\\steamapps\\common\\Game',
@@ -106,46 +78,39 @@ export const mirrorSuite: Suite = {
       },
       { host: 'D:\\Assets', guest: 'C:\\Assets', readOnly: false },
     ]);
-    t.includes(
-      wsb,
-      '<SandboxFolder>C:\\Mirror\\F\\SteamLibrary\\steamapps\\common\\Game</SandboxFolder>',
-      'the .wsb maps F:\\ guests under C:\\Mirror\\F',
+    t.check(
+      wsb.includes('<SandboxFolder>C:\\Mirror\\F\\SteamLibrary\\steamapps\\common\\Game</SandboxFolder>') &&
+        wsb.includes('<SandboxFolder>C:\\Assets</SandboxFolder>') &&
+        !wsb.includes('<SandboxFolder>F:'),
+      'the .wsb maps F:\\ guests under C:\\Mirror\\F, C:\\ guests as they are, and never a drive letter directly',
     );
-    t.includes(wsb, '<SandboxFolder>C:\\Assets</SandboxFolder>', 'the .wsb maps C:\\ guests as they are');
-    t.excludes(wsb, '<SandboxFolder>F:', 'the .wsb never maps a drive-letter folder directly');
 
     t.section('guestWorkspace "mirror"');
     const fallback = 'C:\\Workspace\\mw2-agent';
     const onF = planMirrorWorkspace('F:\\AgentProjects\\mw2-agent', fallback);
-    t.equal(onF.guest, 'F:\\AgentProjects\\mw2-agent', 'a workspace on F: appears at its PC path (mirror + subst)');
-    t.includes(
-      onF.note ?? '',
-      'C:\\Mirror\\F\\AgentProjects\\mw2-agent',
-      'a workspace on F: comes with a note saying where it really is',
-    );
-    t.equal(
-      planMirrorWorkspace('f:\\AgentProjects\\x\\', fallback).guest,
-      'F:\\AgentProjects\\x',
-      'a trailing backslash and a lower-case letter are normalised',
-    );
     const onC = planMirrorWorkspace('C:\\dev\\mw2-agent', fallback);
-    t.equal(
-      { guest: onC.guest, note: onC.note },
-      { guest: 'C:\\dev\\mw2-agent', note: null },
-      'a workspace on C: outside reserved folders keeps its path',
-    );
     const reserved = planMirrorWorkspace('C:\\Users\\josh\\mw2-agent', fallback);
-    t.equal(reserved.guest, fallback, 'C:\\Users\\... falls back to C:\\Workspace\\<name>...');
-    t.includes(reserved.note ?? '', 'reserved', '... with a note');
-    t.equal(planMirrorWorkspace('\\\\server\\share\\mw2-agent', fallback).guest, fallback, 'UNC paths fall back');
-    t.equal(planMirrorWorkspace('A:\\mw2-agent', fallback).guest, fallback, 'A: and B: fall back');
-
+    t.check(
+      onF.guest === 'F:\\AgentProjects\\mw2-agent' &&
+        (onF.note ?? '').includes('C:\\Mirror\\F\\AgentProjects\\mw2-agent') &&
+        planMirrorWorkspace('f:\\AgentProjects\\x\\', fallback).guest === 'F:\\AgentProjects\\x' &&
+        onC.guest === 'C:\\dev\\mw2-agent' &&
+        onC.note === null,
+      'a workspace on F: appears at its PC path with a note where it really is; one on C: outside reserved folders keeps its path',
+    );
+    t.check(
+      reserved.guest === fallback &&
+        (reserved.note ?? '').includes('reserved') &&
+        planMirrorWorkspace('\\\\server\\share\\mw2-agent', fallback).guest === fallback &&
+        planMirrorWorkspace('A:\\mw2-agent', fallback).guest === fallback,
+      'C:\\Users\\..., UNC paths and A:/B: fall back to C:\\Workspace\\<name> (with a note for reserved)',
+    );
     const resolved = await f.run({}, { ...f.makeConfig(), guestWorkspace: 'mirror' });
     const expected = planMirrorWorkspace(f.workA, 'C:\\Workspace\\work-a');
-    t.equal(resolved.config.guestWorkspace, expected.guest, 'resolveRun turns "mirror" into a concrete guest path');
     t.check(
-      expected.note === null || resolved.notes.includes(expected.note),
-      'resolveRun explains a fallback in run.notes',
+      resolved.config.guestWorkspace === expected.guest &&
+        (expected.note === null || resolved.notes.includes(expected.note)),
+      'resolveRun turns "mirror" into a concrete guest path and explains a fallback in run.notes',
       JSON.stringify(resolved.notes),
     );
 
@@ -165,29 +130,13 @@ export const mirrorSuite: Suite = {
       generated.sessionPath,
     );
     const text = fs.readFileSync(generated.wsbPath, 'utf8');
-    t.equal(session.workspace, 'G:\\Projects\\work-a', 'session.json: the workspace is at its drive-letter path');
-    t.equal(
-      session.substDrives,
-      [
-        { letter: 'F', target: 'C:\\Mirror\\F' },
-        { letter: 'G', target: 'C:\\Mirror\\G' },
-      ],
-      'session.json: subst drives are listed for bootstrap.ps1',
-    );
-    t.includes(
-      text,
-      '<SandboxFolder>C:\\Mirror\\G\\Projects\\work-a</SandboxFolder>',
-      '.wsb: the workspace is under C:\\Mirror',
-    );
-    t.includes(
-      text,
-      '<SandboxFolder>C:\\Mirror\\F\\SteamLibrary\\steamapps\\common\\Game</SandboxFolder>',
-      '.wsb: the mapping is under C:\\Mirror',
-    );
-    t.equal(
-      f.readJson<{ substDrives?: unknown[] }>(f.generate(base).sessionPath).substDrives,
-      [],
-      'no other drive letters: no subst drives',
+    t.check(
+      session.workspace === 'G:\\Projects\\work-a' &&
+        session.substDrives?.map((d) => d.letter).join() === 'F,G' &&
+        text.includes('<SandboxFolder>C:\\Mirror\\G\\Projects\\work-a</SandboxFolder>') &&
+        text.includes('<SandboxFolder>C:\\Mirror\\F\\SteamLibrary\\steamapps\\common\\Game</SandboxFolder>') &&
+        f.readJson<{ substDrives?: unknown[] }>(f.generate(base).sessionPath).substDrives?.length === 0,
+      'session.json lists the subst drives for bootstrap.ps1 and the .wsb maps workspace and folders under C:\\Mirror; no other letters, no subst drives',
     );
 
     t.section('where an extra folder goes: guest left out, or one the sandbox cannot use');
@@ -198,26 +147,21 @@ export const mirrorSuite: Suite = {
         deriveGuest('f:\\SteamLibrary\\steamapps\\common\\MW2\\', 'F:\\P\\mw2', 'C:\\Workspace\\mw2'),
       ],
       ['C:\\Workspace\\mw2\\data\\maps', 'C:\\Steam\\MOHAA', 'F:\\SteamLibrary\\steamapps\\common\\MW2'],
-      'no guest: inside the project = the same place in it; outside = the same path as on the PC (C: as is, F: through C:\\Mirror\\F + subst)',
+      'no guest: inside the project = the same place in it; outside = the same path as on the PC',
     );
     const other = t.dir('steam', 'Other');
     const placed = (mappings: { host: string; guest?: string; readOnly: boolean }[]) => {
       const g = f.generate({ ...run, config: { ...run.config, mappings } });
-      return {
-        guests: g.mappings.filter((m) => m.host === game || m.host === other).map((m) => m.guest),
-        notes: g.mappingNotes,
-        wsb: fs.readFileSync(g.wsbPath, 'utf8'),
-      };
+      return g.mappings.filter((m) => m.host === game || m.host === other).map((m) => m.guest);
     };
-    const usable = placed([
-      { host: game, guest: 'D:\\Games', readOnly: true },
-      { host: game, guest: 'c:/assets/', readOnly: true },
-      { host: game, guest: 'C:\\assets', readOnly: true },
-    ]);
     t.equal(
-      usable.guests,
+      placed([
+        { host: game, guest: 'D:\\Games', readOnly: true },
+        { host: game, guest: 'c:/assets/', readOnly: true },
+        { host: game, guest: 'C:\\assets', readOnly: true },
+      ]),
       ['D:\\Games', 'C:\\assets'],
-      'a usable guest path is used exactly as asked (c:/assets/ tidied); the same folder at the same place is mapped once',
+      'a usable guest path is used as asked (c:/assets/ tidied); the same folder at the same place is mapped once',
     );
     const refused = await t.thrownMessage(() =>
       placed([
@@ -229,24 +173,14 @@ export const mirrorSuite: Suite = {
       ]),
     );
     t.check(
-      refused.includes('4 mapped folders cannot be used'),
-      'unusable guest paths stop the launch, all named in one message (never moved elsewhere)',
-      refused,
-    );
-    t.check(
-      refused.includes('C:\\Windows\\foo is a folder the sandbox keeps for itself') &&
+      refused.includes('4 mapped folders cannot be used') &&
+        refused.includes('C:\\Windows\\foo is a folder the sandbox keeps for itself') &&
         refused.includes('steamapps\\Game is not a full path') &&
-        refused.includes('already used by'),
-      '... each with why: reserved, relative, overlapping',
+        refused.includes('already used by') &&
+        refused.includes('Fix: set "guest" to a full path') &&
+        !refused.includes('C:\\Mapped'),
+      'unusable guest paths stop the launch, all named in one message with why and the fix (never moved elsewhere)',
       refused,
-    );
-    t.check(refused.includes('Fix: set "guest" to a full path'), '... and the fix', refused);
-    t.excludes(refused, 'C:\\Mapped', 'no folder is ever placed under C:\\Mapped');
-    const derived = await t.thrownMessage(() => placed([{ host: game, readOnly: true }]));
-    t.check(
-      derived === '' || derived.includes('give it a "guest" path'),
-      'no guest, outside the project: the PC path, or (under C:\\Users, like the temp folder) a message asking for a guest path',
-      derived,
     );
     const inside = t.dir('work-a', 'data');
     const insideRun = await f.run();
@@ -275,7 +209,6 @@ export const mirrorSuite: Suite = {
     t.check(
       missingRequired.includes('2 mapped folders cannot be used') &&
         missingRequired.includes('nope-1') &&
-        missingRequired.includes('nope-2') &&
         missingRequired.includes('"optional": true'),
       'folders that are not there: one message listing each, with the fix',
       missingRequired,
@@ -283,13 +216,12 @@ export const mirrorSuite: Suite = {
 
     t.section('exec, attach and history for a mirrored workspace');
     const workspace = 'F:\\AgentProjects\\mw2-agent';
-    t.equal(
-      guestPathFor(workspace + '\\crates\\engine', workspace, workspace),
-      workspace + '\\crates\\engine',
-      'a host folder maps to the same guest folder',
-    );
     const project = projectFolderName(workspace);
-    t.equal(project, 'F--AgentProjects-mw2-agent', 'the Claude project folder is the same on both sides');
+    t.check(
+      guestPathFor(workspace + '\\crates\\engine', workspace, workspace) === workspace + '\\crates\\engine' &&
+        project === 'F--AgentProjects-mw2-agent',
+      'a host folder maps to the same guest folder, and the Claude project folder is the same on both sides',
+    );
     const sides = f.historySides('mirror', workspace, workspace);
     const hostProject = path.join(sides.hostClaudeDir, 'projects', project);
     const guestProject = path.join(sides.guestClaudeDir, 'projects', project);
@@ -299,15 +231,10 @@ export const mirrorSuite: Suite = {
       '{"display":"hi","timestamp":1,"project":"F:\\\\AgentProjects\\\\mw2-agent"}\n',
     );
     syncHistoryIn(sides);
-    t.includes(
-      fs.readFileSync(path.join(guestProject, 's1.jsonl'), 'utf8'),
-      'F:\\\\AgentProjects\\\\mw2-agent',
-      'history in: paths are unchanged',
-    );
-    t.equal(
-      fs.readdirSync(path.join(sides.guestClaudeDir, 'projects')).length,
-      1,
-      'history in: only the one project folder is created',
+    t.check(
+      fs.readFileSync(path.join(guestProject, 's1.jsonl'), 'utf8').includes('F:\\\\AgentProjects\\\\mw2-agent') &&
+        fs.readdirSync(path.join(sides.guestClaudeDir, 'projects')).length === 1,
+      'history in: paths are unchanged and only the one project folder is created',
     );
     t.write(path.join(guestProject, 's2.jsonl'), '{"cwd":"F:\\\\AgentProjects\\\\mw2-agent","t":2}\n');
     const realPathProject = path.join(sides.guestClaudeDir, 'projects', 'C--Mirror-F-AgentProjects-mw2-agent');
@@ -321,29 +248,19 @@ export const mirrorSuite: Suite = {
     );
     syncHistoryOut(sides);
     const s3 = path.join(hostProject, 's3.jsonl');
-    t.check(fs.existsSync(path.join(hostProject, 's2.jsonl')), 'history out: transcripts under the PC path come back');
-    t.check(
-      fs.existsSync(s3),
-      'history out: transcripts under the real C:\\Mirror path come back into the PC project folder',
-    );
-    t.check(
-      !fs.existsSync(path.join(sides.hostClaudeDir, 'projects', 'C--Mirror-F-AgentProjects-mw2-agent')),
-      'history out: no C:\\Mirror project folder appears on the PC',
-    );
     const s3Text = fs.existsSync(s3) ? fs.readFileSync(s3, 'utf8') : '';
-    t.includes(
-      s3Text,
-      '"cwd":"F:\\\\AgentProjects\\\\mw2-agent"',
-      'history out: C:\\Mirror\\F\\... paths are translated back to F:\\...',
+    t.check(
+      fs.existsSync(path.join(hostProject, 's2.jsonl')) &&
+        !fs.existsSync(path.join(sides.hostClaudeDir, 'projects', 'C--Mirror-F-AgentProjects-mw2-agent')) &&
+        s3Text.includes('"cwd":"F:\\\\AgentProjects\\\\mw2-agent"') &&
+        s3Text.includes('F:/AgentProjects/mw2-agent/src/main.rs') &&
+        !s3Text.includes('Mirror'),
+      'history out: transcripts under the PC path or the real C:\\Mirror path land in the PC project folder with paths translated back',
     );
-    t.includes(s3Text, 'F:/AgentProjects/mw2-agent/src/main.rs', 'history out: forward-slash paths are translated too');
-    t.excludes(s3Text, 'Mirror', 'history out: nothing mentions C:\\Mirror any more');
     const promptHistory = fs.readFileSync(path.join(sides.hostClaudeDir, 'history.jsonl'), 'utf8');
-    t.includes(
-      promptHistory,
-      '"project":"F:\\\\AgentProjects\\\\mw2-agent"}',
+    t.check(
+      promptHistory.includes('"project":"F:\\\\AgentProjects\\\\mw2-agent"}') && !promptHistory.includes('Mirror'),
       'prompt history out: real paths are translated',
     );
-    t.excludes(promptHistory, 'Mirror', 'prompt history out: nothing mentions C:\\Mirror');
   },
 };

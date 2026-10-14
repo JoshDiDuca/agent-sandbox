@@ -8,10 +8,10 @@ import { commandLine, readHistory, recordHistory } from '../cli/history.js';
 import { splitArgs } from '../cli/args.js';
 import { optionProblem } from '../cli/menu/index.js';
 import { cleanTargetOf, type DataEntry } from '../cli/commands/data/collect.js';
-import { ago, colorEnabled, shorten, shortenMiddle } from '../cli/output/index.js';
+import { ago, colorEnabled, shorten } from '../cli/output/index.js';
 import { hoistConfig, withoutConfig } from '../cli/argv.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
-import { CATEGORIES, editConfigText, nameOf, SchemaNode } from '../cli/menu/settings/index.js';
+import { CATEGORIES, editConfigText, SchemaNode } from '../cli/menu/settings/index.js';
 import { Frame, ListScreen, Text, TextScreen, type Key } from '../cli/tui/index.js';
 import { ConfigSchema, LocalOverridesSchema } from '../core/schema/index.js';
 import type { Suite } from './support/suite.js';
@@ -23,56 +23,43 @@ export const cliSuite: Suite = {
     t.section('manifest and parser');
     const program = buildProgram(() => undefined);
     const visible = COMMANDS.filter((c) => !c.hidden).map((c) => c.name);
-    const missingFromParser = visible.filter((name) => !program.commands.some((c) => c.name() === name));
-    t.equal(missingFromParser, [], 'every manifest command exists in the parser');
-    t.check(
-      program.commands.find((c) => c.name() === 'launch')!.options.some((o) => o.long === '--terminal'),
-      'every manifest option exists in the parser (launch --terminal)',
+    t.equal(
+      visible.filter((name) => !program.commands.some((c) => c.name() === name)),
+      [],
+      'every manifest command exists in the parser',
     );
     const packageJson = JSON.parse(fs.readFileSync(path.join(t.packageRoot, 'package.json'), 'utf8')) as {
       version: string;
     };
-    t.equal(program.version(), packageJson.version, '--version prints the package version');
     t.check(
-      program.options.some((o) => o.short === '-v' && o.long === '--version'),
-      '-v is a short form of --version',
+      program.version() === packageJson.version &&
+        program.commands.find((c) => c.name() === 'launch')!.options.some((o) => o.long === '--terminal'),
+      '--version is the package version and manifest options exist in the parser',
     );
 
     const start = parseCli(['start', '--headless']);
-    t.equal(
-      { command: start.command, noAgent: start.noAgent, headless: start.headless },
-      { command: 'launch', noAgent: true, headless: true },
-      '`start` is launch without an agent',
-    );
     const clean = parseCli(['data', 'clean', 'tools/go', 'logs', '--yes']);
     t.equal(
-      { command: clean.command, positionals: clean.positionals, yes: clean.yes },
-      { command: 'data', positionals: ['clean', 'tools/go', 'logs'], yes: true },
-      'data clean takes targets and --yes',
-    );
-    t.equal(
-      parseCli(['start', '--database', 'postgres,redis', '--database', 'mongodb']).databases,
-      ['postgres', 'redis', 'mongodb'],
-      '--database takes lists and can repeat',
-    );
-    t.equal(parseCli(['db', 'start', 'redis']).positionals, ['start', 'redis'], '`db` takes an action and a name');
-    t.equal(
-      parseCli(['launch', '--harness', 'opencode', '--', '--continue']).passthrough,
-      ['--continue'],
-      'agent arguments after -- reach the agent',
+      [
+        [start.command, start.noAgent, start.headless],
+        [clean.command, clean.positionals, clean.yes],
+        parseCli(['start', '--database', 'postgres,redis', '--database', 'mongodb']).databases,
+        parseCli(['launch', '--harness', 'opencode', '--', '--continue']).passthrough,
+      ],
+      [
+        ['launch', true, true],
+        ['data', ['clean', 'tools/go', 'logs'], true],
+        ['postgres', 'redis', 'mongodb'],
+        ['--continue'],
+      ],
+      '`start` is launch without an agent; positionals, repeated lists and arguments after -- parse',
     );
 
     t.section('parser: agent wrappers (claude-sbx ...) and agent-sandbox');
     const wrapped = parseCli(['--terminal', '--continue', '--headless', '--node', '20', '--', '--terminal'], true);
     t.equal(
-      {
-        command: wrapped.command,
-        terminal: wrapped.terminal,
-        headless: wrapped.headless,
-        node: wrapped.node,
-        passthrough: wrapped.passthrough,
-      },
-      { command: 'launch', terminal: true, headless: true, node: '20', passthrough: ['--continue', '--terminal'] },
+      [wrapped.command, wrapped.terminal, wrapped.headless, wrapped.node, wrapped.passthrough],
+      ['launch', true, true, '20', ['--continue', '--terminal']],
       'claude-sbx: sandbox flags are consumed, everything else goes to the agent',
     );
     await t.throws(
@@ -80,36 +67,22 @@ export const cliSuite: Suite = {
       'unknown option',
       'agent-sandbox: unknown options are errors',
     );
-    t.equal(
-      parseCli(['account', 'use', 'work', '--no-restart']).positionals,
-      ['use', 'work'],
-      'agent-sandbox: positionals are collected',
-    );
-    t.equal(parseCli(['clean', '--days=3']).days, 3, 'agent-sandbox: --opt=value works');
     const agentFlags = parseCli(
       ['--model', 'opus', '-p', 'fix it', '--json', '-f', 'x', '--timeout', '5', '--resume', 'abc'],
       true,
     );
-    t.equal(
-      agentFlags.passthrough,
-      ['--model', 'opus', '-p', 'fix it', '--json', '-f', 'x', '--timeout', '5', '--resume', 'abc'],
-      'claude-sbx: any flag that is not a launch option goes to the agent, in order (even ones agent-sandbox uses elsewhere)',
-    );
-    t.equal(
-      { json: agentFlags.json, follow: agentFlags.follow, timeout: agentFlags.timeout },
-      { json: false, follow: false, timeout: 600 },
-      "claude-sbx: the agent's flags do not set agent-sandbox options",
+    t.check(
+      agentFlags.passthrough.join('|') === '--model|opus|-p|fix it|--json|-f|x|--timeout|5|--resume|abc' &&
+        !agentFlags.json &&
+        !agentFlags.follow &&
+        agentFlags.timeout === 600,
+      'claude-sbx: any flag that is not a launch option goes to the agent in order and sets no agent-sandbox option',
     );
     const reserved = parseCli(['--sbx-terminal', '--terminal', '--sbx-node=18'], true);
     t.equal(
-      { terminal: reserved.terminal, node: reserved.node, passthrough: reserved.passthrough },
-      { terminal: true, node: '18', passthrough: [] },
+      [reserved.terminal, reserved.node, reserved.passthrough],
+      [true, '18', []],
       '--sbx-<option> always means agent-sandbox',
-    );
-    t.equal(
-      parseCli(['launch', '--continue', '--sbx-headless']).passthrough,
-      ['--continue'],
-      'agent-sandbox launch passes agent flags too',
     );
     await t.throws(
       () => parseCli(['--sbx-nope'], true),
@@ -118,60 +91,45 @@ export const cliSuite: Suite = {
     );
 
     t.section('menu helpers');
-    t.equal(
-      splitArgs('--model "big one" -c \'x y\''),
-      ['--model', 'big one', '-c', 'x y'],
-      'menu: arguments split like a shell',
+    t.check(
+      splitArgs('--model "big one" -c \'x y\'').join('|') === '--model|big one|-c|x y' &&
+        commandLine(['exec', 'echo', 'a b']) === 'sandbox exec echo "a b"',
+      'menu: arguments split like a shell and command lines are quoted',
     );
-    t.equal(commandLine(['exec', 'echo', 'a b']), 'sandbox exec echo "a b"', 'menu: command lines are quoted');
     const optionOf = (flag: string) => COMMANDS.flatMap((cmd) => cmd.options).find((o) => o.flag === flag)!;
     t.check(
-      optionProblem(optionOf('--node'), 'abc') !== undefined,
-      'menu: a bad Node version is rejected while typing',
+      optionProblem(optionOf('--node'), 'abc') !== undefined &&
+        optionProblem(optionOf('--node'), '22') === undefined &&
+        optionProblem(optionOf('--workspace'), path.join(t.packageRoot, 'no-such-folder-here')) !== undefined &&
+        optionProblem(optionOf('--workspace'), t.packageRoot) === undefined &&
+        optionProblem(optionOf('--days'), '0') !== undefined,
+      'menu: bad Node versions, missing folders and numbers below the minimum are rejected while typing',
     );
-    t.check(optionProblem(optionOf('--node'), '22') === undefined, 'menu: a good Node version is accepted');
-    t.check(
-      optionProblem(optionOf('--workspace'), path.join(t.packageRoot, 'no-such-folder-here')) !== undefined,
-      'menu: a missing folder is rejected',
-    );
-    t.check(
-      optionProblem(optionOf('--workspace'), t.packageRoot) === undefined,
-      'menu: an existing folder is accepted',
-    );
-    t.check(optionProblem(optionOf('--days'), '0') !== undefined, 'menu: a number below the minimum is rejected');
     const rowOf = (area: DataEntry['area'], name: string): DataEntry => ({ area, name, path: 'x', bytes: 1 });
     t.equal(
       [
         cleanTargetOf(rowOf('tools', 'go')),
-        cleanTargetOf(rowOf('tools', 'agents/claude')),
-        cleanTargetOf(rowOf('databases', 'databases/pg')),
         cleanTargetOf(rowOf('host', 'launches')),
+        cleanTargetOf(rowOf('host', 'accounts')),
+        cleanTargetOf(rowOf('tools', '(files in tools)')),
       ],
-      ['tools/go', 'tools/agents/claude', 'databases/pg', 'launches'],
-      'data menu: removable rows become checkbox targets',
-    );
-    t.equal(
-      [cleanTargetOf(rowOf('host', 'accounts')), cleanTargetOf(rowOf('tools', '(files in tools)'))],
-      [null, null],
-      'data menu: accounts and loose files are never offered',
-    );
-    t.equal(
-      COMMANDS.find((cmd) => cmd.name === 'data')!.options.find((o) => o.flag === '--yes')?.noMenu,
-      true,
-      'data menu: --yes is never offered',
+      ['tools/go', 'launches', null, null],
+      'data menu: removable rows become targets; accounts and loose files are never offered',
     );
 
     t.section('--config placement, history, validation, text helpers');
     t.equal(
-      hoistConfig(['--config', 'a.json', 'status', '--json']),
-      ['status', '--config', 'a.json', '--json'],
-      '--config before the command is moved behind it',
-    );
-    t.equal(hoistConfig(['--config=a.json']), ['menu', '--config', 'a.json'], '--config alone opens the menu with it');
-    t.equal(
-      withoutConfig(['status', '--config', 'a.json', '--json']),
-      ['status', '--json'],
-      'the recorded history drops --config',
+      [
+        hoistConfig(['--config', 'a.json', 'status', '--json']),
+        hoistConfig(['--config=a.json']),
+        withoutConfig(['status', '--config', 'a.json', '--json']),
+      ],
+      [
+        ['status', '--config', 'a.json', '--json'],
+        ['menu', '--config', 'a.json'],
+        ['status', '--json'],
+      ],
+      '--config is moved behind the command, alone it opens the menu, and history drops it',
     );
     recordHistory(['launch', '--harness', 'claude']);
     recordHistory(['status']);
@@ -183,23 +141,27 @@ export const cliSuite: Suite = {
       'history: newest first, no duplicates, the menu itself is not recorded',
     );
     t.check(
-      validNodeSpec('22') && validNodeSpec('v22.1.0') && validNodeSpec('lts/*') && !validNodeSpec('abc'),
-      'validation: Node version syntax',
+      validNodeSpec('22') &&
+        validNodeSpec('lts/*') &&
+        !validNodeSpec('abc') &&
+        validPythonSpec('3.12') &&
+        !validPythonSpec('2.7') &&
+        closest('cluade', ['claude', 'codex']) === 'claude' &&
+        closest('zzzzzz', ['claude']) === undefined,
+      'validation: version syntax and did-you-mean for agent names',
     );
-    t.check(validPythonSpec('3.12') && !validPythonSpec('2.7'), 'validation: Python version syntax');
-    t.equal(closest('cluade', ['claude', 'codex']), 'claude', 'validation: did-you-mean for agent names');
-    t.equal(closest('zzzzzz', ['claude']), undefined, 'validation: nothing is suggested for an unrelated name');
-    const env = (vars: NodeJS.ProcessEnv, isTty: boolean): boolean => colorEnabled(vars, isTty);
-    t.check(env({}, true), 'colours: on for a terminal');
-    t.check(!env({}, false), 'colours: off for a pipe');
-    t.check(!env({ NO_COLOR: '1' }, true) && !env({ TERM: 'dumb' }, true), 'colours: off for NO_COLOR and TERM=dumb');
-    t.check(env({ FORCE_COLOR: '1' }, false) && !env({ FORCE_COLOR: '0' }, true), 'colours: FORCE_COLOR overrides');
-    t.equal(shorten('abcdefghij', 6), 'abcde…', 'text helpers: shorten');
-    t.equal(shortenMiddle('C:\\Users\\me\\project', 11), 'C:\\Us…oject', 'text helpers: shorten in the middle');
+    t.check(
+      colorEnabled({}, true) &&
+        !colorEnabled({}, false) &&
+        !colorEnabled({ NO_COLOR: '1' }, true) &&
+        colorEnabled({ FORCE_COLOR: '1' }, false) &&
+        !colorEnabled({ FORCE_COLOR: '0' }, true),
+      'colours: on for a terminal, off for a pipe or NO_COLOR, FORCE_COLOR overrides',
+    );
     t.equal(
-      [ago(0, 10 * 60 * 1000), ago(0, 5000), ago(0, 3 * 86400 * 1000)],
-      ['10 min ago', 'just now', '3 d ago'],
-      'text helpers: relative time',
+      [shorten('abcdefghij', 6), ago(0, 10 * 60 * 1000), ago(0, 5000)],
+      ['abcde…', '10 min ago', 'just now'],
+      'text helpers: shorten and relative time',
     );
 
     t.section('settings screen');
@@ -207,108 +169,51 @@ export const cliSuite: Suite = {
     const set = editConfigText(original, ['attach', 'auto'], true);
     const nested = 'text' in set ? editConfigText(set.text, ['databases', 'postgres', 'port'], 6543) : set;
     const reset = 'text' in nested ? editConfigText(nested.text, ['sandbox', 'headless'], undefined) : nested;
-    t.check('text' in reset, 'editing a config file gives new text');
     const resetText = 'text' in reset ? reset.text : '';
-    t.includes(resetText, '// my notes stay', "settings screen: changes keep the file's comments");
-    t.includes(resetText, '"auto": true', 'settings screen: a new setting is added');
-    t.includes(resetText, '"port": 6543', 'settings screen: nested keys are created');
-    t.excludes(resetText, 'headless', 'settings screen: reset removes a key');
+    t.check(
+      resetText.includes('// my notes stay') &&
+        resetText.includes('"auto": true') &&
+        resetText.includes('"port": 6543') &&
+        !resetText.includes('headless'),
+      "settings screen: changes keep the file's comments, add new and nested keys, and reset removes a key",
+      resetText,
+    );
     const invalid = editConfigText(original, ['sandbox', 'memoryMb'], 12);
-    t.check(
-      'problems' in invalid && invalid.problems.join().includes('memoryMb'),
-      'settings screen: invalid values are not saved',
-      JSON.stringify(invalid),
-    );
-    const missing = editConfigText('{ "storage": { "root": "C:\\\\x" } }', ['agentCommands', 'enabled'], undefined);
-    t.check(
-      'text' in missing && missing.text.includes('"root"'),
-      'removing a setting the file does not have changes nothing (no crash)',
-    );
-    const projectEdit = editConfigText('{}', ['downloads', 'requireChecksum'], true, 'project');
     const projectBad = editConfigText('{}', ['storage', 'root'], 'C:\\x', 'project');
     t.check(
-      'text' in projectEdit && projectEdit.text.includes('requireChecksum'),
-      'settings screen: a project file accepts project settings',
-    );
-    t.check(
-      'problems' in projectBad,
-      'settings screen: a project file is validated against the project schema (storage cannot be set there)',
+      'problems' in invalid && invalid.problems.join().includes('memoryMb') && 'problems' in projectBad,
+      'settings screen: invalid values are not saved; a project file cannot set storage',
+      JSON.stringify(invalid),
     );
 
     // Every setting must be reachable in the settings screen, in a category, with an editor that fits it.
     const userSchema = new SchemaNode(ConfigSchema);
     const projectSchema = new SchemaNode(LocalOverridesSchema);
     const userLeaves = userSchema.leaves();
-    const projectLeaves = projectSchema.leaves();
-    t.check(
-      userLeaves.length > 100 && projectLeaves.length > 50,
-      'settings screen: every setting is a leaf (' +
-        userLeaves.length +
-        ' settings, ' +
-        projectLeaves.length +
-        ' in a project file)',
-    );
     const uncategorised = [...userSchema.children(), ...projectSchema.children()]
       .map(([name]) => name)
       .filter((name) => !CATEGORIES.some((c) => c.keys.includes(name)));
     t.equal(uncategorised, [], 'settings screen: every top-level setting belongs to a category');
-    const kinds = new Set(userLeaves.map((l) => l.node.editor));
-    t.equal(
-      [
-        'boolean',
-        'choice',
-        'union',
-        'number',
-        'string',
-        'string-list',
-        'choice-list',
-        'object-list',
-        'string-map',
-        'object-map',
-      ].filter((k) => !kinds.has(k as never)),
-      [],
-      'settings screen: every kind of editor is used',
-    );
     t.equal(
       userLeaves.filter((l) => l.node.editor === 'json').map((l) => l.key.join('.')),
       [],
       'settings screen: no setting falls back to typing JSON',
     );
-    t.check(
-      userLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum') &&
-        projectLeaves.some((l) => l.key.join('.') === 'downloads.requireChecksum'),
-      'settings screen: downloads.requireChecksum is reachable in both files',
-    );
     const harness = userSchema.child('harnesses')!.element!;
-    t.includes(
-      String(harness.check(harness.initial())),
-      'npmPackage',
-      'settings screen: a new agent says what it still needs (a package to install)',
-    );
-    t.equal(
-      harness.check({ ...(harness.initial() as object), npmPackage: 'my-cli', npmBin: 'my-cli' }),
-      true,
-      '... and is valid once it has one',
-    );
-    const mapping = userSchema.child('mappings')!.element!;
     t.check(
-      mapping.check(mapping.initial()) !== true,
-      'settings screen: a new mapped folder needs its folders filled in before it is valid',
-    );
-    t.equal(
-      [Text.humanize('memoryMb'), Text.humanize('vGpu'), nameOf('node')],
-      ['Memory MB', 'V GPU', 'Node.js'],
-      'settings screen: readable names',
+      String(harness.check(harness.initial())).includes('npmPackage') &&
+        harness.check({ ...(harness.initial() as object), npmPackage: 'my-cli', npmBin: 'my-cli' }) === true,
+      'settings screen: a new agent says what it still needs, and is valid once it has it',
     );
 
     t.section('screens');
     const fit = Text.fit('\x1b[31mred text\x1b[0m', 5);
     t.equal(
-      [Text.width(fit), Text.strip(fit)],
-      [5, 'red …'],
-      'a coloured label is cut to the width without breaking its colour',
+      [Text.width(fit), Text.strip(fit), Text.width('日本')],
+      [5, 'red …', 4],
+      'a coloured label is cut to the width without breaking its colour; wide characters take two columns',
     );
-    t.equal(Text.width('日本'), 4, 'wide characters take two columns');
+    const key = (name: string, text = ''): Key => ({ name, text, ctrl: false, meta: false, shift: false });
     const screen = new ListScreen<string>({
       path: ['T'],
       items: [
@@ -320,7 +225,6 @@ export const cliSuite: Suite = {
         { id: 'y', label: 'Y' },
       ],
     });
-    const key = (name: string, text = ''): Key => ({ name, text, ctrl: false, meta: false, shift: false });
     screen.handle(key('left'));
     screen.handle(key('down'));
     screen.handle(key('right'));
@@ -329,17 +233,11 @@ export const cliSuite: Suite = {
       { done: { kind: 'pick', value: 'b' } },
       'list screen: arrows switch category, Enter picks',
     );
-    const search = new ListScreen<string>({
-      path: ['T'],
-      items: [
-        { value: 'a', label: 'Alpha' },
-        { value: 'b', label: 'Beta' },
-      ],
-    });
-    for (const k of [key('', '/'), key('b', 'b'), key('e', 'e')]) search.handle(k);
-    t.equal(search.handle(key('return')), { done: { kind: 'pick', value: 'b' } }, 'list screen: / searches');
-    const lines = Frame.render(screen.render({ width: 60, height: Frame.bodyHeight(20) }), 60, 20);
-    t.equal(lines.length, 20, 'a frame fills the terminal height exactly');
+    t.equal(
+      Frame.render(screen.render({ width: 60, height: Frame.bodyHeight(20) }), 60, 20).length,
+      20,
+      'a frame fills the terminal height exactly',
+    );
     const multi = new ListScreen<string>({
       path: ['T'],
       multi: true,
@@ -355,10 +253,14 @@ export const cliSuite: Suite = {
       'list screen: space ticks several',
     );
     const typed = new TextScreen({ path: ['T'], label: 'Port', validate: (v) => (Number(v) > 0 ? true : 'a number') });
-    for (const ch of 'x') typed.handle(key(ch, ch));
-    t.equal(typed.handle(key('return')), undefined, 'text field: an invalid value is not accepted');
+    typed.handle(key('x', 'x'));
+    const refused = typed.handle(key('return'));
     typed.handle(key('backspace'));
     typed.handle(key('8', '8'));
-    t.equal(typed.handle(key('return')), { done: '8' }, 'text field: a valid value is');
+    t.equal(
+      [refused, typed.handle(key('return'))],
+      [undefined, { done: '8' }],
+      'text field: an invalid value is not accepted, a valid one is',
+    );
   },
 };

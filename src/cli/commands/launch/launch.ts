@@ -234,7 +234,19 @@ class Launcher {
   private share(generated: GeneratedSandbox): void {
     const deps = sharingDeps(this.ctx.packageRoot);
     if (!deps) return;
-    const shared = this.ctx.loaded.config.sharing.otherUsers;
+    // Only the shared tree may be opened to the group: never a storage folder of your own (your profile, say).
+    const inSharedTree = isWithin(deps.usersDir, this.ctx.dataPath);
+    if (this.ctx.loaded.config.sharing.otherUsers && !inSharedTree)
+      console.log(
+        c.yellow(
+          'This sandbox is not shared: its data is in ' +
+            this.ctx.dataPath +
+            ', outside ' +
+            deps.usersDir +
+            '. Remove storage.root from your config to use the shared folder.',
+        ),
+      );
+    const shared = this.ctx.loaded.config.sharing.otherUsers && inSharedTree;
     const rows = listProcesses();
     beginSharing(deps, {
       user: currentUserName(),

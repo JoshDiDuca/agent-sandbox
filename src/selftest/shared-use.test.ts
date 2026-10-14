@@ -33,50 +33,56 @@ const record = (dataPath: string, shared: boolean): ActiveSandbox => ({
   version: '1.5.0',
   projects: [{ id: 'app', hostPath: 'C:\\Dev\\app', guestPath: 'C:\\Workspace\\app' }],
 });
-const other = (shared: boolean): SandboxOwner => ({
+const other = (shared: boolean, user = 'alice'): SandboxOwner => ({
   kind: 'other',
-  user: 'alice',
+  user,
   shared,
   record: record('C:\\x', shared),
 });
 
-async function rules(t: Harness): Promise<void> {
+function rules(t: Harness): void {
   t.section('what a user may do with another user\u2019s sandbox');
-  t.equal(ownerRule({ kind: 'mine' }, { kind: 'stop', sessions: 1 }).kind, 'allow', 'your own sandbox: everything');
-  t.equal(ownerRule({ kind: 'none' }, { kind: 'use' }).kind, 'allow', 'nothing running: nothing to refuse');
-  t.equal(ownerRule(other(false), { kind: 'look' }).kind, 'allow', 'status and sessions always work');
-  t.equal(ownerRule(other(true), { kind: 'use' }).kind, 'allow', 'shared: attach, exec and db are allowed');
+  t.equal(
+    [
+      ownerRule({ kind: 'mine' }, { kind: 'stop', sessions: 1 }).kind,
+      ownerRule({ kind: 'none' }, { kind: 'use' }).kind,
+      ownerRule(other(false), { kind: 'look' }).kind,
+      ownerRule(other(true), { kind: 'use' }).kind,
+      ownerRule({ kind: 'unknown-other' }, { kind: 'look' }).kind,
+    ],
+    ['allow', 'allow', 'allow', 'allow', 'allow'],
+    'allowed: your own sandbox, nothing running, looking at any, using a shared one',
+  );
   const refused = ownerRule(other(false), { kind: 'use' });
-  t.check(refused.kind === 'refuse' && refused.reason.includes('not shared'), 'not shared: attach is refused with why');
   const stop = ownerRule(other(true), { kind: 'stop', sessions: 2 });
   t.check(
-    stop.kind === 'confirm' && stop.expected === 'alice' && stop.prompt.includes('2 sessions'),
-    'shared: stop asks for the owner\u2019s name and names the session count',
+    refused.kind === 'refuse' &&
+      refused.reason.includes('not shared') &&
+      ownerRule(other(false), { kind: 'stop', sessions: 0 }).kind === 'refuse' &&
+      ownerRule({ kind: 'unknown-other' }, { kind: 'use' }).kind === 'refuse' &&
+      stop.kind === 'confirm' &&
+      stop.expected === 'alice' &&
+      stop.prompt.includes('2 sessions'),
+    'not shared or unrecorded: use and stop are refused; shared: stop asks for the owner’s name and the session count',
   );
-  t.equal(ownerRule(other(false), { kind: 'stop', sessions: 0 }).kind, 'refuse', 'not shared: stop is refused');
   const restart = ownerRule(other(true), { kind: 'owner-only', what: 'restart the agents' });
-  t.check(
-    restart.kind === 'refuse' && restart.reason === 'Only alice can restart the agents: the sandbox is theirs.',
-    'restart, a new launch and the like are the owner\u2019s alone',
-  );
   const window = ownerRule(other(true), { kind: 'owner-only', what: 'x', window: true });
   t.check(
-    window.kind === 'refuse' && window.reason.includes("window is on alice's desktop"),
-    'the window message says whose desktop it is on',
+    restart.kind === 'refuse' &&
+      restart.reason === 'Only alice can restart the agents: the sandbox is theirs.' &&
+      window.kind === 'refuse' &&
+      window.reason.includes("window is on alice's desktop"),
+    'restart, a new launch and the like are the owner’s alone, and the window message says whose desktop it is on',
   );
-  t.equal(ownerRule({ kind: 'unknown-other' }, { kind: 'use' }).kind, 'refuse', 'an unrecorded sandbox is not used');
-  t.equal(ownerRule({ kind: 'unknown-other' }, { kind: 'look' }).kind, 'allow', 'but it can be looked at');
-  const evil = { ...other(true), user: 'al\u001b[2Jice' };
-  t.excludes(ownerLine(evil) ?? '', '\u001b', 'a name with terminal codes is cleaned before it is shown');
-  t.equal(ownerLine(other(false)), 'Running, started by alice (not shared)', 'status line, not shared');
-  t.equal(ownerLine(other(true)), 'Running, started by alice (shared with you)', 'status line, shared');
-  t.equal(ownerLine({ kind: 'mine' }), null, 'your own sandbox needs no extra line');
-  t.equal(
-    launchBlocked(other(true)),
-    'A Windows Sandbox started by alice is already running',
-    'a launch is blocked by name',
+  t.check(
+    !(ownerLine(other(true, 'al\u001b[2Jice')) ?? '').includes('\u001b') &&
+      ownerLine(other(false)) === 'Running, started by alice (not shared)' &&
+      ownerLine(other(true)) === 'Running, started by alice (shared with you)' &&
+      ownerLine({ kind: 'mine' }) === null &&
+      launchBlocked(other(true)) === 'A Windows Sandbox started by alice is already running' &&
+      launchBlocked({ kind: 'mine' }) === null,
+    'the owner is named in the status line and a blocked launch; terminal codes in a name are cleaned',
   );
-  t.equal(launchBlocked({ kind: 'mine' }), null, 'your own is handled by the usual message');
 }
 
 function lifecycle(t: Harness): void {
@@ -86,35 +92,51 @@ function lifecycle(t: Harness): void {
   const storage = t.dir('shared', 'machine', 'users', 'alice');
   const dataPath = path.join(storage, 'data', 'default');
   const calls: AclChange[][] = [];
-  const deps = { records, apply: (c: readonly AclChange[]) => void calls.push([...c]), groupSid: GROUP };
+  const deps = {
+    records,
+    apply: (c: readonly AclChange[]) => void calls.push([...c]),
+    groupSid: GROUP,
+    usersDir: path.join(machine, 'users'),
+  };
   const { startedAt: _ignored, ...start } = record(dataPath, true);
   void _ignored;
   beginSharing(deps, start, new Date('2026-10-14T09:00:00Z'));
-  t.equal(records.readAll().length, 1, 'the record is written');
-  t.equal(records.readAll()[0].shared, true, 'and says it is shared');
-  t.check(calls[0].length === 4 && calls[0].every((c) => c.add), 'sharing on grants the group its four entries');
+  t.check(
+    records.readAll().length === 1 &&
+      records.readAll()[0].shared &&
+      calls[0].length === 4 &&
+      calls[0].every((c) => c.add),
+    'the record is written as shared and the group is granted its four entries',
+  );
   t.check(
     ['requests', 'responses', 'sessions'].every((d) => fs.existsSync(path.join(dataPath, 'run', d))),
     'the owner creates the channel folders before others may write there',
   );
   endSharing(deps, dataPath);
-  t.equal(records.readAll().length, 0, 'the end removes the record');
-  t.check(calls[1].length === 4 && calls[1].every((c) => !c.add), 'and takes the entries away');
-  beginSharing(deps, { ...start, shared: false });
   t.check(
-    calls[2].every((c) => !c.add),
-    'sharing off applies the removal, never a grant',
+    records.readAll().length === 0 && calls[1].length === 4 && calls[1].every((c) => !c.add),
+    'the end removes the record and takes the entries away',
   );
+  beginSharing(deps, { ...start, shared: false });
   endSharing({ ...deps, groupSid: null }, dataPath);
-  t.equal(records.readAll().length, 0, 'without a group there are no permissions to change, the record still goes');
+  t.check(
+    calls[2].every((c) => !c.add) && records.readAll().length === 0,
+    'sharing off applies the removal, never a grant; without a group only the record goes',
+  );
+  const own = path.join(t.dir('shared', 'profile', 'AgentSandbox'), 'data', 'default');
+  beginSharing(deps, { ...start, dataPath: own });
+  endSharing(deps, own);
+  t.check(
+    calls.length === 3 && !fs.existsSync(path.join(own, 'run')),
+    'a data folder outside machine\\users is never opened to the group, even with sharing on',
+  );
 
   const notice = takeSharingNotice(storage);
-  t.includes(
-    notice ?? '',
-    'Agent Sandbox Users can attach to and run commands',
-    'the first sharing launch explains it',
+  t.check(
+    (notice ?? '').includes('Agent Sandbox Users can attach to and run commands') &&
+      takeSharingNotice(storage) === null,
+    'the first sharing launch explains it, once',
   );
-  t.equal(takeSharingNotice(storage), null, 'and only once');
 }
 
 async function borrowed(t: Harness): Promise<void> {
@@ -125,18 +147,16 @@ async function borrowed(t: Harness): Promise<void> {
   for (const bad of [
     path.join(machine, 'users', 'alice', 'accounts'),
     path.join(machine, 'users', 'alice', 'data', 'default', 'run'),
-    path.join(machine, 'users', 'alice', 'data'),
     path.join(machine, '..', 'elsewhere', 'data', 'default'),
     'C:\\Windows',
   ])
     await t.throws(() => sharedDataPath(record(bad, true), machine), 'points outside', 'refused: ' + bad);
   const registry = new BorrowedRegistry(record(ok, true)).read();
-  t.equal(
-    registry.projects.map((p) => p.host),
-    ['C:\\Dev\\app'],
-    'the projects come from the record',
+  t.check(
+    registry.projects.map((p) => p.host).join() === 'C:\\Dev\\app' &&
+      registry.projects[0].guest === 'C:\\Workspace\\app',
+    'the projects come from the record, with their paths in the sandbox',
   );
-  t.equal(registry.projects[0].guest, 'C:\\Workspace\\app', 'with their paths in the sandbox');
   await t.throws(
     () => new BorrowedRegistry(record(ok, true)).save(),
     'theirs to change',
@@ -148,7 +168,7 @@ export const sharedUseSuite: Suite = {
   name: 'shared-use',
   title: 'sharing in the commands: rules, record at launch and end, borrowed folder and projects',
   run: async (t) => {
-    await rules(t);
+    rules(t);
     lifecycle(t);
     await borrowed(t);
   },

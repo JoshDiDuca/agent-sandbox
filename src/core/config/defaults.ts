@@ -214,11 +214,13 @@ export const DEFAULTS: Config = {
       environment: {},
       home: { env: {}, profileDirs: ['.cline'], loginFiles: ['profile/.cline/data/settings/providers.json'] },
     },
+    // @continuedev/cli src/env.ts + auth/authEnv.ts: CONTINUE_GLOBAL_DIR (default ~/.continue), login in auth.json.
     continue: {
       npmPackage: '@continuedev/cli@latest',
       npmBin: 'cn',
       arguments: [],
       environment: {},
+      home: { env: { CONTINUE_GLOBAL_DIR: 'continue' }, loginFiles: ['auth.json'], hostDir: '~/.continue' },
       resumeArguments: ['--resume'],
     },
     kimi: {
@@ -231,7 +233,15 @@ export const DEFAULTS: Config = {
       resumeArguments: ['-c'],
     },
     // DeepSeek has no official coding CLI; these two community agents are built for it.
-    reasonix: { npmPackage: 'reasonix@latest', npmBin: 'reasonix', arguments: [], environment: {} },
+    // github.com/esengine/DeepSeek-Reasonix docs/CONFIG_PATHS.md: REASONIX_HOME (Windows default %APPDATA%\reasonix),
+    // provider keys in .env, settings in config.toml.
+    reasonix: {
+      npmPackage: 'reasonix@latest',
+      npmBin: 'reasonix',
+      arguments: [],
+      environment: {},
+      home: { env: { REASONIX_HOME: 'reasonix' }, loginFiles: ['.env', 'config.toml'], hostDir: '%APPDATA%\\reasonix' },
+    },
     // ~/.codewhale/config.toml is from third-party guides (instagit.com/Hmbown/CodeWhale).
     deepseek: {
       npmPackage: 'codewhale@latest',
@@ -240,11 +250,14 @@ export const DEFAULTS: Config = {
       environment: {},
       home: { env: {}, profileDirs: ['.codewhale'], loginFiles: ['profile/.codewhale/config.toml'] },
     },
+    // aider onboarding.py: an OpenRouter login is saved in ~/.aider/oauth-keys.env (API keys otherwise come from the
+    // environment or ~/.aider.conf.yml).
     aider: {
       uvPackage: 'aider-chat',
       uvBin: 'aider',
       arguments: [],
       environment: {},
+      home: { env: {}, profileDirs: ['.aider'], loginFiles: ['profile/.aider/oauth-keys.env'] },
       resumeArguments: ['--restore-chat-history'],
     },
   },

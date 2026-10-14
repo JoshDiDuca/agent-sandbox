@@ -7,6 +7,8 @@
 #   -Scope CurrentUser|AllUsers   Where to install (env WDS_SCOPE). AllUsers needs an admin PowerShell.
 #   -AutoUpdate / -NoAutoUpdate   Install new versions by itself (env WDS_AUTOUPDATE=1 / 0); asked once when neither is given.
 #   -AddUsers a,b                 AllUsers: also put these Windows users in the group "Agent Sandbox Users" (env WDS_ADDUSERS).
+#   -Share / -NoShare             AllUsers: let the group use a sandbox you start, or not (env WDS_SHARE=1 / 0); asked
+#                                 once when neither is given.
 #   -Uninstall [-RemoveData]      Remove the program (and, with -RemoveData, the saved data, after you type DELETE; or
 #                                 pass -Confirm:$false). Env WDS_UNINSTALL=1, WDS_REMOVEDATA=1.
 # Other environment variables: WDS_PACKAGE (install this tgz or URL instead of the latest release), WDS_SHA256 (its
@@ -21,6 +23,8 @@ param(
   [switch]$AutoUpdate,
   [switch]$NoAutoUpdate,
   [string[]]$AddUsers,
+  [switch]$Share,
+  [switch]$NoShare,
   [switch]$Uninstall,
   [switch]$RemoveData,
   # Test aid: prints the text of one shim as kind:name:target (cmd:sandbox:dist/bin/sandbox.js) and stops.
@@ -120,6 +124,8 @@ param(
   if ($env:WDS_REMOVEDATA -eq '1') { $RemoveData = [switch]$true }
   if ($env:WDS_AUTOUPDATE -eq '1') { $AutoUpdate = [switch]$true }
   if ($env:WDS_AUTOUPDATE -eq '0') { $NoAutoUpdate = [switch]$true }
+  if ($env:WDS_SHARE -eq '1') { $Share = [switch]$true }
+  if ($env:WDS_SHARE -eq '0') { $NoShare = [switch]$true }
   if ($env:WDS_ADDUSERS -and -not $AddUsers) { $AddUsers = @($env:WDS_ADDUSERS -split ',') }
   $usersToAdd = @($AddUsers | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
@@ -193,6 +199,22 @@ param(
 
   # Where to install -----------------------------------------------------------------------------------------------
   $scopeName = $Scope
+  if (-not $scopeName -and $Uninstall) {
+    # Remove what is installed: the one install there is, or ask which when there are both.
+    $userRoot = if ($env:WDS_INSTALL_ROOT) { $env:WDS_INSTALL_ROOT } elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox' } else { $null }
+    $hasUser = $userRoot -and (Test-Path -LiteralPath (Join-Path $userRoot 'active-version'))
+    $hasMachine = $env:ProgramFiles -and (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'WindowsDevelopmentSandbox\active-version'))
+    if ($hasUser -and $hasMachine) {
+      if (-not $interactive) { Problem 'There is an install for just you and one for everyone. Say which to remove with -Scope CurrentUser or -Scope AllUsers.'; return }
+      Write-Host ''
+      Write-Host '   Remove:'
+      Write-Host '     1) The install for just me'
+      Write-Host '     2) The install for everyone on this PC (needs admin)'
+      $choice = Read-Host '   Choose 1 or 2'
+      if ($choice -match '^\s*1') { $scopeName = 'CurrentUser' } elseif ($choice -match '^\s*2') { $scopeName = 'AllUsers' } else { Write-Host '   Nothing removed.'; return }
+    } elseif ($hasMachine) { $scopeName = 'AllUsers' }
+    else { $scopeName = 'CurrentUser' }
+  }
   if (-not $scopeName) {
     if ($interactive -and -not $Uninstall) {
       Write-Host ''
@@ -228,6 +250,7 @@ param(
   # Uninstall ------------------------------------------------------------------------------------------------------
   if ($Uninstall) {
     Step "Removing windows-development-sandbox ($scopeName) from $toolFolder"
+    $wasInstalled = Test-Path -LiteralPath $toolFolder
     Stop-Watchers
     $active = Read-Pointer (Join-Path $toolFolder 'active-version') '^\d+\.\d+\.\d+$'
     $taskScript = if ($active) { Join-Path $toolFolder "versions\$active\package\native\scripts\set-update-task.ps1" } else { $null }
@@ -242,10 +265,12 @@ param(
       Remove-Inside (Join-Path $toolFolder $name) $toolFolder
     }
     if ((Test-Path -LiteralPath $toolFolder) -and -not (Get-ChildItem -LiteralPath $toolFolder -Force)) { Remove-Item -LiteralPath $toolFolder -Force -ErrorAction SilentlyContinue }
-    if (Test-Path -LiteralPath $toolFolder) { Warn "$toolFolder still has files in it (something may be using them); delete it when nothing runs." } else { Ok 'program removed' }
+    if (Test-Path -LiteralPath $toolFolder) { Warn "$toolFolder still has files in it (something may be using them); delete it when nothing runs." }
+    elseif ($wasInstalled) { Ok 'program removed' }
+    else { Write-Host '   Nothing was installed there.' }
     $dataFolder = if ($machine) { $machineData } else { Join-Path $env:LOCALAPPDATA 'AgentSandbox' }
     if (-not $RemoveData) {
-      Write-Host "   Your saved data is kept in $dataFolder. Run the uninstall again with -RemoveData to delete it too."
+      Write-Host "   Your saved data is kept in $dataFolder. To delete it too: install.ps1 -Uninstall -Scope $scopeName -RemoveData"
     } elseif (Test-Path -LiteralPath $dataFolder) {
       $approved = $ConfirmPreference -eq 'None'
       if (-not $approved -and $interactive) {
@@ -562,14 +587,24 @@ param(
       Set-FolderAcl (Join-Path $machineData 'active') ($adminRules + @((New-Rule $groupId 'ReadAndExecute, CreateFiles' 'None' 'None'), (New-Rule $groupId 'Read' 'ObjectInherit' 'InheritOnly'), (New-Rule $ownerSid 'FullControl' 'ObjectInherit' 'InheritOnly')))
       Ok "$machineData and its permissions are in place"
 
-      # The machine settings: where each user's data goes, and whether a sandbox is shared. Asked once.
+      # The machine settings: where each user's data goes, and whether a sandbox is shared. Asked once; -Share / -NoShare
+      # set it (also over an existing file). Not called $share: PowerShell names ignore case, and that is the -Share switch.
       $machineConfig = Join-Path $machineData 'config.json'
-      if (Test-Path -LiteralPath $machineConfig) { Ok "keeping the machine settings in $machineConfig" }
-      else {
-        $share = Ask 'Let other users of this PC use a sandbox you start?'
-        $settings = [ordered]@{ storage = [ordered]@{ root = '%ProgramData%\AgentSandbox\users\%USERNAME%' }; sharing = [ordered]@{ otherUsers = [bool]$share } }
+      $shareChoice = if ($Share) { $true } elseif ($NoShare) { $false } else { $null }
+      if (Test-Path -LiteralPath $machineConfig) {
+        if ($null -eq $shareChoice) { Ok "keeping the machine settings in $machineConfig" }
+        else {
+          $settings = Get-Content -LiteralPath $machineConfig -Raw | ConvertFrom-Json
+          if ($settings.sharing) { $settings.sharing | Add-Member -NotePropertyName otherUsers -NotePropertyValue $shareChoice -Force }
+          else { $settings | Add-Member -NotePropertyName sharing -NotePropertyValue ([pscustomobject]@{ otherUsers = $shareChoice }) -Force }
+          Write-JsonAtomic $machineConfig $settings
+          Ok "sharing with other users: $(if ($shareChoice) { 'on' } else { 'off' })"
+        }
+      } else {
+        if ($null -eq $shareChoice) { $shareChoice = Ask 'Let other users of this PC use a sandbox you start?' }
+        $settings = [ordered]@{ storage = [ordered]@{ root = '%ProgramData%\AgentSandbox\users\%USERNAME%' }; sharing = [ordered]@{ otherUsers = [bool]$shareChoice } }
         Write-JsonAtomic $machineConfig $settings
-        Ok "machine settings written to $machineConfig (sharing with other users: $(if ($share) { 'on' } else { 'off' }))"
+        Ok "machine settings written to $machineConfig (sharing with other users: $(if ($shareChoice) { 'on' } else { 'off' }))"
       }
       Write-Host '   Users added to the group must sign out and in once.' -ForegroundColor Yellow
     } catch {

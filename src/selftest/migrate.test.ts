@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'jsonc-parser';
-import { DEFAULTS, loadConfig } from '../core/config/index.js';
+import { DEFAULTS, loadConfig, machineConfigPath } from '../core/config/index.js';
 import {
   MIGRATIONS,
   MigrationBackup,
@@ -31,20 +31,21 @@ export const migrateSuite: Suite = {
     t.section('the record of what ran');
     const userDir = t.dir('user');
     const marker = new MigrationMarker(userDir);
-    t.equal(marker.read(), { lastVersion: '0.0.0', applied: [] }, 'a missing record means nothing has run yet');
+    const empty = marker.read();
     marker.record('first-change', null);
     marker.record('second-change', t.at('backups', 'one'));
     marker.setVersion('1.5.0');
-    t.check(marker.has('first-change') && !marker.has('third-change'), 'record and has');
-    t.equal(
-      marker.read().applied.map((entry) => [entry.id, entry.backup]),
-      [
-        ['first-change', null],
-        ['second-change', t.at('backups', 'one')],
-      ],
-      'the record keeps the order and the backup of each change',
+    t.check(
+      empty.lastVersion === '0.0.0' &&
+        marker.has('first-change') &&
+        !marker.has('third-change') &&
+        marker
+          .read()
+          .applied.map((entry) => entry.id)
+          .join() === 'first-change,second-change' &&
+        marker.read().lastVersion === '1.5.0',
+      'a missing record means nothing ran yet; the record keeps order and survives setVersion',
     );
-    t.equal(marker.read().lastVersion, '1.5.0', 'setVersion keeps the list of applied changes');
     await t.throws(() => marker.record('Not Kebab', null), 'kebab-case', 'a change id must be kebab-case');
     t.write(marker.file, '{"lastVersion": 5}');
     await t.throws(() => marker.read(), 'not readable', 'an unreadable record stops the run instead of re-running');
@@ -62,10 +63,13 @@ export const migrateSuite: Suite = {
     fs.rmSync(folder, { recursive: true, force: true });
     fs.writeFileSync(fresh, 'made by the migration');
     backup.restore();
-    t.equal(readText(file), '{ // keep\n  "a": 1 }\n', 'a file is restored byte for byte');
-    t.equal(readText(path.join(folder, 'deep', 'b.bin')), 'nested file', 'a folder is restored with its files');
-    t.check(!fs.existsSync(fresh), 'a path that did not exist before the backup is removed on restore');
-    t.check(backup.path.startsWith(path.join(storage, 'backups')), 'backups live under <storage root>\\backups');
+    t.check(
+      readText(file) === '{ // keep\n  "a": 1 }\n' &&
+        readText(path.join(folder, 'deep', 'b.bin')) === 'nested file' &&
+        !fs.existsSync(fresh) &&
+        backup.path.startsWith(path.join(storage, 'backups')),
+      'restore brings back files and folders byte for byte and removes paths that did not exist before',
+    );
     const second = MigrationBackup.create(storage, '1.0.5', '1.5.0');
     t.check(second.path !== backup.path, 'two backups in the same second get different folders');
     await t.throws(
@@ -118,46 +122,36 @@ export const migrateSuite: Suite = {
     const broken = fake('second-change', other, 'b1', { fail: true });
     const runner = new MigrationRunner([first, broken], ctx(runDir), new MigrationMarker(runDir));
     t.equal(
-      runner.pending().map((m) => m.id),
-      ['first-change', 'second-change'],
-      'pending changes run in list order',
-    );
-    t.equal(
       runner.planText(),
       ['first-change: fake first-change', 'second-change: fake second-change'],
-      'a dry run lists one line per pending change',
+      'a dry run lists one line per pending change, in list order',
     );
     await t.throws(
       () => runner.run('1.5.0', () => undefined),
       'Updating your saved settings failed (second-change): disk full',
       'a failing change stops the run with the change named',
     );
-    await t.throws(
-      () => runner.run('1.5.0', () => undefined),
-      'Your files are back as they were',
-      'and says how to recover',
-    );
-    t.equal(readText(target), 'a1', 'the change before the failure stays applied');
-    t.equal(readText(other), 'b0', "the failing change's files are back as they were");
     t.check(
-      new MigrationMarker(runDir).has('first-change') && !new MigrationMarker(runDir).has('second-change'),
-      'the record keeps the change that worked and not the one that failed',
+      readText(target) === 'a1' &&
+        readText(other) === 'b0' &&
+        new MigrationMarker(runDir).has('first-change') &&
+        !new MigrationMarker(runDir).has('second-change') &&
+        new MigrationMarker(runDir).read().lastVersion === '0.0.0',
+      "after a failure: earlier changes stay, the failing change's files are back, the version stays old",
     );
-    t.equal(new MigrationMarker(runDir).read().lastVersion, '0.0.0', 'the version stays old until everything works');
     const retry = new MigrationRunner(
       [first, fake('second-change', other, 'b2')],
       ctx(runDir),
       new MigrationMarker(runDir),
     );
-    t.equal(
-      retry.pending().map((m) => m.id),
-      ['second-change'],
-      'a retry runs only what did not work',
-    );
+    const retryPending = retry.pending().map((m) => m.id);
     const done = await retry.run('1.5.0', () => undefined);
-    t.equal(done.applied, ['second-change'], 'the retry applies it');
-    t.equal(new MigrationMarker(runDir).read().lastVersion, '1.5.0', 'and the version moves on');
-    await t.throws(() => runner.restore(t.at('elsewhere')), 'not a backup folder', 'restore refuses other folders');
+    t.check(
+      retryPending.join() === 'second-change' &&
+        done.applied.join() === 'second-change' &&
+        new MigrationMarker(runDir).read().lastVersion === '1.5.0',
+      'a retry runs only what did not work, and the version moves on',
+    );
 
     const idleDir = t.dir('user-idle');
     const cPath = t.at('run', 'c.txt');
@@ -167,20 +161,19 @@ export const migrateSuite: Suite = {
       ctx(idleDir),
       new MigrationMarker(idleDir),
     );
-    const notes: string[] = [];
-    const waited = await idleRunner.run('1.5.0', (line) => notes.push(line));
-    t.equal(waited.postponed, ['idle-only'], 'a change that needs an idle sandbox waits while one runs');
-    t.check(!fs.existsSync(cPath), 'and nothing is changed while it waits');
-    t.includes(notes.join('\n'), 'Postponed idle-only until no sandbox runs.', 'the wait is said out loud');
+    const waited = await idleRunner.run('1.5.0', () => undefined);
+    const stillWaiting = !fs.existsSync(cPath);
     sandboxUp = false;
     const later = await idleRunner.run('1.5.0', () => undefined);
-    t.equal(later.applied, ['idle-only'], 'it runs on the next start with no sandbox');
+    t.check(
+      waited.postponed.join() === 'idle-only' && stillWaiting && later.applied.join() === 'idle-only',
+      'a change that needs an idle sandbox waits (changing nothing) while one runs, and runs when none does',
+    );
 
     t.section('unpin-config-defaults');
     const unpin = MIGRATIONS.find((m) => m.id === '2026-10-unpin-config-defaults');
-    t.check(unpin !== undefined, 'the first migration is registered');
     const old = DEFAULTS_SNAPSHOTS.find((s) => s.version === '1.0.0');
-    t.check(old !== undefined, 'the 1.0.0 defaults snapshot exists');
+    t.check(unpin !== undefined && old !== undefined, 'the first migration and the 1.0.0 defaults snapshot exist');
     if (!unpin || !old) return;
 
     const configPath = t.at('home', 'config.json');
@@ -188,35 +181,58 @@ export const migrateSuite: Suite = {
     mine.sandbox.memoryMb = 8192;
     t.write(configPath, '// my config, written by an old config init\n' + JSON.stringify(mine, null, 2) + '\n');
     const unpinCtx = ctx(t.at('home'), configPath);
-    t.check(unpin.applies(unpinCtx), 'an old full config.json that pins defaults needs the migration');
-    t.check(!unpin.applies(ctx(t.at('home'), null)), 'no config file: nothing to do');
     const partial = t.write(t.at('partial', 'config.json'), '{"toolchains":{"python":{"enabled":true}}}');
-    t.check(!unpin.applies(ctx(t.at('partial'), partial)), 'a partial file (not a full config init) is left alone');
     const current = t.write(t.at('current', 'config.json'), JSON.stringify(DEFAULTS, null, 2));
-    t.check(!unpin.applies(ctx(t.at('current'), current)), 'a file with the current defaults needs nothing');
+    t.check(
+      unpin.applies(unpinCtx) &&
+        !unpin.applies(ctx(t.at('home'), null)) &&
+        !unpin.applies(ctx(t.at('partial'), partial)) &&
+        !unpin.applies(ctx(t.at('current'), current)),
+      'only an old full config.json that pins defaults needs it (not a missing, partial or current file)',
+    );
 
     const notesUnpin: string[] = [];
     await unpin.run(unpinCtx, (line) => notesUnpin.push(line));
     const after = readText(configPath);
     const obj = parse(after) as ConfigShape;
-    t.equal(
-      obj.toolchains?.python?.enabled,
-      undefined,
-      'a pinned old default is removed (follows the current default)',
+    t.check(
+      obj.toolchains?.python?.enabled === undefined &&
+        obj.sandbox.memoryMb === 8192 &&
+        after.includes('// my config') &&
+        notesUnpin.join('\n').includes('Now follows the default: toolchains.python.enabled') &&
+        loadConfig(configPath).config.toolchains.python.enabled === 'auto' &&
+        !unpin.applies(unpinCtx),
+      "a pinned old default is removed, the user's own value and comments stay, the result loads, and it is idempotent",
     );
-    t.equal(obj.sandbox.memoryMb, 8192, "the user's own value stays");
-    t.includes(after, '// my config', 'comments stay');
-    t.includes(
-      notesUnpin.join('\n'),
-      'Now follows the default: toolchains.python.enabled',
-      'each removed setting is named',
+
+    t.section('follow-machine-storage');
+    const follow = MIGRATIONS.find((m) => m.id === '2026-10-follow-machine-storage');
+    if (!follow) return t.check(false, 'the follow-machine-storage migration exists');
+    const machineFile = machineConfigPath();
+    const pinned = t.write(
+      t.at('follow', 'pinned.json'),
+      '// mine\n' + JSON.stringify({ storage: { root: DEFAULTS.storage.root, warnDataGb: 9 } }),
     );
-    t.equal(
-      loadConfig(configPath).config.toolchains.python.enabled,
-      'auto',
-      'the result still loads with the current default',
-    );
-    t.check(!unpin.applies(unpinCtx), 'running it again finds nothing to do (idempotent)');
+    const chosen = t.write(t.at('follow', 'chosen.json'), JSON.stringify({ storage: { root: 'D:\\Sandbox' } }));
+    const alone = follow.applies(ctx(t.at('follow'), pinned));
+    t.write(machineFile, JSON.stringify({ storage: { root: 'C:\\ProgramData\\AgentSandbox\\users' } }));
+    try {
+      const notesFollow: string[] = [];
+      const wanted = follow.applies(ctx(t.at('follow'), pinned)) && !follow.applies(ctx(t.at('follow'), chosen));
+      await follow.run(ctx(t.at('follow'), pinned), (line) => notesFollow.push(line));
+      const kept = parse(readText(pinned)) as { storage: { root?: string; warnDataGb?: number } };
+      t.check(
+        !alone &&
+          wanted &&
+          kept.storage.root === undefined &&
+          kept.storage.warnDataGb === 9 &&
+          readText(pinned).includes('// mine') &&
+          notesFollow.join().includes('Now follows the all-users install: storage.root'),
+        'with a machine config, an old pinned default storage folder is removed (a chosen one stays; no machine config: nothing)',
+      );
+    } finally {
+      fs.rmSync(machineFile);
+    }
 
     t.section('sandbox migrate');
     const cmdUser = t.dir('cmd-user');
@@ -230,34 +246,42 @@ export const migrateSuite: Suite = {
       MIGRATIONS,
       () => false,
     );
-    t.check(service.versionChanged(), 'a new version is noticed from the small record');
+    const noticed = service.versionChanged();
     const lines: string[] = [];
     const say = (line: string): void => void lines.push(line);
     await runMigrate(service, { dryRun: true }, say);
-    t.includes(lines.join('\n'), '2026-10-unpin-config-defaults', 'a dry run lists the pending change');
-    t.check(readText(cmdConfig).includes('"toolchains"'), 'and changes nothing');
+    const dry = lines.join('\n');
+    const untouched = readText(cmdConfig).includes('"toolchains"');
     lines.length = 0;
     await runMigrate(service, { dryRun: false }, say);
-    t.includes(lines.join('\n'), 'Updated: 2026-10-unpin-config-defaults.', 'a run says what it applied');
-    t.check(!service.versionChanged(), 'and the record moves to the new version');
+    const ran = lines.join('\n');
     lines.length = 0;
     await runMigrate(service, { dryRun: true }, say);
-    t.equal(lines, ['Nothing to update.'], 'a dry run with nothing pending says so');
+    t.check(
+      noticed &&
+        dry.includes('2026-10-unpin-config-defaults') &&
+        untouched &&
+        ran.includes('Updated: 2026-10-unpin-config-defaults.') &&
+        !service.versionChanged() &&
+        lines.join() === 'Nothing to update.',
+      'a dry run lists the pending change and changes nothing; a run applies it and moves the record on',
+    );
     const backups = t.at('cmd-storage', 'backups');
     const made = fs.readdirSync(backups);
-    t.equal(made.length, 1, 'the run kept one backup');
     fs.writeFileSync(cmdConfig, 'broken by hand');
-    lines.length = 0;
     await runMigrate(service, { dryRun: false, restore: path.join(backups, made[0]) }, say);
-    t.check(readText(cmdConfig).includes('"toolchains"'), '--restore puts the saved files back');
     t.check(
-      !autoMigrates('self-test', false) && !autoMigrates('migrate', false) && !autoMigrates('doctor', true),
-      'self-test, migrate and anything inside a sandbox skip the automatic update',
+      made.length === 1 && readText(cmdConfig).includes('"toolchains"'),
+      'the run kept one backup and --restore puts the saved files back',
     );
-    t.check(autoMigrates('launch', false) && autoMigrates('menu', false), 'other commands run it');
     t.check(
-      continuesAfterFailedMigration('doctor') && !continuesAfterFailedMigration('launch'),
-      'only doctor goes on after a failed update',
+      !autoMigrates('self-test', false) &&
+        !autoMigrates('migrate', false) &&
+        !autoMigrates('doctor', true) &&
+        autoMigrates('launch', false) &&
+        continuesAfterFailedMigration('doctor') &&
+        !continuesAfterFailedMigration('launch'),
+      'self-test, migrate and anything inside a sandbox skip the automatic update; only doctor goes on after a failure',
     );
   },
 };

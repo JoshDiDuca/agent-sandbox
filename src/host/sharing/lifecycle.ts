@@ -5,12 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { RunDir } from '../../shared/channel/index.js';
+import { isWithin } from '../../shared/paths/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { InstallLayout, InstallRecordFile } from '../install/index.js';
 import { storageOf } from '../storage/index.js';
 import { sharingAclPlan, applyAcl, type AclChange } from './acl.js';
 import { ActiveRecords, type ActiveSandbox } from './active-record.js';
-import { activeDir } from './machine-paths.js';
+import { activeDir, usersDir } from './machine-paths.js';
 
 export interface SharingDeps {
   readonly records: ActiveRecords;
@@ -18,6 +19,8 @@ export interface SharingDeps {
   readonly apply: (changes: readonly AclChange[]) => void;
   /** The group of users who may share (from install.json); null: no permissions to change. */
   readonly groupSid: string | null;
+  /** The shared tree (machine\users): permissions change only for data folders inside it. */
+  readonly usersDir: string;
 }
 
 /** What the launch knows about the sandbox it is about to start. */
@@ -34,13 +37,19 @@ export function sharingDeps(packageRoot: string): SharingDeps | null {
     records: new ActiveRecords(activeDir()),
     apply: applyAcl,
     groupSid: new InstallRecordFile(layout.root).read()?.groupSid ?? null,
+    usersDir: usersDir(),
   };
+}
+
+/** Folder permissions change only with a group, and only inside the shared tree (never your own storage folder). */
+function opens(deps: SharingDeps, dataPath: string): deps is SharingDeps & { readonly groupSid: string } {
+  return deps.groupSid !== null && isWithin(deps.usersDir, dataPath);
 }
 
 /** Writes the record, and opens (shared) or closes (not shared) the owner's folders for the group. */
 export function beginSharing(deps: SharingDeps, start: SharingStart, now: Date = new Date()): void {
   deps.records.write({ ...start, startedAt: start.startedAt ?? now.toISOString() });
-  if (!deps.groupSid) return;
+  if (!opens(deps, start.dataPath)) return;
   // The owner creates the run folder and every channel folder in it before others may write there: a folder another
   // user created would stay theirs, and writable by them, after sharing is turned off.
   const run = new RunDir(start.dataPath);
@@ -61,7 +70,7 @@ export function endSharing(deps: SharingDeps, dataPath: string): void {
   try {
     const mine = deps.records.readAll().filter((r) => r.dataPath.toLowerCase() === dataPath.toLowerCase());
     for (const record of mine) deps.records.clear(record.sid);
-    if (deps.groupSid && fs.existsSync(path.join(dataPath, 'run')))
+    if (opens(deps, dataPath) && fs.existsSync(path.join(dataPath, 'run')))
       deps.apply(
         sharingAclPlan({
           storageUserDir: storageOf(dataPath),

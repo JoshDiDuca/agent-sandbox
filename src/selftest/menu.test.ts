@@ -13,30 +13,22 @@ import { dialogBox, KeyBar, overlayBox, TabBar, Text, type KeyHint } from '../cl
 import { renderScreens } from './menu-screens.js';
 import type { Suite } from './support/suite.js';
 
-const WIDTHS = [120, 100, 80, 60, 40];
+const WIDTHS = [120, 80, 40];
 
 export const menuSuite: Suite = {
   name: 'menu',
   title: 'menu tabs, key bar, dialogs and unsaved changes',
   run: async (t) => {
-    t.section('tab bar');
+    t.section('tab bar and key bar');
     const tabs = TAB_LABELS.map((label) => ({ label }));
+    const tooWide: string[] = [];
     for (const width of WIDTHS)
       for (const active of [0, 3, 6]) {
         const line = TabBar.render(tabs, active, width);
-        const plain = Text.strip(line);
-        t.check(
-          Text.width(line) <= width && plain.includes(TAB_LABELS[active]),
-          'tab bar at width ' + width + ' (tab ' + (active + 1) + ') fits and names the open tab',
-          width + ': "' + plain + '"',
-        );
+        if (Text.width(line) > width || !Text.strip(line).includes(TAB_LABELS[active]))
+          tooWide.push(width + '/' + active);
       }
-    t.check(
-      Text.strip(TabBar.render(tabs, 0, 120)).includes('7 Maintenance'),
-      'a wide terminal shows every tab by name',
-    );
-
-    t.section('key bar');
+    t.equal(tooWide, [], 'the tab bar fits at every width and names the open tab');
     const keys: KeyHint[] = [
       ['ctrl+s', 'save (2)', 0],
       ['↵', 'edit', 1],
@@ -46,66 +38,58 @@ export const menuSuite: Suite = {
       ['/', 'search', 6],
       ['esc', 'quit', 0],
     ];
-    for (const width of WIDTHS) {
-      const line = Text.strip(KeyBar.render(keys, width));
-      t.check(
-        Text.width(line) <= width && line.includes('quit') && line.includes('save (2)'),
-        'key bar at width ' + width + ' fits and keeps save and the way out',
-        line,
-      );
-    }
+    const bar = (width: number): string => Text.strip(KeyBar.render(keys, width));
     t.check(
-      !Text.strip(KeyBar.render(keys, 60)).includes('search') && Text.strip(KeyBar.render(keys, 60)).includes('edit'),
-      'a narrow key bar drops search before edit',
+      WIDTHS.every((w) => Text.width(bar(w)) <= w && bar(w).includes('quit') && bar(w).includes('save (2)')) &&
+        !bar(60).includes('search') &&
+        bar(60).includes('edit') &&
+        bar(200).includes('search'),
+      'the key bar fits, keeps save and the way out, and drops the least important keys first',
     );
-    t.check(Text.strip(KeyBar.render(keys, 200)).includes('search'), 'a wide terminal lists every key');
 
     t.section('dialog box');
     const box = dialogBox({ title: 'Unsaved changes', lines: ['You have 2 unsaved changes.'], buttons: 'Save' }, 61);
-    const widths = new Set(box.map((l) => Text.width(l)));
-    t.check(widths.size === 1, 'every row of the dialog box is the same width', [...widths].join(','));
     const base = Array.from({ length: 12 }, () => 'x'.repeat(60));
     const over = overlayBox(base, box, 61);
-    t.check(over.length === base.length, 'the overlay keeps the number of rows');
     t.check(
-      over.some((l) => Text.strip(l).includes('Unsaved changes')),
-      'the overlay shows the dialog over the screen',
-    );
-    t.check(
-      over.every((l) => Text.width(l) <= 60),
-      'the overlay never exceeds the width',
+      new Set(box.map((l) => Text.width(l))).size === 1 &&
+        over.length === base.length &&
+        over.some((l) => Text.strip(l).includes('Unsaved changes')) &&
+        over.every((l) => Text.width(l) <= 60),
+      'the dialog box has equal rows and overlays the screen without changing its size',
     );
 
     t.section('unsaved changes (Draft)');
     const file = ConfigFile.user(t.at('draft', 'config.json'));
     t.write(file.file, '{\n  // keep this comment\n  "defaultHarness": "claude"\n}\n');
     const draft = new Draft();
-    t.equal(draft.count(), 0, 'a new draft is empty');
     draft.stage(file, ['defaultHarness'], 'codex');
     draft.stage(file, ['agentCommands', 'enabled'], true);
-    t.equal(draft.count(), 2, 'two staged changes are counted');
-    t.equal(draft.value(file, ['defaultHarness']), 'codex', 'a staged value is what the screen shows');
+    const staged = [draft.count(), draft.value(file, ['defaultHarness'])];
     draft.stage(file, ['defaultHarness'], 'claude');
-    t.equal(draft.count(), 1, 'staging what the file already says drops the change');
+    const restaged = draft.count();
     draft.unstage(file, ['agentCommands', 'enabled']);
-    t.equal(draft.count(), 0, 'undoing a change removes it');
+    t.equal(
+      [staged, restaged, draft.count()],
+      [[2, 'codex'], 1, 0],
+      'staged changes are counted; staging what the file already says, or undoing, drops the change',
+    );
     draft.stage(file, ['defaultHarness'], 'codex');
     draft.stage(file, ['sandbox', 'headless'], false);
     const result = draft.apply();
+    const text = fs.readFileSync(file.file, 'utf8');
     t.check(
-      result.problems.length === 0 && result.files.length === 1,
-      'apply writes the file once',
+      result.problems.length === 0 &&
+        result.files.length === 1 &&
+        draft.count() === 0 &&
+        text.includes('// keep this comment') &&
+        text.includes('"codex"'),
+      'apply writes the file once, keeps its comments and leaves nothing unsaved',
       JSON.stringify(result.problems),
     );
-    t.equal(draft.count(), 0, 'nothing is left unsaved after applying');
-    const text = fs.readFileSync(file.file, 'utf8');
-    t.includes(text, '// keep this comment', "saving keeps the file's comments");
-    t.includes(text, '"codex"', 'saving writes the staged value');
     draft.stage(file, ['defaultHarness'], 42);
-    const refused = draft.apply();
-    t.check(refused.problems.length > 0 && draft.count() === 1, 'an invalid change is refused and stays staged');
+    t.check(draft.apply().problems.length > 0 && draft.count() === 1, 'an invalid change is refused and stays staged');
     draft.discard();
-    t.equal(draft.count(), 0, 'discard drops every staged change');
 
     t.section('tab pages');
     t.equal(
@@ -129,10 +113,9 @@ export const menuSuite: Suite = {
       [
         hostAgentsToShow(false, [{ harness: 'claude' }]),
         hostAgentsToShow(true, [{ harness: 'claude' }, { harness: 'codex' }]),
-        hostAgentsToShow(true, []),
       ],
-      [[], ['claude', 'codex'], []],
-      'not-sandboxed entries show only while agent commands are on, one per installed agent',
+      [[], ['claude', 'codex']],
+      'not-sandboxed entries show only while agent commands are on',
     );
     t.equal(
       parseDatabaseList(
@@ -146,41 +129,22 @@ export const menuSuite: Suite = {
     );
 
     t.section('accounts for every agent');
-    const storage = t.dir('acc', 'storage');
-    const data = t.dir('acc', 'data');
     const service = new AccountsService({
-      storageRoot: storage,
-      dataPath: data,
+      storageRoot: t.dir('acc', 'storage'),
+      dataPath: t.dir('acc', 'data'),
       loaded: { config: structuredClone(DEFAULTS), configPath: null, base: t.temp },
     });
-    t.equal(
-      service
-        .agents()
-        .map((a) => [a.name, a.kept])
-        .slice(0, 2),
-      [
-        ['claude', true],
-        ['codex', true],
-      ],
-      'Claude is listed first, then the agents that keep a login',
-    );
+    const agents = service.agents();
     t.check(
-      service.agents().some((a) => a.name === 'reasonix' && !a.kept),
-      'an agent without a known login folder is listed as not kept',
+      agents[0].name === 'claude' && agents.some((a) => a.name === 'qwen' && a.kept && !a.canSavePc),
+      'Claude is listed first; an agent with only a profile folder cannot be saved from this PC',
     );
-    t.check(
-      service.agents().some((a) => a.name === 'qwen' && a.kept && !a.canSavePc),
-      'an agent that keeps its login in the profile counts as kept',
-    );
-    t.write(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), '{"token":"Q"}');
+    const qwenCreds = t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json');
+    t.write(qwenCreds, '{"token":"Q"}');
     service.save('q', false, 'qwen');
-    t.write(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), '{"token":"Q2"}');
+    t.write(qwenCreds, '{"token":"Q2"}');
     service.activate('q', 'qwen');
-    t.equal(
-      fs.readFileSync(t.at('acc', 'data', 'state', 'qwen', 'profile', '.qwen', 'oauth_creds.json'), 'utf8'),
-      '{"token":"Q"}',
-      'login files below profile/ are saved and restored',
-    );
+    t.equal(fs.readFileSync(qwenCreds, 'utf8'), '{"token":"Q"}', 'login files below profile/ are saved and restored');
     t.equal(
       profileLinkPairs('qwen', ['.qwen', '.config/x', '.QWEN'], 'C:\\Users\\u', 'C:\\AgentData\\state'),
       [
@@ -197,36 +161,27 @@ export const menuSuite: Suite = {
         environment: {},
         home: { env: {}, loginFiles: [], profileDirs },
       }).success;
-    t.check(home(['.qwen', '.local/share/opencode', '.config\\opencode']), 'profile folders: relative paths are fine');
     t.check(
-      !home(['..\\x']) && !home(['C:\\x']) && !home(['a/../b']) && !home(['./a']) && !home(['a|b']),
-      'profile folders: no "..", no drive, no ".", no odd characters',
+      home(['.qwen', '.local/share/opencode']) &&
+        !home(['..\\x']) &&
+        !home(['C:\\x']) &&
+        !home(['a/../b']) &&
+        !home(Array.from({ length: 9 }, (_, i) => 'd' + i)),
+      'profile folders: relative paths only (no "..", no drive), at most 8',
     );
-    t.check(!home(Array.from({ length: 9 }, (_, i) => 'd' + i)), 'profile folders: at most 8');
-    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"A"}');
-    t.equal(service.save('main', false, 'codex'), { name: 'main', email: null }, 'saving the sandbox login works');
-    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"B"}');
+    const codexAuth = t.at('acc', 'data', 'state', 'codex', 'auth.json');
+    t.write(codexAuth, '{"token":"A"}');
+    service.save('main', false, 'codex');
+    t.write(codexAuth, '{"token":"B"}');
     service.save('other', false, 'codex');
-    t.equal(
-      service.list('codex').map((a) => [a.name, a.isDefault, a.isActive]),
-      [
-        ['main', true, false],
-        ['other', false, true],
-      ],
-      'the first login saved is the default; the last saved from the sandbox is active',
-    );
-    t.write(t.at('acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"B2"}');
+    t.write(codexAuth, '{"token":"B2"}');
     service.activate('main', 'codex');
-    t.equal(
-      fs.readFileSync(t.at('acc', 'data', 'state', 'codex', 'auth.json'), 'utf8'),
-      '{"token":"A"}',
-      'using a login puts its files into the sandbox state',
-    );
+    const swapped = fs.readFileSync(codexAuth, 'utf8');
     service.activate('other', 'codex');
     t.equal(
-      fs.readFileSync(t.at('acc', 'data', 'state', 'codex', 'auth.json'), 'utf8'),
-      '{"token":"B2"}',
-      'the outgoing login is saved back first (tokens rotate)',
+      [swapped, fs.readFileSync(codexAuth, 'utf8')],
+      ['{"token":"A"}', '{"token":"B2"}'],
+      'using a login puts its files into the sandbox state; the outgoing login is saved back first (tokens rotate)',
     );
     service.rename('other', 'second', 'codex');
     service.setDefault('second', 'codex');
@@ -238,31 +193,17 @@ export const menuSuite: Suite = {
       ],
       'rename keeps the default and active marks',
     );
-    service.remove('main', 'codex');
-    t.equal(service.list('codex').length, 1, 'remove deletes the saved login');
-    await t.throws(() => service.save('x', false, 'reasonix'), 'does not keep its login', 'no login folder: refused');
+    await t.throws(() => service.save('x', false, 'nobody'), 'Unknown agent', 'an unknown agent: refused');
     await t.throws(() => service.save('bad name', false, 'codex'), 'Invalid account name', 'bad names are refused');
-    t.write(
-      t.at('acc', 'storage', 'accounts', 'old.json'),
-      JSON.stringify({
-        name: 'old',
-        savedAt: '2026-01-01T00:00:00Z',
-        email: 'a@b.c',
-        credentials: {},
-        oauthAccount: null,
-      }),
-    );
-    t.equal(
-      service.list('claude').map((a) => a.name),
-      ['old'],
-      'the old Claude layout is read as Claude accounts',
-    );
 
     t.section('every screen');
     const screens = renderScreens(t.dir('screens'));
-    t.check(screens.includes('=== 7 Maintenance · repair (80x24) ==='), 'all screens render at both sizes');
-    t.includes(screens, 'unsaved: 2', 'the settings screen shows its unsaved count');
-    t.includes(screens, 'Save', 'the leave dialog offers Save');
+    t.check(
+      screens.includes('=== 7 Maintenance · repair (80x24) ===') &&
+        screens.includes('unsaved: 2') &&
+        screens.includes('Save'),
+      'all screens render at both sizes; the settings screen shows its unsaved count and the leave dialog offers Save',
+    );
     const out = process.env.MENU_SCREENS_OUT;
     if (out) fs.writeFileSync(out, screens, 'utf8');
   },

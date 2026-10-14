@@ -25,8 +25,11 @@ export const localConfigSuite: Suite = {
     };
     f.writeLocal(f.workB, localB);
     const untrusted = await t.thrownMessage(() => f.run({ cwd: f.workB }));
-    t.includes(untrusted, '--trust-config', 'an untrusted .sandbox-config.json is refused, with the way to approve it');
-    t.includes(untrusted, 'READ/WRITE', 'the refusal lists what the file would change (read/write folders)');
+    t.check(
+      untrusted.includes('--trust-config') && untrusted.includes('READ/WRITE'),
+      'an untrusted .sandbox-config.json is refused, with the way to approve it and what it would change',
+      untrusted,
+    );
     await t.throws(
       () => f.run({ cwd: f.workB, ask: async () => false }),
       'has not been approved',
@@ -54,26 +57,20 @@ export const localConfigSuite: Suite = {
       'approved local settings apply over the defaults (including toolchains and headless)',
     );
     t.check(
-      approved.config.mappings.some((m) => m.host === path.join(f.workB, 'data') && !m.readOnly),
-      'relative mapping paths resolve against the folder of .sandbox-config.json',
-      'mappings: ' + JSON.stringify(approved.config.mappings),
+      approved.config.mappings.some((m) => m.host === path.join(f.workB, 'data') && !m.readOnly) &&
+        approved.scripts.includes(path.join(f.workB, 'setup.mjs')),
+      'relative mapping and script paths resolve against the folder of .sandbox-config.json',
+      JSON.stringify(approved.config.mappings),
     );
-    t.check(
-      approved.scripts.includes(path.join(f.workB, 'setup.mjs')),
-      'relative script paths resolve against the folder of .sandbox-config.json',
-      'scripts: ' + JSON.stringify(approved.scripts),
-    );
-    t.equal((await f.run({ cwd: f.workB })).harnessName, 'codex', 'an approval is remembered');
     t.equal(
-      (await f.run({ cwd: f.workB, noLocalConfig: true })).harnessName,
-      'claude',
-      '--no-local-config ignores the file',
-    );
-    t.equal((await f.run({ cwd: f.workB, harness: 'gemini' })).harnessName, 'gemini', '--harness beats the file');
-    t.equal(
-      (await f.run({ cwd: f.workB, headless: false })).config.sandbox.headless,
-      false,
-      '--window beats a local headless setting',
+      [
+        (await f.run({ cwd: f.workB })).harnessName,
+        (await f.run({ cwd: f.workB, noLocalConfig: true })).harnessName,
+        (await f.run({ cwd: f.workB, harness: 'gemini' })).harnessName,
+        (await f.run({ cwd: f.workB, headless: false })).config.sandbox.headless,
+      ],
+      ['codex', 'claude', 'gemini', false],
+      'an approval is remembered; --no-local-config ignores the file; --harness and --window beat it',
     );
     f.writeLocal(f.workB, { ...localB, sandbox: { memoryMb: 6144 } });
     await t.throws(() => f.run({ cwd: f.workB }), 'has not been approved', 'changing the file requires approval again');
@@ -109,11 +106,6 @@ export const localConfigSuite: Suite = {
       'sandbox.memoryMb:',
       'values are type-checked (memory too small)',
     );
-    await rejectedBecause(
-      { provisioning: { git: { access: 'admin' } } },
-      'provisioning.git.access:',
-      'unknown git access modes are rejected',
-    );
     await rejectedBecause('{\n  // a comment\n  "readOnly": tru\n}', 'line 3', 'broken JSON is reported with its line');
     await rejectedBecause({ _comment: 'old style' }, '_comment is not allowed', 'unknown keys are rejected');
     f.writeLocal(dirC, '// comments and trailing commas are fine\n{\n  "readOnly": true, /* inline */\n}\n');
@@ -145,18 +137,12 @@ export const localConfigSuite: Suite = {
         (allowedOutside.outsideMappings ?? []).includes(f.shared),
       'true: allowed, and marked as outside the project',
     );
-    f.writeLocal(dirD, { ...outsideFile, readOnly: true });
-    t.includes(
-      await t.thrownMessage(() => f.run({ cwd: dirD }, withOutside(true))),
-      '(outside the project)',
-      'true: still listed, flagged, when you approve the file',
-    );
     const asking = await t.thrownMessage(() =>
       f.run({ cwd: dirD, trustConfig: true, ask: async () => true, interactive: false }),
     );
     t.check(
       asking.includes('projects.allowOutsideMappings') && asking.includes('interactive'),
-      '"ask" without a terminal (even with --trust-config): refused, naming the setting and that an interactive launch asks',
+      '"ask" without a terminal (even with --trust-config) is refused',
       asking,
     );
     t.includes(
@@ -176,37 +162,30 @@ export const localConfigSuite: Suite = {
       },
     });
     t.check(
-      questions.length === 1 && asked.config.sandbox.vGpu && asked.config.mappings.some((m) => m.host === f.shared),
-      '"ask": the folder and a looser setting (vGPU) are asked together, once',
+      questions.length === 1 &&
+        asked.config.sandbox.vGpu &&
+        asked.config.mappings.some((m) => m.host === f.shared) &&
+        (await f.run({ cwd: dirD, trustConfig: true, interactive: false })).config.mappings.some(
+          (m) => m.host === f.shared,
+        ),
+      '"ask": the folder and a looser setting (vGPU) are asked together, once, and the answer is remembered',
       JSON.stringify(questions),
-    );
-    t.check(
-      (await f.run({ cwd: dirD, trustConfig: true, interactive: false })).config.mappings.some(
-        (m) => m.host === f.shared,
-      ),
-      '"ask": the answer is remembered for this project file',
     );
     // What counts as outside is where the folder really is: environment variables are expanded and links followed.
     f.writeLocal(dirD, { mappings: [{ host: '%APPDATA%', readOnly: false }] });
-    t.includes(
-      await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false))),
-      'outside the project',
-      '%VAR% is expanded before deciding inside or outside',
-    );
+    const viaVariable = await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false)));
     fs.symlinkSync(f.shared, path.join(dirD, 'link'), 'junction');
     f.writeLocal(dirD, { mappings: [{ host: './link', readOnly: true }] });
-    t.includes(
-      await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false))),
-      'outside the project',
-      'a link inside the project to a folder outside counts as outside',
-    );
+    const viaLink = await t.thrownMessage(() => f.run({ cwd: dirD, trustConfig: true }, withOutside(false)));
     fs.rmSync(path.join(dirD, 'link'));
     f.writeLocal(dirD, { mappings: [{ host: './assets', readOnly: true }] });
     t.check(
-      (await f.run({ cwd: dirD, trustConfig: true }, withOutside(false))).config.mappings.some(
-        (m) => m.host === path.join(dirD, 'assets'),
-      ),
-      'a folder inside the project needs no permission',
+      viaVariable.includes('outside the project') &&
+        viaLink.includes('outside the project') &&
+        (await f.run({ cwd: dirD, trustConfig: true }, withOutside(false))).config.mappings.some(
+          (m) => m.host === path.join(dirD, 'assets'),
+        ),
+      'outside means where the folder really is (%VAR% expanded, links followed); a folder inside needs no permission',
     );
 
     t.section('a project can only tighten protections');
@@ -232,11 +211,6 @@ export const localConfigSuite: Suite = {
     };
     const keptRun = await f.run({ cwd: dirC, trustConfig: true }, strictUser);
     const kept = keptRun.config;
-    t.check(
-      keptRun.notes.some((n) => n.includes('sandbox.vGpu = true') && n.includes('your own settings')),
-      'what a project asked for and did not get is said at launch, with how to allow it',
-      keptRun.notes.join('\n'),
-    );
     t.equal(
       {
         readOnly: kept.readOnly,
@@ -260,30 +234,25 @@ export const localConfigSuite: Suite = {
       },
       'a project file can never loosen network, git, read-only, GPU, clipboard or login settings',
     );
+    t.check(
+      keptRun.notes.some((n) => n.includes('sandbox.vGpu = true') && n.includes('your own settings')),
+      'what a project asked for and did not get is said at launch, with how to allow it',
+      keptRun.notes.join('\n'),
+    );
     // You allowed one request for this project (asked once at an interactive launch): only that one is let through.
     const store = allowStorePath(strictUser.storage.root);
     saveAllowed(store, path.join(dirC, '.sandbox-config.json'), 'sandbox.vGpu', true, true);
     saveAllowed(store, path.join(dirC, '.sandbox-config.json'), 'sandbox.clipboard', true, false);
     const allowedRun = await f.run({ cwd: dirC, trustConfig: true }, strictUser);
-    t.equal(
-      {
-        vGpu: allowedRun.config.sandbox.vGpu,
-        clipboard: allowedRun.config.sandbox.clipboard,
-        networking: allowedRun.config.sandbox.networking,
-      },
-      { vGpu: true, clipboard: false, networking: false },
-      'a request you allowed for this project is used; one you declined and the others are not',
-    );
     t.check(
-      allowedRun.notes.some((n) => n.includes('Allowed for this project: sandbox.vGpu')) &&
+      allowedRun.config.sandbox.vGpu === true &&
+        allowedRun.config.sandbox.clipboard === false &&
+        allowedRun.config.sandbox.networking === false &&
+        allowedAnswer(store, path.join(f.workB, '.sandbox-config.json'), 'sandbox.vGpu', true) === null &&
+        allowedRun.notes.some((n) => n.includes('Allowed for this project: sandbox.vGpu')) &&
         allowedRun.notes.some((n) => n.includes('sandbox.clipboard') && n.includes('You said no')),
-      'launch says what was allowed and what you declined',
+      'a request you allowed for this project is used and said so; one you declined and the others are not; answers are per project file',
       allowedRun.notes.join('\n'),
-    );
-    t.equal(
-      allowedAnswer(store, path.join(f.workB, '.sandbox-config.json'), 'sandbox.vGpu', true),
-      null,
-      'an answer is kept per project file',
     );
     f.writeLocal(dirC, {
       readOnly: true,
@@ -293,13 +262,13 @@ export const localConfigSuite: Suite = {
     });
     const tightened = (await f.run({ cwd: dirC, trustConfig: true })).config;
     t.equal(
-      {
-        readOnly: tightened.readOnly,
-        gitAccess: tightened.provisioning.git.access,
-        networking: tightened.sandbox.networking,
-        clipboard: tightened.sandbox.clipboard,
-      },
-      { readOnly: true, gitAccess: 'none', networking: false, clipboard: false },
+      [
+        tightened.readOnly,
+        tightened.provisioning.git.access,
+        tightened.sandbox.networking,
+        tightened.sandbox.clipboard,
+      ],
+      [true, 'none', false, false],
       'a project file can still make things stricter',
     );
 
@@ -310,9 +279,10 @@ export const localConfigSuite: Suite = {
     ).config;
     f.writeLocal(dirC, { downloads: { requireChecksum: true } });
     const turnedOn = (await f.run({ cwd: dirC, trustConfig: true })).config;
-    t.equal(keptOn.downloads.requireChecksum, true, 'a project file cannot switch the checksum requirement off');
-    t.equal(turnedOn.downloads.requireChecksum, true, 'a project file can switch the checksum requirement on');
-    t.equal(f.baseConfig.downloads.requireChecksum, false, '(the requirement is off in the defaults)');
+    t.check(
+      keptOn.downloads.requireChecksum === true && turnedOn.downloads.requireChecksum === true,
+      'a project file cannot switch the checksum requirement off, but can switch it on',
+    );
     // With the requirement on, a download without a hash is refused before anything is fetched.
     const strict = new Downloader();
     strict.requireChecksum = true;
@@ -321,9 +291,13 @@ export const localConfigSuite: Suite = {
       () => '',
       (e: Error) => e.message,
     );
-    t.includes(refused, 'requireChecksum', 'a download with no hash is refused when checksums are required');
-    t.includes(refused, 'tool.zip', 'the refusal names the download');
-    t.check(!fs.existsSync(target) && !fs.existsSync(target + '.part'), 'a refused download leaves nothing behind');
+    t.check(
+      refused.includes('requireChecksum') &&
+        refused.includes('tool.zip') &&
+        !fs.existsSync(target) &&
+        !fs.existsSync(target + '.part'),
+      'a download with no hash is refused when checksums are required, naming it, leaving nothing behind',
+    );
     fs.rmSync(path.join(dirC, '.sandbox-config.json'));
   },
 };

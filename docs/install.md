@@ -55,6 +55,7 @@ The one-liner takes no options. To pass them, run the script as a script block:
 | `-Scope CurrentUser\|AllUsers` | `WDS_SCOPE` | where to install (asked when missing) |
 | `-AutoUpdate` / `-NoAutoUpdate` | `WDS_AUTOUPDATE=1` / `0` | answer the automatic-updates question |
 | `-AddUsers a,b` | `WDS_ADDUSERS` | everyone: also put these users in the group |
+| `-Share` / `-NoShare` | `WDS_SHARE=1` / `0` | everyone: answer the sharing question (also changes it on a later run) |
 | `-Uninstall` | `WDS_UNINSTALL=1` | remove the program, PATH entry, shortcut and scheduled task; your data stays |
 | `-RemoveData` | `WDS_REMOVEDATA=1` | with `-Uninstall`: also delete saved data, after you type `DELETE` (`-Confirm:$false` skips that) |
 | | `WDS_PACKAGE`, `WDS_SHA256` | install this package (a file or https address) instead of the latest release, checked against that checksum |
@@ -97,7 +98,11 @@ Run the one-liner again. Whichever way the old version was installed, the instal
 - the npm package (`windows-development-sandbox` or the old `agent-sandbox`) is uninstalled, and the 1.x private-Node
   wrappers are replaced by the new commands at the same place (so your PATH entry stays);
 - your saved settings are brought up to date by `sandbox migrate` (a backup is kept first; `--dry-run` lists what it
-  would change, `--restore <backup>` puts a backup back).
+  would change, `--restore <backup>` puts a backup back);
+- moving from just you to everyone: your data stays in `%LOCALAPPDATA%\AgentSandbox` and the installer says so. The
+  all-users install keeps it in `%ProgramData%\AgentSandbox\users\<you>`, so copy what you want to keep (saved accounts:
+  `accounts`). A storage folder that an old `sandbox config init` wrote into your config is removed, so the shared one
+  is used; one you set yourself stays (and that sandbox cannot be shared).
 
 ## Uninstall
 
@@ -105,7 +110,8 @@ Run the one-liner again. Whichever way the old version was installed, the instal
 & ([scriptblock]::Create((irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1))) -Uninstall -Scope AllUsers
 ```
 
-Leave out `-Scope` for just you. Add `-RemoveData` to delete the saved data as well.
+Without `-Scope` it removes the install there is (and asks which when there are both). Add `-RemoveData` to delete the
+saved data as well.
 
 ## By hand
 
