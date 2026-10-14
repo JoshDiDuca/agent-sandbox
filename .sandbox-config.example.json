@@ -10,6 +10,5 @@
   "mappings": [
     { "host": "./data", "guest": "C:\\Data", "readOnly": true, "optional": true },
     { "host": "D:\\Assets\\textures", "readOnly": true, "optional": true }
-  ],
-  "scripts": []
+  ]
 }

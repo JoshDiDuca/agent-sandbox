@@ -79,11 +79,8 @@ All commands and options: [docs/commands.md](docs/commands.md)
 ## Known gaps
 
 Adding a folder to a RUNNING sandbox needs Windows 11 24H2+ with the updated Windows Sandbox (`wsb share`, untested).
-On older Windows: folders inside a mapped project root (`sandbox projects roots add <folder>`) open instantly;
-anything else offers a restart (your files, tools, databases and logins are kept; the sessions can be reopened).
-
-To get `wsb`: Settings > Windows Update, turn on "Get the latest updates as soon as they're available" (or use the
-Windows 11 Installation Assistant), then update Windows Sandbox from the Microsoft Store. Check with `wsb --version`.
+On older Windows, folders inside a project root open at once and anything else offers a restart. Details, and how to
+get `wsb`: [several projects](docs/projects.md#adding-folders-to-a-running-sandbox-wsb-share).
 
 ## Documentation
 
@@ -91,6 +88,8 @@ Windows 11 Installation Assistant), then update Windows Sandbox from the Microso
 - [Commands](docs/commands.md): every command and option, the menu, sessions and attaching
 - [Tools and databases](docs/toolchains.md): languages, package managers, databases, agents, what is tested
 - [Configuration](docs/configuration.md): settings, project files, paths, accounts, hooks
+- [Several projects](docs/projects.md): project roots, adding a project to a running sandbox, what each agent can see
+- [Changelog](CHANGELOG.md): what shipped in each version
 - [Security](docs/security.md): how your PC is protected, secrets, git access
 - [Troubleshooting](docs/troubleshooting.md): common problems and fixes
 - [Development](docs/development.md): building, testing, releasing (code layout in [CLAUDE.md](CLAUDE.md))

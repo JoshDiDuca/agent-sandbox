@@ -13,51 +13,27 @@ npm ci            # installs and builds
 npm test          # must end with ALL TESTS PASSED
 ```
 
-`npm test` only runs inside a Windows Sandbox or on GitHub Actions (it refuses on a normal PC). Use
-`sandbox start` and run it there; `npm run build` works anywhere.
-
-`npm run build` runs tsc, bundles the sandbox-side code and regenerates `schemas/*.json`. Commit the schemas when
-setting descriptions change.
-
-To run one area while you work, give the suite name (several allowed, or comma separated). `npm test` builds first;
-the second form skips the build:
-
-```powershell
-npm test -- config
-node dist/bin/agent-sandbox.js self-test cli,workspace
-```
-
-Each `src/selftest/*.test.ts` file is one suite (listed in order in `src/selftest/index.ts`; a wrong name prints the
-list). The live tests drive ConPTY and real processes: they poll with long deadlines instead of sleeping, so a failure
-is real, and it prints the screen and daemon log it saw. See [docs/development.md](docs/development.md#tests).
+`npm test` only runs inside a Windows Sandbox or on GitHub Actions (it refuses on a normal PC). Use `sandbox start` and
+run it there; `npm run build` works anywhere. Running one suite, and the test helpers, are in
+[docs/development.md](docs/development.md#tests).
 
 Developing this tool with an agent inside its own sandbox? Install a copy (`npm run install:global`), never a link.
 See [docs/development.md](docs/development.md).
 
 ## Where things are
 
-[CLAUDE.md](CLAUDE.md) has the code layout, the rules and the traps we already fell into. Read it first.
+[CLAUDE.md](CLAUDE.md) has the code layout, the coding standard, the rules and the traps we already fell into. Read it
+first. In short:
 
-## Rules in short
-
-- TypeScript to the standard in [CLAUDE.md](CLAUDE.md#coding-standard): classes for state with behaviour, module
-  functions as `function` declarations, `interface` for shapes, string unions (no `enum`), zod for every shape read
-  from disk. `npm run lint` and `npm run format:check` pass.
-- No PowerShell or C# inside TypeScript strings: scripts are files in `sandbox/scripts` (in the sandbox) or
-  `native/scripts` (on this PC), run by path with parameters; C# lives in `sandbox/csharp` and `native/csharp` (C# 5).
-- The sandbox is hostile. Code on the PC never runs, follows or trusts what the sandbox wrote.
-- Messages are short, plain English. Errors the user can fix use `fail(message, fix)`.
-- New settings go in `src/core/schema/` and `DEFAULTS` (`src/core/config/defaults.ts`), plus `config.example.json`
-  and the docs.
-- New commands go in `src/cli/manifest.ts` (flags and menu both come from it), plus `docs/commands.md`.
-- Add a test in `src/selftest/` for what you change. Tests may only use temp folders they create: never your real
-  config, the registry, PATH, your profile or global git config.
-- Keep dependencies old enough for Node 22.0.0.
+- New setting: schema in `src/core/schema/`, the default in `DEFAULTS` (`src/core/config/defaults.ts`), then
+  `config.example.json` and the docs.
+- New command: `src/cli/manifest.ts` (the flags and the menu both come from it), then [docs/commands.md](docs/commands.md).
+- Every change gets a test in `src/selftest/`.
 
 ## Pull requests
 
 1. Keep each pull request to one change.
-2. `npm test` passes.
+2. `npm test` passes, and `npm run lint` and `npm run format:check` pass.
 3. Docs and `config.example.json` match the code.
 4. Describe what changed and why. Do not bump the version: maintainers do that when releasing.
 

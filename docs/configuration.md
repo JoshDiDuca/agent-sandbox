@@ -44,22 +44,21 @@ Commonly changed:
 
 | Setting | Default | |
 |---|---|---|
-| `storage.root` | `%LOCALAPPDATA%\AgentSandbox` | everything on your PC |
+| `storage.root` | `%LOCALAPPDATA%\AgentSandbox` | everything on your PC. The name `AgentSandbox` is from before the rename and is kept on purpose, so existing users' data stays where it is |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
-| `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`) |
+| `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`). Where projects appear with several projects: [projects](projects.md#where-a-project-appears-inside-the-sandbox) |
 | `mappings` | none | more folders from your PC, read-only or read/write: `{ "host": "F:\\SteamLibrary\\steamapps\\common\\Game", "readOnly": true }`; `guest` (where it appears) is optional, `optional: true` skips a folder that is not on this PC |
 
 Where a mapped folder appears:
 
-- No `guest`: at the same path as on your PC (`C:SteamGame` stays `C:SteamGame`, `F:SteamLibrary...` stays
-  `F:SteamLibrary...`). A folder inside the project is already in the sandbox with the project, so it needs no
+- No `guest`: at the same path as on your PC (`C:\SteamGame` stays `C:\SteamGame`, `F:\SteamLibrary...` stays
+  `F:\SteamLibrary...`). A folder inside the project is already in the sandbox with the project, so it needs no
   mapping (with `workspaceFilter` on, give it a `guest` path outside the project to bring a git-ignored folder in).
 - `guest` given: exactly there. A full path: any `C:` folder, or any path on D: to Z:.
 - A folder that cannot appear at its path stops the launch, and the message names each such folder, why, and the fix:
-  a relative path, the folders the sandbox keeps for itself (`C:Windows`, `C:Program Files*`, `C:ProgramData`,
-  `C:Users`, `C:AgentData`, `C:AgentLaunch`, `C:HostTools`, `C:
-vm`, `C:Mirror`), a path already used by the
-  project, `C:Projects` or another mapping (the same folder or one inside the other), a drive root, `A:`/`B:`, or a
+  a relative path, the folders the sandbox keeps for itself (`C:\Windows`, `C:\Program Files*`, `C:\ProgramData`,
+  `C:\Users`, `C:\AgentData`, `C:\AgentLaunch`, `C:\HostTools`, `C:\nvm`, `C:\Mirror`), a path already used by the
+  project, `C:\Projects` or another mapping (the same folder or one inside the other), a drive root, `A:`/`B:`, or a
   path Windows cannot have. Folders are never moved somewhere else. `sandbox config check` shows where each folder will
   appear, and any problem, before you launch.
 
@@ -73,45 +72,20 @@ running sandbox's projects). The last two are host-only: the sandbox cannot read
 
 ## Several projects in one sandbox
 
-Only one Windows Sandbox runs at a time, and it fixes its mapped folders when it starts. Starting an agent from another
-project while it runs adds that project to it (see [commands](commands.md#several-projects)): its folder, its
-`.sandbox-config.json`, versions, toolchains and databases (set up on demand; tools already installed cost nothing) and
-its own environment for its sessions. These settings, in **your** config only (a project file can never set them,
-because they map folders of your PC), decide which folders are already there:
+Starting an agent from another project while a sandbox runs adds that project to it: its own folder, `.sandbox-config.json`,
+versions, toolchains, databases and environment. How that works, where each project appears inside the sandbox and the
+consent prompts are in [projects](projects.md). These settings, in **your** config only (a project file can never set
+them, because they map folders of your PC), decide which folders are already there:
 
 | Setting | Default | |
 |---|---|---|
 | `projects.roots` | none | folders whose subfolders are your projects (e.g. `F:\Code`), mapped read/write at every start as `C:\Projects\<name>` (at their PC path with `guestWorkspace: "mirror"`). Every project inside, also one created later, opens without a restart, and is always under that folder (also when it started the sandbox) |
 | `projects.all` | `false` | also map every project you have started before, at every start (`sandbox projects choose` / `all on`) |
 | `projects.exclude` | none | projects left out of `all` |
+| `projects.declinedRoots` | none | parent folders you said no to when asked to add them as roots (not asked again) |
 | `projects.askToAddRoot` | `true` | when you start a project whose parent is not a root, ask once whether to add it (answers are saved: yes adds it, no is remembered in `projects.declinedRoots`, never turns this off) |
 | `projects.allowOutsideMappings` | `"ask"` | may a project's `.sandbox-config.json` map folders outside the project (see [project settings](#project-settings))? `"ask"`, `true` or `false` |
 | `projects.wsbShare` | `true` | on Windows 11 24H2+ with the updated Windows Sandbox, add other folders live with `wsb share` (untested; otherwise a restart is offered) |
-
-**A project is at the same place inside the sandbox whichever project started it**, so git worktrees and Claude's
-project history (both store absolute paths) keep working:
-
-| The project is | Inside the sandbox (default) | With `guestWorkspace: "mirror"` |
-|---|---|---|
-| inside a project root, e.g. `F:\AgentProjects\app` with root `F:\AgentProjects` | `C:\Projects\AgentProjects\app`, also when it started the sandbox | `F:\AgentProjects\app` |
-| anywhere else | `C:\Workspace\app`, also when mapped at boot by a restart or shared with `wsb share` | its PC path (a shared folder: `C:\Workspace\app`) |
-
-The root decides: starting from `app` maps the whole root and opens `app` under it (no second mapping). Exceptions keep
-the project's own `C:\Workspace\app` mapping, with a note at launch: a fixed `guestWorkspace` path, `readOnly` and
-`workspaceFilter` (the root would show the folder unfiltered and writable). Two projects with the same folder name
-get `C:\Workspace\app-2` for the second one. Adding a root moves its projects from `C:\Workspace\<name>` to
-`C:\Projects\<root>\<name>` once ([git worktrees after a move](troubleshooting.md)).
-
-Machine-wide protections were fixed when the sandbox started: a project
-that needs a stricter one (git access, network, the LAN block, read-only, ...) cannot join and says so; one that asks
-for less simply gets the sandbox's stricter value. Every agent in the sandbox can see every mapped project
-([security](security.md#several-projects)). Each mapped folder passes the same checks as a launch folder (no drives,
-your profile, system or tool folders).
-
-Adding a folder to a RUNNING sandbox needs Windows 11 24H2+ with the updated Windows Sandbox (`wsb share`, untested).
-On older Windows: folders inside a project root open instantly; anything else offers a restart. To get `wsb`:
-Settings > Windows Update ("Get the latest updates as soon as they're available") or the Windows 11 Installation
-Assistant, then update Windows Sandbox from the Microsoft Store; check with `wsb --version`.
 
 ## Network
 
