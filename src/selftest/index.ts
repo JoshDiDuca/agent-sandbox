@@ -19,6 +19,7 @@ import { cmdlineSuite } from './cmdline.test.js';
 import { configSuite } from './config.test.js';
 import { migrateSuite } from './migrate.test.js';
 import { updateSuite } from './update.test.js';
+import { sharingSuite } from './sharing.test.js';
 import { dataSuite } from './data.test.js';
 import { detectSuite } from './detect.test.js';
 import { generateSuite } from './generate.test.js';
@@ -56,6 +57,7 @@ export const SUITES: Suite[] = [
   configSuite,
   migrateSuite,
   updateSuite,
+  sharingSuite,
   workspaceSuite,
   localConfigSuite,
   // the generated sandbox and the guest that boots it
@@ -214,8 +216,14 @@ export async function selfTest(packageRoot: string, suiteNames: string[] = []): 
   // Defence in depth (shared/test-guard.ts): with this set, host code refuses outward actions and writes outside temp.
   process.env.AGENT_SANDBOX_SELFTEST = '1';
   const t = createHarness(packageRoot);
-  const saved = { home: process.env.AGENT_SANDBOX_HOME, windir: process.env.WINDIR };
+  // The machine folder too: a real machine config (an all-users install) must never change what the tests load.
+  const saved = {
+    home: process.env.AGENT_SANDBOX_HOME,
+    machine: process.env.AGENT_SANDBOX_MACHINE_HOME,
+    windir: process.env.WINDIR,
+  };
   process.env.AGENT_SANDBOX_HOME = path.join(t.temp, 'user-home');
+  process.env.AGENT_SANDBOX_MACHINE_HOME = path.join(t.temp, 'machine-home');
   const results: Result[] = [];
   try {
     const f = createFixtures(t);
@@ -225,6 +233,8 @@ export async function selfTest(packageRoot: string, suiteNames: string[] = []): 
   } finally {
     if (saved.home === undefined) delete process.env.AGENT_SANDBOX_HOME;
     else process.env.AGENT_SANDBOX_HOME = saved.home;
+    if (saved.machine === undefined) delete process.env.AGENT_SANDBOX_MACHINE_HOME;
+    else process.env.AGENT_SANDBOX_MACHINE_HOME = saved.machine;
     if (saved.windir === undefined) delete process.env.WINDIR;
     else process.env.WINDIR = saved.windir;
     t.dispose();

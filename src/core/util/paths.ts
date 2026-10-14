@@ -6,11 +6,16 @@ export function homeDir(): string {
   return process.env.USERPROFILE ?? os.homedir();
 }
 
-/** Expands %VAR% and resolves relative paths against `base`. */
-export function expandPath(input: string, base: string): string {
-  const expanded = input
+/** Expands %VAR% and a leading ~, without resolving the result. */
+export function expandVariables(input: string): string {
+  return input
     .replace(/%([^%]+)%/g, (_m: string, name: string) => process.env[name] ?? '%' + name + '%')
     .replace(/^~(?=$|[\\/])/, homeDir());
+}
+
+/** Expands %VAR% and resolves relative paths against `base`. */
+export function expandPath(input: string, base: string): string {
+  const expanded = expandVariables(input);
   return path.resolve(path.isAbsolute(expanded) ? expanded : path.join(base, expanded));
 }
 export function isRootPath(p: string): boolean {
