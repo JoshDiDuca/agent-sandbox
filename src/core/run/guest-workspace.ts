@@ -13,7 +13,10 @@ import {
 } from '../../shared/paths/index.js';
 import { dirExists, isInsideOrEqual } from '../util/index.js';
 
-/** 'auto' guest workspace: C:\Workspace\<folder name> (shared/paths/projects.ts, where every project's place is decided). */
+/**
+ * 'auto' guest workspace: C:\Workspace\<folder name> (shared/paths/projects.ts, where every project's place is
+ * decided).
+ */
 export const autoGuestWorkspace = autoGuestFolder;
 
 /**

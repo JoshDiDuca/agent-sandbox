@@ -15,7 +15,10 @@ const MAX_KEPT_STRING = 4096;
  * (ESC]052) or huge payload slips through: a dropped string stays dropped until its terminator, however long it is.
  */
 export class OutputFilter {
-  /** text: normal output; esc: after ESC; c2: after a 0xC2 lead byte; string: inside an OSC/DCS/...; stringEsc / stringC2: a possible terminator inside one. */
+  /**
+   * text: normal output; esc: after ESC; c2: after a 0xC2 lead byte; string: inside an OSC/DCS/...; stringEsc /
+   * stringC2: a possible terminator inside one.
+   */
   private state: 'text' | 'esc' | 'c2' | 'string' | 'stringEsc' | 'stringC2' = 'text';
   /** The string being read: an OSC worth keeping is collected until its terminator; null = being dropped. */
   private body: number[] | null = null;

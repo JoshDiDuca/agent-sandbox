@@ -1,6 +1,6 @@
-// Does a project need PowerShell 7 (pwsh)? Windows PowerShell 5.1 ships with Windows, so a plain *.ps1 says nothing;
-// a script that asks for 7 (#Requires -Version 7 / -PSEdition Core) or tells you to run it with `pwsh` does.
-// usesPwsh is pure; readPwshScripts reads a bounded sample of the workspace (no links followed, files and bytes capped).
+// Does a project need PowerShell 7 (pwsh)? Windows PowerShell 5.1 ships with Windows, so a plain *.ps1 says nothing; a
+// script that asks for 7 (#Requires -Version 7 / -PSEdition Core) or tells you to run it with `pwsh` does. usesPwsh is
+// pure; readPwshScripts reads a bounded sample of the workspace (no links followed, files and bytes capped).
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProjectFile } from './databases.js';
@@ -41,7 +41,7 @@ const pwshLine = (raw: string): string | null => {
 };
 
 /** The first script that needs PowerShell 7 and why ("moh.ps1: #Requires -Version 7"), or null. */
-export const usesPwsh = (files: readonly ProjectFile[]): string | null => {
+export function usesPwsh(files: readonly ProjectFile[]): string | null {
   for (const file of files.slice(0, PWSH_MAX_SCRIPTS)) {
     if (!/\.ps[dm]?1$/i.test(file.path)) continue;
     const lines = file.text.slice(0, PWSH_MAX_BYTES).split(/\r?\n/, MAX_LINES);
@@ -51,7 +51,7 @@ export const usesPwsh = (files: readonly ProjectFile[]): string | null => {
     }
   }
   return null;
-};
+}
 
 /** The start of a file, through one handle, only when that handle is a regular file. */
 const readStart = (file: string): string | null => {
@@ -71,7 +71,7 @@ const readStart = (file: string): string | null => {
 };
 
 /** *.ps1 / *.psm1 / *.psd1 in the workspace root and its direct sub-folders (root first), capped. Links are skipped. */
-export const readPwshScripts = (root: string): ProjectFile[] => {
+export function readPwshScripts(root: string): ProjectFile[] {
   const list = (dir: string): fs.Dirent[] => {
     try {
       return fs.readdirSync(dir, { withFileTypes: true }).slice(0, 2000);
@@ -96,33 +96,33 @@ export const readPwshScripts = (root: string): ProjectFile[] => {
     const text = readStart(path.join(root, name));
     return text === null ? [] : [{ path: name, text }];
   });
-};
+}
 
 /** PowerShell 7 installed on this PC (the MSI's folder, or a pwsh.exe on PATH other than a Store alias). */
-export const pcHasPwsh = (
+export function pcHasPwsh(
   env: NodeJS.ProcessEnv = process.env,
   exists: (p: string) => boolean = fs.existsSync,
-): boolean => {
+): boolean {
   const programFiles = env.ProgramFiles ?? 'C:\\Program Files';
   if (exists(path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'))) return true;
   return (env.PATH ?? env.Path ?? '')
     .split(';')
     .some((d) => d && !/WindowsApps/i.test(d) && exists(path.win32.join(d, 'pwsh.exe')));
-};
+}
 
 /**
  * The decision for toolchains.pwsh.enabled: true/false are kept; "auto" is on when a script needs PowerShell 7, or, in
  * a folder that is no project yet (`fresh`), when this PC has it.
  */
-export const decidePwsh = (
+export function decidePwsh(
   setting: boolean | 'auto',
   scripts: readonly ProjectFile[],
   fresh: boolean,
   pcHas: boolean,
-): { on: boolean; reason: string } => {
+): { on: boolean; reason: string } {
   if (setting !== 'auto') return { on: setting, reason: setting ? 'enabled in config' : 'disabled in config' };
   const why = usesPwsh(scripts);
   if (why) return { on: true, reason: why };
   if (fresh && pcHas) return { on: true, reason: 'installed on this PC (new folder)' };
   return { on: false, reason: 'no script needs PowerShell 7' };
-};
+}

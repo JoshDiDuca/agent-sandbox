@@ -6,15 +6,18 @@ import _ from 'lodash';
 export const GB = 1024 ** 3;
 
 /** 1536 -> "1.5 KB". */
-export const humanBytes = (bytes: number): string => {
+export function humanBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = bytes <= 0 ? 0 : Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   const value = bytes / 1024 ** i;
   return (i === 0 ? String(bytes) : value.toFixed(value < 10 ? 1 : 0)) + ' ' + units[i];
-};
+}
 
-/** Size on disk, never following links or junctions (a link counts as 0, so a planted junction cannot make us walk this PC's disk). */
-export const sizeOf = (p: string): number => {
+/**
+ * Size on disk, never following links or junctions (a link counts as 0, so a planted junction cannot make us walk this
+ * PC's disk).
+ */
+export function sizeOf(p: string): number {
   try {
     const stat = fs.lstatSync(p);
     if (stat.isSymbolicLink()) return 0;
@@ -25,10 +28,10 @@ export const sizeOf = (p: string): number => {
   } catch {
     return 0;
   }
-};
+}
 
 /** sizeOf with a time budget: null when measuring would take longer than `ms` (a big data folder can take minutes). */
-export const sizeWithin = (p: string, ms: number): number | null => {
+export function sizeWithin(p: string, ms: number): number | null {
   const deadline = Date.now() + ms;
   const overBudget = Symbol('over budget');
   const walk = (at: string): number => {
@@ -51,10 +54,13 @@ export const sizeWithin = (p: string, ms: number): number | null => {
     if (e === overBudget) return null;
     throw e;
   }
-};
+}
 
-/** Free bytes on the drive that holds `dir` (which may not exist yet: the nearest existing parent is asked); null if unknown. */
-export const freeBytesAt = (dir: string): number | null => {
+/**
+ * Free bytes on the drive that holds `dir` (which may not exist yet: the nearest existing parent is asked); null if
+ * unknown.
+ */
+export function freeBytesAt(dir: string): number | null {
   let at = path.resolve(dir);
   while (!fs.existsSync(at) && path.dirname(at) !== at) at = path.dirname(at);
   try {
@@ -63,7 +69,7 @@ export const freeBytesAt = (dir: string): number | null => {
   } catch {
     return null;
   }
-};
+}
 
 export interface DiskUsage {
   drive: string;
@@ -74,7 +80,7 @@ export interface DiskUsage {
 }
 
 /** Every local drive's size and free space, and which one holds the sandbox storage. */
-export const diskUsage = (storageRoot: string): DiskUsage[] => {
+export function diskUsage(storageRoot: string): DiskUsage[] {
   const storageDrive = path.parse(path.resolve(storageRoot)).root.toUpperCase();
   return 'CDEFGHIJKLMNOPQRSTUVWXYZ'
     .split('')
@@ -97,4 +103,4 @@ export const diskUsage = (storageRoot: string): DiskUsage[] => {
         return [];
       }
     });
-};
+}

@@ -9,7 +9,7 @@ import { tryReadJson } from './util/index.js';
 export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** This package's version. */
-export const packageVersion = (): string => {
+export function packageVersion(): string {
   const file = path.join(PACKAGE_ROOT, 'package.json');
   return z.object({ version: z.string() }).safeParse(tryReadJson(file)).data?.version ?? 'unknown';
-};
+}

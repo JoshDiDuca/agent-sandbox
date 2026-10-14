@@ -7,7 +7,7 @@ import { describeIssues, LocalOverridesSchema } from '../schema/index.js';
 import { expandPath, fail, fileExists, isInsideOrEqual } from '../util/index.js';
 
 /** Validates a folder's settings and resolves its relative paths against that folder. */
-export const normalizeOverrides = (data: unknown, dir: string, source: string): Overrides => {
+export function normalizeOverrides(data: unknown, dir: string, source: string): Overrides {
   const parsed = LocalOverridesSchema.safeParse(data);
   if (!parsed.success) fail(source + ' is not valid:\n  - ' + describeIssues(parsed.error).join('\n  - '));
   const overrides = parsed.data;
@@ -16,7 +16,7 @@ export const normalizeOverrides = (data: unknown, dir: string, source: string): 
   if (missing.length) fail(source + ' is not valid:\n  - scripts: file not found: ' + missing.join(', '));
   const mappings = overrides.mappings?.map((m) => ({ ...m, host: expandPath(m.host, dir) }));
   return { ...overrides, scripts, mappings };
-};
+}
 
 /**
  * The project file's mappings of folders outside the project (%VAR% expanded, links and short names followed). A repo
@@ -27,7 +27,7 @@ export function outsideMappings<M extends { host: string }>(dir: string, mapping
 }
 
 /** `folder` (also where it really is, through links) is inside the project folder `dir`. */
-export const insideProject = (dir: string, folder: string): boolean => {
+export function insideProject(dir: string, folder: string): boolean {
   // Where a path really is: the nearest existing folder resolved (links, 8.3 short names), plus the part not created
   // yet.
   const real = (p: string): string => {
@@ -39,7 +39,7 @@ export const insideProject = (dir: string, folder: string): boolean => {
     }
   };
   return isInsideOrEqual(dir, folder) && isInsideOrEqual(real(dir), real(folder));
-};
+}
 
 /**
  * Protections a project file may only make stricter, never looser. A repo can ship the file, so it must not be able to
@@ -75,8 +75,8 @@ const keepStrictest = (yours: Config, merged: Config): void => {
 };
 
 /** What a project file asks for that would loosen one of your protections (so it is not used). */
-export const loosenedRequests = (config: Config, ov: Overrides): { key: string; wanted: unknown; yours: unknown }[] =>
-  [
+export function loosenedRequests(config: Config, ov: Overrides): { key: string; wanted: unknown; yours: unknown }[] {
+  return [
     ...ON_IS_SAFER.filter((p) => _.has(ov, p) && !_.get(ov, p) && _.get(config, p)),
     ...OFF_IS_SAFER.filter((p) => _.has(ov, p) && _.get(ov, p) && !_.get(config, p)),
     ...(_.has(ov, 'provisioning.git.access') &&
@@ -84,9 +84,10 @@ export const loosenedRequests = (config: Config, ov: Overrides): { key: string; 
       ? ['provisioning.git.access']
       : []),
   ].map((key) => ({ key, wanted: _.get(ov, key), yours: _.get(config, key) }));
+}
 
 /** Applies validated overrides. Mappings with the same guest folder replace the configured ones. */
-export const applyOverrides = (config: Config, ov: Overrides): Config => {
+export function applyOverrides(config: Config, ov: Overrides): Config {
   const { harness, mappings, scripts: _scripts, $schema: _schema, ...rest } = ov;
   const next = mergeConfig(config, rest);
   keepStrictest(config, next);
@@ -104,7 +105,7 @@ export const applyOverrides = (config: Config, ov: Overrides): Config => {
       ...mappings,
     ];
   return next;
-};
+}
 
 const flatten = (value: unknown, prefix = ''): string[] =>
   _.isPlainObject(value)
@@ -112,7 +113,7 @@ const flatten = (value: unknown, prefix = ''): string[] =>
     : [prefix + ' = ' + JSON.stringify(value)];
 
 /** Human-readable list of what a local config changes, with risky items flagged. */
-export const describeOverrides = (ov: Overrides, dir?: string): string[] => {
+export function describeOverrides(ov: Overrides, dir?: string): string[] {
   const { harness, mappings = [], scripts = [], $schema: _schema, ...sections } = ov;
   const outside = dir ? outsideMappings(dir, mappings) : [];
   const lines = [
@@ -137,11 +138,11 @@ export const describeOverrides = (ov: Overrides, dir?: string): string[] => {
     (p) => p + ' is only used if it is stricter than your own setting',
   );
   return [...lines, ...risky.map((r) => '!! ' + r), ...limited.map((r) => '   ' + r)];
-};
+}
 
 /** Your config with these requests let through, so applyOverrides' "strictest wins" keeps the project's value. */
-export const allowRequests = (config: Config, allowed: { key: string; wanted: unknown }[]): Config => {
+export function allowRequests(config: Config, allowed: { key: string; wanted: unknown }[]): Config {
   const next = _.cloneDeep(config);
   allowed.forEach((a) => _.set(next, a.key, a.wanted));
   return next;
-};
+}

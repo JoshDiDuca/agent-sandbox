@@ -27,7 +27,7 @@ export interface SandboxClient {
   attach(sessionId?: string): Promise<number>;
 }
 
-export const sandbox = (options: { config?: string } = {}): SandboxClient => {
+export function sandbox(options: { config?: string } = {}): SandboxClient {
   const loaded = loadConfig(options.config);
   const dataPath = path.join(
     expandPath(loaded.config.storage.root, loaded.base),
@@ -67,7 +67,7 @@ export const sandbox = (options: { config?: string } = {}): SandboxClient => {
       return attachTerminal(channel.pickSession(sessionId));
     },
   };
-};
+}
 
 export type { GuestResponse, SandboxStatus, SessionStatus } from './core/types.js';
 export { main } from './cli/index.js';

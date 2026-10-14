@@ -11,8 +11,9 @@ export const GuestPathSchema = z
   );
 export const NameSchema = z.string().regex(/^[A-Za-z0-9_-]+$/, 'letters, numbers, - and _ only');
 export const StringsSchema = z.array(z.string());
-export const toggle = (description: string): z.ZodObject<{ enabled: z.ZodBoolean }, z.core.$strict> =>
-  z.strictObject({ enabled: z.boolean().describe(description) });
+export function toggle(description: string): z.ZodObject<{ enabled: z.ZodBoolean }, z.core.$strict> {
+  return z.strictObject({ enabled: z.boolean().describe(description) });
+}
 export const SchemaRefSchema = z.string().describe('Path or URL of the JSON Schema for editor autocomplete and docs.');
 
 export const GitAccessSchema = z
@@ -26,7 +27,9 @@ export const GitAccessSchema = z
  * down).
  */
 export const EnabledSchema = z.union([z.boolean(), z.literal('auto')]);
-export const enabled = (what: string, markers: string): typeof EnabledSchema =>
-  EnabledSchema.describe(what + ' true, false, or "auto" = only when the project has ' + markers + '.');
-export const Packages = (what: string, example: string): typeof StringsSchema =>
-  StringsSchema.describe(what + ', installed once and kept (e.g. ' + example + ').');
+export function enabled(what: string, markers: string): typeof EnabledSchema {
+  return EnabledSchema.describe(what + ' true, false, or "auto" = only when the project has ' + markers + '.');
+}
+export function Packages(what: string, example: string): typeof StringsSchema {
+  return StringsSchema.describe(what + ', installed once and kept (e.g. ' + example + ').');
+}

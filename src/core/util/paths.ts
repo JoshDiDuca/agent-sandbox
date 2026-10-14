@@ -2,29 +2,31 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileExists } from './fs.js';
 
-export const homeDir = (): string => process.env.USERPROFILE ?? os.homedir();
+export function homeDir(): string {
+  return process.env.USERPROFILE ?? os.homedir();
+}
 
 /** Expands %VAR% and resolves relative paths against `base`. */
-export const expandPath = (input: string, base: string): string => {
+export function expandPath(input: string, base: string): string {
   const expanded = input
     .replace(/%([^%]+)%/g, (_m: string, name: string) => process.env[name] ?? '%' + name + '%')
     .replace(/^~(?=$|[\\/])/, homeDir());
   return path.resolve(path.isAbsolute(expanded) ? expanded : path.join(base, expanded));
-};
-export const isRootPath = (p: string): boolean => {
+}
+export function isRootPath(p: string): boolean {
   const n = path.resolve(p);
   return n.toLowerCase() === path.parse(n).root.toLowerCase();
-};
-export const isUserProfile = (p: string): boolean => {
+}
+export function isUserProfile(p: string): boolean {
   const profile = process.env.USERPROFILE ?? process.env.HOME ?? '';
   return profile !== '' && path.resolve(p).toLowerCase() === path.resolve(profile).toLowerCase();
-};
-export const isInsideOrEqual = (parent: string, child: string): boolean => {
+}
+export function isInsideOrEqual(parent: string, child: string): boolean {
   const rel = path.relative(path.resolve(parent).toLowerCase(), path.resolve(child).toLowerCase());
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-};
+}
 
-export const findOnPath = (names: string[]): string | null => {
+export function findOnPath(names: string[]): string | null {
   const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter((d: string) => d !== '');
   for (const name of names)
     for (const dir of dirs) {
@@ -32,4 +34,4 @@ export const findOnPath = (names: string[]): string | null => {
       if (fileExists(candidate)) return candidate;
     }
   return null;
-};
+}

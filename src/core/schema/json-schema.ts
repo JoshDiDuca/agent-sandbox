@@ -3,16 +3,17 @@ import { z } from 'zod';
 import { ConfigSchema, LocalOverridesSchema } from './config.js';
 
 /** One readable line per problem: "sandbox.memoryMb: Too small: expected number to be >=2048". */
-export const describeIssues = (error: z.ZodError): string[] =>
-  error.issues.map((issue) => {
+export function describeIssues(error: z.ZodError): string[] {
+  return error.issues.map((issue) => {
     const at = issue.path.join('.');
     if (issue.code === 'unrecognized_keys')
       return issue.keys.map((k) => (at ? at + '.' : '') + k + ' is not allowed here').join('; ');
     return (at || 'value') + ': ' + issue.message;
   });
+}
 
 /** JSON Schema documents for editors. The user config only lists what it changes, so nothing in it is required. */
-export const jsonSchemas = (): Record<string, object> => {
+export function jsonSchemas(): Record<string, object> {
   const dropRequired = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.map(dropRequired);
     if (typeof node !== 'object' || node === null) return node;
@@ -35,4 +36,4 @@ export const jsonSchemas = (): Record<string, object> => {
       'windows-development-sandbox project config (.sandbox-config.json)',
     ),
   };
-};
+}

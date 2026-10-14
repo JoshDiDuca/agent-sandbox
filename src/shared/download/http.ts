@@ -4,12 +4,12 @@
 const USER_AGENT = 'windows-development-sandbox';
 
 /** fetch with retries (the sandbox network can take a few seconds to come up) and a timeout per attempt. */
-export const fetchRetry = async (
+export async function fetchRetry(
   url: string,
   init: RequestInit = {},
   attempts = 5,
   timeoutMs = 60000,
-): Promise<Response> => {
+): Promise<Response> {
   let last: unknown;
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -27,9 +27,12 @@ export const fetchRetry = async (
     if (i < attempts) await new Promise((r) => setTimeout(r, 3000));
   }
   throw last instanceof Error ? last : new Error(String(last));
-};
+}
 
 /** Small lookups fail fast (2 tries, 20 s each) so an offline boot falls back to cached versions quickly. */
-export const fetchJson = async <T>(url: string): Promise<T> =>
-  (await (await fetchRetry(url, { headers: { Accept: 'application/json' } }, 2, 20000)).json()) as T;
-export const fetchText = async (url: string): Promise<string> => await (await fetchRetry(url)).text();
+export async function fetchJson<T>(url: string): Promise<T> {
+  return (await (await fetchRetry(url, { headers: { Accept: 'application/json' } }, 2, 20000)).json()) as T;
+}
+export async function fetchText(url: string): Promise<string> {
+  return await (await fetchRetry(url)).text();
+}

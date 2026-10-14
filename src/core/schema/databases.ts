@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { EnabledSchema } from './common.js';
 
 export const PortSchema = z.number().int().min(1024).max(65535);
-export const dbEnabled = (name: string): typeof EnabledSchema =>
-  EnabledSchema.describe(
+export function dbEnabled(name: string): typeof EnabledSchema {
+  return EnabledSchema.describe(
     name +
       ': true, false, or "auto" = only when the project needs it (found from compose files, dependencies of every language, Prisma/ORM config and connection strings).',
   );
+}
 export const DatabasesSchema = z.strictObject({
   postgres: z.strictObject({
     enabled: dbEnabled('PostgreSQL (with psql, pg_dump). User postgres, no password, localhost only'),

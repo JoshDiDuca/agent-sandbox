@@ -24,8 +24,11 @@ import { dirExists, expandPath, fail, plainText } from '../util/index.js';
 import { guestWorkspaceOf, placeInRoot, previewGuest } from './guest-workspace.js';
 import { resolveVersions } from './versions.js';
 
-/** Precedence (lowest to highest): built-in defaults, user config, .sandbox-config.json in the workspace, command-line flags. */
-export const resolveRun = async (req: RunRequest, hostNodeVersion: string = process.version): Promise<ResolvedRun> => {
+/**
+ * Precedence (lowest to highest): built-in defaults, user config, .sandbox-config.json in the workspace, command-line
+ * flags.
+ */
+export async function resolveRun(req: RunRequest, hostNodeVersion: string = process.version): Promise<ResolvedRun> {
   const notes: string[] = [];
   // Mappings from the user config are relative to that config file; expand them before anything else uses them.
   const expand = (list: string[]): string[] => list.map((p) => expandPath(p, req.loaded.base));
@@ -125,7 +128,7 @@ export const resolveRun = async (req: RunRequest, hostNodeVersion: string = proc
     mirror,
     outsideMappings: outsideAllowed,
   };
-};
+}
 
 /**
  * A project may only tighten. What it asks for beyond that (a looser setting, a folder outside the project) is used

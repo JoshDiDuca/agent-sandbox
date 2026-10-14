@@ -11,8 +11,9 @@ import { GIT_STRICTNESS, NEVER_LOOSER, OFF_IS_SAFER, ON_IS_SAFER } from './overr
 /** The protections of a running sandbox, by setting path (`sandbox.networking`, `provisioning.git.access`, ...). */
 export type Protections = Record<string, boolean | string>;
 
-export const protectionsOf = (config: Config): Protections =>
-  Object.fromEntries(NEVER_LOOSER.map((p) => [p, _.get(config, p) as boolean | string]));
+export function protectionsOf(config: Config): Protections {
+  return Object.fromEntries(NEVER_LOOSER.map((p) => [p, _.get(config, p) as boolean | string]));
+}
 
 /** 1 = `wanted` is stricter than `running`, -1 = looser, 0 = the same. */
 const compare = (
@@ -42,7 +43,7 @@ export interface JoinCheck {
  * settings the sandbox turned on for another of its projects (with your consent); a project that has them off
  * shares them instead of being refused.
  */
-export const checkJoin = (running: Protections, wanted: Protections, widened: string[] = []): JoinCheck => {
+export function checkJoin(running: Protections, wanted: Protections, widened: string[] = []): JoinCheck {
   const stricter: string[] = [];
   const looser: string[] = [];
   const shared: string[] = [];
@@ -61,4 +62,4 @@ export const checkJoin = (running: Protections, wanted: Protections, widened: st
     if (result < 0) looser.push(setting + ' stays ' + JSON.stringify(running[setting]));
   }
   return { stricter, looser, shared };
-};
+}

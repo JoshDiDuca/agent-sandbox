@@ -18,7 +18,9 @@ export const FrameType = {
 /** HELLO flags: control-only connections get no output and never size the console; a query only asks for STATUS. */
 export const HelloFlag = { ControlOnly: 1, Query: 2 } as const;
 
-/** Viewers ping this often; ptyhost counts a viewer as gone after 15 s of silence (e.g. its terminal tab was closed). */
+/**
+ * Viewers ping this often; ptyhost counts a viewer as gone after 15 s of silence (e.g. its terminal tab was closed).
+ */
 export const PING_INTERVAL_MS = 5000;
 
 export interface Frame {
@@ -29,27 +31,27 @@ export interface Frame {
 /** Ctrl+] — the same detach key telnet uses; Claude Code does not bind it. */
 export const DETACH_KEY = 0x1d;
 
-export const encodeFrame = (type: number, payload: Buffer = Buffer.alloc(0)): Buffer => {
+export function encodeFrame(type: number, payload: Buffer = Buffer.alloc(0)): Buffer {
   const header = Buffer.alloc(5);
   header.writeUInt8(type, 0);
   header.writeUInt32LE(payload.length, 1);
   return Buffer.concat([header, payload]);
-};
+}
 
-export const helloFrame = (token: string, cols: number, rows: number, flags = 0): Buffer => {
+export function helloFrame(token: string, cols: number, rows: number, flags = 0): Buffer {
   const head = Buffer.alloc(5);
   head.writeInt16LE(cols, 0);
   head.writeInt16LE(rows, 2);
   head.writeUInt8(flags, 4);
   return encodeFrame(FrameType.Hello, Buffer.concat([head, Buffer.from(token, 'utf8')]));
-};
+}
 
-export const resizeFrame = (cols: number, rows: number): Buffer => {
+export function resizeFrame(cols: number, rows: number): Buffer {
   const payload = Buffer.alloc(4);
   payload.writeInt16LE(cols, 0);
   payload.writeInt16LE(rows, 2);
   return encodeFrame(FrameType.Resize, payload);
-};
+}
 
 /** Same limit as PtyHost.cs; a peer announcing more is broken or hostile. */
 export const MAX_FRAME_BYTES = 1 << 20;

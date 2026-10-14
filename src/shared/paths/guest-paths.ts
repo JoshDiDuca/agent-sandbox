@@ -17,13 +17,15 @@ const DRIVE_PATH = /^([A-Za-z]):\\(.*)$/;
 const BAD_CHARS = /[<>:"|?*/\x00-\x1f]/;
 
 /** The upper-case drive letter of an absolute guest path (F:\x -> F), or null. */
-export const guestDrive = (guest: string): string | null => DRIVE_PATH.exec(guest)?.[1].toUpperCase() ?? null;
+export function guestDrive(guest: string): string | null {
+  return DRIVE_PATH.exec(guest)?.[1].toUpperCase() ?? null;
+}
 
 /**
  * A folder the sandbox can show a host folder at: C:\<not reserved>\... or <D-Z>:\..., never a drive root,
  * no '..' or empty segments, no characters Windows rejects in paths.
  */
-export const isValidGuestPath = (guest: string): boolean => {
+export function isValidGuestPath(guest: string): boolean {
   const m = DRIVE_PATH.exec(guest);
   if (!m) return false;
   const letter = m[1].toUpperCase();
@@ -35,20 +37,20 @@ export const isValidGuestPath = (guest: string): boolean => {
     return false;
   if (letter === 'C') return !RESERVED_GUEST.test('C:\\' + rest);
   return MIRROR_LETTER.test(letter);
-};
+}
 
 /** A guest path as typed, tidied: '/' -> '\', no doubled or trailing backslashes, upper-case drive letter. */
-export const tidyGuestPath = (guest: string): string => {
+export function tidyGuestPath(guest: string): string {
   const p = guest
     .trim()
     .replace(/\//g, '\\')
     .replace(/\\{2,}/g, '\\')
     .replace(/\\+$/, '');
   return /^[a-z]:/.test(p) ? p[0].toUpperCase() + p.slice(1) : p;
-};
+}
 
 /** Why a guest path cannot be used as it is (null: it can). Short, plain English. */
-export const guestPathProblem = (guest: string): string | null => {
+export function guestPathProblem(guest: string): string | null {
   if (isValidGuestPath(guest)) return null;
   const letter = guestDrive(guest);
   if (letter === 'C' && RESERVED_GUEST.test(guest))
@@ -63,26 +65,27 @@ export const guestPathProblem = (guest: string): string | null => {
       ')'
     );
   return guest + ' is not a folder path the sandbox can use';
-};
+}
 
 /** Two guest folders overlap where they really are (F:\x is C:\Mirror\F\x): the same, or one inside the other. */
-export const guestOverlaps = (a: string, b: string): boolean => {
+export function guestOverlaps(a: string, b: string): boolean {
   const x = sandboxFolder(a).replace(/\\+$/, '').toLowerCase();
   const y = sandboxFolder(b).replace(/\\+$/, '').toLowerCase();
   return x === y || x.startsWith(y + '\\') || y.startsWith(x + '\\');
-};
+}
 
 /** How to fix a mapping whose guest path cannot be used: `guest` is what it asked for (none = the PC path). */
-export const guestFix = (guest: string | undefined): string =>
-  guest
+export function guestFix(guest: string | undefined): string {
+  return guest
     ? 'set "guest" to a full path of a free folder, such as C:\\Games\\<name>, or leave it out to use the same path as on this PC.'
     : 'its path on this PC cannot be used inside the sandbox; give it a "guest" path such as C:\\Games\\<name>.';
+}
 
 /**
  * Why a folder cannot appear at `guest` in the sandbox (null: it can): a path the sandbox cannot use, or one that
  * overlaps a folder in `taken`. Folders are never moved somewhere else: the launch names the problem and the fix.
  */
-export const guestConflict = (guest: string, taken: readonly { guest: string; what: string }[]): string | null => {
+export function guestConflict(guest: string, taken: readonly { guest: string; what: string }[]): string | null {
   const problem = guestPathProblem(guest);
   if (problem) return problem;
   const other = taken.find((t) => guestOverlaps(guest, t.guest));
@@ -93,24 +96,24 @@ export const guestConflict = (guest: string, taken: readonly { guest: string; wh
     other.what +
     (other.guest.toLowerCase() === guest.toLowerCase() ? '' : ' (' + other.guest + ')')
   );
-};
+}
 
 /**
  * The guest path a mapping asks for when it gives none: a folder inside the project at the same place in the project's
  * guest folder, any other folder at the same path as on this PC (D: to Z: through C:\Mirror and subst).
  */
-export const deriveGuest = (host: string, projectHost: string, projectGuest: string): string => {
+export function deriveGuest(host: string, projectHost: string, projectGuest: string): string {
   const rel = win32.relative(win32.resolve(projectHost), win32.resolve(host));
   const inside = rel === '' || (!rel.startsWith('..') && !win32.isAbsolute(rel));
   return inside ? (rel ? win32.join(projectGuest, rel) : projectGuest) : tidyGuestPath(win32.resolve(host));
-};
+}
 
 /** Where a guest path really is inside the sandbox (the .wsb SandboxFolder): C: paths as-is, F:\x -> C:\Mirror\F\x. */
-export const sandboxFolder = (guest: string): string => {
+export function sandboxFolder(guest: string): string {
   const m = DRIVE_PATH.exec(guest);
   if (!m || m[1].toUpperCase() === 'C') return guest;
   return MIRROR_ROOT + '\\' + m[1].toUpperCase() + (m[2] ? '\\' + m[2] : '');
-};
+}
 
 export interface SubstDrive {
   letter: string;
@@ -118,20 +121,17 @@ export interface SubstDrive {
 }
 
 /** The subst drives the guest must create at boot for these guest paths, one per letter, sorted. */
-export const substDrives = (guests: string[]): SubstDrive[] => {
+export function substDrives(guests: string[]): SubstDrive[] {
   const letters = [...new Set(guests.map(guestDrive).filter((l): l is string => l !== null && l !== 'C'))].sort();
   return letters.map((letter) => ({ letter, target: MIRROR_ROOT + '\\' + letter }));
-};
+}
 
 /**
  * guestWorkspace "mirror": the workspace at the same path as on this PC, so absolute paths (configs, build caches,
  * cargo fingerprints, Claude's project folder) match. Falls back to `fallback` (C:\Workspace\<name>) when the host
  * path cannot be used inside the sandbox (C:\Users\..., a UNC path, A:/B:, odd characters), with a note saying why.
  */
-export const planMirrorWorkspace = (
-  workspaceHost: string,
-  fallback: string,
-): { guest: string; note: string | null } => {
+export function planMirrorWorkspace(workspaceHost: string, fallback: string): { guest: string; note: string | null } {
   const host = workspaceHost.replace(/\\+$/, '');
   if (isValidGuestPath(host)) {
     const letter = guestDrive(host);
@@ -165,4 +165,4 @@ export const planMirrorWorkspace = (
       fallback +
       ' instead.',
   };
-};
+}

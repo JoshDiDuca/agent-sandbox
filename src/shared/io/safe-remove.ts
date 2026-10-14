@@ -50,7 +50,7 @@ const systemFolders = (): string[] =>
  * Why `target` may not be deleted, or null when it may. Refused: a relative path, a drive root, a protected folder or
  * any folder that contains one, and anything that is not strictly inside `root`.
  */
-export const removeRefusal = (target: string, root: string): string | null => {
+export function removeRefusal(target: string, root: string): string | null {
   if (!target || !path.isAbsolute(target) || !root || !path.isAbsolute(root)) return 'not an absolute path';
   // \\?\C:\Users and \\.\ spell the same folders in a way the checks below would not recognise.
   if (/^[\\/]{2}[?.][\\/]/.test(target) || /^[\\/]{2}[?.][\\/]/.test(root)) return 'a device path (\\\\?\\ or \\\\.\\)';
@@ -62,13 +62,13 @@ export const removeRefusal = (target: string, root: string): string | null => {
   if (system) return 'it is inside ' + system;
   if (!t.startsWith(norm(root) + path.sep)) return 'it is not inside ' + root;
   return null;
-};
+}
 
 /**
  * Deletes `target` (a folder tree or file) only when it is strictly inside `root` and nothing protected; a link is
  * removed itself, never followed. Throws instead of deleting anything else.
  */
-export const safeRemove = (target: string, root: string): void => {
+export function safeRemove(target: string, root: string): void {
   const refusal = removeRefusal(target, root);
   if (refusal) throw new Error('Refusing to delete ' + target + ': ' + refusal);
   assertTestWritable(target);
@@ -87,4 +87,4 @@ export const safeRemove = (target: string, root: string): void => {
     return;
   }
   fs.rmSync(target, { recursive: true, force: true, maxRetries: 2 });
-};
+}

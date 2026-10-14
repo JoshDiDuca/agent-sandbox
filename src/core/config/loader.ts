@@ -7,27 +7,32 @@ import { fail, homeDir, readJsonc } from '../util/index.js';
 import { DEFAULTS } from './defaults.js';
 
 /** Per-user folder for config and hooks. Survives reinstalling the npm package. */
-export const userDir = (): string => process.env.AGENT_SANDBOX_HOME ?? path.join(homeDir(), '.agent-sandbox');
-export const userConfigPath = (): string => path.join(userDir(), 'config.json');
+export function userDir(): string {
+  return process.env.AGENT_SANDBOX_HOME ?? path.join(homeDir(), '.agent-sandbox');
+}
+export function userConfigPath(): string {
+  return path.join(userDir(), 'config.json');
+}
 
 /** Deep merge where arrays (and anything that is not a plain object) replace instead of merging element by element. */
-export const mergeConfig = <T>(base: T, extra: unknown): T =>
-  _.mergeWith(_.cloneDeep(base), extra, (_target: unknown, source: unknown) =>
+export function mergeConfig<T>(base: T, extra: unknown): T {
+  return _.mergeWith(_.cloneDeep(base), extra, (_target: unknown, source: unknown) =>
     Array.isArray(source) ? source : undefined,
   );
+}
 
 /** Validates a full config; throws one readable error listing every problem. */
-export const validateConfig = (config: unknown, source: string): Config => {
+export function validateConfig(config: unknown, source: string): Config {
   const parsed = ConfigSchema.safeParse(config);
   if (!parsed.success) fail(source + ' is not valid:\n  - ' + describeIssues(parsed.error).join('\n  - '));
   return parsed.data;
-};
+}
 
 /**
  * Lookup order: --config, %AGENT_SANDBOX_CONFIG%, ~/.agent-sandbox/config.json, built-in defaults.
  * Whatever file is found (JSON with comments) is merged over the defaults, so it only needs the keys you change.
  */
-export const loadConfig = (explicitPath?: string): LoadedConfig => {
+export function loadConfig(explicitPath?: string): LoadedConfig {
   const requested = explicitPath ?? process.env.AGENT_SANDBOX_CONFIG;
   const full = path.resolve(requested ?? userConfigPath());
   if (!fs.existsSync(full)) {
@@ -43,9 +48,9 @@ export const loadConfig = (explicitPath?: string): LoadedConfig => {
     configPath: full,
     base: path.dirname(full),
   };
-};
+}
 
-export const assertNoGuestOverlap = (mappings: { guest: string }[]): void => {
+export function assertNoGuestOverlap(mappings: { guest: string }[]): void {
   const normal = mappings.map((m) => m.guest.replace(/\\+$/, '').toLowerCase());
   normal.forEach((a, i) =>
     normal.slice(i + 1).forEach((b, j) => {
@@ -60,4 +65,4 @@ export const assertNoGuestOverlap = (mappings: { guest: string }[]): void => {
         );
     }),
   );
-};
+}

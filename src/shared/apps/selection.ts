@@ -2,14 +2,14 @@ import type { Config, GitAccess } from '../../core/types.js';
 import { type AppEntry, appById } from './catalogue.js';
 
 /** A catalogue `exe` that is a regex ("/.../") matches names with a version in them. */
-export const exeMatcher = (exe: string): ((name: string) => boolean) => {
+export function exeMatcher(exe: string): (name: string) => boolean {
   const regex = /^\/(.+)\/$/.exec(exe);
   if (regex) {
     const r = new RegExp(regex[1], 'i');
     return (name) => r.test(name);
   }
   return (name) => name.toLowerCase() === exe.toLowerCase();
-};
+}
 
 /** Your own program as a catalogue entry (its folder is apps\custom\<id>). */
 const customEntry = (id: string, app: Config['apps']['custom'][string]): AppEntry => ({
@@ -25,10 +25,7 @@ const customEntry = (id: string, app: Config['apps']['custom'][string]): AppEntr
 });
 
 /** The apps to install, in order: 7-Zip first when anything needs it to unpack. */
-export const appsToInstall = (
-  apps: Config['apps'],
-  gitAccess: GitAccess,
-): { entries: AppEntry[]; skipped: string[] } => {
+export function appsToInstall(apps: Config['apps'], gitAccess: GitAccess): { entries: AppEntry[]; skipped: string[] } {
   const chosen = apps.install.flatMap((id) => {
     const e = appById(id);
     return e && !e.setting ? [e] : [];
@@ -43,8 +40,9 @@ export const appsToInstall = (
   const needs7zip =
     allowed.some((e) => e.needs?.includes('7zip') || e.unpack === 'nsis') && !allowed.some((e) => e.id === '7zip');
   return { entries: [...(needs7zip ? [appById('7zip')!] : []), ...allowed], skipped };
-};
+}
 
 /** Does any chosen app draw with OpenGL (so the Mesa step must run first)? */
-export const appsNeedMesa = (apps: Config['apps'] | undefined): boolean =>
-  Boolean(apps?.install.some((id) => appById(id)?.needs?.includes('mesa')));
+export function appsNeedMesa(apps: Config['apps'] | undefined): boolean {
+  return Boolean(apps?.install.some((id) => appById(id)?.needs?.includes('mesa')));
+}

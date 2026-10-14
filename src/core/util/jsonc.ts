@@ -6,9 +6,12 @@ import { fail } from './errors.js';
  * Parses JSON with comments and trailing commas (JSONC, like VS Code's settings.json). Errors name the file, line
  * and column, and say what to fix.
  */
-export const parseJsonc = <T>(text: string, source: string): T => {
+export function parseJsonc<T>(text: string, source: string): T {
   const errors: ParseError[] = [];
-  const value = parseJsoncText(text.replace(/^﻿/, ''), errors, { allowTrailingComma: true, disallowComments: false });
+  const value = parseJsoncText(text.replace(/^\uFEFF/, ''), errors, {
+    allowTrailingComma: true,
+    disallowComments: false,
+  });
   if (errors.length) {
     const { offset, error } = errors[0];
     const before = text.slice(0, offset).split(/\r?\n/);
@@ -25,6 +28,8 @@ export const parseJsonc = <T>(text: string, source: string): T => {
     );
   }
   return value as T;
-};
+}
 
-export const readJsonc = <T>(file: string): T => parseJsonc<T>(fs.readFileSync(file, 'utf8'), file);
+export function readJsonc<T>(file: string): T {
+  return parseJsonc<T>(fs.readFileSync(file, 'utf8'), file);
+}

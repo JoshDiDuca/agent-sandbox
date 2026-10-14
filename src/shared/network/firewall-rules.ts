@@ -16,25 +16,25 @@ export const RULE_NAMES = [
   'AgentSandbox-Gateway-UDP',
 ];
 
-export const isIPv4 = (ip: string): boolean => {
+export function isIPv4(ip: string): boolean {
   const parts = ip.split('.');
   return parts.length === 4 && parts.every((p: string) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
-};
-export const ipToInt = (ip: string): number => {
+}
+export function ipToInt(ip: string): number {
   if (!isIPv4(ip)) throw new Error('Invalid IPv4 address: ' + ip);
   const p = ip.split('.').map(Number);
   return p[0] * 16777216 + p[1] * 65536 + p[2] * 256 + p[3];
-};
-export const intToIp = (n: number): string => {
+}
+export function intToIp(n: number): string {
   return [Math.floor(n / 16777216) % 256, Math.floor(n / 65536) % 256, Math.floor(n / 256) % 256, n % 256].join('.');
-};
-export const cidrToRange = (cidr: string): [number, number] => {
+}
+export function cidrToRange(cidr: string): [number, number] {
   const [ip, bits] = cidr.split('/');
   const size = 2 ** (32 - Number(bits));
   const start = Math.floor(ipToInt(ip) / size) * size;
   return [start, start + size - 1];
-};
-export const subtractIps = (ranges: [number, number][], ips: string[]): [number, number][] => {
+}
+export function subtractIps(ranges: [number, number][], ips: string[]): [number, number][] {
   let result: [number, number][] = ranges.map((r: [number, number]) => [r[0], r[1]] as [number, number]);
   for (const ip of ips) {
     const n = ipToInt(ip);
@@ -50,32 +50,36 @@ export const subtractIps = (ranges: [number, number][], ips: string[]): [number,
     result = next;
   }
   return result;
-};
-export const formatRange = (range: [number, number]): string => {
+}
+export function formatRange(range: [number, number]): string {
   return range[0] === range[1] ? intToIp(range[0]) : intToIp(range[0]) + '-' + intToIp(range[1]);
-};
-export const isPrivateV4 = (ip: string): boolean => {
+}
+export function isPrivateV4(ip: string): boolean {
   const n = ipToInt(ip);
   return PRIVATE_V4.some((c: string) => {
     const [s, e] = cidrToRange(c);
     return n >= s && n <= e;
   });
-};
+}
 
-export const parseDefaultGateways = (routePrint: string): string[] => {
+export function parseDefaultGateways(routePrint: string): string[] {
   const found: string[] = [];
   for (const line of routePrint.split(/\r?\n/)) {
     const m = /^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(\d{1,3}(?:\.\d{1,3}){3})\s/.exec(line);
     if (m && isIPv4(m[1])) found.push(m[1]);
   }
   return found;
-};
+}
 /** The IPv4 servers in a dns.getServers() list ('8.8.8.8', '8.8.8.8:1053', '[::1]:53'); IPv6 ones are dropped. */
-export const ipv4DnsServers = (servers: string[]): string[] =>
-  servers.map((s: string) => s.replace(/:\d+$/, '')).filter(isIPv4);
+export function ipv4DnsServers(servers: string[]): string[] {
+  return servers.map((s: string) => s.replace(/:\d+$/, '')).filter(isIPv4);
+}
 
-/** Fallback only: the "DNS Servers" label is English, so this finds nothing on localised Windows (dns.getServers() does). */
-export const parseDnsServers = (ipconfigAll: string): string[] => {
+/**
+ * Fallback only: the "DNS Servers" label is English, so this finds nothing on localised Windows (dns.getServers()
+ * does).
+ */
+export function parseDnsServers(ipconfigAll: string): string[] {
   const found: string[] = [];
   let inDns = false;
   for (const line of ipconfigAll.split(/\r?\n/)) {
@@ -89,10 +93,13 @@ export const parseDnsServers = (ipconfigAll: string): string[] => {
     }
   }
   return found;
-};
+}
 
-/** netsh argument lists. Private ranges are blocked EXCEPT DNS/DHCP to the sandbox's own gateway, so name resolution keeps working. */
-export const buildFirewallCommands = (exemptIps: string[]): string[][] => {
+/**
+ * netsh argument lists. Private ranges are blocked EXCEPT DNS/DHCP to the sandbox's own gateway, so name resolution
+ * keeps working.
+ */
+export function buildFirewallCommands(exemptIps: string[]): string[][] {
   const exempt = [...new Set(exemptIps.filter((ip: string) => isIPv4(ip) && isPrivateV4(ip)))];
   const v4 = subtractIps(PRIVATE_V4.map(cidrToRange), exempt).map(formatRange);
   const add = (name: string, extra: string[]): string[] => [
@@ -126,4 +133,4 @@ export const buildFirewallCommands = (exemptIps: string[]): string[][] => {
     );
   }
   return commands;
-};
+}

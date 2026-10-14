@@ -14,4 +14,6 @@ export const fail: (message: string, fix?: string) => never = (message, fix) => 
   throw new UserError(message, fix);
 };
 
-export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+export function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}

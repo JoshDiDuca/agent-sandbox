@@ -4,7 +4,9 @@ import path from 'node:path';
 
 const systemRoot = (): string => process.env.SystemRoot ?? process.env.WINDIR ?? 'C:\\Windows';
 
-export const system32 = (exe: string): string => path.join(systemRoot(), 'System32', exe);
+export function system32(exe: string): string {
+  return path.join(systemRoot(), 'System32', exe);
+}
 
 export const SYSTEM = {
   cmd: (): string => system32('cmd.exe'),

@@ -22,7 +22,7 @@ const toAsset = (asset: GithubRelease['assets'][number]): ReleaseAsset => ({
  * Finds an asset in the latest GitHub release of `repo` (with its published sha256 when available). With
  * `searchOlder`, falls back to the newest stable release that still ships a matching asset (projects drop assets).
  */
-export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = false): Promise<ReleaseAsset> => {
+export async function githubAsset(repo: string, pattern: RegExp, searchOlder = false): Promise<ReleaseAsset> {
   let latest: GithubRelease;
   try {
     latest = await fetchJson<GithubRelease>('https://api.github.com/repos/' + repo + '/releases/latest');
@@ -46,33 +46,35 @@ export const githubAsset = async (repo: string, pattern: RegExp, searchOlder = f
   throw new Error(
     'No asset matching ' + pattern + ' in the ' + (searchOlder ? 'stable' : 'latest') + ' ' + repo + ' release(s)',
   );
-};
+}
 
-/** A release's assets from github.com's expanded_assets page (no API rate limit): each download link, then its sha256. */
-export const parseReleasePage = (html: string): ReleaseAsset[] => {
+/**
+ * A release's assets from github.com's expanded_assets page (no API rate limit): each download link, then its sha256.
+ */
+export function parseReleasePage(html: string): ReleaseAsset[] {
   const links = [...html.matchAll(/href="(\/[^"]+\/releases\/download\/[^"]+)"/g)];
   return links.map((link, i) => {
     const digest =
       /sha256:([0-9a-f]{64})/.exec(html.slice(link.index, links[i + 1]?.index ?? html.length))?.[1] ?? null;
     return { url: 'https://github.com' + link[1], name: decodeURIComponent(link[1].split('/').pop()!), sha256: digest };
   });
-};
+}
 
 /** The latest release's tag, from github.com's own redirect (no API, no rate limit). */
-export const latestGithubTag = async (repo: string): Promise<string> => {
+export async function latestGithubTag(repo: string): Promise<string> {
   const latest = await fetchRetry('https://github.com/' + repo + '/releases/latest', {}, 2, 20000);
   const tag = decodeURIComponent(latest.url.split('/releases/tag/')[1] ?? '');
   return tag || Promise.reject(new Error('Could not find the latest release of ' + repo));
-};
+}
 
 /** Release tags in the order github.com's /<repo>/releases page lists them (newest first), without duplicates. */
-export const parseReleaseTags = (html: string, repo: string): string[] => {
+export function parseReleaseTags(html: string, repo: string): string[] {
   const escaped = repo.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
   const tags = [...html.matchAll(new RegExp('href="/' + escaped + '/releases/tag/([^"?#]+)"', 'gi'))].map((m) =>
     decodeURIComponent(m[1]),
   );
   return [...new Set(tags)];
-};
+}
 
 /** How many releases the rate-limit fallback looks through for `searchOlder` (one page request each). */
 const OLDER_RELEASES = 10;
@@ -85,7 +87,8 @@ const githubAssetFromPage = async (repo: string, pattern: RegExp, searchOlder: b
   const latest = await latestGithubTag(repo);
   const hit = await assetsOf(latest);
   if (hit) return hit;
-  // nvm-windows' portable zip and winlibs' builds only exist in older releases: walk the release list like the API path does.
+  // nvm-windows' portable zip and winlibs' builds only exist in older releases: walk the release list like the API path
+  // does.
   if (searchOlder) {
     const older = parseReleaseTags(await fetchText('https://github.com/' + repo + '/releases'), repo).filter(
       (t) => t !== latest,

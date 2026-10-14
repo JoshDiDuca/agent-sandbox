@@ -75,12 +75,12 @@ export interface ToolchainDecision {
  * hints: reasons found by reading files (a script that calls vcvars/vswhere) or about this PC
  * ("builds Rust with MSVC"), which turn an "auto" toolchain on like a marker file does.
  */
-export const decideToolchains = (
+export function decideToolchains(
   settings: Toolchains,
   entries: string[],
   pcHas: AutoToolchain[],
   hints: Partial<Record<AutoToolchain, string>> = {},
-): Record<AutoToolchain, ToolchainDecision> => {
+): Record<AutoToolchain, ToolchainDecision> {
   const fresh = !projectUses(entries, PROJECT_FILES);
   const decide = (name: AutoToolchain): ToolchainDecision => {
     const setting = settings[name].enabled;
@@ -112,14 +112,14 @@ export const decideToolchains = (
   if (settings.vscode.enabled === 'auto' && pcHas.includes('vscode'))
     result.vscode = { on: true, reason: 'installed on this PC' };
   return result;
-};
+}
 
 /** The settings with every "auto" replaced by the decision (what the sandbox receives). */
-export const resolveToolchains = (
+export function resolveToolchains(
   settings: Toolchains,
   decisions: Record<AutoToolchain, ToolchainDecision>,
-): Toolchains => {
+): Toolchains {
   const out = structuredClone(settings);
   for (const name of AUTO_TOOLCHAINS) (out[name] as { enabled: boolean | 'auto' }).enabled = decisions[name].on;
   return out;
-};
+}

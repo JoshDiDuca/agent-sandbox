@@ -74,7 +74,9 @@ export interface AppEntry {
   about: string;
   size: string;
   source: AppSource;
-  /** How the download is unpacked: an archive (zip/7z/tar, the default), the file itself, an NSIS installer or an MSI. */
+  /**
+   * How the download is unpacked: an archive (zip/7z/tar, the default), the file itself, an NSIS installer or an MSI.
+   */
   unpack?: 'archive' | 'file' | 'nsis' | 'msi';
   /** The program to start (or the tool on PATH): a file name, or a regex (/.../) for names with a version in them. */
   exe: string;
@@ -82,7 +84,10 @@ export interface AppEntry {
   cli?: boolean;
   /** Needs these first: 7-Zip to unpack an installer, Mesa for OpenGL without a GPU. */
   needs?: ('7zip' | 'mesa')[];
-  /** Settings elsewhere that this entry stands for (VS Code, Windows Terminal): shown in the catalogue, not installed by it. */
+  /**
+   * Settings elsewhere that this entry stands for (VS Code, Windows Terminal): shown in the catalogue, not installed by
+   * it.
+   */
   setting?: string;
   /** Only with full git access (it pushes on its own, past the sandbox's git guard). */
   fullGitOnly?: boolean;
@@ -808,4 +813,6 @@ export const APPS: AppEntry[] = [
   },
 ];
 
-export const appById = (id: string): AppEntry | undefined => APPS.find((a) => a.id === id);
+export function appById(id: string): AppEntry | undefined {
+  return APPS.find((a) => a.id === id);
+}

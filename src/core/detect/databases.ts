@@ -224,7 +224,7 @@ const bounded = (text: string): string =>
     .filter((line) => line.length <= MAX_LINE)
     .join('\n');
 
-export const detectDatabases = (input: ProjectFile[], hostHas: Database[] | (() => Database[]) = []): Detection[] => {
+export function detectDatabases(input: ProjectFile[], hostHas: Database[] | (() => Database[]) = []): Detection[] {
   const files = input.map((f) => ({ path: f.path, text: bounded(f.text) }));
   const found = new Map<Database, string[]>();
   const add = (db: Database, reason: string): void => {
@@ -249,10 +249,10 @@ export const detectDatabases = (input: ProjectFile[], hostHas: Database[] | (() 
     if (orm.length && mine) add(mine, orm[0] + ', and this PC has ' + mine + ' installed');
   }
   return DATABASES.filter((db) => found.has(db)).map((database) => ({ database, reasons: found.get(database)! }));
-};
+}
 
 /** Windows service names of databases installed on this PC (from `sc query`), e.g. postgresql-x64-16, MySQL80. */
-export const databasesFromServices = (serviceNames: string[]): Database[] => {
+export function databasesFromServices(serviceNames: string[]): Database[] {
   const has = (r: RegExp): boolean => serviceNames.some((s) => r.test(s));
   return DATABASES.filter(
     (db) =>
@@ -265,4 +265,4 @@ export const databasesFromServices = (serviceNames: string[]): Database[] => {
         dynamodb: false,
       })[db],
   );
-};
+}

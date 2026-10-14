@@ -30,7 +30,7 @@ const PackageJsonSchema = z.object({
 /**
  * The Node version a Volta project pins ("volta": { "node": "20.11.1" } in package.json), so nvm defaults to it too.
  */
-export const voltaNode = (workspace: string): string | null => {
+export function voltaNode(workspace: string): string | null {
   const file = path.join(workspace, 'package.json');
   if (!fileExists(file)) return null;
   try {
@@ -41,19 +41,19 @@ export const voltaNode = (workspace: string): string | null => {
   } catch {
     return null;
   }
-};
+}
 
 /**
  * Picks tool versions. Highest priority first: command line, the folder's .sandbox-config.json,
  * version files in the workspace (.nvmrc, .node-version, .python-version), the tool config, this PC's node version.
  */
-export const resolveVersions = (
+export function resolveVersions(
   config: Config,
   workspace: string,
   local: Overrides,
   req: { nodeVersion?: string; pythonVersion?: string },
   hostNodeVersion: string,
-): ToolVersions => {
+): ToolVersions {
   const localTools = (local.toolchains ?? {}) as { node?: { version?: string }; python?: { version?: string } };
   const pick = (
     cli: string | undefined,
@@ -83,4 +83,4 @@ export const resolveVersions = (
     config.toolchains.python.version,
   );
   return { node, nodeExtra: config.toolchains.node.extraVersions, python };
-};
+}

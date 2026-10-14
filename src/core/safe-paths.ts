@@ -11,7 +11,7 @@ const protectedFolders = (packageRoot: string, storageRoot: string): [string, st
 ];
 
 /** A read/write folder mapped into the sandbox must not contain, or sit inside, any protected folder. */
-export const assertSafeMapping = (folder: string, packageRoot: string, storageRoot: string): void => {
+export function assertSafeMapping(folder: string, packageRoot: string, storageRoot: string): void {
   if (isRootPath(folder) || isUserProfile(folder))
     fail(
       'A whole drive or user profile cannot be mapped into the sandbox: ' + folder,
@@ -24,10 +24,13 @@ export const assertSafeMapping = (folder: string, packageRoot: string, storageRo
         'Map a folder that is not inside (and does not contain) ' + dir + '.',
       );
   }
-};
+}
 
-/** The agent gets read/write access to the workspace, so refuse folders that would let it reach the tool itself, its storage, or the OS. */
-export const assertSafeWorkspace = (workspace: string, packageRoot: string, storageRoot: string): void => {
+/**
+ * The agent gets read/write access to the workspace, so refuse folders that would let it reach the tool itself, its
+ * storage, or the OS.
+ */
+export function assertSafeWorkspace(workspace: string, packageRoot: string, storageRoot: string): void {
   if (isRootPath(workspace))
     fail(
       'A whole drive cannot be the workspace: ' + workspace,
@@ -67,4 +70,4 @@ export const assertSafeWorkspace = (workspace: string, packageRoot: string, stor
     if (dir && isInsideOrEqual(dir, workspace))
       fail('A system folder cannot be the workspace: ' + workspace, 'Run sandbox claude from a project folder.');
   }
-};
+}

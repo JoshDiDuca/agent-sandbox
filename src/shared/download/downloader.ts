@@ -23,7 +23,10 @@ export interface ArchiveOptions extends Checksums {
   members?: string[];
 }
 
-/** Who wants coarse download progress: called as a download starts (in the caller's async context), returns its reporter. */
+/**
+ * Who wants coarse download progress: called as a download starts (in the caller's async context), returns its
+ * reporter.
+ */
 export type DownloadWatcher = () => ((fraction: number) => void) | null;
 
 export class Downloader {
@@ -60,7 +63,8 @@ export class Downloader {
       const want = sums[kind]?.trim().toLowerCase();
       return want ? [{ want, hash: crypto.createHash(kind) }] : [];
     });
-    // Progress for the boot screen: every 10% or 5 s at most, never per chunk; called here so it knows who is downloading.
+    // Progress for the boot screen: every 10% or 5 s at most, never per chunk; called here so it knows who is
+    // downloading.
     const size = Number(response.headers.get('content-length')) || 0;
     const report = size > 0 ? (this.watcher?.() ?? null) : null;
     let received = 0;

@@ -27,7 +27,7 @@ const connectOnce = (host: string, port: number, timeoutMs: number): Promise<net
 };
 
 /** Tries every address the sandbox published and returns the first one that answers. */
-export const connect = async (endpoint: Endpoint, timeoutMs = 3000): Promise<net.Socket> => {
+export async function connect(endpoint: Endpoint, timeoutMs = 3000): Promise<net.Socket> {
   const errors: string[] = [];
   for (const address of endpoint.addresses) {
     try {
@@ -37,15 +37,15 @@ export const connect = async (endpoint: Endpoint, timeoutMs = 3000): Promise<net
     }
   }
   throw new Error('Could not reach the sandbox session (' + errors.join('; ') + ')');
-};
+}
 
 /** Sends one control frame (e.g. RESTART) without taking over the screen. */
-export const sendControl = async (endpoint: Endpoint, type: number): Promise<void> => {
+export async function sendControl(endpoint: Endpoint, type: number): Promise<void> {
   const socket = await connect(endpoint);
   await new Promise<void>((resolve) =>
     socket.end(Buffer.concat([helloFrame(endpoint.token, 80, 24, HelloFlag.ControlOnly), encodeFrame(type)]), resolve),
   );
-};
+}
 
 /** Who is watching a session right now: `remote` counts viewers on the PC (not the sandbox's own tabs). */
 export interface Viewers {
@@ -58,7 +58,7 @@ export interface Viewers {
  * was closed (or a PC that went to sleep) is not reported. null when the session does not answer: an older ptyhost
  * treats the query as a silent control connection, so the caller must not assume anything.
  */
-export const queryViewers = async (endpoint: Endpoint, timeoutMs = 2000): Promise<Viewers | null> => {
+export async function queryViewers(endpoint: Endpoint, timeoutMs = 2000): Promise<Viewers | null> {
   let socket: net.Socket;
   try {
     socket = await connect(endpoint, timeoutMs);
@@ -89,4 +89,4 @@ export const queryViewers = async (endpoint: Endpoint, timeoutMs = 2000): Promis
     socket.on('close', () => done(null));
     socket.write(helloFrame(endpoint.token, 80, 24, HelloFlag.Query));
   });
-};
+}

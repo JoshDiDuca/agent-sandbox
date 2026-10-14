@@ -74,26 +74,28 @@ export const DEVELOPER_HOSTS = [
 ];
 
 /** The allowOnly list with "@developer" expanded, lower case, without duplicates. */
-export const expandAllowList = (list: string[]): string[] => [
-  ...new Set(
-    list
-      .flatMap((h) => (h.trim().toLowerCase() === '@developer' ? DEVELOPER_HOSTS : [h]))
-      .map((h) => h.trim().toLowerCase())
-      .filter((h) => HOST_PATTERN.test(h)),
-  ),
-];
+export function expandAllowList(list: string[]): string[] {
+  return [
+    ...new Set(
+      list
+        .flatMap((h) => (h.trim().toLowerCase() === '@developer' ? DEVELOPER_HOSTS : [h]))
+        .map((h) => h.trim().toLowerCase())
+        .filter((h) => HOST_PATTERN.test(h)),
+    ),
+  ];
+}
 
 /** Does `host` match one of the patterns? "*.example.com" matches its subdomains (not example.com itself). */
-export const hostAllowed = (host: string, patterns: string[]): boolean => {
+export function hostAllowed(host: string, patterns: string[]): boolean {
   const h = host.toLowerCase().replace(/\.$/, '');
   return patterns.some((p) => (p.startsWith('*.') ? h.endsWith(p.slice(1)) && h.length > p.length - 1 : h === p));
-};
+}
 
 export const HOSTS_BEGIN = '# >>> windows-development-sandbox network.blockHosts';
 export const HOSTS_END = '# <<< windows-development-sandbox network.blockHosts';
 
 /** The hosts file with our block section replaced by `hosts` (each sent to 0.0.0.0 and ::); everything else stays. */
-export const withBlockedHosts = (hostsFile: string, hosts: string[]): string => {
+export function withBlockedHosts(hostsFile: string, hosts: string[]): string {
   const begin = hostsFile.indexOf(HOSTS_BEGIN);
   const end = hostsFile.indexOf(HOSTS_END);
   const outside =
@@ -104,7 +106,7 @@ export const withBlockedHosts = (hostsFile: string, hosts: string[]): string => 
   const base = outside.replace(/\s+$/, '');
   if (!clean.length) return base + '\r\n';
   return [base, HOSTS_BEGIN, ...clean.flatMap((h) => ['0.0.0.0 ' + h, ':: ' + h]), HOSTS_END, ''].join('\r\n');
-};
+}
 
 /** One forwarded port: <pc> on this PC (localhost only) reaches <sandbox> inside. */
 export interface PortForward {
@@ -116,7 +118,9 @@ export interface PortForward {
  * The port the sandbox's relay for forward `index` listens on (it connects on to localhost:<sandbox> inside, so a
  * server that only listens on localhost is reachable too). Out of the range Windows hands out for outgoing connections.
  */
-export const relayPort = (index: number): number => 38100 + index;
+export function relayPort(index: number): number {
+  return 38100 + index;
+}
 
 /** The address the sandbox's built-in proxy listens on (allowOnly). */
 export const PROXY_PORT = 38080;
