@@ -46,6 +46,7 @@ import { liveNetworkSuite } from './live-network.test.js';
 import { liveTerminalSuite } from './live-terminal.test.js';
 import { auditSuite } from './audit.test.js';
 import { layoutSuite } from './layout.test.js';
+import { menuSuite } from './menu.test.js';
 
 /** Every suite, in the order they run. The live ones come last: they are the slowest and need Windows. */
 export const SUITES: Suite[] = [
@@ -82,6 +83,7 @@ export const SUITES: Suite[] = [
   dataSuite,
   repairSuite,
   cliSuite,
+  menuSuite,
   agentCommandsSuite,
   // every command as its own process
   hostSimSuite,
