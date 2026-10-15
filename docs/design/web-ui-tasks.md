@@ -2,6 +2,11 @@
 
 ## Start here (instructions for the agent picking this up)
 
+**Ask an advisor instead of guessing.** Whenever the area file does not settle something, a test fails and you do not
+know why, or a change could touch security (the web server, secrets, another user's sandbox), stop and ask an advisor:
+start an Agent with `model: "opus"` and a short, self-contained question (the facts, what you tried, the options you
+see). Follow its answer and say so in your report. Guessing is the most common reason an area is sent back.
+
 You are finishing the web UI by moving each area of the tool into the shared core, so the command line, the menu and
 the web UI all run the same code. Work like this:
 
