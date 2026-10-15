@@ -134,7 +134,7 @@ and for `restart`, `show`, `hide` and starting your own, you are told whose it i
 | `sandbox clean [--days n] [-y]` | delete old launch folders, logs and leftovers (shows what and how much first, then asks) |
 | `sandbox sync` | copy history back to this PC now |
 | `sandbox sessions [--wide]` | the sessions; `--wide` adds each one's folder |
-| `sandbox logs [-f]` | the sandbox log |
+| `sandbox logs [-f] [--crash]` | the newest sandbox log (`-f` keeps printing new lines). `--crash` prints the report of the last crash instead: the freeze gap, blue-screen codes, hardware and memory events, crash dumps, this PC's memory log and whether vGPU was on (see [troubleshooting](troubleshooting.md)) |
 
 ## Diagnostics
 

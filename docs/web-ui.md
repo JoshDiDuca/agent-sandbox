@@ -1,7 +1,7 @@
 # Web UI (design)
 
-Status: **Phase 1 (the foundation) is built, off by default** (`web.enabled`; `sandbox web start` works either way and
-nothing starts it by itself yet). Planned to be complete in 1.9, the release before 2.0. This page is the design the
+Status: **Phase 1 (the foundation) is built, off by default** (`web.enabled`; `sandbox web start` works either way; with
+`web.enabled` on, every sandbox start also starts it). Planned to be complete in 1.9, the release before 2.0. This page is the design the
 code follows; user-facing steps go in README.md once it ships.
 
 ## What it is for
@@ -67,9 +67,10 @@ The server is a way into every agent you run, so it is treated like a login:
 
 ## What Phase 1 is (as built)
 
-- **Settings:** `web.enabled` (default off) and `web.port` (default 47800, 1024-65535). Not in `LocalOverrides`.
+- **Settings:** `web.enabled` (default off; on = every sandbox start also starts the server), `web.openOnLaunch` (default off; opens the
+  browser already signed in) and `web.port` (default 47800, 1024-65535). Not in `LocalOverrides`.
 - **Commands:** `sandbox web start | stop | status | open` (PC only). `start` spawns the hidden `_web` command detached,
-  works with `web.enabled` off (it then runs for this run only; nothing yet starts it with the sandbox), and prints no
+  works with `web.enabled` off (it then runs for this run only), and prints no
   token. `open` starts it if needed and opens the default browser (through `cmd /c start`) on `/#k=<token>`. `stop`
   signs in with the token and asks the server to stop. The server needs the built app in `dist/web` (`npm run build`).
 - **Server** (`src/host/web/`): `node:http` and `ws` (bundled, `bundleDependencies`), on `127.0.0.1` only. The token, pid
