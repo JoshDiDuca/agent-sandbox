@@ -28,5 +28,6 @@ Start with the [README](../README.md). Version history is in the [changelog](../
 | [design/engines.md](design/engines.md) | Sandbox engines and storage providers (contained storage, HCS engine) |
 | [design/hcs-backend.md](design/hcs-backend.md) | Research behind the HCS engine |
 | [design/web-ui-tasks.md](design/web-ui-tasks.md) | Web UI parity tasks, one area at a time |
+| [design/web-ui-standard.md](design/web-ui-standard.md) | How every web page looks, the Page hints, checking with screenshots |
 | [design/roadmap-tasks.md](design/roadmap-tasks.md) | Specs for the roadmap tasks |
 | [design/areas/](design/areas/00-worked-example.md) | One spec per area (agents, projects, accounts, data, storage, apps, health, updates, logs, VPN, engine, web, settings export), starting with a worked example |
