@@ -83,6 +83,12 @@ export class SchemaNode {
   get integer(): boolean {
     return Boolean(this.inner.isInt);
   }
+  /** A secret (an API key): shown as ***, typed with each character hidden. */
+  get secret(): boolean {
+    const meta = (z: ZodLike): { secret?: boolean } | undefined =>
+      (z as unknown as { meta?: () => { secret?: boolean } | undefined }).meta?.();
+    return meta(this.schema)?.secret === true || meta(this.inner)?.secret === true;
+  }
   /** May the setting be left out (optional or with a default)? */
   get optional(): boolean {
     return ['optional', 'default'].includes(this.schema._zod.def.type);

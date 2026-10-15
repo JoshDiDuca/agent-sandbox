@@ -71,7 +71,8 @@ export function mergeMcpServers(
   return Object.keys(host.mcpServers ?? {}).length + Object.keys(hostProject).length;
 }
 
-export function syncClaudeProfile(): void {
+/** `credentials`: the text of this PC's .credentials.json, handed over in the one-shot secrets file. */
+export function syncClaudeProfile(credentials?: string): void {
   const profile = session.claudeProfile;
   if (profile.items.length === 0) {
     log('No Claude settings were staged from this PC.');
@@ -82,6 +83,14 @@ export function syncClaudeProfile(): void {
   for (const name of profile.items) {
     const from = path.join(source, name);
     const to = path.join(claudeDir, name);
+    if (name === '.credentials.json') {
+      // Never staged in the launch folder: it came in the secrets file.
+      if (credentials && !exists(to)) {
+        fs.writeFileSync(to, credentials, 'utf8');
+        log('Claude settings: copied ' + name + ' from this PC');
+      } else log("Claude settings: kept the sandbox's " + name);
+      continue;
+    }
     if (!exists(from)) continue;
     if ((KEEP_SANDBOX_COPY.includes(name) || !profile.overwrite) && exists(to)) {
       log("Claude settings: kept the sandbox's " + name);

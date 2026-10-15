@@ -51,6 +51,7 @@ export const ON_IS_SAFER = [
   'network.blockPrivateRanges',
   'sandbox.protectedClient',
   'downloads.requireChecksum',
+  'vpn.killSwitch',
 ];
 export const OFF_IS_SAFER = [
   'sandbox.networking',

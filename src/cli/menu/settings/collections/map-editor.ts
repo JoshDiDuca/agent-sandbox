@@ -6,7 +6,11 @@ import { formatValue } from '../format.js';
 export class MapEditor extends CollectionEditor<Record<string, unknown>> {
   protected override noun = 'variable';
   protected entries(): ListItem<string>[] {
-    return Object.entries(this.value).map(([k, v]) => ({ value: k, label: k, hint: formatValue(v) }));
+    return Object.entries(this.value).map(([k, v]) => ({
+      value: k,
+      label: k,
+      hint: this.node.element?.secret ? '***' : formatValue(v),
+    }));
   }
   protected async add(): Promise<void> {
     const name = await this.app.text({

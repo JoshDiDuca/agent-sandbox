@@ -33,6 +33,7 @@ export const DEFAULTS: Config = {
     warnDataGb: 50,
   },
   network: { blockPrivateRanges: true, allowOnly: [], blockHosts: [], forwardPorts: [], dns: [], proxy: '' },
+  vpn: { enabled: false, provider: 'nordvpn', protocol: 'udp', country: '', configFile: '', killSwitch: true },
   provisioning: {
     copyFromHost: true,
     fallbackToInstall: true,

@@ -183,6 +183,16 @@
       },
       "additionalProperties": false
     },
+    "vpn": {
+      "type": "object",
+      "properties": {
+        "killSwitch": {
+          "type": "boolean",
+          "description": "Block all traffic that does not go through the tunnel: when the tunnel cannot start, the sandbox stays offline instead of using your normal connection. A project can only turn this on, never off."
+        }
+      },
+      "additionalProperties": false
+    },
     "provisioning": {
       "type": "object",
       "properties": {
@@ -1040,6 +1050,7 @@
               "sourcegit",
               "githubdesktop",
               "lazygit",
+              "jj",
               "7zip",
               "winmerge",
               "everything",
@@ -1092,7 +1103,9 @@
               "ffmpeg",
               "sqlite",
               "shellcheck",
-              "gitleaks"
+              "gitleaks",
+              "ast-grep",
+              "rust-analyzer"
             ]
           },
           "description": "Apps from the catalogue to install in every sandbox (the Apps screen in the menu lists them by category). Each is downloaded once and kept."

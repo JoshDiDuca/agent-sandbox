@@ -43,7 +43,8 @@ export function holdsData(dir: string): boolean {
 
 /**
  * Creates the storage root when it is missing. Under %ProgramData%\AgentSandbox\users the folder is made private
- * before anything is written in it (the users folder itself is created as you when no all-users install made it).
+ * before anything is written in it (the users folder itself is created as you when no all-users install made it). A
+ * root elsewhere is made private when this call creates it.
  */
 export function ensureStorageRoot(
   root: string,
@@ -57,7 +58,16 @@ export function ensureStorageRoot(
     return;
   }
   if (!priv) {
-    fs.mkdirSync(root, { recursive: true });
+    // A root of your own choosing is made private too, but only when this call creates it (never an existing folder,
+    // so a tree that already holds files is not walked) and never a drive root.
+    const created = fs.mkdirSync(root, { recursive: true });
+    if (created && path.dirname(path.resolve(root)) !== path.resolve(root)) {
+      try {
+        protect(root);
+      } catch {
+        // Drives without permissions (FAT, some network shares) cannot be made private: the folder is still used.
+      }
+    }
     return;
   }
   fs.mkdirSync(path.dirname(priv), { recursive: true });

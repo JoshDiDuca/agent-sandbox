@@ -160,10 +160,11 @@ and for `restart`, `show`, `hide` and starting your own, you are told whose it i
 | `sandbox config get <setting>` / `set <setting> <value>` | read or change one setting, e.g. `sandbox config set sandbox.memoryMb 8192`; a wrong value lists what is allowed |
 | `sandbox config check [--workspace <dir>]` | check a project's `.sandbox-config.json` and list what it changes, without starting anything |
 | `sandbox agent-commands [status\|on\|off]` | **(Beta)** typing an agent's own command on this PC (`claude`, `codex` ...) starts it in a hidden sandbox for the folder you are in and attaches that terminal. See [agent commands](configuration.md#agent-commands-beta) |
+| `sandbox vpn [status\|login\|logout]` | the VPN login (typed hidden, kept encrypted, never printed) and whether the VPN is on. `login` first prints the steps to find NordVPN's service credentials. See [vpn](vpn.md) |
 | `sandbox host <agent> [-- arguments]` | any agent installed on this PC, run here, **not** sandboxed (`SANDBOX_AGENT_DIRECT=1` is set for it) |
 | `sandbox host claude [--personal]` (or `claude-host`) | Claude on this PC, **not** sandboxed, with its own profile (`--personal` uses your normal one). `sandbox host-claude` still works but is no longer listed |
 
-`sandbox --version` (or `-v`) prints the version. Inside a sandbox, commands that control it from outside (`launch`,
+`sandbox --version` (or `-v`) prints the version and where this copy runs from, for example `1.5.1 (all users, C:\Program Files\WindowsDevelopmentSandbox)` or `1.5.1 (npm copy, C:\nvm4w\nodejs\node_modules\windows-development-sandbox)`; `--version --short` prints the number alone (the installer and updater compare it). When you start the menu or a sandbox from a copy that is not the installed one while an install exists, one yellow line says so, once per version (`sandbox doctor` explains). Inside a sandbox, commands that control it from outside (`launch`,
 `attach`, `exec`, `stop`, `show`, `hide`, `restart`) say so, list what does work there, and do nothing; `sandbox db` runs `sbx-db` right there. `sandbox resume` with nothing to reopen says `Nothing to resume. Start one: sandbox claude.`
 
 Every command also takes `--config <file>` (before or after the command) to use another settings file. Colours are off

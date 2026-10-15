@@ -544,6 +544,22 @@ const COMMAND_LIST = [
     options: [],
   },
   {
+    name: 'vpn',
+    summary: 'the VPN for the sandbox: save your login, see whether it is on (NordVPN first)',
+    group: 'Advanced',
+    args: [
+      {
+        name: 'action',
+        description: 'status, login or logout',
+        required: false,
+        choices: ['status', 'login', 'logout'],
+      },
+    ],
+    options: [],
+    json: true,
+    examples: ['sandbox vpn login', 'sandbox vpn status'],
+  },
+  {
     name: 'host-claude',
     summary: 'run Claude on this PC, NOT sandboxed, with its own profile (same as: sandbox host claude)',
     group: 'Agents',

@@ -32,7 +32,7 @@ export class ObjectEditor {
           ...fields.map(([name, field]) => ({
             value: name,
             label: Text.humanize(name),
-            hint: formatValue(value[name]),
+            hint: field.secret && value[name] ? '***' : formatValue(value[name]),
             description: field.description,
             section: 'Fields',
             flip: field.editor === 'boolean',

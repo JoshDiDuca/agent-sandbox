@@ -1,6 +1,6 @@
 // An agent (claude, codex, ...) the sandbox can run.
 import { z } from 'zod';
-import { StringsSchema } from './common.js';
+import { secret, StringsSchema } from './common.js';
 
 /** A folder below the agent's state folder: plain names only, no drive, no "..". */
 const SubfolderSchema = z
@@ -48,7 +48,11 @@ export const HarnessSchema = z
       .describe('Python package installed with `uv tool install` inside the sandbox (e.g. aider-chat).'),
     uvBin: z.string().optional().describe('Command the uv package provides.'),
     arguments: StringsSchema.describe('Arguments always passed to the agent.'),
-    environment: z.record(z.string(), z.string()).describe('Environment variables for the agent.'),
+    environment: z
+      .record(z.string(), secret(z.string()))
+      .describe(
+        'Environment variables for the agent (API keys go here). Their values are shown as *** and are handed to the sandbox in a one-shot file, never kept in the launch folder. The agent can read its own environment.',
+      ),
     home: HarnessHomeSchema.optional().describe(
       'Where its login lives inside the sandbox; leave out when the agent cannot be pointed at a folder (then its login is not kept between sandboxes).',
     ),

@@ -12,6 +12,8 @@ import { createHarness, type RunningHarness } from './support/harness.js';
 import { liveTestsAvailable } from './support/live.js';
 import type { Suite } from './support/suite.js';
 import { accountsSuite } from './accounts.test.js';
+import { credentialsSuite } from './credentials.test.js';
+import { vpnSuite } from './vpn.test.js';
 import { agentCommandsSuite } from './agent-commands.test.js';
 import { channelSuite } from './channel.test.js';
 import { cliSuite } from './cli.test.js';
@@ -81,6 +83,8 @@ export const SUITES: Suite[] = [
   // syncing with this PC
   syncSuite,
   accountsSuite,
+  credentialsSuite,
+  vpnSuite,
   workspaceViewSuite,
   auditSuite,
   // an untrusted sandbox: what the host refuses to do with what it finds

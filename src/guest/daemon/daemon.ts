@@ -7,6 +7,7 @@ import { execCommand } from './exec.js';
 import { sessions } from './sessions.js';
 import { respond, safely } from './state.js';
 import { run } from '../runtime/paths.js';
+import { withRequestSecrets } from '../runtime/secrets.js';
 import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
 
@@ -36,7 +37,9 @@ export class Daemon {
       safely('claiming a request', () => fs.rmSync(run.requestFile(req.id), { force: true }));
       if (run.readSession(req.id)) continue;
       // Not awaited: starting a session or running a command must not hold up other requests.
-      void Promise.resolve(this.handle(req)).catch((e: unknown) => respond(req.id, { ok: false, message: errMsg(e) }));
+      void Promise.resolve(this.handle(withRequestSecrets(req))).catch((e: unknown) =>
+        respond(req.id, { ok: false, message: errMsg(e) }),
+      );
     }
     if (Date.now() - this.lastMemSave > MEM_SAVE_MS) {
       this.lastMemSave = Date.now();

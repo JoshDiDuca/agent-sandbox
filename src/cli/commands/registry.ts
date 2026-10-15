@@ -21,6 +21,7 @@ import {
 } from './maintenance/index.js';
 import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
+import { vpn } from './vpn.js';
 import { web, webServer } from './web.js';
 
 export type Handler = (ctx: Context) => number | Promise<number | void>;
@@ -54,6 +55,7 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   'host-claude': claudeHost,
   host: hostCommand,
   _watch: watcher,
+  vpn: vpn,
   web: web,
   _web: webServer,
 } satisfies Partial<Record<CommandName, Handler>>;

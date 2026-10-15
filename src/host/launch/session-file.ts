@@ -56,7 +56,8 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
     roots: [...parts.boot.roots, ...parts.boot.projects].map((r) => r.guest),
     ...(o.autoSession === false ? { autoSession: false } : {}),
     harnessName,
-    harness: parts.harness,
+    // The environment (it may hold API keys) travels in a one-shot file in <data>\secrets, never in this file.
+    harness: parts.harness ? { ...parts.harness, environment: {} } : null,
     harnessArguments: o.harnessArgs,
     persistAgentState: config.storage.persistAgentState,
     networking: config.sandbox.networking,
@@ -71,6 +72,7 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
     attach: config.attach,
     hooks: config.hooks,
     downloads: config.downloads,
+    ...(o.vpn ? { vpn: o.vpn.session } : {}),
     hostTools: hostToolsOf(o.probe),
     claudeProfile: {
       overwrite: config.claudeProfile.overwrite,

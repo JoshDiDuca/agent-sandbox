@@ -21,6 +21,8 @@ export interface TextOptions {
   accept?: RegExp;
   /** A muted line under the field while nothing is wrong (what is allowed: "1 to 65536"). */
   hint?: string;
+  /** A secret: the field shows * for each character (a password, an API key). */
+  masked?: boolean;
 }
 
 /** One line of text. Resolves to the text, or undefined when you press Esc. */
@@ -36,7 +38,7 @@ export class TextScreen implements Screen<string | undefined> {
 
   render(size: Size): FrameParts {
     const width = Math.min(size.width - 4, 100);
-    const chars = [...this.value];
+    const chars = [...this.value].map((ch) => (this.o.masked ? '*' : ch));
     // Scroll the field so the cursor stays visible.
     const inner = width - 4;
     const start = Math.max(0, this.cursor - inner + 1);

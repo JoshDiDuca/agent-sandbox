@@ -16,6 +16,7 @@ import {
   type ListResult,
 } from '../../tui/index.js';
 import { dataFolderRow, DataFolderFlow } from '../data-folder.js';
+import { VpnLoginFlow, vpnLoginRow, VPN_LOGIN } from '../vpn-login.js';
 import { CATEGORIES, categoryOf, nameOf } from '../settings/categories.js';
 import type { ConfigFile } from '../settings/config-file.js';
 import type { Draft } from '../settings/draft.js';
@@ -173,7 +174,7 @@ export function settingsOptions(
       { key: 'r', label: file.isProject ? 'remove' : 'reset to default', applies: (id) => set.has(id) },
       { key: 'z', label: 'undo', applies: (id) => unsaved.has(id) },
     ],
-    enterLabel: (_category, id) => (id === DATA_FOLDER ? 'change' : 'edit'),
+    enterLabel: (_category, id) => (id === DATA_FOLDER || id === VPN_LOGIN ? 'change' : 'edit'),
   };
 }
 
@@ -208,7 +209,10 @@ export class SettingsPage extends ListPage<string> {
 
   protected options(): ListOptions<string> {
     const row = dataFolderRow(this.ctx);
-    return settingsOptions(this.files, this.scope, this.draft, [{ value: DATA_FOLDER, category: 'general', ...row }]);
+    return settingsOptions(this.files, this.scope, this.draft, [
+      { value: DATA_FOLDER, category: 'general', ...row },
+      { value: VPN_LOGIN, category: 'network', ...vpnLoginRow(this.ctx) },
+    ]);
   }
 
   /** Stages a value; your own file never keeps a line that only repeats the default. */
@@ -235,6 +239,10 @@ export class SettingsPage extends ListPage<string> {
       if (result.kind !== 'pick') return {};
       const exit = await new DataFolderFlow(this.app, this.ctx).run();
       return exit ? { exit } : { reload: true };
+    }
+    if (result.value === VPN_LOGIN) {
+      if (result.kind !== 'pick') return {};
+      return { reload: true, notice: await new VpnLoginFlow(this.app, this.ctx).run() };
     }
     const setting = settingsOf(this.file).find((s) => s.key.join('.') === result.value);
     if (!setting) return {};

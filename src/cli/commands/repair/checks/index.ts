@@ -8,6 +8,7 @@ import { NETWORK_CHECKS } from './network.js';
 import { PC_CHECKS } from './pc.js';
 import { SANDBOX_CHECKS } from './sandbox.js';
 import { SETTINGS_CHECKS } from './settings.js';
+import { VPN_CHECKS } from './vpn.js';
 
 export const ALL_CHECKS: readonly Check[] = [
   ...PC_CHECKS,
@@ -18,4 +19,5 @@ export const ALL_CHECKS: readonly Check[] = [
   ...SANDBOX_CHECKS,
   ...AGENT_CHECKS,
   ...NETWORK_CHECKS,
+  ...VPN_CHECKS,
 ];

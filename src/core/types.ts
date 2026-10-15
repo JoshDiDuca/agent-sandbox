@@ -117,6 +117,14 @@ export interface DatabasePlan {
   adminPort?: number;
 }
 
+/** The VPN decided at launch (host/vpn/prepare.ts): its checked profile, and the login for the one-shot file. */
+export interface PreparedVpn {
+  session: GuestVpn;
+  /** The profile text, already checked. */
+  profile: string;
+  credentials: { username: string; password: string };
+}
+
 /** databases / pcLanguages: use these instead of scanning (tests). */
 export interface GenerateOptions {
   packageRoot: string;
@@ -136,6 +144,8 @@ export interface GenerateOptions {
   autoSession?: boolean;
   /** The other projects mapped at boot with their effective configs: the sandbox boots with what they want too. */
   bootWants?: { projects: BootWant[]; keepOff: string[] };
+  /** The VPN for this launch (vpn.enabled); its profile goes in the launch folder, its login in the one-shot file. */
+  vpn?: PreparedVpn;
 }
 export interface Generated {
   wsbPath: string;
@@ -163,6 +173,17 @@ export interface ProfileResult {
   skipped: string[];
   credentials: boolean;
   secretsRemoved: string[];
+}
+
+/** The VPN of one launch: what the guest needs besides the login (which comes in the one-shot secrets file). */
+export interface GuestVpn {
+  provider: Config['vpn']['provider'];
+  protocol: Config['vpn']['protocol'];
+  killSwitch: boolean;
+  /** The server's name, for messages. */
+  server: string;
+  /** The checked profile, relative to the launch folder. */
+  profile: string;
 }
 
 /** Written by the host to C:\AgentLaunch\session.json (read-only for the guest): everything the guest needs to know. */
@@ -199,6 +220,8 @@ export interface GuestSession {
   attach: Config['attach'];
   hooks: Config['hooks'];
   downloads: Config['downloads'];
+  /** Set when the VPN is on for this launch (older launch folders lack it). */
+  vpn?: GuestVpn;
   /** nodeVersion: this PC's Node (e.g. 22.11.0), found under nvm\v<version> when nvm is mapped, else under node. */
   /** volta / pyenv: this PC uses them (their "auto" settings turn them on in the sandbox too). */
   hostTools: {

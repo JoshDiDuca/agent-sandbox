@@ -31,6 +31,30 @@ Removed:
 these settings. The launch output lists what was kept back, and warns about files like `.env` or `*.pem` that the agent
 can read because the whole folder is mapped.
 
+### Your own logins and keys
+
+- **Saved logins are encrypted at rest.** Accounts saved with `sandbox account save` (Claude and the other agents) and
+  the VPN login are sealed with Windows DPAPI for your Windows user: the files in `<storage>\accounts` and
+  `<storage>\vpn` hold only names, dates and e-mail addresses in the clear. Nobody else, and no other Windows user, can
+  open them, not even with a copy of the files. They are decrypted only when you switch to one or start a sandbox with
+  it. Logins saved by older versions are encrypted the first time they are read.
+- **Your storage folder is private.** One that is created empty (the default under `%ProgramData%\AgentSandbox\users`,
+  or a folder you chose) gets permissions for you, SYSTEM and administrators only. A folder that already holds files is
+  never rewritten (that takes minutes); `sandbox doctor` shows how it is protected.
+- **Agent environment values and your Claude login do not travel in files the sandbox keeps.** The launch folder is
+  mapped read-only into the sandbox and kept for days, so `session.json` and everything in it hold no API key, no
+  `harnesses.<agent>.environment` value, no copy of your Claude login and no VPN login. They go in a one-shot file in
+  `<data>\secrets` (next to `run\`, not in it, so other users of a shared sandbox cannot touch it) that the sandbox reads
+  and deletes at once; whatever it did not read is removed when the sandbox stops and before the next launch. The same goes
+  for the keys of an agent started later (`sandbox codex` in a sandbox started for claude). A shared sandbox never gets
+  your values.
+- **What the agent can always see:** its own environment, the login it was started with (Claude's `.credentials.json`
+  inside the sandbox, the files of another agent's login, the VPN service credentials while it connects) and
+  everything in your project folder. The agent is an administrator inside the sandbox; treat every key you give it as one it
+  can read, use and leak. Use keys you can revoke, with the smallest rights.
+- **Settings print `***`** for secret values (`sandbox config show`, the settings screen, `doctor`, every `--json`).
+- `network.proxy` takes no `user:password@`: it would be stored in plain text in a file the sandbox reads.
+
 ## Nothing runs on your PC
 
 - Host and sandbox talk through small JSON files. The sandbox can ask for four things (start a session, run a command,
@@ -120,6 +144,26 @@ Other users' secrets stay out: when the sandbox is someone else's, your agent en
 `--account` is refused. Restarting it, adding a project, showing its window and starting a new one are the owner's
 alone. Everything read from the owner's folders is checked like anything from a sandbox (validated, links refused,
 text cleaned). The "By" label shown for a request is a label, not proof of who sent it.
+
+## VPN
+
+`vpn.enabled` sends the sandbox's traffic through a VPN ([vpn.md](vpn.md)). What to know:
+
+- Your login is encrypted on your PC and given to the sandbox only while it starts (a one-shot file, never in
+  `session.json`). The NordVPN login is a **service credential** that you can revoke on Nord Account, not your account
+  password. The agent can read it while the sandbox runs, and it can turn the tunnel off, because it is the
+  administrator there. The VPN keeps a well-behaved agent and its tools off your normal connection and hides your address
+  from the sites they visit; it does not contain a hostile agent.
+- The kill switch (on by default) blocks everything outside the tunnel before the tunnel starts, so a failed tunnel
+  means no internet, not an open connection. A project can turn it on, never off, and can never set a VPN, a server, a
+  profile or a login.
+- The VPN profile is untrusted data: it is fetched on your PC (a bounded download), checked, and only profiles made of a
+  short list of harmless settings are used; anything that could run a program (`script-security`, `up`, `down`,
+  `plugin`, `route-up`, `tls-verify` ...) is refused, here and again in the sandbox.
+- OpenVPN is installed from the publisher's MSI, checked against a SHA-256 stored in this program (`downloads.requireChecksum`
+  does not refuse it). Tool downloads before the tunnel is up (the first minutes of a boot) go through your normal connection.
+- What the sandbox says about its tunnel (`run\vpn.json`) is its own word: `sandbox vpn status` compares the address it
+  reports with your PC's, but a compromised agent can lie.
 
 ## Shared tools
 

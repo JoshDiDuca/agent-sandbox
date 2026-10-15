@@ -1,5 +1,7 @@
 // Several Claude logins for the sandbox. Each account is a saved copy of Claude's .credentials.json plus the
-// `oauthAccount` block of .claude.json, kept in host-only storage (<storage>\accounts, never mapped into a sandbox).
+// `oauthAccount` block of .claude.json, kept in host-only storage (<storage>\accounts, never mapped into a sandbox)
+// and encrypted with Windows DPAPI (host/secrets): only the name, e-mail and date are readable in the file. Accounts
+// saved before that were plain; they are encrypted the first time they are read.
 // Switching writes them into the sandbox's persistent Claude state; when the sandbox is running the agent is then
 // restarted in place with --continue so the conversation carries on.
 import fs from 'node:fs';
@@ -9,6 +11,7 @@ import { isSafeFileName } from '../../shared/paths/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { storageOf } from '../storage/index.js';
 import { errMsg, fail, fileExists } from '../../core/util/index.js';
+import { SecretStore } from '../secrets/index.js';
 import { PluginShare } from './plugin-share.js';
 import {
   clearAccountCaches,
@@ -51,6 +54,22 @@ const IndexSchema = z.object({
   active: z.record(z.string().max(200), z.string().regex(NAME)).optional(),
 });
 type Index = z.output<typeof IndexSchema>;
+/** On disk: the readable details and the sealed login ({ credentials, oauthAccount }). */
+const SealedSchema = z.object({
+  name: z.string().regex(NAME),
+  savedAt: z.string().max(64),
+  email: z.string().max(200).nullable(),
+  sealed: z.string().max(200000),
+});
+type Stored = z.output<typeof SealedSchema> | Account;
+const StoredSchema = z.union([SealedSchema, AccountSchema]) as unknown as z.ZodType<Stored>;
+const isSealed = (s: Stored): s is z.output<typeof SealedSchema> => 'sealed' in s;
+/** What lists need: no decryption. */
+export interface AccountMeta {
+  readonly name: string;
+  readonly savedAt: string;
+  readonly email: string | null;
+}
 
 export function accountsDir(storageRoot: string): string {
   return path.join(storageRoot, 'accounts');
@@ -89,6 +108,7 @@ export class AccountStore {
   constructor(
     private readonly storageRoot: string,
     private readonly sharePlugins = false,
+    private readonly secrets: SecretStore = SecretStore.standard(),
   ) {}
 
   /** With the setting on: refreshes the shared plugin set from this data set, or fills this data set from it. */
@@ -107,18 +127,60 @@ export class AccountStore {
     }
   }
 
-  private file(name: string): JsonFile<Account> {
-    return new JsonFile(AccountSchema as z.ZodType<Account>, path.join(accountsDir(this.storageRoot), name + '.json'));
+  private file(name: string): JsonFile<Stored> {
+    return new JsonFile(StoredSchema, path.join(accountsDir(this.storageRoot), name + '.json'));
+  }
+
+  private seal(account: Account): z.output<typeof SealedSchema> {
+    const { name, savedAt, email, credentials, oauthAccount } = account;
+    return { name, savedAt, email, sealed: this.secrets.sealJson({ credentials, oauthAccount }) };
   }
 
   private store(name: string, login: Login): Account {
     const account: Account = { name, savedAt: new Date().toISOString(), email: emailOf(login.oauthAccount), ...login };
-    this.file(name).write(account);
+    this.file(name).write(this.seal(account));
     return account;
   }
 
+  /** The saved account's name, date and e-mail (nothing is decrypted). */
+  meta(name: string): AccountMeta | null {
+    const stored = validName(name) ? this.file(name).read() : null;
+    return stored ? { name: stored.name, savedAt: stored.savedAt, email: stored.email } : null;
+  }
+
+  /**
+   * The saved account with its login decrypted. A plain file from an older version is encrypted on the spot (it stays
+   * readable when that fails).
+   */
   read(name: string): Account | null {
-    return validName(name) ? this.file(name).read() : null;
+    const stored = validName(name) ? this.file(name).read() : null;
+    if (!stored) return null;
+    if (isSealed(stored)) {
+      const login = this.secrets.openJson(stored.sealed) as { credentials: unknown; oauthAccount: unknown };
+      return { name: stored.name, savedAt: stored.savedAt, email: stored.email, ...login };
+    }
+    try {
+      this.file(name).write(this.seal(stored));
+    } catch {
+      // Could not encrypt now (DPAPI unavailable): the old plain file stays and is tried again next time.
+    }
+    return stored;
+  }
+
+  /** Encrypts every account still saved as plain text (older versions); returns how many it did. */
+  sealLegacy(): number {
+    const dir = accountsDir(this.storageRoot);
+    if (!fs.existsSync(dir)) return 0;
+    let done = 0;
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'index.json')) {
+      const name = f.slice(0, -5);
+      const stored = validName(name) ? this.file(name).read() : null;
+      if (!stored || isSealed(stored)) continue;
+      this.read(name);
+      const after = this.file(name).read();
+      if (after && isSealed(after)) done++;
+    }
+    return done;
   }
 
   defaultName(): string | null {
@@ -133,13 +195,14 @@ export class AccountStore {
   list(dataPath: string): AccountRow[] {
     const dir = accountsDir(this.storageRoot);
     if (!fs.existsSync(dir)) return [];
+    this.sealLegacy();
     const def = this.defaultName();
     const active = this.activeFor(dataPath);
     return fs
       .readdirSync(dir)
       .filter((f) => f.endsWith('.json') && f !== 'index.json')
-      .map((f) => this.read(f.slice(0, -5)))
-      .filter((a): a is Account => a !== null)
+      .map((f) => this.meta(f.slice(0, -5)))
+      .filter((a): a is AccountMeta => a !== null)
       .map((a) => ({
         name: a.name,
         email: a.email,
@@ -175,7 +238,7 @@ export class AccountStore {
       );
     const { claudeDir, globalStateFile } = sandboxLogin(dataPath);
     const outgoing = this.activeFor(dataPath);
-    if (outgoing && outgoing !== name && this.read(outgoing) && fileExists(path.join(claudeDir, '.credentials.json'))) {
+    if (outgoing && outgoing !== name && this.meta(outgoing) && fileExists(path.join(claudeDir, '.credentials.json'))) {
       try {
         this.store(outgoing, readLogin(claudeDir, globalStateFile));
       } catch {
@@ -194,7 +257,7 @@ export class AccountStore {
   }
 
   setDefault(name: string | null): void {
-    if (name !== null && !this.read(name))
+    if (name !== null && !this.meta(name))
       fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
     updateIndex(this.storageRoot, (i) => ({ ...i, default: name ?? undefined }));
   }
@@ -203,8 +266,8 @@ export class AccountStore {
     assertName(to);
     const account =
       this.read(name) ?? fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
-    if (this.read(to)) fail('There is an account "' + to + '" already.', 'Pick another name.');
-    this.file(to).write({ ...account, name: to });
+    if (this.meta(to)) fail('There is an account "' + to + '" already.', 'Pick another name.');
+    this.file(to).write(this.seal({ ...account, name: to }));
     fs.rmSync(this.file(name).file);
     updateIndex(this.storageRoot, (i) => ({
       ...i,
@@ -214,7 +277,7 @@ export class AccountStore {
   }
 
   remove(name: string): void {
-    if (!this.read(name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
+    if (!this.meta(name)) fail('Unknown account "' + name + '".', 'See your accounts with: sandbox account list');
     fs.rmSync(this.file(name).file);
     if (this.defaultName() === name) this.setDefault(null);
   }

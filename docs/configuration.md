@@ -132,11 +132,37 @@ The **Network** category of the settings (or `network` in your file):
 | `blockHosts` | names that go nowhere (the sandbox's hosts file), e.g. production servers or telemetry; exact names, no wildcards |
 | `forwardPorts` | `{ "pc": 3000, "sandbox": 5173 }`: `http://localhost:3000` on your PC reaches port 5173 inside while the sandbox runs, even a dev server that only listens on localhost there. Only this PC can use it; no admin rights needed |
 | `dns` | DNS servers for the sandbox, e.g. `["1.1.1.1", "9.9.9.9"]` |
-| `proxy` | your HTTP proxy for everything in the sandbox (`HTTP_PROXY` / `HTTPS_PROXY`), e.g. `http://proxy.corp:8080`; with `allowOnly`, the sandbox's proxy hands on to it |
+| `proxy` | your HTTP proxy for everything in the sandbox (`HTTP_PROXY` / `HTTPS_PROXY`), e.g. `http://proxy.corp:8080`; with `allowOnly`, the sandbox's proxy hands on to it. No `user:password@` in the address: it would sit in plain text where the agent can read it, so it is refused (use a proxy that needs no login) |
 
 These are applied inside the sandbox, where the agent is an administrator: they keep a well-behaved agent (and the
 tools it runs) in bounds, but a determined one could undo them. `sandbox.networking: false` is the only hard isolation.
 A project's `.sandbox-config.json` may add `blockHosts` and turn on `blockPrivateRanges`, nothing else here.
+
+## VPN
+
+The **VPN** settings (Network category, or `vpn` in your file) send the sandbox's traffic through a VPN. Only the
+sandbox: your PC's own connection is untouched. Plain steps for NordVPN: [vpn.md](vpn.md).
+
+| Setting | |
+| --- | --- |
+| `enabled` | the VPN is on for new sandboxes (off by default). Needs a saved login: `sandbox vpn login` |
+| `provider` | `nordvpn` (a recommended server is picked at every launch) or `openvpn-file` (your own `.ovpn`, see `configFile`) |
+| `protocol` | `udp` (faster) or `tcp` (gets through networks that block udp) |
+| `country` | NordVPN only: e.g. `uk`, `us`, `Germany`; empty = the best server anywhere |
+| `configFile` | `openvpn-file` only: the `.ovpn` on this PC, certificates inside it. Profiles that run programs (`script-security`, `up`, `down`, `plugin` ...) are refused |
+| `killSwitch` | block everything that does not go through the tunnel; when the tunnel cannot start the sandbox stays offline (on by default) |
+
+The login is not a setting: it is typed hidden by `sandbox vpn login` (or Settings > Network > Set NordVPN login),
+kept encrypted for your Windows user and handed to the sandbox only while it starts. A project's
+`.sandbox-config.json` can turn `killSwitch` on, never off, and can never choose a VPN, a server, a profile or a login.
+
+## Agent environment variables
+
+`harnesses.<agent>.environment` holds variables for one agent, such as an API key. Their values are shown as `***` in
+`sandbox config show`, in the settings screen and in every `--json` output (typed with each character hidden in the
+screen), and they reach the sandbox in a one-shot file that the sandbox reads and deletes, never in `session.json` or
+the launch folder. The agent can read its own environment, which is the point; so can anything else it runs.
+`toolchains.environment` is for tool settings (registry mirrors), not for secrets.
 
 ## Audit log
 

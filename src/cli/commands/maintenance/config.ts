@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import _ from 'lodash';
 import { DEFAULTS, userConfigPath, userDir } from '../../../core/config/index.js';
+import { redactSecrets } from '../../../core/schema/index.js';
 import {
   allowedAnswer,
   allowStorePath,
@@ -121,14 +122,21 @@ function setSettingCommand(ctx: Context, key: string | undefined, text: string |
   const outcome = ConfigFile.user(ctx.loaded.configPath).set(keyPath, value);
   if (typeof outcome === 'object')
     fail('Could not change ' + key + ': ' + outcome.problems.join('; '), 'Nothing was written.');
-  console.log(key + ' is ' + JSON.stringify(value) + (outcome === 'unchanged' ? ' (it was already)' : '') + '.');
+  console.log(
+    key +
+      ' is ' +
+      JSON.stringify(_.get(redactSecrets(_.set({}, keyPath, value)), keyPath)) +
+      (outcome === 'unchanged' ? ' (it was already)' : '') +
+      '.',
+  );
   return 0;
 }
 
 function getSettingCommand(ctx: Context, key: string | undefined): number {
   if (!key) fail('Which setting?', 'Usage: sandbox config get <setting>   (all of them: sandbox config show)');
   const { path: keyPath } = settingNode(key);
-  const value = _.get(ctx.loaded.config, keyPath) as unknown;
+  // Secret values (an agent's API keys) are never printed.
+  const value = _.get(redactSecrets(ctx.loaded.config), keyPath) as unknown;
   console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
   return 0;
 }
@@ -250,7 +258,7 @@ export function config(ctx: Context): number | Promise<number> {
     case 'init':
       return initConfig();
     case 'show':
-      console.log(JSON.stringify(ctx.loaded.config, null, 2));
+      console.log(JSON.stringify(redactSecrets(ctx.loaded.config), null, 2));
       return 0;
     case 'get':
       return getSettingCommand(ctx, key);

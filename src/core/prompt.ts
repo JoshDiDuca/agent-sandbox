@@ -1,7 +1,7 @@
 // Questions asked on the terminal, all through @inquirer/prompts. askYesNo is for optional offers: without an
 // interactive terminal the answer is "no". askRequired, askChoice and askName are for questions a command cannot go on
 // without: with no terminal they fail and say how to answer on the command line.
-import { checkbox, confirm, input, select } from '@inquirer/prompts';
+import { checkbox, confirm, input, password, select } from '@inquirer/prompts';
 import { fail } from './util/errors.js';
 
 /** One entry of a list question; `description` is shown under the highlighted entry. */
@@ -60,4 +60,17 @@ export async function askName(
   requireTerminal(fix);
   const answer = await input({ message, validate: validate ? (v) => validate(v.trim()) : undefined });
   return answer.trim();
+}
+
+/**
+ * Type a secret (a password, an API key) with each character shown as *. Never echoed, never kept; `fix` says what to
+ * do without a terminal.
+ */
+export async function askSecret(message: string, fix: string): Promise<string> {
+  requireTerminal(fix);
+  return password({
+    message,
+    mask: '*',
+    validate: (v) => (v.length > 0 ? true : 'Type it, or press Ctrl+C to cancel.'),
+  });
 }

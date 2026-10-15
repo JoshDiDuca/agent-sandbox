@@ -82,6 +82,7 @@ export class ValueEditor {
           about,
           initial: typeof current === 'string' ? current : '',
           allowEmpty: node.check('') === true,
+          masked: node.secret,
           validate: (v) => node.check(v),
         });
         return typed === undefined ? undefined : { value: typed };

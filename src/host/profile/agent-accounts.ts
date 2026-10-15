@@ -1,11 +1,14 @@
 // Saved logins for agents other than Claude: <storage>\accounts\<agent>\<name>\ holds a copy of the agent's login files
-// (the harness `home.loginFiles`) and meta.json. Host-only storage, never mapped into a sandbox; switching copies the
-// files into the sandbox's persistent state. Claude keeps its own older layout (accounts.ts).
+// (the harness `home.loginFiles`, each one encrypted with Windows DPAPI as <file>.sealed) and meta.json. Host-only
+// storage, never mapped into a sandbox; switching decrypts the files into the sandbox's persistent state. Copies saved
+// by older versions were plain: they are encrypted the next time the accounts are listed or one is switched to.
+// Claude keeps its own older layout (accounts.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile } from '../../shared/io/index.js';
 import { isSafeFileName } from '../../shared/paths/index.js';
+import { SecretStore } from '../secrets/index.js';
 import { assertNoLinks, ensureDir, fail, isLink } from '../../core/util/index.js';
 import { accountsDir, type AccountRow } from './accounts.js';
 
@@ -36,7 +39,26 @@ export class AgentAccountStore {
     private readonly storageRoot: string,
     private readonly agent: string,
     private readonly loginFiles: readonly string[],
+    private readonly secrets: SecretStore = SecretStore.standard(),
   ) {}
+
+  /** Encrypts the plain login files of every account saved by an older version. */
+  sealLegacy(): void {
+    if (!fs.existsSync(this.dir)) return;
+    for (const d of fs.readdirSync(this.dir, { withFileTypes: true })) {
+      if (!d.isDirectory() || d.isSymbolicLink() || !validName(d.name)) continue;
+      for (const f of this.loginFiles) {
+        const plain = path.join(this.folder(d.name), ...f.split(/[\\/]/));
+        if (!fs.existsSync(plain) || isLink(plain)) continue;
+        try {
+          fs.writeFileSync(plain + '.sealed', this.secrets.sealBytes(fs.readFileSync(plain)));
+          fs.rmSync(plain);
+        } catch {
+          // Could not encrypt now: the plain copy stays readable and is tried again next time.
+        }
+      }
+    }
+  }
 
   private get dir(): string {
     return path.join(accountsDir(this.storageRoot), this.agent);
@@ -71,6 +93,7 @@ export class AgentAccountStore {
 
   list(dataPath: string): AccountRow[] {
     if (!fs.existsSync(this.dir)) return [];
+    this.sealLegacy();
     const def = this.defaultName();
     const active = this.activeFor(dataPath);
     return fs
@@ -106,7 +129,7 @@ export class AgentAccountStore {
     for (const f of found) {
       const dest = path.join(target, ...f.split(/[\\/]/));
       ensureDir(path.dirname(dest));
-      fs.copyFileSync(path.join(from, f), dest);
+      fs.writeFileSync(dest + '.sealed', this.secrets.sealBytes(fs.readFileSync(path.join(from, f))));
     }
     new JsonFile(MetaSchema, path.join(target, 'meta.json')).write({ name, savedAt: new Date().toISOString() });
   }
@@ -129,6 +152,7 @@ export class AgentAccountStore {
             .map((a) => a.name)
             .join(', ') || 'none yet'),
       );
+    this.sealLegacy();
     // Tokens rotate while the agent runs: the outgoing account's current files are saved back first.
     const outgoing = this.activeFor(dataPath);
     if (outgoing && outgoing !== name && this.meta(outgoing)) {
@@ -145,7 +169,9 @@ export class AgentAccountStore {
       assertNoLinks(to, path.dirname(dest));
       if (isLink(dest)) fs.rmSync(dest);
       const saved = path.join(this.folder(name), ...f.split(/[\\/]/));
-      if (fs.existsSync(saved)) fs.copyFileSync(saved, dest);
+      if (fs.existsSync(saved + '.sealed'))
+        fs.writeFileSync(dest, this.secrets.openBytes(fs.readFileSync(saved + '.sealed', 'utf8')));
+      else if (fs.existsSync(saved)) fs.copyFileSync(saved, dest);
       else fs.rmSync(dest, { force: true });
     }
     this.setActive(dataPath, name);

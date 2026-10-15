@@ -7,6 +7,32 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## 1.7.0
+
+VPN (NordVPN first; built and tested in a sandbox, still to be tried on a real PC: [docs/vpn.md](docs/vpn.md))
+
+- NordVPN inside the sandbox only, your PC's own connection untouched: sign in to your Nord account on the website
+  with your normal login once, copy its service credentials, and `sandbox vpn login` keeps them encrypted on this PC.
+  Each sandbox picks a NordVPN server, connects with OpenVPN and, with the kill switch on (the default), has no
+  internet when the tunnel is down. `sandbox vpn status` and Settings > Network show it. Your own `.ovpn` works too
+  (`vpn.provider: openvpn-file`).
+
+Credentials
+
+- Saved logins (every agent) are encrypted at rest with Windows DPAPI for your user; older saved logins are encrypted
+  the first time they are read.
+- Agent API keys (`environment`), a copied Claude login and the VPN login never go into launch folders,
+  `session.json` or the folder other users may write to: the sandbox reads them once from a file it deletes.
+- Secret settings print as `***` in `config`, the menu and every `--json` output. A proxy with a password in its
+  address is refused.
+
+Install copies and folder permissions
+
+- `sandbox doctor` lists every `sandbox`, `agent-sandbox` and `claude-sbx` on the PATH, says which runs and how to remove each other one. `sandbox --version` says where it runs from (`--version --short` is the plain number). A copy that is not the installed one says so once per version.
+- `npm run install:global` refuses while a managed install exists (`-- --force` to override). The installer refuses a just-you install next to an everyone install and offers to remove an older per-user install and `C:\Scripts\agent-sandbox`.
+- Sharing finds the all-users install from any copy, and a launch says so when sharing is on but there is no such install.
+- A launch with sharing off skips the permission step when the sharing group has no entry on your folders. Repair makes a data folder with files private without the 30 second limit, and says it can take minutes.
+
 ## 1.6.0
 
 Fixes

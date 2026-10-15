@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { generateSandbox } from '../../../host/launch/index.js';
 import { findSecretFiles } from '../../../host/profile/index.js';
 import { RepoGuardStore } from '../../../host/guard/index.js';
+import { hostPublicIp, prepareVpn, readVpnLine, vpnNotes } from '../../../host/vpn/index.js';
 import {
   assertCanLaunch,
   isSandboxRunning,
@@ -163,6 +164,15 @@ class Launcher {
     if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
     const prepared = generateOnly ? null : await prepare(ctx, run);
     const bootWants = await bootWantsFor(ctx, run, extras.extraProjects);
+    // The VPN (vpn.enabled): its server and profile are fetched and checked here, before anything is written.
+    const vpn = generateOnly
+      ? null
+      : await prepareVpn({
+          config,
+          storageRoot: ctx.storageRoot,
+          sandboxRunning: isSandboxRunning(),
+          base: run.workspaceHost,
+        });
     const generated: GeneratedSandbox = generateSandbox({
       packageRoot: ctx.packageRoot,
       run,
@@ -171,11 +181,13 @@ class Launcher {
       extraProjects: extras.extraProjects,
       autoSession: extras.autoSession,
       bootWants: bootWants.wants,
+      ...(vpn ? { vpn } : {}),
     });
 
     const notes = [...run.notes, ...bootWants.notes, ...generated.projects.notes, ...generated.mappingNotes];
     for (const note of notes) console.log(note);
     this.warnSecretFiles(run);
+    for (const line of vpnNotes(config.vpn)) console.log(c.yellow(line));
     table(launchSummary(run, generated, prepared));
     if (generateOnly) return 0;
     // A restart or sandbox resume reopens sessions itself (they pass the projects they keep).
@@ -240,7 +252,16 @@ class Launcher {
    */
   private share(generated: GeneratedSandbox): void {
     const deps = sharingDeps(this.ctx.packageRoot);
-    if (!deps) return;
+    if (!deps) {
+      if (this.ctx.loaded.config.sharing.otherUsers)
+        console.log(
+          c.yellow(
+            'This sandbox is not shared: sharing.otherUsers is on, but no all-users install was found on this PC. ' +
+              'Install for everyone (install.ps1 -Scope AllUsers) to share sandboxes.',
+          ),
+        );
+      return;
+    }
     // Only the shared tree may be opened to the group: never a storage folder of your own (your profile, say).
     const inSharedTree = isWithin(deps.usersDir, this.ctx.dataPath);
     if (this.ctx.loaded.config.sharing.otherUsers && !inSharedTree)
@@ -289,6 +310,27 @@ class Launcher {
       spawnDetached(this.ctx.entry, ['_watch', ...(config ? ['--config', path.resolve(config)] : [])]);
   }
 
+  /** Waits for the boot; the VPN's outcome is said whether the boot worked or not (a failed tunnel can be why). */
+  private async bootThenReportVpn(run: ResolvedRun, launchId: string, timed: boolean): Promise<void> {
+    try {
+      await waitForBoot(this.ctx.dataPath, launchId, timed);
+    } catch (e) {
+      await this.reportVpn(run);
+      throw e;
+    }
+    await this.reportVpn(run);
+  }
+
+  /** Says whether the VPN came up (the sandbox reports it; its address is compared with this PC's). */
+  private async reportVpn(run: ResolvedRun): Promise<void> {
+    if (!run.config.vpn.enabled) return;
+    const line = readVpnLine(this.ctx.dataPath, await hostPublicIp());
+    if (!line) return;
+    console.log(
+      line.level === 'ok' ? c.green(line.text) : line.level === 'warn' ? c.yellow(line.text) : c.red(line.text),
+    );
+  }
+
   /** Waits for the boot and attaches when asked to; otherwise says where the agent opens. */
   private async afterStart(run: ResolvedRun, generated: GeneratedSandbox): Promise<number> {
     const { ctx, options, extras } = this;
@@ -299,7 +341,7 @@ class Launcher {
     const headsUp = firstBootNotice(dataPath, generated);
     if (options.terminal || options.noAgent || extras.waitUntilReady) {
       if (headsUp) console.log(headsUp);
-      await waitForBoot(dataPath, generated.launchId, Boolean(headsUp));
+      await this.bootThenReportVpn(run, generated.launchId, Boolean(headsUp));
       if (extras.waitUntilReady) return 0;
       // Without an agent there is no session to attach to: the sandbox itself is the result.
       if (options.noAgent) {
@@ -312,7 +354,11 @@ class Launcher {
       }
       return attachHere(ctx, await waitForStart(ctx, generated.launchId, 'Starting ' + run.harnessName));
     }
-    if (headsUp) console.log(headsUp + '\nFollow along: sandbox logs -f');
+    // The VPN's outcome is worth waiting for: a failed tunnel with the kill switch on means no internet.
+    if (config.vpn.enabled) {
+      if (headsUp) console.log(headsUp);
+      await this.bootThenReportVpn(run, generated.launchId, Boolean(headsUp));
+    } else if (headsUp) console.log(headsUp + '\nFollow along: sandbox logs -f');
     if (hidden)
       console.log(
         (await hidden)

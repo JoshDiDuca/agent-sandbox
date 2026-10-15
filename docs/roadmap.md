@@ -9,11 +9,12 @@ Status: **in progress**, **planned**, **idea** (needs a design decision or a tes
 
 | Item | Status |
 | --- | --- |
-| NordVPN inside the sandbox only (your PC's own connection is untouched): sign in to your Nord account on the website with your normal login once, copy its service credentials, and `sandbox vpn login` keeps them encrypted on this PC (never your account password) | in progress |
-| Credentials stored safely: encrypted at rest (Windows DPAPI, your user only), never in launch folders, `--json` or logs | in progress |
-| Later: your own OpenVPN / WireGuard file (business VPNs), NordLynx (WireGuard) | planned |
-| Kill switch: no traffic leaves the sandbox when the tunnel is down | planned |
-| Warnings: a VPN login inside the sandbox is readable by the agent; free VPNs see all traffic; shown in the menu and at launch | planned |
+| NordVPN inside the sandbox only (your PC's own connection is untouched): sign in to your Nord account on the website with your normal login once, copy its service credentials, and `sandbox vpn login` keeps them encrypted on this PC (never your account password) | built and tested here; **must be tried on a real PC** ([vpn.md](vpn.md#what-is-not-tested-yet)) |
+| Credentials stored safely: encrypted at rest (Windows DPAPI, your user only), never in launch folders, `--json` or logs | done (saved logins and agent keys too; tests in the `credentials` and `vpn` suites) |
+| Your own OpenVPN file (business VPNs): `vpn.provider: openvpn-file` | built, untested on a real PC |
+| Later: WireGuard files, NordLynx (WireGuard) | planned |
+| Kill switch: no traffic leaves the sandbox when the tunnel is down | built (firewall rules before the tunnel starts); to verify on a real PC |
+| Warnings: a VPN login inside the sandbox is readable by the agent; free VPNs see all traffic; shown in the menu and at launch | done |
 
 ## 1.9 — Web UI (the release before 2.0)
 

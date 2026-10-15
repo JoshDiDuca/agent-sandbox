@@ -48,8 +48,8 @@ export const CATEGORIES: SettingsCategory[] = [
     id: 'network',
     label: 'Network',
     description:
-      'What the sandbox can reach: your LAN, only some hosts, blocked hosts, DNS, a proxy, and ports forwarded from this PC to servers inside. (No network at all: Sandbox machine > Networking.)',
-    keys: ['network'],
+      'What the sandbox can reach: your LAN, only some hosts, blocked hosts, DNS, a proxy, ports forwarded from this PC to servers inside, and a VPN (with a login set here). (No network at all: Sandbox machine > Networking.)',
+    keys: ['network', 'vpn'],
   },
   {
     id: 'security',
@@ -82,6 +82,7 @@ const NAMES: Record<string, string> = {
   claudeProfile: 'Claude profile',
   storage: 'Storage on this PC',
   network: 'Network',
+  vpn: 'VPN',
   hooks: 'Hooks',
   personalization: 'Desktop look',
   projects: 'Projects',

@@ -11,8 +11,9 @@ import {
   ProjectStatusSchema,
   SandboxStatusSchema,
   SessionStatusSchema,
+  VpnStatusSchema,
 } from './schema.js';
-import type { GuestRequest, GuestResponse, ProjectStatus, SandboxStatus, SessionStatus } from './schema.js';
+import type { GuestRequest, GuestResponse, ProjectStatus, SandboxStatus, SessionStatus, VpnStatus } from './schema.js';
 import { readValid } from '../io/index.js';
 
 /** Ids become file names, so only a strict alphabet is allowed (no separators, no dots). */
@@ -42,21 +43,26 @@ const scan = <S extends z.ZodType>(schema: S, dir: string): { valid: z.output<S>
 export class RunDir {
   readonly root: string;
   readonly sandboxFile: string;
+  readonly vpnFile: string;
   readonly requestsDir: string;
   readonly responsesDir: string;
   readonly sessionsDir: string;
   readonly projectsDir: string;
   /** audit.processes: programs the sandbox started, in small .jsonl files the host takes in and deletes. */
   readonly auditDir: string;
+  /** One-shot secrets the host hands over (see secrets.ts). Next to run, not in it: shared-use users can change run. */
+  readonly secretsDir: string;
 
   constructor(dataDir: string) {
     this.root = path.join(dataDir, 'run');
     this.sandboxFile = path.join(this.root, 'sandbox.json');
+    this.vpnFile = path.join(this.root, 'vpn.json');
     this.requestsDir = path.join(this.root, 'requests');
     this.responsesDir = path.join(this.root, 'responses');
     this.sessionsDir = path.join(this.root, 'sessions');
     this.projectsDir = path.join(this.root, 'projects');
     this.auditDir = path.join(this.root, 'audit');
+    this.secretsDir = path.join(dataDir, 'secrets');
   }
 
   requestFile(id: string): string {
@@ -72,8 +78,15 @@ export class RunDir {
     return path.join(this.projectsDir, safeId(name) + '.json');
   }
 
+  secretFile(id: string): string {
+    return path.join(this.secretsDir, safeId(id) + '.json');
+  }
+
   readSandboxStatus(): SandboxStatus | null {
     return readValid(SandboxStatusSchema, this.sandboxFile);
+  }
+  readVpnStatus(): VpnStatus | null {
+    return readValid(VpnStatusSchema, this.vpnFile);
   }
   readSession(id: string): SessionStatus | null {
     return readValid(SessionStatusSchema, this.sessionFile(id));

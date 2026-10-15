@@ -23,6 +23,7 @@ import { AppsSchema } from './apps.js';
 import { ProjectsSchema } from './projects.js';
 import { ResumeSchema } from './resume.js';
 import { WebSchema } from './web.js';
+import { VpnSchema } from './vpn.js';
 
 export const ConfigSchema = z
   .strictObject({
@@ -57,6 +58,7 @@ export const ConfigSchema = z
         ),
     }),
     network: NetworkSchema,
+    vpn: VpnSchema,
     provisioning: ProvisioningSchema,
     downloads: DownloadsSchema,
     toolchains: ToolchainsSchema,
@@ -106,6 +108,8 @@ export const LocalOverridesSchema = z
     sandbox: SandboxSchema.omit({ cpuLimit: true, pageFileMb: true }).partial(),
     // A project may block more (the LAN, hosts); it never opens hosts, ports, DNS or a proxy.
     network: NetworkSchema.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
+    // A project may turn the kill switch on, never off, and never choose a VPN, a server, a file or a login.
+    vpn: VpnSchema.pick({ killSwitch: true }).partial(),
     provisioning: ProvisioningSchema.pick({ copyFromHost: true, fallbackToInstall: true, refresh: true })
       .extend({ git: GitSchema.partial(), terminal: toggle('Windows Terminal as the sandbox window.').partial() })
       .partial(),

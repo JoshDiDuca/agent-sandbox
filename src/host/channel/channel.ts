@@ -9,6 +9,7 @@ import type { ProjectSpec } from '../../shared/channel/index.js';
 import { now, RunDir } from '../../shared/channel/index.js';
 import { safeRemove, writeJsonAtomic } from '../../shared/io/index.js';
 import { isSandboxRunning } from '../sandbox/index.js';
+import { withoutSecrets, writeSecrets } from '../secrets/index.js';
 import { assertTestWritable, refuseInSelfTest } from '../test-guard.js';
 
 const BOOT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -125,7 +126,10 @@ export class SandboxChannel {
     if (request.kind === 'exec' && /shutdown/i.test(request.command[0] ?? ''))
       refuseInSelfTest('shut down Windows Sandbox');
     assertNoLinks(this.dataPath, this.run.requestsDir);
-    writeJsonAtomic(this.run.requestFile(request.id), request);
+    // Agent environment values (they may be API keys) never go into run: they travel in a one-shot file next to it.
+    const { request: plain, secrets } = withoutSecrets(request);
+    if (secrets) writeSecrets(this.dataPath, request.id, secrets);
+    writeJsonAtomic(this.run.requestFile(request.id), plain);
   }
 
   waitForResponse(requestId: string, timeoutMs: number): Promise<GuestResponse> {

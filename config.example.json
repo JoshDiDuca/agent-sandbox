@@ -51,6 +51,14 @@
     "dns": [],
     "proxy": ""
   },
+  "vpn": {
+    "enabled": false,
+    "provider": "nordvpn",
+    "protocol": "udp",
+    "country": "",
+    "configFile": "",
+    "killSwitch": true
+  },
   "provisioning": {
     "copyFromHost": true,
     "fallbackToInstall": true,

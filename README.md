@@ -92,5 +92,6 @@ get `wsb`: [several projects](docs/projects.md#adding-folders-to-a-running-sandb
 - [Several projects](docs/projects.md): project roots, adding a project to a running sandbox, what each agent can see
 - [Changelog](CHANGELOG.md): what shipped in each version
 - [Security](docs/security.md): how your PC is protected, secrets, git access
+- [VPN](docs/vpn.md): send the sandbox through NordVPN (or your own OpenVPN profile), with a kill switch
 - [Troubleshooting](docs/troubleshooting.md): common problems and fixes
 - [Development](docs/development.md): building, testing, releasing (code layout in [CLAUDE.md](CLAUDE.md))

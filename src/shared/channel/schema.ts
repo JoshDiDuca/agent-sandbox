@@ -142,6 +142,19 @@ export const ProjectStatusSchema = z.object({
   summary: z.array(Text(512)).max(64),
 });
 
+/** The guest writes run/vpn.json: whether the VPN tunnel is up (validated and capped on the host). */
+export const VpnStatusSchema = z.object({
+  state: z.enum(['off', 'starting', 'up', 'failed']),
+  message: Text(2000),
+  killSwitch: z.boolean(),
+  /** The server's name, e.g. uk2201.nordvpn.com. */
+  server: Text(128).optional(),
+  /** What the sandbox's traffic looks like from outside, once the tunnel is up. */
+  publicIp: Text(64).optional(),
+  updatedAt: TimeSchema,
+});
+
+export type VpnStatus = z.output<typeof VpnStatusSchema>;
 export type ProjectSpec = z.output<typeof ProjectSpecSchema>;
 export type ProjectStatus = z.output<typeof ProjectStatusSchema>;
 export type AttachEndpoint = z.output<typeof AttachEndpointSchema>;

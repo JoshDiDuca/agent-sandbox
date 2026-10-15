@@ -25,6 +25,7 @@ import {
 import { SandboxChannel } from '../host/channel/index.js';
 import { ProjectRegistry } from '../host/projects/registry.js';
 import { storageOf } from '../host/storage/index.js';
+import { clearSecrets } from '../host/secrets/index.js';
 import { endSharing, sharingDeps } from '../host/sharing/index.js';
 import { PACKAGE_ROOT } from '../core/package-info.js';
 import { syncBack } from './sync-cycle.js';
@@ -279,6 +280,13 @@ export class Watcher {
       if (bytes !== null) saveDataSize(this.storageRoot, this.dataPath, bytes);
     } catch {
       /* best effort */
+    }
+    // One-shot secrets the sandbox never read (it stopped early) and any login copy left in a launch folder.
+    try {
+      // Not when a new sandbox already started: its own files are there.
+      if (!isSandboxRunning()) clearSecrets(this.storageRoot, this.dataPath);
+    } catch (e) {
+      this.note('could not remove the one-shot secrets: ' + errMsg(e));
     }
     // An all-users install: the record of whose sandbox this was goes, and the group loses access to the folders.
     const sharing = sharingDeps(PACKAGE_ROOT);

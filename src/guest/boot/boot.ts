@@ -23,6 +23,7 @@ import { pruneToolLeftovers } from '../toolchains/leftovers.js';
 import { wanted } from '../toolchains/detect.js';
 import { configureVscode } from '../toolchains/tools/vscode.js';
 import { enableProcessAudit } from '../audit/process-audit.js';
+import { setupVpn } from '../vpn/index.js';
 import { now } from '../../shared/channel/run-dir.js';
 import { writeJsonAtomic } from '../../shared/io/json.js';
 import { viewSession } from '../sessions/viewer.js';
@@ -32,10 +33,12 @@ import { dryRun, isWin, localDir, logsDir, run, toolsDir } from '../runtime/path
 import { log, logPath, warn } from '../runtime/log.js';
 import { mkdirp } from '../runtime/fs.js';
 import { session, workspace } from '../runtime/session.js';
+import { applyBootEnvironment, BOOT_SECRETS_VARIABLE, takeSecrets } from '../runtime/secrets.js';
+import type { SecretsFile } from '../../shared/channel/secrets.js';
 import { setSandboxStatus } from '../runtime/status.js';
 import { errMsg } from '../../core/util/errors.js';
 
-const STEPS = 8;
+const STEPS = 9;
 const PRIMARY_POLLS = 600;
 const POLL_MS = 500;
 const VSCODE_LANGUAGES = ['python', 'java', 'go', 'rust', 'cpp', 'msvc', 'dotnet', 'ruby', 'php', 'deno', 'pwsh'];
@@ -62,12 +65,19 @@ async function soft(what: string, work: () => unknown): Promise<void> {
   }
 }
 
-function startDaemon(env: NodeJS.ProcessEnv): void {
+function startDaemon(env: NodeJS.ProcessEnv, secrets: SecretsFile): void {
   spawn(process.execPath, [path.join(path.dirname(process.argv[1]), 'daemon.js')], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
-    env: { ...env, AGENT_LOG_PREFIX: 'daemon' },
+    env: {
+      ...env,
+      AGENT_LOG_PREFIX: 'daemon',
+      // The agent's environment (it may hold API keys): the daemon moves it into memory and removes this at once.
+      ...(secrets.harnessEnvironment
+        ? { [BOOT_SECRETS_VARIABLE]: JSON.stringify({ harnessEnvironment: secrets.harnessEnvironment }) }
+        : {}),
+    },
   }).unref();
 }
 
@@ -121,6 +131,8 @@ export class Boot {
   private ptyHost: string | null = null;
   private lan: LanState = session.networking ? 'open' : 'offline';
   private readonly gitAccess = session.provisioning.git.access ?? 'full';
+  /** What the host handed over in its one-shot file (read and deleted at the start of run()). */
+  private secrets: SecretsFile = {};
 
   async run(): Promise<void> {
     log(
@@ -137,9 +149,12 @@ export class Boot {
       throw new Error('Workspace folder is missing in the sandbox: ' + workspace);
     mkdirp(toolsDir);
     mkdirp(run.root);
+    this.secrets = takeSecrets(session.launchId);
+    applyBootEnvironment(this.secrets.harnessEnvironment);
     await this.networkAndSessionHost();
     await this.hooksAndDesktop();
     const { tools, env } = await this.developerTools();
+    await this.vpn();
     await this.gitIdentity(env);
     await this.claude(tools);
     await this.agent(env);
@@ -210,14 +225,24 @@ export class Boot {
     return { tools, env };
   }
 
+  /** vpn.enabled: the tunnel and its kill switch, before anything else uses the network (git, the agent). */
+  private async vpn(): Promise<void> {
+    step(4, session.vpn ? 'VPN (' + session.vpn.server + ')' : 'VPN (off)');
+    if (!session.vpn) return;
+    await soft('VPN', async () => {
+      await setupVpn(this.secrets, this.ptyHost);
+    });
+  }
+
   private async gitIdentity(env: NodeJS.ProcessEnv): Promise<void> {
-    step(4, 'Git identity');
+    step(5, 'Git identity');
     await soft('Git config', () => setupGitConfig(env));
   }
 
   private async claude(tools: ToolchainResult): Promise<void> {
-    step(5, 'Claude settings, history and claude-mem');
-    if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
+    step(6, 'Claude settings, history and claude-mem');
+    if (session.harnessName === 'claude')
+      await soft('Claude settings', () => syncClaudeProfile(this.secrets.claudeCredentials));
     await soft('claude-mem restore', restoreClaudeMem);
     await soft('Agent databases restore', restoreLocalState);
     await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, this.lan));
@@ -225,23 +250,23 @@ export class Boot {
   }
 
   private async agent(env: NodeJS.ProcessEnv): Promise<void> {
-    step(6, 'Agent: ' + session.harnessName);
+    step(7, 'Agent: ' + session.harnessName);
     linkProfileDirs(session.agentProfileDirs ?? {});
     if (session.harness) await agents.provision(session.harnessName, session.harness, env);
   }
 
   private preAgentHooks(env: NodeJS.ProcessEnv): void {
-    step(7, 'Pre-agent hooks');
+    step(8, 'Pre-agent hooks');
     runHooks('pre-agent', env);
   }
 
   /** Ready: starts the session daemon and, with an agent, its first session, shown in this window. */
   private async start(env: NodeJS.ProcessEnv): Promise<void> {
-    step(8, 'Starting ' + session.harnessName);
+    step(9, 'Starting ' + session.harnessName);
     setSandboxStatus('ready', 'Ready');
     // No agent, or a restart that adds a project (the host opens its sessions itself once the sandbox is ready).
     if (!session.harness || session.autoSession === false) {
-      if (!dryRun) startDaemon(env);
+      if (!dryRun) startDaemon(env, this.secrets);
       log('Ready' + (session.harness ? '' : ' (no agent requested)') + '. Workspace: ' + workspace);
       return;
     }
@@ -256,7 +281,7 @@ export class Boot {
       runHooks('post-agent', env);
       return;
     }
-    startDaemon(env);
+    startDaemon(env, this.secrets);
     writeJsonAtomic(run.requestFile(session.launchId), {
       kind: 'session',
       id: session.launchId,

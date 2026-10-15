@@ -7,6 +7,7 @@ import type { GenerateOptions, Generated, ProfileResult } from '../../core/types
 import { widenForProjects } from '../../core/local-config/index.js';
 import { dirExists, ensureDir, fail, writeJson } from '../../core/util/index.js';
 import { capturePersonalization, stageClaudeProfile } from '../profile/index.js';
+import { clearSecrets, writeSecrets } from '../secrets/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { planBootProjects } from './boot-projects.js';
 import { planDatabases } from './database-plan.js';
@@ -17,6 +18,15 @@ import { decideProjectToolchains } from './toolchains.js';
 import { buildWsb, resolveMemoryMb } from './wsb-file.js';
 
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
+
+/** Moves the staged copy of this PC's Claude login out of the launch folder; its text goes in the one-shot file. */
+function takeStagedCredentials(launchPath: string): string | undefined {
+  const file = path.join(launchPath, 'claude-profile', '.credentials.json');
+  if (!fs.existsSync(file)) return undefined;
+  const text = fs.readFileSync(file, 'utf8');
+  fs.rmSync(file, { force: true });
+  return text;
+}
 
 export function generateSandbox(given: GenerateOptions): Generated & { personalization: string } {
   // Several projects at boot: the sandbox also gets what the others want and you allowed (core/local-config).
@@ -47,8 +57,11 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
   );
   const launchId = Date.now() + '-' + crypto.randomBytes(3).toString('hex');
   const launchPath = path.join(storageRoot, 'launches', launchId);
-  ensureDir(launchPath);
+  // Whatever must stay secret goes in a one-shot file in the data folder, never into the launch folder (the sandbox
+  // maps it read-only and it is kept for days). Leftovers of earlier launches go first.
   ensureDir(dataPath);
+  clearSecrets(storageRoot, dataPath);
+  ensureDir(launchPath);
   const mappingNotes: string[] = [];
   const mappings = collectMappings(o, launchPath, boot, mappingNotes);
 
@@ -56,14 +69,25 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
     harnessName === 'claude'
       ? stageClaudeProfile(config.claudeProfile, launchPath, workspaceHost, config.secrets)
       : NO_PROFILE;
+  // This PC's Claude login leaves the launch folder for the one-shot file (with the agent environment and VPN login).
+  const claudeCredentials = takeStagedCredentials(launchPath);
   stageGitIdentity(launchPath);
   const personalization = config.personalization.enabled ? capturePersonalization(launchPath) : 'disabled';
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
   const toolchains = decideProjectToolchains(o);
 
+  if (o.vpn) {
+    ensureDir(path.join(launchPath, 'vpn'));
+    fs.writeFileSync(path.join(launchPath, 'vpn', 'server.ovpn'), o.vpn.profile, 'utf8');
+  }
   const session = guestSession(o, { launchId, launchPath, harness, boot, mappings, profile, databases, toolchains });
   const sessionPath = path.join(launchPath, 'session.json');
   writeJson(sessionPath, session);
+  writeSecrets(dataPath, launchId, {
+    ...(harness && Object.keys(harness.environment).length ? { harnessEnvironment: harness.environment } : {}),
+    ...(claudeCredentials ? { claudeCredentials } : {}),
+    ...(o.vpn ? { vpn: o.vpn.credentials } : {}),
+  });
   fs.writeFileSync(path.join(launchPath, 'env.cmd'), logonEnv(session.workspace), 'utf8');
   copyRuntime(o.packageRoot, launchPath);
   stageHooks(o.packageRoot, launchPath, o.run.scripts);

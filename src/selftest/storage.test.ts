@@ -307,7 +307,17 @@ async function privateRoot(t: Harness): Promise<void> {
   t.check(calls.length === 2, 'a root that holds data is not touched');
   const plain = t.at('plain', 'root');
   ensureStorageRoot(plain, spy);
-  t.check(fs.existsSync(plain) && calls.length === 2 && privateFolderOf(plain) === null, 'elsewhere: just created');
+  t.check(
+    fs.existsSync(plain) && calls.length === 3 && calls[2] === plain + ':0' && privateFolderOf(plain) === null,
+    'elsewhere: created and made private while empty',
+  );
+  ensureStorageRoot(plain, spy);
+  t.check(calls.length === 3, 'an existing folder elsewhere is never touched (it may hold a big tree)');
+  const noPermissions = t.at('plain2', 'root');
+  ensureStorageRoot(noPermissions, () => {
+    throw new Error('drive without permissions');
+  });
+  t.check(fs.existsSync(noPermissions), 'a drive that cannot be made private is still used');
   const deep = path.join(users, 'bob', 'sub');
   ensureStorageRoot(deep, spy);
   t.check(

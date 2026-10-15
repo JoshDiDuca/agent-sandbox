@@ -50,6 +50,8 @@ const COMMANDS: Command[] = [
   sandbox('sessions', 'sessions'),
   sandbox('doctor', 'doctor'),
   sandbox('account list', 'account', 'list'),
+  sandbox('vpn status', 'vpn', 'status'),
+  sandbox('vpn status --json', 'vpn', 'status', '--json'),
   sandbox('account use nobody', 'account', 'use', 'nobody'),
   { bin: 'agent-sandbox', label: 'config path', args: ['config', 'path'] },
   sandbox('config show', 'config', 'show'),

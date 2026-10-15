@@ -116,6 +116,10 @@ export const NetworkSchema = z.strictObject({
   proxy: z
     .string()
     .regex(/^(https?:\/\/[^\s]+)?$/, 'http://host:port')
+    .refine(
+      (v) => !/^https?:\/\/[^/?#]*@/i.test(v),
+      'no user name or password in the address (it would be stored in plain text and visible to the agent): use a proxy that needs no login',
+    )
     .describe(
       'An HTTP proxy the sandbox uses to reach the internet (HTTP_PROXY / HTTPS_PROXY for everything in it), e.g. http://proxy.corp:8080. Empty = none.',
     ),

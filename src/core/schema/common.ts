@@ -33,3 +33,12 @@ export function enabled(what: string, markers: string): typeof EnabledSchema {
 export function Packages(what: string, example: string): typeof StringsSchema {
   return StringsSchema.describe(what + ', installed once and kept (e.g. ' + example + ').');
 }
+
+/**
+ * Marks a setting whose value is a secret (an API key in an agent's environment): config show / get, the menu, doctor
+ * and every --json print *** for it (core/schema/redact.ts), and it is never written to session.json or the launch
+ * folder (it travels in a one-shot file, see shared/channel/secrets.ts).
+ */
+export function secret<T extends z.ZodType>(schema: T): T {
+  return schema.meta({ secret: true }) as T;
+}

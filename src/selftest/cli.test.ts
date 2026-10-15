@@ -10,6 +10,7 @@ import { splitArgs } from '../cli/args.js';
 import { optionProblem } from '../cli/menu/index.js';
 import { cleanTargetOf, type DataEntry } from '../cli/commands/data/collect.js';
 import { ago, colorEnabled, shorten } from '../cli/output/index.js';
+import { versionText } from '../cli/version.js';
 import { hoistConfig, withoutConfig } from '../cli/argv.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
 import { CATEGORIES, editConfigText, SchemaNode, SETTINGS_ELSEWHERE } from '../cli/menu/settings/index.js';
@@ -36,6 +37,16 @@ export const cliSuite: Suite = {
       program.version() === packageJson.version &&
         program.commands.find((c) => c.name() === 'launch')!.options.some((o) => o.long === '--terminal'),
       '--version is the package version and manifest options exist in the parser',
+    );
+
+    t.check(
+      versionText(['--version'], t.packageRoot)?.startsWith(packageJson.version + ' (') === true &&
+        versionText(['-v'], t.packageRoot)?.includes(t.packageRoot) === true &&
+        versionText(['--version', '--short'], t.packageRoot) === packageJson.version &&
+        versionText(['status'], t.packageRoot) === null &&
+        versionText(['--short'], t.packageRoot) === null &&
+        versionText(['--version', 'x'], t.packageRoot) === null,
+      '--version says where it runs from; --version --short is the plain number the updater compares',
     );
 
     const start = parseCli(['start', '--headless']);
