@@ -15,8 +15,10 @@ import { primaryProject } from '../boot/project-status.js';
 import { ensurePtyHost, ptyHostLogTail, startPtyHost, waitForPtyHost } from '../sessions/pty-host.js';
 import { agents } from '../agents/agent-installer.js';
 import { saveClaudeMem } from '../setup/claude-mem.js';
+import { saveLocalState } from '../agents/local-state.js';
 import { projectHooks, runHooks, runHooksAsync, type HookTarget } from '../setup/hooks.js';
 import { guestAddresses } from '../network/addresses.js';
+import { withRegistryPath } from '../setup/environment.js';
 import { dataDir, toolsDir } from '../runtime/paths.js';
 import { exists } from '../runtime/fs.js';
 import { log, warn } from '../runtime/log.js';
@@ -81,7 +83,7 @@ const launchPtyHost = async (
     rows: 32,
     id: req.id,
     cwd: req.cwd,
-    env: { ...env, ...harness.environment },
+    env: { ...withRegistryPath(env), ...harness.environment },
     remote,
     command: commandLine(launch.file, [...base, ...req.args]),
     restartCommand: commandLine(launch.file, [...base, ...(harness.resumeArguments ?? [])]),
@@ -290,6 +292,7 @@ export class SessionManager {
       );
     else safely('post-agent hooks', () => runHooks('post-agent', process.env));
     safely('claude-mem save', saveClaudeMem);
+    safely('agent databases save', saveLocalState);
     this.idle.check();
   }
 }

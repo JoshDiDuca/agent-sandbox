@@ -3,7 +3,7 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['main', 'daemon', 'view', 'gitguard', 'db', 'netproxy'].map(
+  entryPoints: ['main', 'daemon', 'view', 'gitguard', 'db', 'netproxy', 'agent'].map(
     (name) => 'src/guest/entries/' + name + '.ts',
   ),
   outdir: 'dist/runtime',

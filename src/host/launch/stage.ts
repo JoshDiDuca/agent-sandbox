@@ -28,7 +28,7 @@ export function stageScripts(target: string, scripts: readonly string[]): void {
   });
 }
 
-export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js', 'db.js', 'netproxy.js'];
+export const RUNTIME_FILES = ['main.js', 'daemon.js', 'view.js', 'gitguard.js', 'db.js', 'netproxy.js', 'agent.js'];
 
 /** The bundled sandbox runtime (dist/runtime: one self-contained file per entry point) and the sandbox/ scripts. */
 export function copyRuntime(packageRoot: string, launchPath: string): void {

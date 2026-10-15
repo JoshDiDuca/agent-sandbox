@@ -100,7 +100,7 @@ export async function setupPython(env: ToolEnv, config: Toolchains['python'], ve
   const py3 = await installPython('python', versions.python.spec);
   const shims = shimDir(py3);
   shimPair(shims, '3', py3);
-  env.prepend.push(py3, path.join(py3, 'Scripts'), shims);
+  env.prepend.push(py3, mkdirp(path.join(py3, 'Scripts')), shims);
   env.vars.PYTHONIOENCODING = 'utf-8';
   env.summary.push(
     'python: ' + path.basename(py3).replace('python-', '') + ' (from ' + versions.python.source + '; py works too)',

@@ -1,7 +1,7 @@
 // Bun, uv and Deno: single-binary tools from GitHub releases (claude-mem needs Bun and uv).
 import path from 'node:path';
 import { dryRun, localDir } from '../runtime/paths.js';
-import { exists } from '../runtime/fs.js';
+import { exists, mkdirp } from '../runtime/fs.js';
 import { log } from '../runtime/log.js';
 import { arch, tool, versionOf, type ToolEnv } from './tool-env.js';
 import { installFromGithub } from './install.js';
@@ -100,5 +100,5 @@ export async function setupUv(env: ToolEnv): Promise<void> {
     { size: '20 MB' },
   );
   Object.assign(env.vars, uvVars());
-  env.prepend.push(tool('uv-bin'));
+  env.prepend.push(mkdirp(tool('uv-bin')));
 }

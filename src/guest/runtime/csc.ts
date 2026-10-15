@@ -21,6 +21,7 @@ const SOURCES = {
   openssl: 'OpenSsl.cs',
   cargoshim: 'CargoShim.cs',
   linkgate: 'LinkGate.cs',
+  pathsync: 'PathSync.cs',
 } as const;
 
 export type Helper = keyof typeof SOURCES;

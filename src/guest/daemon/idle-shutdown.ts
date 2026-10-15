@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { saveClaudeMem } from '../setup/claude-mem.js';
+import { saveLocalState } from '../agents/local-state.js';
 import { isWin, run } from '../runtime/paths.js';
 import { log } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
@@ -22,6 +23,7 @@ export class IdleShutdown {
       if (!this.idle()) return;
       log('Headless sandbox has no sessions left; shutting down.');
       safely('claude-mem save', saveClaudeMem);
+      safely('agent databases save', saveLocalState);
       spawnSync(SYSTEM.shutdown(), ['/s', '/t', '5'], { windowsHide: true });
     }, GRACE_MS);
   }

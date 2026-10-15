@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import type { GuestRequest } from '../../core/types.js';
 import { SYSTEM } from '../../shared/system.js';
 import { exists } from '../runtime/fs.js';
+import { withRegistryPath } from '../setup/environment.js';
 import { errMsg } from '../../core/util/errors.js';
 import { provisioner } from './project-provisioner.js';
 import { insideWorkspace, respond } from './state.js';
@@ -25,7 +26,7 @@ export function execCommand(req: Extract<GuestRequest, { kind: 'exec' }>): void 
   }
   // chcp 65001 first: console programs then write UTF-8 (not the OEM code page) into the pipes.
   // In a project registered after boot, its own environment (its Node, Python, database variables).
-  const env = provisioner.provisionedFor(req.cwd)?.env ?? process.env;
+  const env = withRegistryPath(provisioner.provisionedFor(req.cwd)?.env ?? process.env);
   const child = spawn(
     SYSTEM.cmd(),
     ['/d', '/s', '/c', '"chcp 65001>nul & ' + req.command.map(quoteForCmd).join(' ') + '"'],

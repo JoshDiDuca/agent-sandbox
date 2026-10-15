@@ -28,6 +28,8 @@ const PURE_GUEST = [
   'guest/boot/project-env.js',
   'guest/audit/parse.js',
   'guest/sessions/cmdline.js',
+  'guest/agents/agent-files.js',
+  'guest/setup/path-plan.js',
   'guest/toolchains/catalogue.js',
   'guest/toolchains/tools/vscode-profile.js',
 ];

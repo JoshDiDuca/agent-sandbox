@@ -237,4 +237,6 @@ export interface GuestSession {
   agentHomes?: Record<string, string>;
   /** Per agent: folders of the user profile (.qwen ...) linked into the persistent state at boot. */
   agentProfileDirs?: Record<string, string[]>;
+  /** Every configured agent (without its environment): a terminal command each; older launch folders lack it. */
+  agents?: Record<string, Harness>;
 }

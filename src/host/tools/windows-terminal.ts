@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { downloader, githubAsset } from '../../shared/download/index.js';
-import { safeRemove } from '../../shared/io/index.js';
+import { safeRemove, writeFileAtomic } from '../../shared/io/index.js';
 import { assertTestWritable } from '../test-guard.js';
+import { applyEdits, modify } from 'jsonc-parser';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../../core/util/index.js';
 
@@ -72,6 +73,15 @@ export function withPwshProfile(
   return { ...settings, profiles: { ...profiles, list } };
 }
 
+/** settings.json that makes new tabs read the current environment; null when it already does. Pure. */
+export function withReloadEnvironment(
+  settings: z.output<typeof TerminalSettingsSchema>,
+): z.output<typeof TerminalSettingsSchema> | null {
+  const compatibility = settings.compatibility as { reloadEnvironmentVariables?: unknown } | undefined;
+  if (compatibility?.reloadEnvironmentVariables === true) return null;
+  return { ...settings, compatibility: { ...compatibility, reloadEnvironmentVariables: true } };
+}
+
 /**
  * Shows the PowerShell 7 profile once pwsh is installed in this data folder (and `allowed`, i.e. toolchains.pwsh is
  * not off), hides it otherwise. settings.json is written by the sandbox too: read with a size cap, through no links,
@@ -84,15 +94,26 @@ export function syncPwshProfile(dataPath: string, allowed: boolean): void {
   if (!fileExists(file) || fs.statSync(file).size > MAX_SETTINGS_BYTES) return;
   const visible = allowed && fileExists(path.join(dataPath, 'tools', 'pwsh', 'pwsh.exe'));
   let parsed: z.output<typeof TerminalSettingsSchema>;
+  const text = fs.readFileSync(file, 'utf8');
   try {
-    const result = TerminalSettingsSchema.safeParse(parseJsonc<unknown>(fs.readFileSync(file, 'utf8'), file));
+    const result = TerminalSettingsSchema.safeParse(parseJsonc<unknown>(text, file));
     if (!result.success) return;
     parsed = result.data;
   } catch {
     return;
   }
-  const next = withPwshProfile(parsed, visible);
-  if (next) writeJson(file, next);
+  const withProfile = withPwshProfile(parsed, visible);
+  if (withProfile) {
+    writeJson(file, withReloadEnvironment(withProfile) ?? withProfile);
+    return;
+  }
+  // Only the reload switch is missing: set that one value in the text, so comments and the layout stay.
+  if (withReloadEnvironment(parsed)) {
+    const edits = modify(text, ['compatibility', 'reloadEnvironmentVariables'], true, {
+      formattingOptions: { insertSpaces: true, tabSize: 4 },
+    });
+    writeFileAtomic(file, applyEdits(text, edits));
+  }
 }
 
 export async function ensureTerminal(

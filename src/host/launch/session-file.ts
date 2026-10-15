@@ -91,6 +91,7 @@ export function guestSession(o: GenerateOptions, parts: SessionParts): GuestSess
         h.home?.profileDirs?.length ? [[name, h.home.profileDirs]] : [],
       ),
     ),
+    agents: Object.fromEntries(Object.entries(config.harnesses).map(([name, h]) => [name, { ...h, environment: {} }])),
   };
 }
 

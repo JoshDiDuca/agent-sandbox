@@ -12,26 +12,13 @@ import { exists, mkdirp } from '../runtime/fs.js';
 import { log, warn } from '../runtime/log.js';
 import { session } from '../runtime/session.js';
 import { addMachineEnvironment } from '../setup/environment.js';
+import { agentPaths as paths, type AgentPaths } from './agent-files.js';
 import { linkHarnessProfile } from './profile-links.js';
 
 /** Where an agent comes from: copied from this PC, or installed with npm or uv. */
 export type AgentSource = 'host' | 'npm' | 'uv';
 
-interface AgentPaths {
-  readonly dir: string;
-  readonly exe: string | null;
-  readonly cmd: string | null;
-}
-
-function agentPaths(name: string, harness: Harness): AgentPaths {
-  const dir = path.join(toolsDir, 'agents', name);
-  const exe = harness.hostExecutable ?? (harness.uvBin ? harness.uvBin + '.exe' : null);
-  return {
-    dir,
-    exe: exe ? path.join(dir, exe) : null,
-    cmd: harness.npmBin ? path.join(dir, harness.npmBin + '.cmd') : null,
-  };
-}
+const agentPaths = (name: string, harness: Harness): AgentPaths => paths(toolsDir, name, harness);
 
 /** npm install with the runner's own npm into tools\agents\<name> (no global state outside persistent storage). */
 async function installViaNpm(name: string, harness: Harness, dir: string, env: NodeJS.ProcessEnv): Promise<void> {

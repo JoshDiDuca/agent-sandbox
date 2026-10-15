@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import type { GuestRequest } from '../../core/types.js';
 import { saveClaudeMem } from '../setup/claude-mem.js';
+import { saveLocalState } from '../agents/local-state.js';
 import { execCommand } from './exec.js';
 import { sessions } from './sessions.js';
 import { respond, safely } from './state.js';
@@ -40,6 +41,7 @@ export class Daemon {
     if (Date.now() - this.lastMemSave > MEM_SAVE_MS) {
       this.lastMemSave = Date.now();
       safely('claude-mem save', saveClaudeMem);
+      safely('agent databases save', saveLocalState);
     }
   }
 

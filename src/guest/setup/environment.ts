@@ -3,10 +3,14 @@ import path from 'node:path';
 import type { ToolEnv } from '../toolchains/index.js';
 import { claudeDir, session, stateDir, workspace } from '../runtime/session.js';
 import { dataDir, dryRun, isWin, testMode, toolsDir } from '../runtime/paths.js';
-import { mkdirp } from '../runtime/fs.js';
-import { runScriptWithJson } from '../runtime/process.js';
+import { exists, mkdirp } from '../runtime/fs.js';
+import { execOutput, runScriptWithJson } from '../runtime/process.js';
+import { SYSTEM } from '../../shared/system.js';
 import { warn } from '../runtime/log.js';
 import { errMsg } from '../../core/util/errors.js';
+import { localStateVars } from '../agents/local-state.js';
+import { agentPaths } from '../agents/agent-files.js';
+import { appendMissing, expandVars, isPinnedNodeDir, parseRegPath, pathKey, planPath } from './path-plan.js';
 
 /** Older launch folders have no agentHomes: these two were always set. */
 const LEGACY_HOMES: Record<string, string> = { CODEX_HOME: 'codex', GEMINI_CLI_HOME: 'gemini' };
@@ -49,6 +53,7 @@ export function agentEnv(
     ...tools.vars,
     CLAUDE_CONFIG_DIR: claudeDir,
     ...homes,
+    ...localStateVars(),
     npm_config_cache: path.join(toolsDir, 'npm-cache'),
     npm_config_update_notifier: 'false',
     AGENT_WORKSPACE: target.workspace,
@@ -59,7 +64,13 @@ export function agentEnv(
     AGENT_SANDBOX: '1',
     AGENT_SANDBOX_WORKSPACE: target.workspace,
   };
-  for (const dir of [env.CLAUDE_CONFIG_DIR, ...Object.keys(homes).map((n) => env[n]), env.npm_config_cache])
+  const local = Object.keys(localStateVars());
+  for (const dir of [
+    env.CLAUDE_CONFIG_DIR,
+    ...Object.keys(homes).map((n) => env[n]),
+    env.npm_config_cache,
+    ...local.map((n) => env[n]),
+  ])
     mkdirp(dir as string);
   // The runner's own Node (bootstrap.ps1 puts it first on PATH) is not exposed: `node` is whatever nvm selected.
   const runners = [path.join(toolsDir, 'node'), path.dirname(process.execPath)].map((d) => d.toLowerCase());
@@ -72,14 +83,18 @@ export function agentEnv(
 export function persistEnvironment(env: NodeJS.ProcessEnv, toolVars: string[]): void {
   if (!isWin || dryRun || testMode) return;
   const vars = Object.fromEntries(
-    [...toolVars, ...AGENT_VARS, ...Object.keys(agentHomes())]
+    [...toolVars, ...AGENT_VARS, ...Object.keys(agentHomes()), ...Object.keys(localStateVars())]
       .filter((n) => env[n] !== undefined)
       .map((n) => [n, env[n] as string]),
   );
   try {
     runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', {
       vars,
-      path: env.PATH ?? '',
+      path: planPath({
+        entries: [env.PATH ?? '', ...installedAgentDirs()],
+        exists,
+        drop: (dir) => isPinnedNodeDir(dir, nvmHome()),
+      }).join(path.delimiter),
       add: [],
       additive: false,
     });
@@ -95,9 +110,51 @@ export function persistEnvironment(env: NodeJS.ProcessEnv, toolVars: string[]): 
  */
 export function addMachineEnvironment(vars: Record<string, string>, dirs: string[], additive = false): void {
   if (!isWin || dryRun || testMode) return;
+  // Folders that do not exist stay out, and so does a pinned Node version (`nvm use` could not move it).
+  const planned = planPath({ entries: dirs, exists, drop: (dir) => isPinnedNodeDir(dir, nvmHome()) });
   try {
-    runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', { vars, path: null, add: dirs, additive });
+    runScriptWithJson('set-machine-environment.ps1', 'SettingsFile', { vars, path: null, add: planned, additive });
   } catch (e) {
     warn('Could not add to the environment: ' + errMsg(e));
+  }
+}
+
+const nvmHome = (): string => path.join(toolsDir, 'nvm');
+
+/** The folder of every configured agent that is installed: its command works in any terminal. */
+function installedAgentDirs(): string[] {
+  return Object.entries(session.agents ?? {}).flatMap(([name, harness]) => {
+    const p = agentPaths(toolsDir, name, harness);
+    return (p.exe && exists(p.exe)) || (p.cmd && exists(p.cmd)) ? [p.dir] : [];
+  });
+}
+
+const MACHINE_ENVIRONMENT_KEY = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
+const USER_ENVIRONMENT_KEY = 'HKCU\\Environment';
+
+const registryPath = (key: string): string => parseRegPath(execOutput(SYSTEM.reg(), ['query', key, '/v', 'Path']));
+
+/**
+ * The environment for a program the daemon starts (an agent session, `sandbox exec`): its own PATH, plus every machine
+ * and user PATH folder added since the daemon started (python, cargo, other agents ...) at the end. Never changes
+ * `env`; without Windows it is returned as it is.
+ */
+export function withRegistryPath(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (!isWin || dryRun || testMode) return env;
+  try {
+    const registry = expandVars(registryPath(MACHINE_ENVIRONMENT_KEY) + ';' + registryPath(USER_ENVIRONMENT_KEY), env);
+    const runner = pathKey(path.join(toolsDir, 'node'));
+    const pathName = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+    return {
+      ...env,
+      [pathName]: appendMissing(
+        env[pathName] ?? '',
+        registry,
+        (dir) => pathKey(dir) === runner || isPinnedNodeDir(dir, nvmHome()),
+      ),
+    };
+  } catch (e) {
+    warn('Could not read the machine PATH (the session keeps the one it has): ' + errMsg(e));
+    return env;
   }
 }

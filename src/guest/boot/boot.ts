@@ -5,6 +5,9 @@ import { spawn } from 'node:child_process';
 import { writeGuides } from './guide.js';
 import { setupToolchains, type ToolchainResult } from '../toolchains/index.js';
 import { agents } from '../agents/agent-installer.js';
+import { agentShims, sbxAgentText, shimText } from '../agents/agent-files.js';
+import { restoreLocalState } from '../agents/local-state.js';
+import { installShellPath } from '../setup/shell-path.js';
 import { linkProfileDirs } from '../agents/profile-links.js';
 import { restoreClaudeMem } from '../setup/claude-mem.js';
 import { syncClaudeProfile } from '../setup/claude-profile.js';
@@ -79,7 +82,19 @@ function writeDbCommand(): string {
     path.join(dir, 'sbx-db.cmd'),
     '@setlocal\r\n@set AGENT_LOG_PREFIX=db\r\n@"' + process.execPath + '" "' + db + '" %*\r\n',
   );
+  writeAgentCommands(dir);
   return dir;
+}
+
+/**
+ * `claude`, `codex` ... by name in every terminal tab, installed yet or not (the command installs the agent on first
+ * use), and `sbx-agent`. Written to the sandbox's disk each boot, next to `sbx-db`.
+ */
+function writeAgentCommands(dir: string): void {
+  const install = { node: process.execPath, script: path.join(path.dirname(process.argv[1]), 'agent.js') };
+  for (const shim of agentShims(toolsDir, session.agents ?? {}))
+    fs.writeFileSync(path.join(dir, shim.command + '.cmd'), shimText(shim, install));
+  fs.writeFileSync(path.join(dir, 'sbx-agent.cmd'), sbxAgentText(install));
 }
 
 async function waitForPrimary(): Promise<boolean> {
@@ -181,6 +196,7 @@ export class Boot {
       );
     const env = agentEnv(tools);
     persistEnvironment(env, Object.keys(tools.vars));
+    await soft('Shell start-up PATH', installShellPath);
     saveBootEnv({
       basePath,
       toolVars: Object.keys(tools.vars),
@@ -203,6 +219,7 @@ export class Boot {
     step(5, 'Claude settings, history and claude-mem');
     if (session.harnessName === 'claude') await soft('Claude settings', syncClaudeProfile);
     await soft('claude-mem restore', restoreClaudeMem);
+    await soft('Agent databases restore', restoreLocalState);
     await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, this.lan));
     await soft('Claude managed settings', () => writeManagedSettings(this.gitAccess));
   }

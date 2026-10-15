@@ -72,8 +72,10 @@ export const personalizationSuite: Suite = {
     syncPwshProfile(data, true);
     const untouched = fs.readFileSync(settings, 'utf8');
     t.check(
-      untouched.startsWith('// edited'),
-      'untouched until pwsh is installed (comments and trailing commas survive)',
+      untouched.startsWith('// edited') &&
+        /"guid": "\{x\}",\s*\}/.test(untouched) &&
+        /"reloadEnvironmentVariables":\s*true/.test(untouched),
+      'until pwsh is installed only the reload switch is added (comments and trailing commas survive)',
     );
     t.write(path.join(data, 'tools', 'pwsh', 'pwsh.exe'), 'MZ');
     syncPwshProfile(data, true);
