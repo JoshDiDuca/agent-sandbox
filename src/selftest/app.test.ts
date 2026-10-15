@@ -3,6 +3,7 @@
 // exempt with a reason), the reference views' pages, their CLI and menu renderings, and the settings feature run
 // against a config file of its own.
 import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
 import { DEFINITIONS, NAV, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
@@ -97,7 +98,11 @@ const STATUS: SandboxStatus = {
 /** The operations and queries a list of views can reach. */
 function reached(views: readonly AnyView[]): Set<string> {
   return new Set(
-    views.flatMap((v) => [...v.operations.map((o) => o.id), ...Object.values(v.queries).map((q) => q.id)]),
+    views.flatMap((v) => [
+      ...v.operations.map((o) => o.id),
+      ...Object.values(v.queries).map((q) => q.id),
+      ...(v.pickers ?? []).map((q) => q.id),
+    ]),
   );
 }
 
@@ -392,12 +397,12 @@ export const appSuite: Suite = {
     const chosen = menu.resolve({ kind: 'pick', value: 'new' });
     t.check(
       menu.items.length === 2 &&
-        menu.actions.map((a) => a.key).join() === 'r,o,l' &&
+        menu.actions.map((a) => a.key).join() === 'n,r,o,l' &&
         menu.enterLabel(undefined, 'new') === 'attach' &&
         chosen?.kind === 'action' &&
         chosen.action.kind === 'link' &&
         menu.resolve({ kind: 'action', key: 'l', value: undefined })?.kind === 'refresh',
-      'sessions in the menu: rows, the r/o/l keys, Enter attaches',
+      'sessions in the menu: rows, the n/r/o/l keys, Enter attaches',
     );
     const menuStatus = menuView(statusPage, { category: 'status', prefix: 'status:' });
     t.check(
@@ -447,6 +452,36 @@ export const appSuite: Suite = {
       reset.message.startsWith('sandbox.memoryMb is back to its default') &&
         !fs.readFileSync(configFile, 'utf8').includes('8192'),
       'reset removes the line',
+    );
+
+    t.section('the folder picker (files.browse)');
+    const browseRoot = t.dir('app-browse');
+    fs.mkdirSync(path.join(browseRoot, 'zeta'));
+    fs.mkdirSync(path.join(browseRoot, 'Alpha'));
+    fs.mkdirSync(path.join(browseRoot, '$Recycle.Bin'));
+    fs.writeFileSync(path.join(browseRoot, 'notes.txt'), 'x');
+    const folders = (await runDefinition('files.browse', ctx, { path: browseRoot }, quiet)) as {
+      entries: { name: string; kind: string }[];
+      parent: string | null;
+    };
+    t.equal(
+      folders.entries.map((e) => e.name).join(),
+      'Alpha,zeta',
+      'a folder lists its folders by name, without files or $ system folders',
+    );
+    const withFiles = (await runDefinition('files.browse', ctx, { path: browseRoot, files: true }, quiet)) as {
+      entries: { name: string; kind: string }[];
+    };
+    t.equal(
+      withFiles.entries.map((e) => e.kind + ':' + e.name).join(),
+      'dir:Alpha,dir:zeta,file:notes.txt',
+      'with files: folders first, then files',
+    );
+    t.check(folders.parent === path.dirname(browseRoot), 'it names the folder above');
+    await t.throws(
+      () => runDefinition('files.browse', ctx, { path: 'relative\\folder' }, quiet),
+      'is not a full path',
+      'a path that is not a full path is refused',
     );
     const listed = await readQuery(
       QUERIES.find((q) => q.id === 'settings.list')!,

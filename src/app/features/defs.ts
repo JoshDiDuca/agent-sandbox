@@ -2,12 +2,18 @@
 // bundle imports this file (and through it only *.def.ts files); app/registry.ts adds the run functions on the Node
 // side. A new feature adds its definitions here and its implementations there.
 import type { AnyDefinition, AnyView, OperationDef, QueryDef } from '../kernel/index.js';
+import { browseFolder } from './files/files.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
 import { listSessions, restartSessions, sessionsView } from './sessions/sessions.def.js';
 import { getSetting, listSettings, resetSetting, setSetting, settingsView } from './settings/settings.def.js';
 
+export type { FolderEntry, FolderListing } from './files/files.def.js';
+export type { SandboxStatus } from './sandbox/sandbox.def.js';
+export type { SessionRow, SessionsList } from './sessions/sessions.def.js';
+export type { SettingRow, SettingsList } from './settings/settings.def.js';
+
 export const OPERATIONS = [showWindow, hideWindow, stopSandbox, restartSessions, setSetting, resetSetting] as const;
-export const QUERIES = [sandboxStatus, listSessions, listSettings, getSetting] as const;
+export const QUERIES = [sandboxStatus, listSessions, listSettings, getSetting, browseFolder] as const;
 export const VIEWS = [sandboxView, sessionsView, settingsView] as const;
 
 export type Operation = (typeof OPERATIONS)[number];

@@ -14,6 +14,7 @@ import {
   type Page,
   type Section,
 } from '../../kernel/index.js';
+import { browseFolder } from '../files/files.def.js';
 
 export const ScopeSchema = z
   .enum(['user', 'project'])
@@ -128,11 +129,12 @@ function settingItem(row: SettingRow, scope: Scope): Item {
     id: row.id,
     label: row.label,
     hint: shown,
-    ...(row.set ? { tone: scope === 'project' ? 'accent' : 'ok', badges: [{ text: 'set', tone: 'accent' }] } : {}),
+    ...(row.set ? { tone: scope === 'project' ? 'accent' : 'ok', badges: [{ text: 'changed', tone: 'accent' }] } : {}),
     description: row.field.help,
     group: row.section,
     details: details(row, scope),
     keywords: row.id,
+    code: row.id,
     cells: { setting: row.id, value: shown },
     primary: action(
       setSetting,
@@ -140,6 +142,7 @@ function settingItem(row: SettingRow, scope: Scope): Item {
       {
         label: 'Change',
         verb: 'edit',
+        inline: true,
         fields: [{ ...row.field, name: 'value', label: row.label }],
         initial: { value: editable },
       },
@@ -187,6 +190,7 @@ export function settingsPage(o: SettingsList): Page {
   }));
   return {
     title: 'Settings',
+    categories: true,
     notice: {
       text:
         'Editing ' +
@@ -205,6 +209,7 @@ export const settingsView = defineView({
   summary: 'Every setting, for all projects or just this project, with its value, default and description.',
   queries: { settings: listSettings },
   operations: [setSetting, resetSetting],
+  pickers: [browseFolder],
   tabs: {
     param: 'scope',
     choices: [

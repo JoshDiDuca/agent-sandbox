@@ -190,7 +190,7 @@ export const webSuite: Suite = {
     const cookie = good.ok ? good.cookie : '';
     t.check(auth.signedIn('x=1; sbxweb=' + cookie), 'the cookie signs in');
     t.check(
-      !auth.signedIn('sbxweb=' + cookie.replace(/.$/, '0')) && !auth.signedIn(undefined),
+      !auth.signedIn('sbxweb=' + cookie.replace(/.$/, (c) => (c === '0' ? '1' : '0'))) && !auth.signedIn(undefined),
       'another cookie does not',
     );
     clock += 13 * 60 * 60 * 1000;
