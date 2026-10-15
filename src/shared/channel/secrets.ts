@@ -21,6 +21,12 @@ export const SecretsFileSchema = z.strictObject({
     .optional(),
   /** VPN service credentials (vpn.provider's login), only for the launch's own sandbox. */
   vpn: z.strictObject({ username: z.string().min(1).max(256), password: z.string().min(1).max(1024) }).optional(),
+  /** The checked WireGuard config of vpn.provider wireguard-file (holds the private key). */
+  wireguardConfig: z
+    .string()
+    .min(1)
+    .max(32 * 1024)
+    .optional(),
 });
 
 export type SecretsFile = z.output<typeof SecretsFileSchema>;

@@ -1,7 +1,7 @@
 // The VPN setting (inside the sandbox only; the login is not a setting: it is kept encrypted by `sandbox vpn login`).
 import { z } from 'zod';
 
-export const VPN_PROVIDERS = ['nordvpn', 'openvpn-file'] as const;
+export const VPN_PROVIDERS = ['nordvpn', 'openvpn-file', 'wireguard-file'] as const;
 
 export const VpnSchema = z.strictObject({
   enabled: z
@@ -12,7 +12,7 @@ export const VpnSchema = z.strictObject({
   provider: z
     .enum(VPN_PROVIDERS)
     .describe(
-      'nordvpn: a recommended NordVPN server is picked at every launch. openvpn-file: your own .ovpn file (configFile).',
+      'nordvpn: a recommended NordVPN server is picked at every launch. openvpn-file: your own .ovpn file (configFile). wireguard-file: your own WireGuard .conf (configFile), e.g. from your company.',
     ),
   protocol: z.enum(['udp', 'tcp']).describe('udp is faster; tcp gets through networks that block udp.'),
   country: z
@@ -22,7 +22,7 @@ export const VpnSchema = z.strictObject({
   configFile: z
     .string()
     .describe(
-      "openvpn-file: the .ovpn file on this PC (its certificates inside it). Files that run programs (script-security, up, down, plugin ...) are refused. A project's file can never set this.",
+      "openvpn-file / wireguard-file: the .ovpn or .conf file on this PC (an .ovpn has its certificates inside it). Files that run programs (script-security, up, down, plugin, PostUp ...) are refused. A WireGuard file holds your private key: it is read when a sandbox starts and handed over in a one-shot file. A project's file can never set this.",
     ),
   killSwitch: z
     .boolean()

@@ -14,7 +14,8 @@ export function writeSecrets(dataPath: string, id: string, secrets: SecretsFile)
     !Object.keys(secrets.harnessSpecEnvironment ?? {}).length &&
     !Object.keys(secrets.projectHarnessEnvironment ?? {}).length &&
     !secrets.claudeCredentials &&
-    !secrets.vpn;
+    !secrets.vpn &&
+    !secrets.wireguardConfig;
   if (empty) return null;
   const run = new RunDir(dataPath);
   assertNoLinks(dataPath, run.secretsDir);

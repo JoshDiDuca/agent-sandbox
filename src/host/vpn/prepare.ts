@@ -5,6 +5,12 @@ import path from 'node:path';
 import type { Config, PreparedVpn } from '../../core/types.js';
 import { expandPath, fail } from '../../core/util/index.js';
 import { assertSafeOvpn, MAX_OVPN_BYTES } from '../../shared/vpn/ovpn.js';
+import {
+  assertSafeWireguard,
+  inspectWireguard,
+  MAX_WIREGUARD_BYTES,
+  renderWireguard,
+} from '../../shared/vpn/wireguard.js';
 import { fetchBounded, nordProfile, recommendedServer, type Fetcher } from './nordvpn.js';
 import { VpnLogin } from './login.js';
 
@@ -27,6 +33,7 @@ export async function prepareVpn(o: PrepareOptions): Promise<PreparedVpn | null>
     fail('The VPN is on, but sandbox.networking is off: there is no network to put it on.', 'Turn one of them off.');
   if (o.sandboxRunning)
     fail('A sandbox is running already, so the VPN login is not handed over.', 'Start the VPN sandbox after it stops.');
+  if (vpn.provider === 'wireguard-file') return prepareWireguard(o);
   const login = o.login ?? new VpnLogin(o.storageRoot);
   const credentials =
     login.read(vpn.provider) ??
@@ -84,15 +91,73 @@ export async function prepareVpn(o: PrepareOptions): Promise<PreparedVpn | null>
   };
 }
 
+/**
+ * wireguard-file: reads vpn.configFile on this PC (size capped), checks it as untrusted data and returns it written
+ * again from the checked values. It holds the private key, so it only ever goes in the one-shot secrets file. There is
+ * no saved login: the keys are in the file.
+ */
+function prepareWireguard(o: PrepareOptions): PreparedVpn {
+  const { vpn } = o.config;
+  if (!vpn.configFile.trim())
+    fail(
+      'vpn.provider is wireguard-file but vpn.configFile is empty.',
+      'Set it: sandbox config set vpn.configFile <path to your .conf>',
+    );
+  const file = expandPath(vpn.configFile, o.base ?? process.cwd());
+  let size: number;
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) throw new Error('not a file');
+    size = stat.size;
+  } catch {
+    return fail('The WireGuard config ' + file + ' does not exist.', 'Fix vpn.configFile.');
+  }
+  if (size > MAX_WIREGUARD_BYTES) fail('The WireGuard config ' + file + ' is too big.', 'Use a plain .conf file.');
+  const text = fs.readFileSync(file, 'utf8');
+  try {
+    const config = assertSafeWireguard(text, path.basename(file));
+    return {
+      session: { provider: vpn.provider, protocol: 'udp', killSwitch: vpn.killSwitch, server: path.basename(file) },
+      wireguardConfig: renderWireguard(config),
+    };
+  } catch (e) {
+    return fail(
+      e instanceof Error ? e.message : String(e),
+      'Nothing was started. Use a config without PostUp, PreUp or other script lines.',
+    );
+  }
+}
+
+/** For doctor: null when vpn.configFile is a readable, safe WireGuard config, else a short reason (never a key). */
+export function wireguardFileProblem(configFile: string, base: string): string | null {
+  if (!configFile.trim()) return 'vpn.configFile is empty';
+  const file = expandPath(configFile, base);
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return file + ' is not a file';
+    if (stat.size > MAX_WIREGUARD_BYTES) return file + ' is too big for a WireGuard config';
+    const report = inspectWireguard(fs.readFileSync(file, 'utf8'));
+    return report.ok ? null : 'refused: ' + report.problems.slice(0, 3).join('; ');
+  } catch {
+    return file + ' cannot be read';
+  }
+}
+
 /** What the launch says about the VPN: the warnings the user must see before trusting it. */
 export function vpnNotes(vpn: Config['vpn']): string[] {
   if (!vpn.enabled) return [];
   return [
     'VPN: ' +
-      (vpn.provider === 'nordvpn' ? 'NordVPN' + (vpn.country ? ' (' + vpn.country + ')' : '') : 'your profile') +
+      (vpn.provider === 'nordvpn'
+        ? 'NordVPN' + (vpn.country ? ' (' + vpn.country + ')' : '')
+        : vpn.provider === 'wireguard-file'
+          ? 'your WireGuard config'
+          : 'your profile') +
       (vpn.killSwitch
         ? ', kill switch on: if the tunnel fails the sandbox stays offline.'
         : ', kill switch OFF: if the tunnel fails the sandbox uses your normal connection.'),
-    'The agent in the sandbox can read the VPN login (a service login you can revoke) and can turn the tunnel off, because it is the administrator there.',
+    vpn.provider === 'wireguard-file'
+      ? 'The agent in the sandbox can read the WireGuard private key from your config and can turn the tunnel off, because it is the administrator there. Use a key you can revoke.'
+      : 'The agent in the sandbox can read the VPN login (a service login you can revoke) and can turn the tunnel off, because it is the administrator there.',
   ];
 }

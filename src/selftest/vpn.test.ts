@@ -12,6 +12,7 @@ import {
   findCountry,
   nordProfile,
   prepareVpn,
+  wireguardFileProblem,
   recommendedServer,
   VpnLogin,
   vpnLine,
@@ -19,7 +20,7 @@ import {
 } from '../host/vpn/index.js';
 import { RunDir } from '../shared/channel/index.js';
 import type { SecretsFile } from '../shared/channel/secrets.js';
-import { OPENVPN_MSI } from '../shared/vpn/download.js';
+import { OPENVPN_MSI, WIREGUARD_MSI } from '../shared/vpn/download.js';
 import {
   cleanServers,
   killSwitchCommands,
@@ -28,6 +29,16 @@ import {
   tunnelCommands,
 } from '../shared/vpn/kill-switch.js';
 import { assertSafeOvpn, inspectOvpn, PROGRAM_DIRECTIVES } from '../shared/vpn/ovpn.js';
+import {
+  assertSafeWireguard,
+  handshakeDone,
+  inspectWireguard,
+  renderWireguard,
+  serviceRunning,
+  WIREGUARD_PROGRAM_KEYS,
+  wireguardEndpoints,
+  wireguardTunnelAddress,
+} from '../shared/vpn/wireguard.js';
 import type { Suite } from './support/suite.js';
 
 const PROFILE = [
@@ -66,6 +77,25 @@ const PROFILE = [
   'abcd',
   '-----END OpenVPN Static key V1-----',
   '</tls-auth>',
+  '',
+].join('\r\n');
+
+const PRIVATE_KEY = 'PrivPlanted' + 'A'.repeat(32) + '=';
+const PUBLIC_KEY = 'PubPlanted' + 'B'.repeat(33) + '=';
+const PRESHARED_KEY = 'PskPlanted' + 'C'.repeat(33) + '=';
+const WG_CONFIG = [
+  '[Interface]',
+  'PrivateKey = ' + PRIVATE_KEY,
+  'Address = 10.64.0.2/32, fd00::2/128',
+  'DNS = 10.64.0.1',
+  'MTU = 1380',
+  '',
+  '[Peer] # the office',
+  'PublicKey = ' + PUBLIC_KEY,
+  'PresharedKey = ' + PRESHARED_KEY,
+  'AllowedIPs = 0.0.0.0/0, ::/0',
+  'Endpoint = vpn.example.com:51820',
+  'PersistentKeepalive = 25',
   '',
 ].join('\r\n');
 
@@ -344,7 +374,7 @@ export const vpnSuite: Suite = {
     t.check(
       prepared !== null &&
         prepared.session.server === 'uk2201.nordvpn.com' &&
-        prepared.credentials.password === PASSWORD,
+        prepared.credentials?.password === PASSWORD,
       'a launch picks the server, checks its profile and holds the login in memory',
     );
     await t.throws(
@@ -450,6 +480,180 @@ export const vpnSuite: Suite = {
         updatedAt: 'n',
       }).text.includes('\u001b'),
       'text the sandbox wrote loses its escape sequences before it is printed',
+    );
+
+    t.section('WireGuard: your own config is untrusted data');
+    const wg = inspectWireguard(WG_CONFIG);
+    t.check(
+      wg.ok &&
+        wg.config.peers.length === 1 &&
+        wg.config.peers[0].endpointHost === 'vpn.example.com' &&
+        wg.config.peers[0].endpointPort === 51820 &&
+        wireguardTunnelAddress(wg.config) === '10.64.0.2' &&
+        wireguardEndpoints(wg.config)[0].port === 51820,
+      'a plain config is accepted and says where it connects and which address the tunnel has',
+      JSON.stringify(wg),
+    );
+    for (const key of WIREGUARD_PROGRAM_KEYS) {
+      const bad = inspectWireguard(WG_CONFIG.replace('MTU = 1380', key + ' = calc.exe'));
+      t.check(
+        !bad.ok && bad.problems.some((p) => p.toLowerCase().includes(key)),
+        key + ' is refused by name',
+        JSON.stringify(bad),
+      );
+    }
+    const wgOdd = [
+      ['FwMark = 7', 'an unknown [Interface] key is refused, not passed on'],
+      ['postup = calc', 'lower case does not hide PostUp'],
+      ['[Socks]', 'an unknown section is refused'],
+      ['DNS = evil.example.com', 'a DNS name (a search domain) is refused: only addresses'],
+      ['MTU = 99999', 'an MTU out of range is refused'],
+      ['PrivateKey = ' + PRIVATE_KEY, 'a second PrivateKey is refused'],
+    ] as const;
+    for (const [line, why] of wgOdd) {
+      const text = line.startsWith('[') ? WG_CONFIG + line + '\r\n' : WG_CONFIG.replace('MTU = 1380', line);
+      t.check(!inspectWireguard(text).ok, why, line);
+    }
+    t.check(
+      !inspectWireguard(WG_CONFIG.replace(PRIVATE_KEY, 'tooshort')).ok &&
+        !inspectWireguard(WG_CONFIG.replace('10.64.0.2/32, fd00::2/128', 'fd00::2/128')).ok &&
+        !inspectWireguard(WG_CONFIG.replace('vpn.example.com:51820', '[2001:db8::1]:51820')).ok &&
+        !inspectWireguard(WG_CONFIG.replace('Endpoint = vpn.example.com:51820', '')).ok &&
+        !inspectWireguard(WG_CONFIG.replace('vpn.example.com:51820', 'vpn.example.com:0')).ok &&
+        !inspectWireguard(WG_CONFIG.replace('[Peer] # the office', '')).ok &&
+        !inspectWireguard('x'.repeat(20 * 1024)).ok &&
+        !inspectWireguard(WG_CONFIG.replace('AllowedIPs = 0.0.0.0/0, ::/0', 'AllowedIPs = 300.0.0.0/0')).ok,
+      'a bad key, an IPv6-only address or endpoint, a missing endpoint or peer, a bad port, a huge file and a bad range are refused',
+    );
+    t.check(
+      inspectWireguard(WG_CONFIG.replace('MTU = 1380', '# PostUp = calc\r\nMTU = 1380 # PreUp = calc')).ok,
+      'comments are comments (a commented-out PostUp is not a key)',
+    );
+    const refusals = [
+      WG_CONFIG.replace('MTU = 1380', 'PostUp = ' + PRIVATE_KEY),
+      WG_CONFIG.replace('MTU = 1380', 'Bogus = ' + PRESHARED_KEY),
+      WG_CONFIG.replace(PUBLIC_KEY, 'bad' + PRESHARED_KEY),
+      WG_CONFIG.replace(PRIVATE_KEY, PRIVATE_KEY + 'x'),
+    ].map(inspectWireguard);
+    t.check(
+      refusals.every(
+        (r) => !r.ok && !JSON.stringify(r).includes('PrivPlanted') && !JSON.stringify(r).includes('PskPlanted'),
+      ),
+      'what a refusal says never contains a key',
+    );
+    await t.throws(
+      () => assertSafeWireguard(WG_CONFIG.replace('MTU = 1380', 'PostUp = calc'), 'office.conf'),
+      'office.conf was refused',
+      'a refused config names its file and the reason',
+    );
+    if (wg.ok) {
+      const text = renderWireguard(wg.config, { 0: '203.0.113.7' });
+      t.check(
+        text.includes('Endpoint = 203.0.113.7:51820') &&
+          !text.includes('vpn.example.com') &&
+          !text.includes('the office') &&
+          inspectWireguard(text).ok,
+        'the config handed on is written again from the checked values, with the endpoint as an address, and is itself valid',
+      );
+    }
+    const wgRules = killSwitchCommands([{ ip: '203.0.113.7', port: 51820, proto: 'udp' }], null).map((c) =>
+      c.join(' '),
+    );
+    t.check(
+      wgRules.some(
+        (c) =>
+          c.includes('name=AgentSandbox-VPN-Server-1') &&
+          c.includes('protocol=udp') &&
+          c.includes('remoteip=203.0.113.7') &&
+          c.includes('remoteport=51820'),
+      ) && wgRules.findIndex((c) => c.includes('blockoutbound')) < wgRules.findIndex((c) => c.includes('action=allow')),
+      'the kill switch blocks first and lets only the endpoint host:port through, over udp',
+    );
+    t.check(
+      tunnelCommands('10.64.0.2').some((c) => c.join(' ').includes('localip=10.64.0.2') && c[2] === 'add'),
+      "the tunnel's own address (from Address) is let through once the service runs",
+    );
+    t.check(
+      WIREGUARD_MSI.x64.sha256.length === 64 &&
+        WIREGUARD_MSI.arm64.sha256.length === 64 &&
+        WIREGUARD_MSI.base.startsWith('https://download.wireguard.com/') &&
+        serviceRunning('STATE              : 4  RUNNING') &&
+        !serviceRunning('STATE              : 1  STOPPED') &&
+        handshakeDone('abc=\t1700000000\r\n') &&
+        !handshakeDone('abc=\t0\r\n') &&
+        !handshakeDone(''),
+      'the WireGuard download is pinned by checksum; the service state and handshake are read from the tools output',
+    );
+
+    t.section('WireGuard: the keys never land in session.json or the launch folder');
+    const wgDir = t.dir('wg-config');
+    const wgFile = path.join(wgDir, 'office.conf');
+    fs.writeFileSync(wgFile, WG_CONFIG);
+    const wgSettings = f.makeConfig();
+    wgSettings.vpn = { ...wgSettings.vpn, enabled: true, provider: 'wireguard-file', configFile: wgFile };
+    const wgRun = await f.run({}, wgSettings);
+    const wgPrepared = await prepareVpn({
+      config: wgRun.config,
+      storageRoot: wgSettings.storage.root,
+      login: new VpnLogin(t.dir('wg-nologin'), SecretStore.memory()),
+    });
+    t.check(
+      wgPrepared !== null &&
+        wgPrepared.session.server === 'office.conf' &&
+        wgPrepared.session.profile === undefined &&
+        wgPrepared.credentials === undefined &&
+        (wgPrepared.wireguardConfig ?? '').includes(PRIVATE_KEY),
+      'a launch needs no saved login; it holds the checked config (with the private key) in memory only',
+    );
+    fs.writeFileSync(wgFile, WG_CONFIG.replace('MTU = 1380', 'PostUp = calc.exe'));
+    await t.throws(
+      () => prepareVpn({ config: wgRun.config, storageRoot: wgSettings.storage.root }),
+      'refused',
+      'a config with PostUp stops the launch before anything is written',
+    );
+    t.check(
+      wireguardFileProblem(wgFile, wgDir)?.includes('refused') === true &&
+        wireguardFileProblem(path.join(wgDir, 'missing.conf'), wgDir) !== null &&
+        !(wireguardFileProblem(wgFile, wgDir) ?? '').includes('PrivPlanted'),
+      'doctor says a bad or missing config is a problem, without a key',
+    );
+    fs.writeFileSync(wgFile, WG_CONFIG);
+    t.check(wireguardFileProblem('office.conf', wgDir) === null, 'a good config, even by a relative path, is fine');
+    clearSecrets(wgSettings.storage.root, wgRun.dataPath);
+    const wgLaunch = generateSandbox({
+      packageRoot: t.packageRoot,
+      run: wgRun,
+      harnessArgs: [],
+      probe: f.probe,
+      pcLanguages: ['python', 'rust', 'cpp', 'dotnet'],
+      ...(wgPrepared ? { vpn: wgPrepared } : {}),
+    });
+    const wgSession = fs.readFileSync(wgLaunch.sessionPath, 'utf8');
+    const wgAll: string[] = [];
+    const wgWalk = (d: string): void => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) wgWalk(p);
+        else wgAll.push(fs.readFileSync(p, 'latin1'));
+      }
+    };
+    wgWalk(wgLaunch.launchPath);
+    const hasKey = (text: string): boolean =>
+      text.includes(PRIVATE_KEY) || text.includes(PRESHARED_KEY) || text.includes('PrivPlanted');
+    t.check(
+      !hasKey(wgSession) && !wgAll.some(hasKey) && !fs.existsSync(path.join(wgLaunch.launchPath, 'vpn')),
+      'neither the private key nor the preshared key is in session.json or any file of the launch folder',
+    );
+    const wgHanded = f.readJson(new RunDir(wgRun.dataPath).secretFile(wgLaunch.launchId)) as SecretsFile;
+    t.check(
+      (wgHanded.wireguardConfig ?? '').includes(PRIVATE_KEY) && wgHanded.vpn === undefined,
+      'the config is only in the one-shot file for the sandbox',
+    );
+    clearSecrets(wgSettings.storage.root, wgRun.dataPath);
+    t.check(
+      !fs.existsSync(new RunDir(wgRun.dataPath).secretFile(wgLaunch.launchId)) &&
+        vpnNotes(wgSettings.vpn).some((n) => n.includes('WireGuard private key') && n.includes('turn the tunnel off')),
+      'the launch warns that the agent can read the key and turn the tunnel off',
     );
   },
 };

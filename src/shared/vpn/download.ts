@@ -12,3 +12,20 @@ export const OPENVPN_MSI = {
   },
   base: 'https://swupdate.openvpn.org/community/releases/',
 } as const;
+
+/**
+ * WireGuard for Windows (brings wireguard.exe and wg.exe). Hashes computed from the files on download.wireguard.com
+ * (https); both files carry a valid WireGuard LLC signature.
+ */
+export const WIREGUARD_MSI = {
+  version: '1.1.1',
+  x64: {
+    file: 'wireguard-amd64-1.1.1.msi',
+    sha256: '7bfed60ad61b785c914b38b61555a975488e1d3ec472dbfb2fcdf498fca75242',
+  },
+  arm64: {
+    file: 'wireguard-arm64-1.1.1.msi',
+    sha256: '8336335c738d4aff040fa9d11b752da65a80b6f41d3262d6ba5e82f97ebd1bd4',
+  },
+  base: 'https://download.wireguard.com/windows-client/',
+} as const;

@@ -2,7 +2,7 @@
 
 The sandbox can send all its traffic through a VPN. Only the sandbox: your PC's own connection is untouched. NordVPN
 works with the login you already have; you do not need a NordVPN app on your PC. You can also use your own OpenVPN
-profile (`.ovpn`), for example from your company.
+profile (`.ovpn`) or WireGuard config (`.conf`), for example from your company.
 
 **Status: built and tested without a VPN.** The parts that need a real PC and a real VPN account (the network driver
 inside Windows Sandbox, the tunnel, the kill switch with the attach channel) are listed under
@@ -45,15 +45,49 @@ To use your own profile instead: `sandbox config set vpn.provider openvpn-file`,
 C:\path\work.ovpn`, then `sandbox vpn login` for the user name and password your VPN gave you (certificates stay inside the
 profile; a profile that needs no user name is not supported yet).
 
+## Your own WireGuard file
+
+For a business VPN that gives you a WireGuard config (a `.conf` file):
+
+```
+sandbox config set vpn.provider wireguard-file
+sandbox config set vpn.configFile C:\path\office.conf
+sandbox config set vpn.enabled true
+```
+
+There is no `sandbox vpn login`: the keys are in the file. What happens at launch:
+
+1. On your PC the file is read (at most 16 KB) and **checked**. Only `PrivateKey`, `Address`, `DNS`, `MTU`,
+   `ListenPort` and, in each `[Peer]`, `PublicKey`, `PresharedKey`, `AllowedIPs`, `Endpoint` and
+   `PersistentKeepalive` are accepted. `PreUp`, `PostUp`, `PreDown`, `PostDown` (they run programs), `Table`,
+   `SaveConfig` and anything unknown stop the launch before anything is written. It needs an IPv4 `Address` and an
+   `Endpoint` that is a name or an IPv4 address (IPv6 endpoints and names in `DNS` are refused). The config is then
+   written again from the checked values.
+2. The private and preshared keys travel only in the one-shot file the sandbox reads and deletes at once: never in
+   `session.json`, the launch folder or the shared run folder.
+3. In the sandbox: the config is checked again, WireGuard for Windows is downloaded from download.wireguard.com
+   (checked against a SHA-256 stored in this program) and installed silently, the endpoint name is looked up (so
+   WireGuard needs no DNS once the kill switch is on) and **the kill switch is applied first**, with the endpoint's
+   address and UDP port as the one hole. The config goes in a file for `wireguard.exe /installtunnelservice` and is
+   deleted as soon as the service runs (or has failed). Then the tunnel's own address (`Address`) is let through and
+   the sandbox waits (30 seconds) for the server to answer (the first handshake).
+4. The sandbox reports `up` or `failed` the same way as for OpenVPN. A failed tunnel is removed again.
+
+Things to know: put a `DNS` line in the config, or names cannot be looked up through the tunnel. With the kill switch
+on, only traffic that goes through the tunnel leaves the sandbox, so an `AllowedIPs` that is not `0.0.0.0/0` (a split
+tunnel) leaves the rest of the internet unreachable; the sandbox warns about that in its log. Use a key you can
+revoke on the VPN server: the agent in the sandbox can read it. `sandbox doctor` checks that the file is readable and
+plain and that download.wireguard.com answers.
+
 ## Settings
 
 | Setting | Default | |
 | --- | --- | --- |
 | `vpn.enabled` | `false` | the VPN is on for new sandboxes |
-| `vpn.provider` | `nordvpn` | `nordvpn` or `openvpn-file` |
+| `vpn.provider` | `nordvpn` | `nordvpn`, `openvpn-file` or `wireguard-file` |
 | `vpn.protocol` | `udp` | `udp` or `tcp` (tcp passes networks that block udp) |
 | `vpn.country` | empty | NordVPN: `uk`, `us`, `Germany` ...; empty = the best server |
-| `vpn.configFile` | empty | `openvpn-file`: your `.ovpn` |
+| `vpn.configFile` | empty | `openvpn-file`: your `.ovpn`; `wireguard-file`: your `.conf` |
 | `vpn.killSwitch` | `true` | nothing leaves the sandbox except through the tunnel |
 
 A project's `.sandbox-config.json` can turn `killSwitch` on, never off, and can never choose a VPN, a server, a profile
@@ -120,6 +154,20 @@ settings rules, secrets kept out of files). It has not been run against a real t
 - **Attach still works** (`sandbox claude -t` from the PC) and so do `forwardPorts`, while the kill switch is on. The
   rules assume return traffic of connections your PC opens is allowed by Windows' firewall state, as it is for the LAN
   block.
+- **WireGuard (your own file)**, all of it, as nothing here ran against a real tunnel:
+  - the MSI installs quietly (`DO_NOT_LAUNCH=1`) and `wireguard.exe /installtunnelservice` starts the service inside
+    Windows Sandbox (the WireGuard network driver must install there);
+  - the service has read the config before the file is deleted (it reads it once at start), and the key is gone from
+    disk afterwards (`C:\Windows\Temp\sbx-wg-*` is empty);
+  - the first handshake shows in `wg.exe show sandbox latest-handshakes`, and the sandbox appears from the server's
+    address, not yours;
+  - the kill switch rules do not get in the way of WireGuard's own firewall rules for `AllowedIPs 0.0.0.0/0`, and
+    with the tunnel stopped (`wireguard.exe /uninstalltunnelservice sandbox`) nothing leaves;
+  - attach (`sandbox claude -t`) and `forwardPorts` work with the kill switch on, a `DNS` line answers through the
+    tunnel, and a wrong key or endpoint fails cleanly (offline with the kill switch, normal connection without);
+  - the pinned MSI hashes (version 1.1.1) match what the publisher serves. When they were computed they differed from
+    the list in `latest.sig` on the same site, though both files carry a valid WireGuard LLC signature: compare again
+    before a release.
 - **OpenVPN's installer options.** It is installed with its default features; check that the install finishes quietly.
 - **IPv6** is blocked by the default outbound rule; check that nothing leaks.
 - **Restarting the sandbox's agent session** after a VPN failure behaves (the agent cannot install itself offline).

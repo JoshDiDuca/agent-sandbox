@@ -23,14 +23,26 @@ async function status(ctx: Context): Promise<number> {
   if (printJson(ctx, report)) return 0;
   table([
     ['VPN', report.enabled ? c.green('on') : 'off  (turn on: sandbox config set vpn.enabled true)'],
-    ['Provider', report.provider === 'nordvpn' ? 'NordVPN' : 'your own .ovpn file'],
+    [
+      'Provider',
+      report.provider === 'nordvpn'
+        ? 'NordVPN'
+        : report.provider === 'wireguard-file'
+          ? 'your own WireGuard .conf'
+          : 'your own .ovpn file',
+    ],
     ['Protocol', report.protocol],
     ['Country', report.country || 'best available'],
     ['Kill switch', report.killSwitch ? 'on (no internet if the tunnel fails)' : c.yellow('off')],
-    ['Login', LOGIN_TEXT[report.login] + (report.loginSavedAt ? c.dim('  ' + report.loginSavedAt.slice(0, 10)) : '')],
+    [
+      'Login',
+      report.provider === 'wireguard-file'
+        ? c.dim('not needed (the keys are in your config)')
+        : LOGIN_TEXT[report.login] + (report.loginSavedAt ? c.dim('  ' + report.loginSavedAt.slice(0, 10)) : ''),
+    ],
     ...(report.running ? [['Running now', report.running.text]] : []),
   ]);
-  if (report.login === 'none') nextStep('sandbox vpn login');
+  if (report.provider !== 'wireguard-file' && report.login === 'none') nextStep('sandbox vpn login');
   if (report.login === 'unreadable')
     console.log(c.dim('Only the Windows user that saved it can read it. Save it again: sandbox vpn login'));
   for (const w of VPN_WARNINGS) console.log(c.dim(w));
@@ -40,6 +52,10 @@ async function status(ctx: Context): Promise<number> {
 async function login(ctx: Context): Promise<number> {
   requireOnPc('vpn login');
   const service = new VpnService(ctx);
+  if (service.provider === 'wireguard-file') {
+    console.log('A WireGuard config needs no login: the keys are in the file vpn.configFile points to.');
+    return 0;
+  }
   const nord = service.provider === 'nordvpn';
   console.log(
     nord

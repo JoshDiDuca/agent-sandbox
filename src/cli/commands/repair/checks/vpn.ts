@@ -1,12 +1,15 @@
 // The VPN, when it is on: is the login saved and readable, can the OpenVPN download be reached. Not shown when the
 // VPN is off. (That the storage folder is private is checked with the data folder.)
-import { VpnLogin } from '../../../../host/vpn/index.js';
-import { OPENVPN_MSI } from '../../../../shared/vpn/download.js';
+import { VpnLogin, wireguardFileProblem } from '../../../../host/vpn/index.js';
+import { OPENVPN_MSI, WIREGUARD_MSI } from '../../../../shared/vpn/download.js';
 import type { Check, Finding, RepairEnv } from '../types.js';
 import { ok } from './common.js';
 
 const REACH_MS = 6000;
 const vpnOn = (env: RepairEnv): boolean => env.ctx.loaded.config.vpn.enabled;
+const wireguard = (env: RepairEnv): boolean => env.ctx.loaded.config.vpn.provider === 'wireguard-file';
+const loginNeeded = (env: RepairEnv): boolean => vpnOn(env) && !wireguard(env);
+const wireguardOn = (env: RepairEnv): boolean => vpnOn(env) && wireguard(env);
 
 export const VPN_CHECKS: Check[] = [
   {
@@ -14,7 +17,7 @@ export const VPN_CHECKS: Check[] = [
     group: 'Network',
     name: 'VPN login',
     checking: 'the saved VPN login',
-    applies: vpnOn,
+    applies: loginNeeded,
     run: (env: RepairEnv): Finding => {
       const { provider } = env.ctx.loaded.config.vpn;
       const state = new VpnLogin(env.storageRoot).state(provider);
@@ -35,18 +38,40 @@ export const VPN_CHECKS: Check[] = [
     },
   },
   {
+    id: 'vpn-config',
+    group: 'Network',
+    name: 'WireGuard config',
+    checking: 'the WireGuard config file',
+    applies: wireguardOn,
+    run: (env: RepairEnv): Finding => {
+      const problem = wireguardFileProblem(env.ctx.loaded.config.vpn.configFile, process.cwd());
+      return problem
+        ? {
+            status: 'needs-you',
+            detail: problem,
+            means: 'The sandbox cannot start its VPN, so a launch stops.',
+            fix: 'Set vpn.configFile to a plain WireGuard .conf (no PostUp, PreUp or other script lines).',
+          }
+        : ok('readable and plain (keys are not shown)');
+    },
+  },
+  {
     id: 'vpn-download',
     group: 'Network',
-    name: 'OpenVPN download',
-    checking: 'whether the OpenVPN download can be reached',
+    name: 'VPN download',
+    checking: 'whether the VPN software download can be reached',
     applies: vpnOn,
     timeoutMs: REACH_MS + 4000,
     run: async (env: RepairEnv): Promise<Finding> => {
-      if (await env.system.reachable(OPENVPN_MSI.base, REACH_MS)) return ok('swupdate.openvpn.org answers');
+      const [name, base] = wireguard(env)
+        ? (['WireGuard', WIREGUARD_MSI.base] as const)
+        : (['OpenVPN', OPENVPN_MSI.base] as const);
+      const host = new URL(base).host;
+      if (await env.system.reachable(base, REACH_MS)) return ok(host + ' answers');
       return {
         status: 'warn',
-        detail: 'swupdate.openvpn.org did not answer within ' + REACH_MS / 1000 + ' seconds',
-        means: 'The sandbox downloads OpenVPN there at its first VPN start (it is kept afterwards).',
+        detail: host + ' did not answer within ' + REACH_MS / 1000 + ' seconds',
+        means: 'The sandbox downloads ' + name + ' there at its first VPN start (it is kept afterwards).',
         fix: 'Check your internet connection or proxy, then run this again.',
       };
     },

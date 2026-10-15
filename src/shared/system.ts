@@ -24,6 +24,7 @@ export const SYSTEM = {
   shutdown: (): string => system32('shutdown.exe'),
   dism: (): string => system32('Dism.exe'),
   msiexec: (): string => system32('msiexec.exe'),
+  sc: (): string => system32('sc.exe'),
   /** The .NET Framework C# compiler that ships with Windows (C# 5). */
   csc: (): string => path.join(systemRoot(), 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
 } as const;
