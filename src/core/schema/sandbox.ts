@@ -51,8 +51,28 @@ export const SandboxSchema = z.strictObject({
     .describe(
       'Size of the sandbox\'s paging file in MB, created at full size when it starts so it never grows while builds run (8 GB of its disk always stays free). Windows Sandbox starts with about 1 GB: parallel builds then fail with "The paging file is too small", and Windows grows the file under load. 0 = leave Windows\' own.',
     ),
-  reserveHostMb: z.number().int().nonnegative().describe('RAM always left for this PC when memoryMb is "auto".'),
-  vGpu: z.boolean().describe('Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface.'),
+  reserveHostMb: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe(
+      'Memory always left for this PC when memoryMb is "auto": the sandbox gets at most (free RAM, and RAM plus paging file still unused) minus this.',
+    ),
+  agentMemoryHeadroomMb: z
+    .union([z.literal('auto'), z.literal('none'), z.number().int().min(0)])
+    .describe(
+      'Memory kept out of the agents reach inside the sandbox, in MB: everything the agents start (their builds, tests, tools) together may use at most the sandbox memory minus this; a runaway parallel build then gets out-of-memory errors in its own session instead of freezing or crashing the whole sandbox. "auto" = the larger of 2048 MB and 10 % of the sandbox memory; "none" = no limit. Yours only: a project file cannot change it.',
+    ),
+  pressureResponse: z
+    .boolean()
+    .describe(
+      'When the sandbox (or this PC) runs low on memory, slow the heaviest build programs down (lower priority) and, if that is not enough, pause the biggest compiler for a few seconds at a time, so heavy parallel builds slow down instead of closing the sandbox. Never touches the agents themselves. Yours only: a project file cannot change it.',
+    ),
+  vGpu: z
+    .boolean()
+    .describe(
+      "Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface. The sandbox then uses this PC's graphics card, and with some graphics drivers heavy use can freeze the whole PC: turn it on only when a program in the sandbox needs the GPU (the mesa toolchain gives software OpenGL without it).",
+    ),
   networking: z.boolean().describe('Internet access. false is the only hard network isolation Windows Sandbox offers.'),
   clipboard: z
     .boolean()

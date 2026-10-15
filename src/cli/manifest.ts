@@ -443,7 +443,10 @@ const COMMAND_LIST = [
     summary: 'print the newest sandbox log',
     group: 'Health',
     args: [],
-    options: [bool('--follow', 'keep printing new lines', { short: '-f' })],
+    options: [
+      bool('--follow', 'keep printing new lines', { short: '-f' }),
+      bool('--crash', 'print the report of the last crash (what Windows logged, this PC and the sandbox memory)'),
+    ],
   },
   {
     name: 'setup',

@@ -3,12 +3,14 @@
 // (daemon/project).
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { GuestRequest, Harness, SessionStatus } from '../../core/types.js';
 import { FrameType, sendControl } from '../../shared/pty/index.js';
 import { isWithin } from '../../shared/paths/projects.js';
 import { now } from '../../shared/channel/run-dir.js';
 import { SYSTEM } from '../../shared/system.js';
+import { cargoJobs } from '../../shared/memory/index.js';
 import { commandLine } from '../sessions/cmdline.js';
 import { freePort } from '../runtime/ports.js';
 import { primaryProject } from '../boot/project-status.js';
@@ -60,12 +62,25 @@ const harnessFor = (req: SessionRequest): Harness => {
   );
 };
 
+/**
+ * What keeps heavy load from taking the sandbox down: the job object's memory limit for everything the agents start
+ * (ptyhost reads PTYHOST_JOB_MB) and cargo's parallel jobs sized to the sandbox's memory and the sessions building.
+ */
+export function memoryEnv(env: NodeJS.ProcessEnv, sessions: number): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  if (session.agentMemoryLimitMb) out.PTYHOST_JOB_MB = String(session.agentMemoryLimitMb);
+  if (!env.CARGO_BUILD_JOBS)
+    out.CARGO_BUILD_JOBS = String(cargoJobs(os.cpus().length, os.totalmem() / 1024 ** 3, sessions));
+  return out;
+}
+
 /** Starts ptyhost for the agent and waits until it listens; a failure carries the tail of ptyhost's own log. */
 const launchPtyHost = async (
   req: SessionRequest,
   remote: boolean,
   env: NodeJS.ProcessEnv,
   say: (m: string) => void,
+  sessions: number,
 ): Promise<{ child: ChildProcess; port: number; token: string }> => {
   const harness = harnessFor(req);
   // Never refresh here: main already did, and replacing a running agent's executable would fail.
@@ -83,7 +98,7 @@ const launchPtyHost = async (
     rows: 32,
     id: req.id,
     cwd: req.cwd,
-    env: { ...withRegistryPath(env), ...harness.environment },
+    env: { ...withRegistryPath(env), ...harness.environment, ...memoryEnv(env, sessions) },
     remote,
     command: commandLine(launch.file, [...base, ...req.args]),
     restartCommand: commandLine(launch.file, [...base, ...(harness.resumeArguments ?? [])]),
@@ -170,7 +185,7 @@ export class SessionManager {
     try {
       const place = await placeFor(req, say);
       const remote = session.networking && session.attach.enabled;
-      const { child, port, token } = await launchPtyHost(req, remote, place.env, say);
+      const { child, port, token } = await launchPtyHost(req, remote, place.env, say, this.live.size + 1);
       const resumed = req.harness === 'claude' ? resumedConversation(req.args) : undefined;
       const running: SessionStatus = {
         ...status,

@@ -123,11 +123,11 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991,
-          "description": "RAM always left for this PC when memoryMb is \"auto\"."
+          "description": "Memory always left for this PC when memoryMb is \"auto\": the sandbox gets at most (free RAM, and RAM plus paging file still unused) minus this."
         },
         "vGpu": {
           "type": "boolean",
-          "description": "Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface."
+          "description": "Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface. The sandbox then uses this PC's graphics card, and with some graphics drivers heavy use can freeze the whole PC: turn it on only when a program in the sandbox needs the GPU (the mesa toolchain gives software OpenGL without it)."
         },
         "networking": {
           "type": "boolean",

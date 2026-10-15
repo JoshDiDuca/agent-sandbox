@@ -79,7 +79,7 @@ sealed class SessionHost
         log.Write("starting: " + command);
         while (true)
         {
-            using (PseudoConsole console = PseudoConsole.Start(command, hub.Cols, hub.Rows, hub.Broadcast))
+            using (PseudoConsole console = PseudoConsole.Start(command, hub.Cols, hub.Rows, hub.Broadcast, log))
             {
                 hub.Attach(console);
                 log.Write("pseudo console: " + Native.ConsoleKind);
@@ -856,7 +856,7 @@ sealed class PseudoConsole : IDisposable
         this.pump = pump;
     }
 
-    public static PseudoConsole Start(string commandLine, short cols, short rows, Action<byte[]> onOutput)
+    public static PseudoConsole Start(string commandLine, short cols, short rows, Action<byte[]> onOutput, Log log)
     {
         SafeFileHandle inRead;
         SafeFileHandle inWrite;
@@ -872,7 +872,7 @@ sealed class PseudoConsole : IDisposable
         }
         inRead.Dispose();
         outWrite.Dispose();
-        IntPtr process = Native.Spawn(commandLine, handle);
+        IntPtr process = Native.Spawn(commandLine, handle, log);
         FileStream output = new FileStream(outRead, FileAccess.Read);
         Thread pump = new Thread(() => Pump(output, onOutput));
         pump.IsBackground = true;
@@ -1085,6 +1085,12 @@ sealed class Log
 static class Native
 {
     private const uint ExtendedStartupInfoPresent = 0x00080000;
+    private const uint CreateSuspended = 0x00000004;
+    // The shared job of everything the agents start (the memory governor in the daemon opens it by this name).
+    private const string AgentJobName = "Local\\AgentSandboxAgentsJob";
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JobObjectLimitJobMemory = 0x00000200;
+    private const long BytesPerMb = 1024L * 1024L;
     private const int UseStdHandles = 0x00000100;
     private static readonly IntPtr PseudoConsoleAttribute = (IntPtr)0x00020016;
 
@@ -1123,6 +1129,43 @@ static class Native
     {
         public StartupInfo StartupInfo;
         public IntPtr lpAttributeList;
+    }
+
+    // JOBOBJECT_BASIC_LIMIT_INFORMATION, IO_COUNTERS and JOBOBJECT_EXTENDED_LIMIT_INFORMATION.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobBasicLimit
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobExtendedLimit
+    {
+        public JobBasicLimit BasicLimitInformation;
+        public IoCounters IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryUsed;
+        public UIntPtr PeakJobMemoryUsed;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1181,6 +1224,18 @@ static class Native
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern bool CreateProcessW(string lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref StartupInfoEx lpStartupInfo, out ProcessInformation lpProcessInformation);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JobExtendedLimit info, int length);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint ResumeThread(IntPtr thread);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
@@ -1241,9 +1296,51 @@ static class Native
         return NativeMethods.CreatePipe(out read, out write, IntPtr.Zero, 0);
     }
 
-    /// <summary>Starts `commandLine` attached to the pseudo console. Null std handles: never leak our own stdio into the child.</summary>
-    public static IntPtr Spawn(string commandLine, IntPtr pseudoConsole)
+    private static IntPtr agentJob;
+    private static bool agentJobTried;
+
+    /// <summary>
+    /// The shared job of everything the agents start, with a memory limit for all of it together (PTYHOST_JOB_MB, set
+    /// by the daemon from sandbox.agentMemoryHeadroomMb): a runaway build then gets out-of-memory errors in its own
+    /// session instead of using up the whole sandbox. Zero when no limit is asked for or the job cannot be made; ptyhost
+    /// itself is never in it. The handle stays open for ptyhost's whole life (the job lives while a handle is open).
+    /// </summary>
+    private static IntPtr AgentJob(Log log)
     {
+        if (agentJobTried)
+        {
+            return agentJob;
+        }
+        agentJobTried = true;
+        long limitMb;
+        if (!long.TryParse(Environment.GetEnvironmentVariable("PTYHOST_JOB_MB"), out limitMb) || limitMb < 512)
+        {
+            return IntPtr.Zero;
+        }
+        IntPtr job = NativeMethods.CreateJobObjectW(IntPtr.Zero, AgentJobName);
+        if (job == IntPtr.Zero)
+        {
+            log.Write("agent job: CreateJobObject failed (" + Marshal.GetLastWin32Error() + "); no memory limit");
+            return IntPtr.Zero;
+        }
+        JobExtendedLimit info = new JobExtendedLimit();
+        info.BasicLimitInformation.LimitFlags = JobObjectLimitJobMemory;
+        info.JobMemoryLimit = new UIntPtr((ulong)(limitMb * BytesPerMb));
+        if (!NativeMethods.SetInformationJobObject(job, JobObjectExtendedLimitInformation, ref info, Marshal.SizeOf(typeof(JobExtendedLimit))))
+        {
+            log.Write("agent job: setting the limit failed (" + Marshal.GetLastWin32Error() + "); no memory limit");
+            NativeMethods.CloseHandle(job);
+            return IntPtr.Zero;
+        }
+        log.Write("agent job: everything the agent starts may use " + limitMb + " MB together");
+        agentJob = job;
+        return job;
+    }
+
+    /// <summary>Starts `commandLine` attached to the pseudo console. Null std handles: never leak our own stdio into the child.</summary>
+    public static IntPtr Spawn(string commandLine, IntPtr pseudoConsole, Log log)
+    {
+        IntPtr job = AgentJob(log);
         IntPtr size = IntPtr.Zero;
         NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
         IntPtr attributes = Marshal.AllocHGlobal(size);
@@ -1256,9 +1353,18 @@ static class Native
             info.StartupInfo.dwFlags = UseStdHandles;
             info.lpAttributeList = attributes;
             ProcessInformation pi;
-            if (!NativeMethods.CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, ExtendedStartupInfoPresent, IntPtr.Zero, null, ref info, out pi))
+            if (!NativeMethods.CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, ExtendedStartupInfoPresent | (job != IntPtr.Zero ? CreateSuspended : 0), IntPtr.Zero, null, ref info, out pi))
             {
                 throw new IOException("CreateProcess failed (" + Marshal.GetLastWin32Error() + "): " + commandLine);
+            }
+            if (job != IntPtr.Zero)
+            {
+                // Suspended until it is in the job, so nothing it starts can be outside.
+                if (!NativeMethods.AssignProcessToJobObject(job, pi.hProcess))
+                {
+                    log.Write("agent job: could not add the agent (" + Marshal.GetLastWin32Error() + "); it runs without the memory limit");
+                }
+                NativeMethods.ResumeThread(pi.hThread);
             }
             NativeMethods.CloseHandle(pi.hThread);
             return pi.hProcess;
