@@ -26,7 +26,7 @@ export const DEFAULTS: Config = {
   },
   sharing: { otherUsers: false },
   storage: {
-    root: '%LOCALAPPDATA%\\AgentSandbox',
+    root: '%ProgramData%\\AgentSandbox\\users\\%USERNAME%',
     persistAgentState: true,
     dataName: 'default',
     markSandboxFiles: true,
@@ -90,6 +90,7 @@ export const DEFAULTS: Config = {
     sqlserver: { enabled: 'auto' },
   },
   attach: { enabled: true, reuseSession: true, auto: false, autoHide: false },
+  web: { enabled: false, port: 47800 },
   agentCommands: { enabled: false, agents: 'auto' },
   secrets: { strip: true, allow: [], patterns: [], warnFiles: true },
   personalization: { enabled: true },
@@ -101,6 +102,7 @@ export const DEFAULTS: Config = {
     globalStateFile: 'auto',
     copyCredentials: false,
     overwrite: true,
+    sharePluginsAcrossAccounts: false,
     syncHistory: true,
     historyScope: 'project',
     syncClaudeMem: true,
@@ -124,6 +126,7 @@ export const DEFAULTS: Config = {
       arguments: [],
       environment: {},
       home: { env: { CODEX_HOME: 'codex' }, loginFiles: ['auth.json'], hostDir: '~/.codex' },
+      localState: { CODEX_SQLITE_HOME: 'sqlite' },
       resumeArguments: ['resume', '--last'],
     },
     gemini: {

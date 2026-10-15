@@ -6,6 +6,9 @@ import { DEFAULTS } from '../../../core/config/index.js';
 import type { Migration, MigrationContext } from '../migration.js';
 import { fullSnapshots, readFileObject, removeValues, type Json } from './config-file.js';
 
+/** storage.root is never unpinned: the old default now names the old folder, and following today's would hide it. */
+const KEEP_PINNED = ['storage', 'root'];
+
 /** Paths of the leaves of a JSON object (arrays and scalars are leaves). */
 function leafPaths(value: unknown, prefix: string[] = []): string[][] {
   if (!_.isPlainObject(value)) return prefix.length ? [prefix] : [];
@@ -18,6 +21,7 @@ function pinnedLeaves(file: Json): string[][] {
   return leafPaths(file).filter((path) => {
     const value = _.get(file, path);
     return (
+      !_.isEqual(path, KEEP_PINNED) &&
       _.has(DEFAULTS, path) &&
       !_.isEqual(value, _.get(DEFAULTS, path)) &&
       snapshots.some((snapshot) => _.has(snapshot.defaults, path) && _.isEqual(_.get(snapshot.defaults, path), value))

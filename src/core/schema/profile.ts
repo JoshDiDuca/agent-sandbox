@@ -55,6 +55,11 @@ export const ClaudeProfileSchema = z.strictObject({
   globalStateFile: z.string().describe('Your .claude.json, or "auto". Empty string = do not copy.'),
   copyCredentials: z.boolean().describe('Copy your Claude LOGIN into the sandbox. Prefer sandbox account instead.'),
   overwrite: z.boolean().describe('Refresh these settings from this PC on every launch.'),
+  sharePluginsAcrossAccounts: z
+    .boolean()
+    .describe(
+      'When you switch Claude accounts, copy your Claude plugins (and which ones are enabled) into a data set that has none yet. Off by default: plugins are code that runs in your sessions.',
+    ),
   syncHistory: z.boolean().describe('Bring conversation history in, and sync new history back (path-translated).'),
   historyScope: z
     .enum(['project', 'all'])

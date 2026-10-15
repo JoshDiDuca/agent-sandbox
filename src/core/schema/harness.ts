@@ -52,6 +52,12 @@ export const HarnessSchema = z
     home: HarnessHomeSchema.optional().describe(
       'Where its login lives inside the sandbox; leave out when the agent cannot be pointed at a folder (then its login is not kept between sandboxes).',
     ),
+    localState: z
+      .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), SubfolderSchema)
+      .optional()
+      .describe(
+        "Environment variable -> folder below the agent's own state folder (state\\<agent>) for SQLite databases. SQLite cannot run in a mapped folder, so the agent runs from a copy on the sandbox's disk (the variable points to it) that is copied from and back to that folder.",
+      ),
     resumeArguments: StringsSchema.optional().describe(
       'Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.',
     ),

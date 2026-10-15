@@ -22,6 +22,7 @@ import { ToolchainsSchema } from './toolchains.js';
 import { AppsSchema } from './apps.js';
 import { ProjectsSchema } from './projects.js';
 import { ResumeSchema } from './resume.js';
+import { WebSchema } from './web.js';
 
 export const ConfigSchema = z
   .strictObject({
@@ -35,7 +36,12 @@ export const ConfigSchema = z
     sandbox: SandboxSchema,
     sharing: SharingSchema,
     storage: z.strictObject({
-      root: z.string().min(1).describe('Where everything is kept on this PC (tools, databases, logins, launches).'),
+      root: z
+        .string()
+        .min(1)
+        .describe(
+          'Where everything is kept on this PC (tools, databases, logins, launches). The default is a private folder for you under %ProgramData%\\AgentSandbox\\users, which works for installs for one user and for everyone. sandbox storage move <folder> moves it.',
+        ),
       persistAgentState: z.boolean().describe('Keep agent logins and history between sandboxes.'),
       dataName: NameSchema.describe('Name of the persistent data set (C:\\AgentData) shared by all workspaces.'),
       markSandboxFiles: z
@@ -58,6 +64,7 @@ export const ConfigSchema = z
       'Databases running inside the sandbox. Data persists in C:\\AgentData\\databases; each one starts at boot.',
     ),
     attach: AttachSchema,
+    web: WebSchema,
     agentCommands: AgentCommandsSchema,
     secrets: SecretsSchema,
     personalization: toggle('Copy your desktop look (theme, accent, taskbar, wallpaper, ...) into the sandbox.'),

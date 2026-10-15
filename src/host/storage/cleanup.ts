@@ -14,6 +14,8 @@ export interface PruneOptions {
   conflictDays: number;
   keep: string[];
   now?: number;
+  /** Only count what would go (nothing is deleted). */
+  dryRun?: boolean;
 }
 export interface PruneResult {
   launches: number;
@@ -50,7 +52,7 @@ export function pruneStorage(storageRoot: string, options: Partial<PruneOptions>
   const result: PruneResult = { launches: 0, logs: 0, leftovers: 0, bytes: 0 };
   const remove = (p: string, counter: keyof Omit<PruneResult, 'bytes'>): void => {
     result.bytes += sizeOf(p);
-    safeRemove(p, storageRoot);
+    if (!o.dryRun) safeRemove(p, storageRoot);
     result[counter]++;
   };
 

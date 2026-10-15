@@ -6,6 +6,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { assertNoLinks, fail, isInsideOrEqual, isLink } from '../../core/util/index.js';
 import { JsonFile } from '../../shared/io/index.js';
+import { protectPrivateFolder } from '../sharing/index.js';
+import { ensureStorageRoot } from '../storage/index.js';
 
 const ManifestSchema = z.object({
   entries: z.array(z.object({ original: z.string(), copy: z.string(), existed: z.boolean() })),
@@ -65,6 +67,7 @@ export class MigrationBackup {
 
   /** Copies each existing file or folder (and records the ones that do not exist yet, to remove them on restore). */
   save(paths: readonly string[]): void {
+    ensureStorageRoot(this.storageRoot, protectPrivateFolder);
     const dataRoot = path.join(this.storageRoot, 'data');
     const entries: Manifest['entries'] = this.manifest.read()?.entries ?? [];
     for (const target of paths) {

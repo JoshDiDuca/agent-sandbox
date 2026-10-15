@@ -227,7 +227,7 @@
         "root": {
           "type": "string",
           "minLength": 1,
-          "description": "Where everything is kept on this PC (tools, databases, logins, launches)."
+          "description": "Where everything is kept on this PC (tools, databases, logins, launches). The default is a private folder for you under %ProgramData%\\AgentSandbox\\users, which works for installs for one user and for everyone. sandbox storage move <folder> moves it."
         },
         "persistAgentState": {
           "type": "boolean",
@@ -1147,6 +1147,22 @@
       },
       "additionalProperties": false
     },
+    "web": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "(Beta) Allow the web UI: your sandbox sessions in a browser on this PC. Off by default, and nothing starts it by itself yet: sandbox web start works either way and runs it until sandbox web stop (or a restart of the PC)."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Port of the web UI on 127.0.0.1 (this PC only). Pick another when it is taken."
+        }
+      },
+      "additionalProperties": false
+    },
     "agentCommands": {
       "type": "object",
       "properties": {
@@ -1388,6 +1404,10 @@
           "type": "boolean",
           "description": "Refresh these settings from this PC on every launch."
         },
+        "sharePluginsAcrossAccounts": {
+          "type": "boolean",
+          "description": "When you switch Claude accounts, copy your Claude plugins (and which ones are enabled) into a data set that has none yet. Off by default: plugins are code that runs in your sessions."
+        },
         "syncHistory": {
           "type": "boolean",
           "description": "Bring conversation history in, and sync new history back (path-translated)."
@@ -1500,6 +1520,18 @@
               }
             },
             "additionalProperties": false
+          },
+          "localState": {
+            "description": "Environment variable -> folder below the agent's own state folder (state\\<agent>) for SQLite databases. SQLite cannot run in a mapped folder, so the agent runs from a copy on the sandbox's disk (the variable points to it) that is copied from and back to that folder.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
+            }
           },
           "resumeArguments": {
             "description": "Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.",

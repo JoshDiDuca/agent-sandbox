@@ -1,5 +1,6 @@
 // Reading and editing a config.json (JSON with comments) for the migrations: removing a value keeps every comment.
 import fs from 'node:fs';
+import nodePath from 'node:path';
 import { applyEdits, modify, parse, type ParseError } from 'jsonc-parser';
 import _ from 'lodash';
 import { writeFileAtomic } from '../../../shared/io/index.js';
@@ -35,4 +36,11 @@ export function removeValues(
     note(why + ': ' + path.join('.'));
   }
   writeFileAtomic(file, text);
+}
+
+/** Sets one value in the file (created when missing), comments and the rest untouched. */
+export function setValue(file: string, path: string[], value: unknown): void {
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '{}\n';
+  fs.mkdirSync(nodePath.dirname(file), { recursive: true });
+  writeFileAtomic(file, applyEdits(text, modify(text, path, value, FORMAT)));
 }

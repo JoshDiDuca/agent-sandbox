@@ -269,7 +269,7 @@ export const migrateSuite: Suite = {
     const backups = t.at('cmd-storage', 'backups');
     const made = fs.readdirSync(backups);
     fs.writeFileSync(cmdConfig, 'broken by hand');
-    await runMigrate(service, { dryRun: false, restore: path.join(backups, made[0]) }, say);
+    await runMigrate(service, { dryRun: false, restore: path.join(backups, made[0]), yes: true }, say);
     t.check(
       made.length === 1 && readText(cmdConfig).includes('"toolchains"'),
       'the run kept one backup and --restore puts the saved files back',

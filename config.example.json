@@ -37,7 +37,7 @@
     "otherUsers": false
   },
   "storage": {
-    "root": "%LOCALAPPDATA%\\AgentSandbox",
+    "root": "%ProgramData%\\AgentSandbox\\users\\%USERNAME%",
     "persistAgentState": true,
     "dataName": "default",
     "markSandboxFiles": true,
@@ -207,6 +207,10 @@
     "auto": false,
     "autoHide": false
   },
+  "web": {
+    "enabled": false,
+    "port": 47800
+  },
   "agentCommands": {
     "enabled": false,
     "agents": "auto"
@@ -238,6 +242,7 @@
     "globalStateFile": "auto",
     "copyCredentials": false,
     "overwrite": true,
+    "sharePluginsAcrossAccounts": false,
     "syncHistory": true,
     "historyScope": "project",
     "syncClaudeMem": true,
@@ -283,6 +288,9 @@
           "auth.json"
         ],
         "hostDir": "~/.codex"
+      },
+      "localState": {
+        "CODEX_SQLITE_HOME": "sqlite"
       },
       "resumeArguments": [
         "resume",

@@ -1,8 +1,11 @@
 // An all-users install keeps everyone's data under %ProgramData%\AgentSandbox (its machine config says where), so a
 // sandbox can be shared. A config.json written by an old `config init` pins storage.root to the old per-user default,
 // which wins over the machine config. Removes that pin, and only that: a storage.root you chose yourself stays.
+import path from 'node:path';
 import _ from 'lodash';
 import { DEFAULTS, machineConfigPath } from '../../../core/config/index.js';
+import { expandPath } from '../../../core/util/index.js';
+import { holdsData } from '../../storage/root.js';
 import type { Migration, MigrationContext } from '../migration.js';
 import { fullSnapshots, readFileObject, removeValues } from './config-file.js';
 
@@ -16,7 +19,11 @@ function pinnedOverMachine(configPath: string | null): boolean {
   if (!file || !_.has(file, ROOT)) return false;
   const value = _.get(file, ROOT);
   const defaults = [_.get(DEFAULTS, ROOT), ...fullSnapshots(file).map((s) => _.get(s.defaults, ROOT))];
-  return defaults.some((d) => _.isEqual(d, value));
+  if (!defaults.some((d) => _.isEqual(d, value))) return false;
+  // A pin that holds your saved data while the shared folder has none is kept: sandbox storage offers the move.
+  const pinned = typeof value === 'string' ? expandPath(value, path.dirname(configPath ?? '')) : '';
+  const shared = expandPath(String(_.get(machine, ROOT)), path.dirname(machineConfigPath()));
+  return !(holdsData(pinned) && !holdsData(shared));
 }
 
 export const followMachineStorage: Migration = {
