@@ -9,7 +9,7 @@ Status: **in progress**, **planned**, **idea** (needs a design decision or a tes
 
 | Item | What to check |
 | --- | --- |
-| NordVPN, your own OpenVPN or WireGuard file, the kill switch (1.7.0, 1.8.0) | [vpn.md](vpn.md#what-is-not-tested-yet): the driver in Windows Sandbox, traffic through the tunnel, nothing leaks with it down, attach still works |
+| NordVPN, your own OpenVPN or WireGuard file, the kill switch (alpha; 1.7.0, 1.8.0) | [vpn.md](vpn.md#what-is-not-tested-yet): the driver in Windows Sandbox, traffic through the tunnel, nothing leaks with it down, attach still works |
 | Later: NordLynx (NordVPN over WireGuard) | planned once the above works |
 
 ## 1.9 — Sandbox engines and contained storage (opt-in: contained storage beta, HCS engine alpha)

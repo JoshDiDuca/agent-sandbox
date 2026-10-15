@@ -167,9 +167,9 @@ These are applied inside the sandbox, where the agent is an administrator: they 
 tools it runs) in bounds, but a determined one could undo them. `sandbox.networking: false` is the only hard isolation.
 A project's `.sandbox-config.json` may add `blockHosts` and turn on `blockPrivateRanges`, nothing else here.
 
-## VPN
+## VPN (alpha)
 
-The **VPN** settings (Network category, or `vpn` in your file) send the sandbox's traffic through a VPN. Only the
+**Alpha: not yet tried on a real PC.** The **VPN** settings (Network category, or `vpn` in your file) send the sandbox's traffic through a VPN. Only the
 sandbox: your PC's own connection is untouched. Plain steps for NordVPN: [vpn.md](vpn.md).
 
 | Setting | |
