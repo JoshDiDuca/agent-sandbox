@@ -1,5 +1,33 @@
 # Parity tasks: one area at a time (spec for contributors)
 
+## Start here (instructions for the agent picking this up)
+
+You are finishing the web UI by moving each area of the tool into the shared core, so the command line, the menu and
+the web UI all run the same code. Work like this:
+
+1. Work in your own git worktree of this repository, on a branch made from the latest `master`
+   (`git worktree add <folder> -b web-ui/<area> master`). Never commit to `master` yourself.
+2. Read, in order: `CLAUDE.md` (all of it: the hard rules, the coding standard, the Gotchas), then
+   [shared-core.md](shared-core.md) (the contract, then its "As built" and "How to add a feature" sections), then the
+   rest of this file.
+3. Do the areas in the table at the end of this file **one at a time, in order**, starting with area 1 (agents). Copy
+   the three reference features in `src/app/features/sandbox`, `sessions` and `settings`; follow "Steps for every
+   area" and "Rules" below exactly.
+4. An area is done only when `npm run build`, `npm run lint` and `npm run format:check` pass and `npm test` prints
+   `ALL TESTS PASSED` (gate on that text, not the exit code; live tests can flake: run once more before calling a
+   failure real). Do not weaken or delete tests to make them pass; if a test is wrong, say so in your report.
+5. Commit each area separately, with a clear message saying what moved where. Then **stop** and write a short report:
+   the branch name, what you changed, what you deleted, anything you were unsure about, anything left undone. Wait for
+   the review before starting the next area.
+6. When something in this spec is unclear or seems wrong, do not guess: stop and say what is unclear in your report.
+
+The environment: you run inside a Windows Sandbox on a mapped folder, so symlinks and npm workspaces do not work,
+`sed -i` leaves stray files (use your editor's file tools), and shell heredocs and `node -e` eat backslashes (write
+code with file tools). Never run the self-test on a real PC, and never touch the real `~/.agent-sandbox`, the registry,
+PATH or the user's profile.
+
+## Read first
+
 Read first, in this order: CLAUDE.md, [shared-core.md](shared-core.md) (the contract, then its "As built" and "How to
 add a feature" sections), then the three reference features in `src/app/features/sandbox`, `src/app/features/sessions`
 and `src/app/features/settings`, and how the surfaces draw them: `src/cli/menu/pages/sessions-page.ts` (a menu section
