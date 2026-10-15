@@ -195,7 +195,9 @@ export const SANDBOX_CHECKS: Check[] = [
     timeoutMs: 150_000,
     run: (env: RepairEnv): Finding => {
       const bin = path.join(env.storageRoot, 'bin');
-      const built = dirExists(bin) && fs.readdirSync(bin).some((n) => /^HostTools-[0-9a-f]+\.exe$/i.test(n));
+      const built =
+        dirExists(bin) &&
+        fs.readdirSync(bin).some((n) => /^[0-9a-f]{12}$/i.test(n) && fs.existsSync(path.join(bin, n, 'HostTools.exe')));
       if (built) return ok('built in ' + bin);
       return {
         status: 'warn',

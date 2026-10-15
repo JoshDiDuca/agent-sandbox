@@ -31,8 +31,9 @@ export function nativeScript(name: string, args: readonly string[] = []): string
 }
 
 /**
- * <storage>\bin\HostTools-<hash of its sources>.exe, compiled with the .NET Framework csc the first time; null when it
- * cannot be built (no csc, a compile error): the caller then runs the PowerShell fallback.
+ * <storage>\bin\<hash of its sources>\HostTools.exe, compiled with the .NET Framework csc the first time; null when it
+ * cannot be built (no csc, a compile error): the caller then runs the PowerShell fallback. A plain name and full file
+ * properties (AssemblyInfo.cs), so antivirus software does not take a nameless, random-looking exe for malware.
  */
 export function hostToolsExe(storageRoot: string): string | null {
   refuseInSelfTest('build HostTools.exe');
@@ -49,13 +50,31 @@ export function hostToolsExe(storageRoot: string): string | null {
   }
   const hash = crypto.createHash('sha256');
   for (const file of sources) hash.update(fs.readFileSync(file));
-  const exe = path.join(storageRoot, 'bin', 'HostTools-' + hash.digest('hex').slice(0, 12) + '.exe');
+  const bin = path.join(storageRoot, 'bin');
+  const exe = path.join(bin, hash.digest('hex').slice(0, 12), 'HostTools.exe');
   if (fs.existsSync(exe)) return exe;
   if (!fs.existsSync(SYSTEM.csc())) return null;
   fs.mkdirSync(path.dirname(exe), { recursive: true });
+  removeOldHostTools(bin, path.dirname(exe));
   const result = spawnSync(SYSTEM.csc(), ['/nologo', '/optimize', '/target:exe', '/out:' + exe, ...sources], {
     windowsHide: true,
     timeout: 120000,
   });
   return result.status === 0 && fs.existsSync(exe) ? exe : null;
+}
+
+/** Earlier builds: HostTools-<hash>.exe files and other <hash> folders in bin (best effort: one in use stays). */
+function removeOldHostTools(bin: string, keep: string): void {
+  for (const entry of fs.readdirSync(bin, { withFileTypes: true })) {
+    const full = path.join(bin, entry.name);
+    const old =
+      (entry.isFile() && /^HostTools-[0-9a-f]{12}\.exe$/i.test(entry.name)) ||
+      (entry.isDirectory() && /^[0-9a-f]{12}$/i.test(entry.name) && full !== keep);
+    if (!old) continue;
+    try {
+      fs.rmSync(full, { recursive: true, force: true });
+    } catch {
+      // Still running (keep-awake of another sandbox): removed by a later build.
+    }
+  }
 }

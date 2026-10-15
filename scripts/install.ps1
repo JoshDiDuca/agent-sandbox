@@ -13,6 +13,8 @@
 #                                 pass -Confirm:$false). Env WDS_UNINSTALL=1, WDS_REMOVEDATA=1.
 #   -Version x.y.z                Install this release instead of the latest, also an older one than the installed one
 #                                 (env WDS_VERSION). Your saved data is never touched.
+#   -StartMenuShortcut            Also make a Start menu shortcut (env WDS_SHORTCUT=1). Off by default: some antivirus
+#                                 tools (Malwarebytes: "Trojan.Loader") flag a shortcut that starts a command script.
 # If an upgrade fails after it started changing the install, the previous version is put back (pointers and commands),
 # automatic updates are switched off (and the scheduled task removed for AllUsers) and the message says so.
 # Other environment variables: WDS_PACKAGE (install this tgz or URL instead of the latest release), WDS_SHA256 (its
@@ -33,6 +35,7 @@ param(
   [switch]$RemoveData,
   # An exact release to install (also an older one than the installed version); empty: the latest.
   [ValidatePattern('^(\d+\.\d+\.\d+)?$')][string]$Version = $env:WDS_VERSION,
+  [switch]$StartMenuShortcut,
   # Test aid: prints the text of one shim as kind:name:target (cmd:sandbox:dist/bin/sandbox.js) and stops.
   [string]$PrintShim
 )
@@ -132,6 +135,7 @@ param(
   if ($env:WDS_AUTOUPDATE -eq '0') { $NoAutoUpdate = [switch]$true }
   if ($env:WDS_SHARE -eq '1') { $Share = [switch]$true }
   if ($env:WDS_SHARE -eq '0') { $NoShare = [switch]$true }
+  if ($env:WDS_SHORTCUT -eq '1') { $StartMenuShortcut = [switch]$true }
   if ($env:WDS_ADDUSERS -and -not $AddUsers) { $AddUsers = @($env:WDS_ADDUSERS -split ',') }
   $usersToAdd = @($AddUsers | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
@@ -647,7 +651,18 @@ param(
   Add-PathEntry $binFolder $machine
   $env:Path = "$binFolder;$env:Path"
   Ok "$binFolder is on the PATH"
-  try { Set-Shortcut $shortcutFile (Join-Path $binFolder 'sandbox.cmd'); Ok 'Start menu shortcut' } catch { Warn "Could not make the Start menu shortcut: $_" }
+  if ($StartMenuShortcut) {
+    try { Set-Shortcut $shortcutFile (Join-Path $binFolder 'sandbox.cmd'); Ok 'Start menu shortcut (some antivirus tools flag it; see docs/install.md)' } catch { Warn "Could not make the Start menu shortcut: $_" }
+  } else {
+    # A shortcut that starts a command script looks like a malware loader to some antivirus tools (a false positive,
+    # but an alarming one): none by default, and the one an earlier install made goes.
+    foreach ($old in @($shortcutFile, (Join-Path ([Environment]::GetFolderPath('Programs')) 'Windows Development Sandbox.lnk'))) {
+      if (Test-Path -LiteralPath $old) {
+        Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $old)) { Ok "removed the Start menu shortcut $old (run sandbox in a terminal)" }
+      }
+    }
+  }
 
   # 8. Everyone: the group, the machine folders and the machine settings --------------------------------------------
   $groupSid = $null

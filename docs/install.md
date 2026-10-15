@@ -56,6 +56,7 @@ The one-liner takes no options. To pass them, run the script as a script block:
 | `-AutoUpdate` / `-NoAutoUpdate` | `WDS_AUTOUPDATE=1` / `0` | answer the automatic-updates question |
 | `-AddUsers a,b` | `WDS_ADDUSERS` | everyone: also put these users in the group |
 | `-Share` / `-NoShare` | `WDS_SHARE=1` / `0` | everyone: answer the sharing question (also changes it on a later run) |
+| `-StartMenuShortcut` | `WDS_SHORTCUT=1` | also make a Start menu shortcut. Off by default: some antivirus tools (Malwarebytes "Trojan.Loader") flag a shortcut that starts a command script, a false positive. Without it an earlier shortcut is removed |
 | `-Uninstall` | `WDS_UNINSTALL=1` | remove the program, PATH entry, shortcut and scheduled task; your data stays |
 | `-RemoveData` | `WDS_REMOVEDATA=1` | with `-Uninstall`: also delete saved data, after you type `DELETE` (`-Confirm:$false` skips that) |
 | `-Version x.y.z` | `WDS_VERSION` | install this release instead of the latest (also an older one) |
