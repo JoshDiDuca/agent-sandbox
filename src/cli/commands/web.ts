@@ -45,6 +45,42 @@ async function startServer(ctx: Context, control: WebControl): Promise<number> {
   );
 }
 
+/**
+ * At a sandbox start, with web.enabled: the web UI is started in the background when it is not running, and with
+ * web.openOnLaunch opened in the browser, signed in. Never stops the launch: a problem is one line.
+ */
+export async function startWebOnLaunch(ctx: Context): Promise<void> {
+  const { web: settings } = ctx.loaded.config;
+  if (!settings.enabled) return;
+  try {
+    const control = controlOf(ctx);
+    const before = await control.status();
+    let state = before.running ? before.state : null;
+    if (!state) {
+      if (before.state) control.clear();
+      const configFile = ctx.options.config;
+      spawnDetached(ctx.entry, ['_web', ...(configFile ? ['--config', path.resolve(configFile)] : [])]);
+      for (const started = Date.now(); !state && Date.now() - started < START_WAIT_MS; await sleep(300)) {
+        const now = await control.status();
+        if (now.running && now.state) state = now.state;
+      }
+    }
+    if (!state) {
+      console.log(
+        'The web UI did not start (port ' + settings.port + ' may be taken: change web.port). Try: sandbox web start',
+      );
+      return;
+    }
+    if (settings.openOnLaunch) {
+      openBrowser(control.url(state));
+      console.log('The web UI is open in your browser (http://127.0.0.1:' + state.port + '/).');
+    } else
+      console.log('The web UI is at http://127.0.0.1:' + state.port + '/ (open it signed in with: sandbox web open).');
+  } catch (e) {
+    console.log('The web UI could not be started: ' + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
 export async function web(ctx: Context): Promise<number> {
   requireOnPc('web');
   const action = ctx.options.positionals[0] ?? 'status';
