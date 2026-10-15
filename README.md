@@ -5,6 +5,7 @@
 **A throwaway Windows machine for every project, with or without an AI agent.**
 
 [![Release](https://img.shields.io/github/v/release/JoshDiDuca/windows-development-sandbox?label=release)](https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest)
+[![npm](https://img.shields.io/npm/v/windows-development-sandbox?logo=npm&label=npm)](https://www.npmjs.com/package/windows-development-sandbox)
 [![CI](https://github.com/JoshDiDuca/windows-development-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/JoshDiDuca/windows-development-sandbox/actions/workflows/ci.yml)
 ![Windows 10/11 Pro, Enterprise, Education](https://img.shields.io/badge/Windows-10%20%7C%2011%20Pro-0078D4)
 ![MIT](https://img.shields.io/badge/license-MIT-green)
