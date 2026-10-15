@@ -135,7 +135,7 @@
         },
         "clipboard": {
           "type": "boolean",
-          "description": "Shared clipboard between this PC and the sandbox."
+          "description": "Shared clipboard between this PC and the sandbox. Also lets an agent's copy (in sandbox attach) reach this PC's clipboard."
         },
         "audioInput": {
           "type": "boolean",

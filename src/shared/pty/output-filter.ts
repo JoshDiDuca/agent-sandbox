@@ -7,10 +7,23 @@ const KEPT_OSC = (body: string): boolean => {
 };
 /** Longest OSC kept (a title or a link); anything longer is dropped whole. */
 const MAX_KEPT_STRING = 4096;
+/** Longest clipboard write kept (about 750 KB of text); anything longer is dropped whole. */
+const MAX_CLIPBOARD_STRING = 1024 * 1024;
+/** A clipboard write (OSC 52: selection, then base64): never a read ("?"), which would send the clipboard back. */
+const CLIPBOARD_WRITE = /^0{0,2}52;[cpqs0-7]{0,8};[A-Za-z0-9+/=]*$/;
+
+export interface OutputFilterOptions {
+  /**
+   * Let clipboard writes (OSC 52) through: the agent's "copy" reaches your clipboard. Only where the sandbox can reach
+   * that clipboard anyway (its own terminal, or sandbox.clipboard on). Clipboard reads are always dropped.
+   */
+  readonly clipboardWrites?: boolean;
+}
 
 /**
  * Removes the terminal "strings" an untrusted program could abuse from the sandbox's output before it reaches your
- * terminal: clipboard writes (OSC 52), terminal macros (ConEmu's OSC 9), DCS / APC / PM / SOS, and their C1 forms.
+ * terminal: clipboard writes (OSC 52, unless clipboardWrites) and reads, terminal macros (ConEmu's OSC 9), DCS / APC /
+ * PM / SOS, and their C1 forms.
  * Titles, links, progress and colours pass. A byte-level state machine, so no split across chunks, leading zero
  * (ESC]052) or huge payload slips through: a dropped string stays dropped until its terminator, however long it is.
  */
@@ -22,9 +35,21 @@ export class OutputFilter {
   private state: 'text' | 'esc' | 'c2' | 'string' | 'stringEsc' | 'stringC2' = 'text';
   /** The string being read: an OSC worth keeping is collected until its terminator; null = being dropped. */
   private body: number[] | null = null;
+  private readonly maxString: number;
+
+  constructor(private readonly options: OutputFilterOptions = {}) {
+    this.maxString = options.clipboardWrites ? MAX_CLIPBOARD_STRING : MAX_KEPT_STRING;
+  }
+
+  /** An OSC that may pass: a short title, link, progress or mark, or (when allowed) a clipboard write. */
+  private kept(body: string): boolean {
+    if (this.options.clipboardWrites && CLIPBOARD_WRITE.test(body)) return true;
+    return body.length <= MAX_KEPT_STRING && KEPT_OSC(body);
+  }
 
   push(chunk: Buffer): Buffer {
-    const out = Buffer.allocUnsafe(chunk.length + MAX_KEPT_STRING + 8);
+    // At most: the string carried over from the last chunk, this chunk, and an OSC prefix and terminator.
+    const out = Buffer.allocUnsafe(chunk.length + (this.body?.length ?? 0) + 8);
     let n = 0;
     const put = (...bytes: number[]): void => {
       for (const b of bytes) out[n++] = b;
@@ -45,7 +70,7 @@ export class OutputFilter {
     };
     const endString = (terminator: number[]): void => {
       const body = this.body && Buffer.from(this.body).toString('latin1');
-      if (body !== null && KEPT_OSC(body)) {
+      if (body !== null && this.kept(body)) {
         put(0x1b, 0x5d);
         out.write(body, n, 'latin1');
         n += body.length;
@@ -55,7 +80,7 @@ export class OutputFilter {
       this.state = 'text';
     };
     const collect = (b: number): void => {
-      if (this.body && this.body.push(b) > MAX_KEPT_STRING) this.body = null;
+      if (this.body && this.body.push(b) > this.maxString) this.body = null;
     };
     for (const b of chunk) {
       switch (this.state) {

@@ -128,6 +128,9 @@ export const DEFAULTS: Config = {
       environment: {},
       home: { env: { CODEX_HOME: 'codex' }, loginFiles: ['auth.json'], hostDir: '~/.codex' },
       localState: { CODEX_SQLITE_HOME: 'sqlite' },
+      // Its own command sandbox keeps local users' passwords sealed with DPAPI: unreadable in the next sandbox
+      // ("CryptUnprotectData" on every command), so it sets that sandbox up again at each boot.
+      bootReset: ['.sandbox-secrets', '.sandbox\\setup_marker.json', '.sandbox\\deny_read_acl_state.json'],
       resumeArguments: ['resume', '--last'],
     },
     gemini: {

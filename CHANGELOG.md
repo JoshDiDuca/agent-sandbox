@@ -7,6 +7,15 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## 1.7.1
+
+- Codex could not run any command ("CryptUnprotectData", "please restore the workspace runner"): its own command
+  sandbox keeps local users' passwords sealed to the sandbox that created them, and every sandbox is a new machine.
+  Those files are now removed at each boot (harness `bootReset`) and Codex sets its sandbox up again.
+- Copying text from an agent's session: the agent's own copy now reaches the clipboard in the sandbox's terminal, and
+  in `sandbox attach` while `sandbox.clipboard` is on. Clipboard reads stay blocked. To select with the mouse while an
+  agent has it, hold Shift while you drag.
+
 ## 1.7.0
 
 VPN (NordVPN first; built and tested in a sandbox, still to be tried on a real PC: [docs/vpn.md](docs/vpn.md))

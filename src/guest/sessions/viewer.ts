@@ -32,7 +32,9 @@ export async function viewSession(id: string): Promise<number> {
     return 1;
   }
   const socket = await connect({ ...session.attach, addresses: ['127.0.0.1'] });
-  const result = await runTerminalClient(socket, session.attach.token);
+  // The sandbox's own terminal: a copy in the agent reaches the sandbox's clipboard (and yours only through
+  // sandbox.clipboard, which already shares it).
+  const result = await runTerminalClient(socket, session.attach.token, { clipboardWrites: true });
   if (result.reason === 'exit') console.log(session.harness + ' exited with code ' + result.exitCode + '.');
   else if (result.reason === 'error') console.log('Session error: ' + result.message);
   return result.reason === 'exit' ? result.exitCode : 1;

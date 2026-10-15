@@ -99,6 +99,16 @@ export function localStateEntries(
   );
 }
 
+/** Every agent's bootReset paths, absolute below its state folder (the schema allows only plain relative paths). */
+export function bootResetPaths(
+  agents: Readonly<Record<string, Harness>>,
+  stateDir: string,
+): { agent: string; path: string }[] {
+  return Object.entries(agents).flatMap(([agent, harness]) =>
+    (harness.bootReset ?? []).map((rel) => ({ agent, path: path.join(stateDir, agent, rel) })),
+  );
+}
+
 /** A SQLite database file or one of its -wal / -shm siblings. */
 export const isDatabaseFile = (name: string): boolean => /\.(sqlite3?|db)(-wal|-shm)?$/i.test(name);
 

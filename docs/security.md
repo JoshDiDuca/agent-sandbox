@@ -60,8 +60,11 @@ can read because the whole folder is mapped.
 - Host and sandbox talk through small JSON files. The sandbox can ask for four things (start a session, run a command,
   restart, ping), and everything it writes back is validated and size-capped.
 - Text from the sandbox loses its escape sequences before it reaches your terminal. When you attach, the session's
-  output passes a filter that drops clipboard writes (OSC 52, however they are split or disguised), terminal macros
-  and other control strings; colours, titles, links and progress pass.
+  output passes a filter that drops clipboard reads (OSC 52 `?`, however they are split or disguised), terminal macros
+  and other control strings; colours, titles, links and progress pass. The agent's "copy" (an OSC 52 clipboard write)
+  passes only where the sandbox can already reach your clipboard: in the sandbox's own terminal, and in
+  `sandbox attach` while `sandbox.clipboard` is on (with it off, clipboard writes are dropped too). The web UI drops
+  them.
 - Programs and scripts (`.exe`, `.ps1`, `.bat`, `.cmd`, `.msi`, `.lnk` ...) that appear or change in your project while
   a sandbox runs get Windows' "downloaded from the internet" mark (`storage.markSandboxFiles`, on by default): SmartScreen
   asks before one runs, and PowerShell's RemoteSigned policy refuses an unsigned marked script. Programs you build

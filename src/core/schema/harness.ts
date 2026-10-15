@@ -62,6 +62,13 @@ export const HarnessSchema = z
       .describe(
         "Environment variable -> folder below the agent's own state folder (state\\<agent>) for SQLite databases. SQLite cannot run in a mapped folder, so the agent runs from a copy on the sandbox's disk (the variable points to it) that is copied from and back to that folder.",
       ),
+    bootReset: z
+      .array(SubfolderSchema)
+      .max(32)
+      .optional()
+      .describe(
+        "Files and folders below the agent's own state folder (state\\<agent>) that only work on the machine that wrote them (keys sealed with Windows DPAPI, local accounts it created). Every sandbox is a new machine, so they are deleted at each boot and the agent sets them up again.",
+      ),
     resumeArguments: StringsSchema.optional().describe(
       'Arguments used when the agent is restarted in place (e.g. after an account switch) so it resumes the conversation.',
     ),

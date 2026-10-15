@@ -159,6 +159,23 @@ export const channelSuite: Suite = {
       ['ab\x1b]0;title\x07cd', 'xy', 'xy', 'xy', 'xyz'],
       'clipboard writes (OSC 52) from the sandbox are stripped in every disguise (split chunks, leading zero, huge, C1); titles pass',
     );
+    const copying = (...chunks: string[]): string => {
+      const f = new OutputFilter({ clipboardWrites: true });
+      return Buffer.concat(chunks.map((s) => f.push(Buffer.from(s, 'latin1')))).toString('latin1');
+    };
+    const big = 'QUFB'.repeat(50000);
+    t.equal(
+      [
+        copying('a\x1b]52;c;ZXZpbA==\x07b'),
+        copying('x\x1b]5', '2;c;cGF5\x1b', '\\y'),
+        copying('x\x1b]52;c;' + big + '\x07y').length,
+        copying('x\x1b]52;c;?\x07y'),
+        copying('x\x1b]52;c;' + 'A'.repeat(1100000) + '\x07y'),
+        copying('x\x1bP1$qm\x1b\\y\x1b]9;9;macro\x07z'),
+      ],
+      ['a\x1b]52;c;ZXZpbA==\x07b', 'x\x1b]52;c;cGF5\x1b\\y', big.length + 10, 'xy', 'xy', 'xyz'],
+      "with clipboard writes allowed: the agent's copy passes (split, long), a clipboard read or a huge one never does, other strings stay dropped",
+    );
     const plain = '\x1b]8;;https://a.b\x1b\\link\x1b]8;;\x1b\\ \x1b[31mred\x1b[0m é\xc2\xa0';
     t.equal(
       [through(plain), through('\x1b]9;9;macro\x07\x1b]9;4;1;50\x07')],

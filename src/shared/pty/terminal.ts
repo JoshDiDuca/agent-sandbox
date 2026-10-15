@@ -37,7 +37,8 @@ export function fixWindowsKeys(chunk: Buffer): Buffer {
 export function runTerminalClient(
   socket: net.Socket,
   token: string,
-  options: { detachKey?: number } = {},
+  /** clipboardWrites: the agent's "copy" (OSC 52) reaches the clipboard; see OutputFilterOptions. */
+  options: { detachKey?: number; clipboardWrites?: boolean } = {},
 ): Promise<ClientResult> {
   const stdin = process.stdin;
   const stdout = process.stdout;
@@ -51,7 +52,7 @@ export function runTerminalClient(
   return new Promise((resolve) => {
     let done = false;
     const reader = new FrameReader();
-    const filter = new OutputFilter();
+    const filter = new OutputFilter({ clipboardWrites: options.clipboardWrites });
     let sent = size();
     let resizeTimer: NodeJS.Timeout | undefined;
     // Set once raw mode is on (below); finish() may run before that.

@@ -300,6 +300,11 @@
       "localState": {
         "CODEX_SQLITE_HOME": "sqlite"
       },
+      "bootReset": [
+        ".sandbox-secrets",
+        ".sandbox\\setup_marker.json",
+        ".sandbox\\deny_read_acl_state.json"
+      ],
       "resumeArguments": [
         "resume",
         "--last"

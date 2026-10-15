@@ -49,7 +49,11 @@ export const SandboxSchema = z.strictObject({
   reserveHostMb: z.number().int().nonnegative().describe('RAM always left for this PC when memoryMb is "auto".'),
   vGpu: z.boolean().describe('Virtual GPU. Off by default: Microsoft notes it widens the sandbox attack surface.'),
   networking: z.boolean().describe('Internet access. false is the only hard network isolation Windows Sandbox offers.'),
-  clipboard: z.boolean().describe('Shared clipboard between this PC and the sandbox.'),
+  clipboard: z
+    .boolean()
+    .describe(
+      "Shared clipboard between this PC and the sandbox. Also lets an agent's copy (in sandbox attach) reach this PC's clipboard.",
+    ),
   audioInput: z.boolean().describe('Microphone access.'),
   videoInput: z.boolean().describe('Camera access.'),
   printerRedirection: z.boolean().describe('Printers from this PC.'),

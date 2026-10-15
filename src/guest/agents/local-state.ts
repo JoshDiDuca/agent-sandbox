@@ -10,7 +10,13 @@ import { execOutput } from '../runtime/process.js';
 import { log, warn } from '../runtime/log.js';
 import { session, stateDir } from '../runtime/session.js';
 import { errMsg } from '../../core/util/errors.js';
-import { isCopyableDatabaseFile, isDatabaseFile, localStateEntries, type LocalState } from './agent-files.js';
+import {
+  bootResetPaths,
+  isCopyableDatabaseFile,
+  isDatabaseFile,
+  localStateEntries,
+  type LocalState,
+} from './agent-files.js';
 
 const SQLITE_HEADER = 'SQLite format 3\0';
 
@@ -85,6 +91,26 @@ function adoptLegacy(s: LocalState): void {
   }
   for (const n of names) fs.rmSync(path.join(s.legacy, n), { force: true });
   log(s.agent + ': moved ' + copyable.length + ' database file(s) to ' + s.store + '.');
+}
+
+/** Boot: what an agent sealed to the last sandbox (bootReset) is deleted, so it sets it up again. Links are left. */
+export function resetMachineBound(): void {
+  if (dryRun) return;
+  for (const { agent, path: target } of bootResetPaths(session.agents ?? {}, stateDir)) {
+    try {
+      const stat = fs.lstatSync(target, { throwIfNoEntry: false });
+      if (!stat || stat.isSymbolicLink()) continue;
+      fs.rmSync(target, { recursive: true, force: true });
+      log(
+        agent +
+          ': removed ' +
+          path.relative(path.join(stateDir, agent), target) +
+          ' (it only worked in the last sandbox).',
+      );
+    } catch (e) {
+      warn(agent + ': could not remove ' + target + ' (' + errMsg(e) + ').');
+    }
+  }
 }
 
 /** Boot: the saved databases of every configured agent are copied to the sandbox's disk, where the agent runs them. */

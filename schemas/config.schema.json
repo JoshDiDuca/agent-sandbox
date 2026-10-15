@@ -182,7 +182,7 @@
         },
         "clipboard": {
           "type": "boolean",
-          "description": "Shared clipboard between this PC and the sandbox."
+          "description": "Shared clipboard between this PC and the sandbox. Also lets an agent's copy (in sandbox attach) reach this PC's clipboard."
         },
         "audioInput": {
           "type": "boolean",
@@ -1572,6 +1572,15 @@
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             },
             "additionalProperties": {
+              "type": "string",
+              "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
+            }
+          },
+          "bootReset": {
+            "description": "Files and folders below the agent's own state folder (state\\<agent>) that only work on the machine that wrote them (keys sealed with Windows DPAPI, local accounts it created). Every sandbox is a new machine, so they are deleted at each boot and the agent sets them up again.",
+            "maxItems": 32,
+            "type": "array",
+            "items": {
               "type": "string",
               "pattern": "^(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))[A-Za-z0-9._ -]+([\\\\/][A-Za-z0-9._ -]+)*$"
             }

@@ -6,7 +6,7 @@ import { writeGuides } from './guide.js';
 import { setupToolchains, type ToolchainResult } from '../toolchains/index.js';
 import { agents } from '../agents/agent-installer.js';
 import { agentShims, sbxAgentText, shimText } from '../agents/agent-files.js';
-import { restoreLocalState } from '../agents/local-state.js';
+import { resetMachineBound, restoreLocalState } from '../agents/local-state.js';
 import { installShellPath } from '../setup/shell-path.js';
 import { linkProfileDirs } from '../agents/profile-links.js';
 import { restoreClaudeMem } from '../setup/claude-mem.js';
@@ -244,6 +244,7 @@ export class Boot {
     if (session.harnessName === 'claude')
       await soft('Claude settings', () => syncClaudeProfile(this.secrets.claudeCredentials));
     await soft('claude-mem restore', restoreClaudeMem);
+    await soft('Agent files of the last sandbox', resetMachineBound);
     await soft('Agent databases restore', restoreLocalState);
     await soft('Sandbox guide for the agent', () => writeGuides(tools.summary, this.lan));
     await soft('Claude managed settings', () => writeManagedSettings(this.gitAccess));

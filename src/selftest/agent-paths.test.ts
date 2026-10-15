@@ -8,6 +8,7 @@ import { SYSTEM } from '../shared/system.js';
 import {
   agentCommand,
   agentShims,
+  bootResetPaths,
   isCopyableDatabaseFile,
   isDatabaseFile,
   localStateEntries,
@@ -97,6 +98,24 @@ export const agentPathsSuite: Suite = {
       ['state_5.sqlite', 'x.sqlite-wal', 'x.sqlite-shm'].map(isCopyableDatabaseFile),
       [true, true, false],
       'the -shm file is not copied (SQLite rebuilds it)',
+    );
+
+    t.section('agent files sealed to the last sandbox');
+    t.equal(
+      bootResetPaths(DEFAULTS.harnesses, 'C:\\AgentData\\state')
+        .filter((p) => p.agent === 'codex')
+        .map((p) => p.path),
+      [
+        'C:\\AgentData\\state\\codex\\.sandbox-secrets',
+        'C:\\AgentData\\state\\codex\\.sandbox\\setup_marker.json',
+        'C:\\AgentData\\state\\codex\\.sandbox\\deny_read_acl_state.json',
+      ],
+      "codex's DPAPI-sealed sandbox users and setup marker are removed at boot (CryptUnprotectData otherwise)",
+    );
+    t.check(
+      HarnessSchema.safeParse({ ...DEFAULTS.harnesses.codex, bootReset: ['..\\login'] }).success === false &&
+        HarnessSchema.safeParse({ ...DEFAULTS.harnesses.codex, bootReset: ['C:\\Windows'] }).success === false,
+      'bootReset takes only plain paths below the agent state folder',
     );
 
     t.section('PATH planner');

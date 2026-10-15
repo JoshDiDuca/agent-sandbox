@@ -42,7 +42,8 @@ interface JoinedSession {
 export function attachHere(ctx: Context, session: Parameters<typeof attachTerminal>[0]): Promise<number> {
   if (ctx.loaded.config.attach.autoHide && !insideSandbox())
     void hideSandboxWindow(ctx.storageRoot, 120).catch(() => false);
-  return attachTerminal(session);
+  // A copy in the agent reaches this PC's clipboard only when sandbox.clipboard already shares it with the sandbox.
+  return attachTerminal(session, { clipboardWrites: ctx.loaded.config.sandbox.clipboard });
 }
 
 /** The sandbox writes sandbox.json a few seconds into its boot; a second launch right after the first waits for it. */
