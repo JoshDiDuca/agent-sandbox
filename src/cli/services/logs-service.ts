@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { assertNoLinks, fail, safeText } from '../../core/util/index.js';
+import { hostDataFolder, hostDataRoot } from '../../host/storage/index.js';
 import type { Context } from '../commands/context.js';
 
 export interface LogFile {
@@ -22,8 +23,8 @@ export class LogsService {
   constructor(private readonly ctx: Pick<Context, 'dataPath'>) {}
 
   private dir(): string {
-    const dir = path.join(this.ctx.dataPath, 'logs');
-    assertNoLinks(this.ctx.dataPath, dir);
+    const dir = hostDataFolder(this.ctx.dataPath, 'logs');
+    assertNoLinks(hostDataRoot(this.ctx.dataPath), dir);
     return dir;
   }
 
@@ -46,7 +47,7 @@ export class LogsService {
     return (
       this.files()[0]?.path ??
       fail(
-        'No sandbox logs yet in ' + path.join(this.ctx.dataPath, 'logs') + '.',
+        'No sandbox logs yet in ' + hostDataFolder(this.ctx.dataPath, 'logs') + '.',
         'Logs appear after the first start (sandbox claude).',
       )
     );

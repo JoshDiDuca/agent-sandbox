@@ -5,3 +5,4 @@ export * from './move.js';
 export * from './history.js';
 export * from './offer.js';
 export * from './providers/index.js';
+export * from './contained/index.js';

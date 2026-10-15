@@ -2,17 +2,17 @@ import path from 'node:path';
 import type { Config } from '../core/types.js';
 import { assertNoLinks } from '../core/util/index.js';
 import { hostClaudeDir, PluginShare } from '../host/profile/index.js';
-import { storageOf } from '../host/storage/index.js';
+import { hostDataFolder, hostDataRoot, storageOf } from '../host/storage/index.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, writeSyncState, type SyncState } from './sync-state.js';
 import { syncHistoryIn, syncHistoryOut, type SyncPaths } from './history.js';
 
-const guestClaude = (dataPath: string): string => path.join(dataPath, 'state', 'claude');
-const guestMem = (dataPath: string): string => path.join(dataPath, 'state', 'claude-mem');
+const guestClaude = (dataPath: string): string => path.join(hostDataFolder(dataPath, 'state'), 'claude');
+const guestMem = (dataPath: string): string => path.join(hostDataFolder(dataPath, 'state'), 'claude-mem');
 
 /** Sync paths for the sandbox side, after checking nothing on the way there is a link planted by the sandbox. */
 const toPaths = (state: SyncState, dataPath: string): SyncPaths => {
-  assertNoLinks(dataPath, guestClaude(dataPath));
+  assertNoLinks(hostDataRoot(dataPath), guestClaude(dataPath));
   return {
     hostClaudeDir: state.hostClaudeDir,
     guestClaudeDir: guestClaude(dataPath),
@@ -42,7 +42,7 @@ export function syncProjectIn(dataPath: string, project: { hostWorkspace: string
 }
 
 const memSync = (dataPath: string, state: SyncState, direction: 'in' | 'out'): MemResult => {
-  assertNoLinks(dataPath, guestMem(dataPath));
+  assertNoLinks(hostDataRoot(dataPath), guestMem(dataPath));
   return syncClaudeMem(hostClaudeMemDir(), guestMem(dataPath), state, direction);
 };
 

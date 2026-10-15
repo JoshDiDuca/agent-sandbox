@@ -5,12 +5,13 @@ import path from 'node:path';
 import { downloader, githubAsset } from '../../shared/download/index.js';
 import { safeRemove, writeFileAtomic } from '../../shared/io/index.js';
 import { assertTestWritable } from '../test-guard.js';
+import { hostDataFolder, hostDataRoot } from '../storage/index.js';
 import { applyEdits, modify } from 'jsonc-parser';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists, parseJsonc, writeJson } from '../../core/util/index.js';
 
 export function terminalDir(dataPath: string): string {
-  return path.join(dataPath, 'tools', 'terminal');
+  return path.join(hostDataFolder(dataPath, 'tools'), 'terminal');
 }
 export function terminalExe(dataPath: string): string {
   return path.join(terminalDir(dataPath), 'WindowsTerminal.exe');
@@ -90,9 +91,9 @@ export function withReloadEnvironment(
 export function syncPwshProfile(dataPath: string, allowed: boolean): void {
   const file = path.join(terminalDir(dataPath), 'settings', 'settings.json');
   assertTestWritable(file);
-  assertNoLinks(dataPath, file);
+  assertNoLinks(hostDataRoot(dataPath), file);
   if (!fileExists(file) || fs.statSync(file).size > MAX_SETTINGS_BYTES) return;
-  const visible = allowed && fileExists(path.join(dataPath, 'tools', 'pwsh', 'pwsh.exe'));
+  const visible = allowed && fileExists(path.join(hostDataFolder(dataPath, 'tools'), 'pwsh', 'pwsh.exe'));
   let parsed: z.output<typeof TerminalSettingsSchema>;
   const text = fs.readFileSync(file, 'utf8');
   try {
@@ -143,9 +144,9 @@ const installTerminal = async (
   const settings = path.join(dir, 'settings');
   // downloader.archive replaces tools\terminal: the portable settings folder waits here meanwhile (and goes back also
   // when the download fails). One still parked from an interrupted earlier run is the one to keep.
-  const parked = path.join(dataPath, 'tools', 'terminal-settings.parked');
-  assertNoLinks(dataPath, settings);
-  assertNoLinks(dataPath, parked);
+  const parked = path.join(hostDataFolder(dataPath, 'tools'), 'terminal-settings.parked');
+  assertNoLinks(hostDataRoot(dataPath), settings);
+  assertNoLinks(hostDataRoot(dataPath), parked);
   if (fileExists(exe) && !refresh) return { exe, message: 'cached' };
   try {
     if (fs.existsSync(settings)) {
@@ -172,7 +173,7 @@ const installTerminal = async (
         fs.renameSync(parked, settings);
       }
       const settingsFile = path.join(settings, 'settings.json');
-      assertNoLinks(dataPath, settingsFile);
+      assertNoLinks(hostDataRoot(dataPath), settingsFile);
       if (fileExists(path.join(dir, '.portable')) && !fs.existsSync(settingsFile)) writeJson(settingsFile, SETTINGS);
     }
   } catch (e) {

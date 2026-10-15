@@ -7,7 +7,7 @@ import { writeFileAtomic } from '../shared/io/index.js';
 import { refuseInSelfTest } from '../host/test-guard.js';
 import { errMsg, sleep } from '../core/util/index.js';
 import { RepoGuardStore } from '../host/guard/index.js';
-import { isSandboxRunning, spawnDetached } from '../host/sandbox/index.js';
+import { isSandboxRunning, realContainedDeps, spawnDetached } from '../host/sandbox/index.js';
 import { readActiveViews, WorkspaceView, type ViewOptions } from '../host/workspace-view/index.js';
 import { readForwards, sandboxAddress, startPortForwards } from '../host/network/index.js';
 import { AuditCollector, readAuditSettings } from '../host/audit/collect.js';
@@ -24,7 +24,7 @@ import {
 } from '../host/life/index.js';
 import { SandboxChannel } from '../host/channel/index.js';
 import { ProjectRegistry } from '../host/projects/registry.js';
-import { storageOf } from '../host/storage/index.js';
+import { ContainedStorage, setNameOf, storageOf } from '../host/storage/index.js';
 import { clearSecrets } from '../host/secrets/index.js';
 import { endSharing, sharingDeps } from '../host/sharing/index.js';
 import { PACKAGE_ROOT } from '../core/package-info.js';
@@ -115,6 +115,7 @@ export class Watcher {
     fs.mkdirSync(path.dirname(watcherLog(this.dataPath)), { recursive: true });
     writeFileAtomic(watcherPidFile(this.dataPath), String(process.pid));
     this.start();
+    this.holdContained();
     try {
       await sleep(FIRST_SYNC_MS);
       while (isSandboxRunning()) {
@@ -135,9 +136,45 @@ export class Watcher {
       this.sync(true);
     } finally {
       this.stop();
+      await this.releaseContained();
     }
     // After stop(): its pid file is gone, so the sandbox started again gets a watcher of its own.
     this.restartAfterCrash();
+  }
+
+  /** Contained storage of this data set (only when a mounted image is on record), else null. */
+  private contained(): ContainedStorage | null {
+    try {
+      const storage = new ContainedStorage(realContainedDeps(this.storageRoot, 64), setNameOf(this.dataPath));
+      return storage.isRecorded() ? storage : null;
+    } catch {
+      // Not a name contained storage can use: there is none.
+      return null;
+    }
+  }
+
+  /** The mounted image stays mounted until the sandbox is gone: this watcher holds it. */
+  private holdContained(): void {
+    try {
+      this.contained()?.hold({ id: 'watcher', pid: process.pid });
+    } catch (e) {
+      this.note('contained storage: could not record the watcher: ' + errMsg(e));
+    }
+  }
+
+  /** The sandbox is gone and the last sync done: let go of the image, which dismounts it when nothing else holds it. */
+  private async releaseContained(): Promise<void> {
+    try {
+      const result = await this.contained()?.release('watcher');
+      if (result)
+        this.note(
+          result.dismounted
+            ? 'contained storage dismounted'
+            : 'contained storage stays mounted: ' + (result.note ?? ''),
+        );
+    } catch (e) {
+      this.note('contained storage: ' + errMsg(e));
+    }
   }
 
   private note(message: string): void {

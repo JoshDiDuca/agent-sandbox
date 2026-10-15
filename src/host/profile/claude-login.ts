@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertTestWritable } from '../test-guard.js';
+import { hostDataFolder, hostDataRoot } from '../storage/index.js';
 import { assertNoLinks, fail, fileExists, isLink, removeLink, tryReadJson, writeJson } from '../../core/util/index.js';
 
 export interface Login {
@@ -21,7 +22,7 @@ export const MAX_STATE_BYTES = 256 * 1024 * 1024;
 const ACCOUNT_CACHES = ['remote-settings.json', 'policy-limits.json', 'policy-limits.json.stamp.json'] as const;
 
 export function sandboxClaudeDir(dataPath: string): string {
-  return path.join(dataPath, 'state', 'claude');
+  return path.join(hostDataFolder(dataPath, 'state'), 'claude');
 }
 
 export function emailOf(oauthAccount: unknown): string | null {
@@ -51,7 +52,7 @@ export function readLogin(claudeDir: string, globalStateFile: string): Login {
 
 /** The sandbox's Claude login files (refuses when the data folder holds a link on the way). */
 export function sandboxLogin(dataPath: string): LoginFiles {
-  assertNoLinks(dataPath, sandboxClaudeDir(dataPath));
+  assertNoLinks(hostDataRoot(dataPath), sandboxClaudeDir(dataPath));
   return {
     claudeDir: sandboxClaudeDir(dataPath),
     globalStateFile: path.join(sandboxClaudeDir(dataPath), '.claude.json'),

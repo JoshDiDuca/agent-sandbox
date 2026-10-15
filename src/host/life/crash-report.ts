@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertNoLinks, safeText } from '../../core/util/index.js';
+import { hostDataFolder, hostDataRoot } from '../storage/index.js';
 import { explainStop, readStopEvents, type StopCause, type StopEvent } from './stop-events.js';
 
 const KEEP_REPORTS = 20;
@@ -50,8 +51,8 @@ export function crashReportText(
 /** The newest memory log the sandbox wrote, last 16 KB at most, without following links in the data folder. */
 function memoryLogTail(dataPath: string): string {
   try {
-    const logs = path.join(dataPath, 'logs');
-    assertNoLinks(dataPath, logs);
+    const logs = hostDataFolder(dataPath, 'logs');
+    assertNoLinks(hostDataRoot(dataPath), logs);
     const newest = fs
       .readdirSync(logs)
       .filter((f) => /^memory-\d{8}-\d{6}\.log$/.test(f))

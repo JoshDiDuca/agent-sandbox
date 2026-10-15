@@ -13,6 +13,7 @@ import {
   measureFolder,
   moveWarning,
   planOffer,
+  staleMountNote,
   StorageHistory,
   type MoveOffer,
 } from '../../../host/storage/index.js';
@@ -96,4 +97,9 @@ export async function storageBeforeCommand(ctx: Context, command: string): Promi
     }
   }
   ensureStorageRoot(ctx.storageRoot, protectPrivateFolder);
+  // Contained storage (beta): a mount an earlier sandbox left behind is only mentioned here; repair fixes it.
+  if (command !== 'launch' && !ctx.options.json) {
+    const stale = staleMountNote(ctx.storageRoot, ctx.loaded.config.storage.dataName, isSandboxRunning());
+    if (stale) console.error(c.yellow(stale));
+  }
 }

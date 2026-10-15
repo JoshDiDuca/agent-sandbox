@@ -1,3 +1,4 @@
 export { FolderStorageProvider, dataMapping, folderAttachment } from './folder.js';
-export { providerFor } from './registry.js';
+export { ContainedStorageProvider } from './contained.js';
+export { providerFor, type ProviderOptions } from './registry.js';
 export type { DataSet, PreparedStorage, ProviderCheck, StorageAttachment, StorageProvider } from './types.js';

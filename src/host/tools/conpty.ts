@@ -3,6 +3,7 @@ import path from 'node:path';
 import { downloader, extractArchive, fetchJson, moveIntoPlace, stagingFolder } from '../../shared/download/index.js';
 import { safeRemove } from '../../shared/io/index.js';
 import { assertTestWritable } from '../test-guard.js';
+import { hostDataFolder, hostDataRoot } from '../storage/index.js';
 import { z } from 'zod';
 import { assertNoLinks, errMsg, fileExists } from '../../core/util/index.js';
 
@@ -10,7 +11,7 @@ import { assertNoLinks, errMsg, fileExists } from '../../core/util/index.js';
 
 /** Where the sandbox finds conpty.dll + OpenConsole.exe (guest/ptyhost.ts points ptyhost at it). */
 export function conptyDir(dataPath: string): string {
-  return path.join(dataPath, 'tools', 'conpty');
+  return path.join(hostDataFolder(dataPath, 'tools'), 'conpty');
 }
 const NUGET_CONPTY = 'https://api.nuget.org/v3-flatcontainer/microsoft.windows.console.conpty/';
 const NugetVersionsSchema = z.object({ versions: z.array(z.string()) });
@@ -25,7 +26,7 @@ const NugetCatalogSchema = z.object({ packageHash: z.string(), packageHashAlgori
 export async function ensureConpty(dataPath: string, refresh: boolean): Promise<string> {
   const dir = conptyDir(dataPath);
   assertTestWritable(dir);
-  assertNoLinks(dataPath, dir);
+  assertNoLinks(hostDataRoot(dataPath), dir);
   if (fileExists(path.join(dir, 'conpty.dll')) && fileExists(path.join(dir, 'OpenConsole.exe')) && !refresh)
     return 'cached';
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';

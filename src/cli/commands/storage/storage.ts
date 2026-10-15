@@ -12,6 +12,7 @@ import {
   estimate,
   holdsData,
   measureFolder,
+  mountedSets,
   moveWarning,
   otherDataFolders,
   sharedDefaultRoot,
@@ -25,9 +26,17 @@ import { protectPrivateFolder } from '../../../host/sharing/index.js';
 import { watcherRunning } from '../../../sync/index.js';
 import { printJson, working } from '../../output/index.js';
 import { requireOnPc, type Context } from '../context.js';
+import { contained } from './contained.js';
 
 /** Why a move cannot start (a background sync is still on a data folder in the old storage), or null. */
 export function storageBusy(root: string): string | null {
+  const mounted = mountedSets(root);
+  if (mounted.length > 0)
+    return (
+      'The contained storage of "' +
+      mounted.join('", "') +
+      '" is mounted (a disk image; moving now would reach into it).'
+    );
   const data = path.join(root, 'data');
   try {
     for (const name of fs.readdirSync(data))
@@ -202,10 +211,12 @@ export function storage(ctx: Context): number | Promise<number> {
       return move(ctx);
     case 'use':
       return use(ctx);
+    case 'contained':
+      return contained(ctx);
     default:
       return fail(
         'Unknown storage action "' + action + '".',
-        'Use: sandbox storage, sandbox storage move <folder> or sandbox storage use <folder>',
+        'Use: sandbox storage, sandbox storage move <folder>, sandbox storage use <folder> or sandbox storage contained on|off|status',
       );
   }
 }
