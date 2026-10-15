@@ -2,37 +2,22 @@
 import type { Config } from '../../core/types.js';
 import { fail } from '../../core/util/index.js';
 import type { SandboxEngine } from './engine.js';
+import { checkHcs, realHcsProbes, type HcsProbes } from './hcs/check.js';
+import { HCS_CAPABILITIES, HcsEngine } from './hcs/engine.js';
 import type { EngineCapabilities, EngineCheck, EngineId } from './types.js';
 import { WindowsSandboxEngine } from './windows-sandbox/engine.js';
 
-/** What the HCS engine is meant to offer (docs/design/engines.md); it is not built yet. */
-const HCS_PLANNED: EngineCapabilities = {
-  desktop: false,
-  gpu: false,
-  clipboard: false,
-  audio: false,
-  video: false,
-  printers: false,
-  liveFolderAdd: false,
-  attachedDisks: true,
-  multipleInstances: true,
-  hvsocket: true,
-};
-
-const HCS_NOT_BUILT: EngineCheck = {
-  available: false,
-  reasons: ['The HCS engine is not built yet (beta, coming in 1.9).'],
-  fixes: ['Use "windows-sandbox" (the default) for sandbox.engine.'],
-};
-
-/** The engine to launch with. A setting that cannot work yet stops here, before anything is written. */
+/** The engine for the settings when nothing is looked up first (Windows Sandbox); hcs is opened with openEngine. */
 export function engineFor(config: Config): SandboxEngine {
   if (config.sandbox.engine === 'hcs')
-    fail(
-      'The HCS engine is not available yet (beta, coming in 1.9).',
-      'Set sandbox.engine to "windows-sandbox" (the default) in your settings.',
-    );
+    fail('The HCS engine has to be opened first (its check looks at this PC).', 'Run: sandbox engine check hcs');
   return new WindowsSandboxEngine(config.sandbox);
+}
+
+/** The engine to launch with. HCS is returned only when its check passes; otherwise this stops with the reasons. */
+export async function openEngine(config: Config, hcsProbes?: HcsProbes): Promise<SandboxEngine> {
+  if (config.sandbox.engine === 'hcs') return HcsEngine.open(config.storage.root, hcsProbes);
+  return engineFor(config);
 }
 
 export interface EngineReport {
@@ -43,7 +28,7 @@ export interface EngineReport {
 }
 
 /** Every engine with its capabilities and whether it can be used on this PC. */
-export async function engineReports(config: Config): Promise<EngineReport[]> {
+export async function engineReports(config: Config, hcsProbes: HcsProbes = realHcsProbes()): Promise<EngineReport[]> {
   const windows = new WindowsSandboxEngine(config.sandbox);
   const inUse = config.sandbox.engine;
   return [
@@ -53,6 +38,6 @@ export async function engineReports(config: Config): Promise<EngineReport[]> {
       capabilities: windows.capabilities(),
       check: await windows.check(),
     },
-    { id: 'hcs', inUse: inUse === 'hcs', capabilities: HCS_PLANNED, check: HCS_NOT_BUILT },
+    { id: 'hcs', inUse: inUse === 'hcs', capabilities: HCS_CAPABILITIES, check: checkHcs(hcsProbes) },
   ];
 }
