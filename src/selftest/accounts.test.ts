@@ -49,6 +49,56 @@ export const accountsSuite: Suite = {
       "the outgoing account's refreshed tokens are saved back before switching",
     );
 
+    t.section('sharing plugins between data sets');
+    const plugA = path.join(storage, 'data', 'p1', 'state', 'claude');
+    const plugB = path.join(storage, 'data', 'p2', 'state', 'claude');
+    const plugC = path.join(storage, 'data', 'p3', 'state', 'claude');
+    const login = '{"claudeAiOauth":{"refreshToken":"x"}}';
+    for (const dir of [plugA, plugB, plugC]) t.write(path.join(dir, '.credentials.json'), login);
+    t.write(path.join(plugA, 'plugins', 'installed_plugins.json'), '{"version":2,"plugins":{}}');
+    t.write(path.join(plugA, 'plugins', 'cache', 'm', 'p', 'a.js'), 'x');
+    t.write(path.join(plugA, 'settings.json'), '{"theme":"dark","enabledPlugins":{"p@m":true}}');
+    t.write(path.join(plugB, 'settings.json'), '{"theme":"light","enabledPlugins":{"q@m":false}}');
+    const dataP = (n: string): string => path.join(storage, 'data', n);
+    const off = new AccountStore(storage);
+    off.save(dataP('p1'), 'one', null);
+    off.activate(dataP('p2'), 'one');
+    t.check(!fs.existsSync(path.join(plugB, 'plugins')), 'plugins are not copied when the setting is off (default)');
+    const on = new AccountStore(storage, true);
+    on.activate(dataP('p1'), 'one');
+    on.activate(dataP('p2'), 'one');
+    const settingsB = f.readJson(path.join(plugB, 'settings.json'));
+    t.check(
+      fs.existsSync(path.join(plugB, 'plugins', 'cache', 'm', 'p', 'a.js')) &&
+        settingsB.theme === 'light' &&
+        settingsB.enabledPlugins['p@m'] === true &&
+        settingsB.enabledPlugins['q@m'] === false &&
+        !fs.existsSync(path.join(storage, 'accounts', 'shared-plugins', '.credentials.json')),
+      'on: plugins and enabledPlugins reach the other data set; its own settings win and no login travels',
+    );
+    t.write(path.join(plugC, 'plugins', 'installed_plugins.json'), '{}');
+    const outside = t.dir('plugin-victim');
+    t.write(path.join(outside, 'secret.txt'), 's');
+    fs.symlinkSync(outside, path.join(plugC, 'plugins', 'cache'), 'junction');
+    on.activate(dataP('p3'), 'one');
+    t.check(
+      (on.pluginNote ?? '').includes('link') &&
+        !fs.existsSync(path.join(storage, 'accounts', 'shared-plugins', 'plugins', 'cache', 'secret.txt')),
+      'a link in the plugins is refused (the switch still works) and nothing behind it is copied',
+    );
+
+    const dataQ = dataP('p4');
+    const plugQ = path.join(dataQ, 'state', 'claude');
+    t.write(path.join(plugQ, 'plugins', 'installed_plugins.json'), '{"version":2}');
+    t.write(path.join(plugQ, 'plugins', 'cache', 'new.js'), 'n');
+    on.syncPlugins(dataQ);
+    const plugR = path.join(storage, 'data', 'p5', 'state', 'claude');
+    on.syncPlugins(dataP('p5'));
+    t.check(
+      fs.existsSync(path.join(plugR, 'plugins', 'cache', 'new.js')),
+      'launch-time refresh: plugins installed in one data set reach the shared set and the next empty data set',
+    );
+
     t.section('removing and refusing');
     new AccountStore(storage).setDefault('work');
     new AccountStore(storage).remove('work');

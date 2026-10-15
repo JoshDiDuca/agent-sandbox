@@ -8,12 +8,14 @@ import { z } from 'zod';
 import { isSafeFileName } from '../../shared/paths/index.js';
 import { JsonFile } from '../../shared/io/index.js';
 import { storageOf } from '../storage/index.js';
-import { fail, fileExists } from '../../core/util/index.js';
+import { errMsg, fail, fileExists } from '../../core/util/index.js';
+import { PluginShare } from './plugin-share.js';
 import {
   clearAccountCaches,
   emailOf,
   MAX_STATE_BYTES,
   readLogin,
+  sandboxClaudeDir,
   readUntrusted,
   sandboxLogin,
   writeSandboxJson,
@@ -80,7 +82,30 @@ function assertName(name: string): void {
 }
 /** The saved Claude logins under <storage>\accounts, and which one each sandbox data folder uses. */
 export class AccountStore {
-  constructor(private readonly storageRoot: string) {}
+  /** What the last activate() did with the shared plugins (a problem there never stops the switch). */
+  pluginNote: string | null = null;
+
+  /** @param sharePlugins claudeProfile.sharePluginsAcrossAccounts: carry Claude plugins to the account switched to */
+  constructor(
+    private readonly storageRoot: string,
+    private readonly sharePlugins = false,
+  ) {}
+
+  /** With the setting on: refreshes the shared plugin set from this data set, or fills this data set from it. */
+  syncPlugins(dataPath: string): void {
+    this.shareStep(dataPath, sandboxClaudeDir(dataPath));
+  }
+
+  private shareStep(dataPath: string, claudeDir: string): void {
+    this.pluginNote = null;
+    if (!this.sharePlugins) return;
+    try {
+      const result = PluginShare.in(this.storageRoot).sync(dataPath, claudeDir);
+      if (result === 'restored') this.pluginNote = 'Claude plugins were copied in from your other accounts.';
+    } catch (e) {
+      this.pluginNote = 'Claude plugins were not copied: ' + errMsg(e);
+    }
+  }
 
   private file(name: string): JsonFile<Account> {
     return new JsonFile(AccountSchema as z.ZodType<Account>, path.join(accountsDir(this.storageRoot), name + '.json'));
@@ -163,6 +188,7 @@ export class AccountStore {
     const state = readUntrusted(globalStateFile, MAX_STATE_BYTES) as Record<string, unknown> | null;
     if (account.oauthAccount && (state || !fileExists(globalStateFile)))
       writeSandboxJson(globalStateFile, { ...(state ?? {}), oauthAccount: account.oauthAccount });
+    this.shareStep(dataPath, claudeDir);
     setActive(dataPath, name);
     return account;
   }

@@ -15,6 +15,7 @@ const SyncStateSchema = z.object({
   syncHistory: z.boolean().optional(),
   syncClaudeMem: z.boolean().optional(),
   syncClaudeMemBack: z.boolean().optional(),
+  sharePlugins: z.boolean().optional(),
   historyScope: z.enum(['project', 'all']).optional(),
   /** Newest claude-mem database time on each side right after the last sync (detects edits on both sides). */
   memHostStamp: z.number().optional(),

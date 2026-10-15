@@ -1,7 +1,8 @@
 import path from 'node:path';
 import type { Config } from '../core/types.js';
 import { assertNoLinks } from '../core/util/index.js';
-import { hostClaudeDir } from '../host/profile/index.js';
+import { hostClaudeDir, PluginShare } from '../host/profile/index.js';
+import { storageOf } from '../host/storage/index.js';
 import { hostClaudeMemDir, syncClaudeMem, type MemResult } from './claude-mem.js';
 import { readSyncState, writeSyncState, type SyncState } from './sync-state.js';
 import { syncHistoryIn, syncHistoryOut, type SyncPaths } from './history.js';
@@ -66,6 +67,7 @@ export function syncBeforeLaunch(config: Config, dataPath: string, hostWorkspace
     historyScope: profile.historyScope,
     syncClaudeMem: profile.syncClaudeMem,
     syncClaudeMemBack: profile.syncClaudeMemBack,
+    sharePlugins: profile.sharePluginsAcrossAccounts,
     projects: [],
   };
   if (profile.syncHistory) summary.history = syncHistoryIn(toPaths(state, dataPath), { scope: profile.historyScope });
@@ -83,6 +85,7 @@ export function syncBack(dataPath: string, final: boolean): SyncSummary {
   const summary: SyncSummary = { history: 0, claudeMem: 'disabled' };
   if (!state) return summary;
   if (state.syncHistory) summary.history = syncHistoryOut(toPaths(state, dataPath));
+  if (final && state.sharePlugins) PluginShare.in(storageOf(dataPath)).saveQuietly(dataPath, guestClaude(dataPath));
   if (final && state.syncClaudeMem && state.syncClaudeMemBack) summary.claudeMem = memSync(dataPath, state, 'out');
   writeSyncState(dataPath, state);
   return summary;
