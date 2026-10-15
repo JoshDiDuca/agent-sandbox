@@ -5,12 +5,13 @@ before the version number goes up. What has shipped is in the [changelog](../CHA
 
 Status: **in progress**, **planned**, **idea** (needs a design decision or a test on a real PC first).
 
-## 1.6 — VPN
+## 1.7 — VPN (NordVPN first)
 
 | Item | Status |
 | --- | --- |
-| VPN inside the sandbox only (your PC's own connection is untouched): WireGuard and OpenVPN config files | planned |
-| Providers: NordVPN (its WireGuard/OpenVPN configs), business VPNs (OpenVPN / WireGuard profiles from the company), a short list of free ones with a clear warning | planned |
+| NordVPN inside the sandbox only (your PC's own connection is untouched): sign in to your Nord account on the website with your normal login once, copy its service credentials, and `sandbox vpn login` keeps them encrypted on this PC (never your account password) | in progress |
+| Credentials stored safely: encrypted at rest (Windows DPAPI, your user only), never in launch folders, `--json` or logs | in progress |
+| Later: your own OpenVPN / WireGuard file (business VPNs), NordLynx (WireGuard) | planned |
 | Kill switch: no traffic leaves the sandbox when the tunnel is down | planned |
 | Warnings: a VPN login inside the sandbox is readable by the agent; free VPNs see all traffic; shown in the menu and at launch | planned |
 

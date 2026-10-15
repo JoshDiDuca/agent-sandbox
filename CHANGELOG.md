@@ -7,13 +7,38 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
-## 1.5.1
+## 1.6.0
 
+Fixes
 - An all-users install could not start a sandbox when your storage held many files: every launch rewrote folder
   permissions over everything inside it and stopped after two minutes with "Could not change the folder permissions
   ... ETIMEDOUT". A launch now writes only the entries that change, on those folders alone, and takes under a second.
-- The installer no longer rewrites the permissions of `%ProgramData%\AgentSandbox` on every run when they are already
-  right (that also walked every user's storage).
+  The installer no longer rewrites the permissions of `%ProgramData%\AgentSandbox` when they are already right.
+- Starting an agent from another project folder in the running sandbox failed with "the running sandbox works on ...
+  and Windows Sandbox cannot add folders while it runs", even for a folder in one of its roots, when another copy or
+  version of `sandbox` had started it. The sandbox's projects are now read from any version and rebuilt from its
+  launch folder when needed.
+- A launch can no longer hang without a word: time limits on the Windows tools it runs, a check that Windows Sandbox
+  really started, and a clear message when the sandbox never reports in.
+- Codex starts: its databases live on the sandbox's own disk (SQLite cannot run on a mapped folder) and are saved,
+  also while Codex runs.
+- Every new terminal tab has the right PATH (PowerShell, pwsh, cmd, Git Bash), every configured agent works by name in
+  any tab, and an agent that is not installed yet installs itself the first time you type it.
+- A failed update or install puts the previous version back and turns automatic updates off (you are told once).
+
+New
+- Your data folder: new installs keep it in `%ProgramData%\AgentSandbox\users\<you>`, readable only by you, for both
+  kinds of install. Existing data stays where it is; you are offered a move (size, time, a warning when it is big)
+  after an upgrade or a switch of install type, in Settings > General (with a folder browser) and with
+  `sandbox storage move`. Older versions still find it after a move.
+- The menu: navigation on the left as a tree, Agents (start, add your own, make default, remove), Settings in 8
+  categories, inputs that fit each setting (choices, number ranges, folder pickers, list editors).
+- The command line: help grouped by topic, "did you mean", pickers when an argument is missing, confirmations before
+  anything is deleted, `sandbox config get/set`, `--agent` (`--harness` still works).
+- `sandbox doctor` and `sandbox repair`: live grouped output, 31 checks (most can fix what they find), a repair log,
+  and `doctor --fix`.
+- `claudeProfile.sharePluginsAcrossAccounts` (off by default): Claude plugins follow you to your other data sets.
+- `sandbox web` (beta, off by default): your sessions in a browser on this PC, with a live terminal.
 
 ## 1.5.0
 
