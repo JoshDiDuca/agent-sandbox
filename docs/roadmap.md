@@ -5,39 +5,40 @@ before the version number goes up. What has shipped is in the [changelog](../CHA
 
 Status: **in progress**, **planned**, **idea** (needs a design decision or a test on a real PC first).
 
-## 1.7 — VPN (NordVPN first)
+## To verify on a real PC (shipped, but only tested inside a sandbox)
+
+| Item | What to check |
+| --- | --- |
+| NordVPN, your own OpenVPN or WireGuard file, the kill switch (1.7.0, 1.8.0) | [vpn.md](vpn.md#what-is-not-tested-yet): the driver in Windows Sandbox, traffic through the tunnel, nothing leaks with it down, attach still works |
+| Later: NordLynx (NordVPN over WireGuard) | planned once the above works |
+
+## 1.9 — Sandbox engines and contained storage (beta, opt-in)
+
+Windows Sandbox stays the default and keeps every feature it has; these are extras you switch on, and one setting
+switches them off again. Design: [design/hcs-backend.md](design/hcs-backend.md).
 
 | Item | Status |
 | --- | --- |
-| NordVPN inside the sandbox only (your PC's own connection is untouched): sign in to your Nord account on the website with your normal login once, copy its service credentials, and `sandbox vpn login` keeps them encrypted on this PC (never your account password) | built and tested here; **must be tried on a real PC** ([vpn.md](vpn.md#what-is-not-tested-yet)) |
-| Credentials stored safely: encrypted at rest (Windows DPAPI, your user only), never in launch folders, `--json` or logs | done (saved logins and agent keys too; tests in the `credentials` and `vpn` suites) |
-| Your own OpenVPN file (business VPNs): `vpn.provider: openvpn-file` | built, untested on a real PC |
-| Later: WireGuard files, NordLynx (WireGuard) | planned |
-| Kill switch: no traffic leaves the sandbox when the tunnel is down | built (firewall rules before the tunnel starts); to verify on a real PC |
-| Warnings: a VPN login inside the sandbox is readable by the agent; free VPNs see all traffic; shown in the menu and at launch | done |
+| An engine layer: today's Windows Sandbox launch behind one interface (unchanged behaviour on every Windows Sandbox version), so other engines can plug in | planned |
+| Contained storage for Windows Sandbox (`storage.contained`): tools, logins and logs in one VHDX per data set, mounted on a private folder only while a sandbox runs and mapped in as folders today are; one admin prompt per launch; stale-mount repair in doctor | planned; first run `scripts/experiments/Test-ContainedStorage.ps1` on a PC |
+| An HCS engine (`sandbox.engine: hcs`, beta): headless agents in a Hyper-V isolated Server Core container with the storage VHDX attached to the VM (never mounted on the PC) | idea: go/no-go test first (Docker Desktop, Windows containers, Hyper-V isolation: the terminal bridge, Node and csc inside Server Core); `scripts/experiments/hcs/Test-Hcs.ps1` shows what this PC allows |
+| A small helper installed by the all-users installer, so contained storage needs no admin prompt per launch | idea (after the above) |
 
-## 1.9 — Web UI (the release before 2.0)
+## 2.0 — Web UI
 
-Design and security model: [web-ui.md](web-ui.md).
+Being built separately; reviewed and merged here. Design and security model: [web-ui.md](web-ui.md).
 
 | Item | Status |
 | --- | --- |
-| Foundation: `sandbox web` (loopback only, token + cookie login), the terminal bridge, a React app with sessions, a live terminal and new sessions; off by default | in progress |
+| Foundation: `sandbox web` (loopback only, token + cookie login), the terminal bridge, a React app with sessions, a live terminal and new sessions; off by default | built (1.6.0), being extended |
 | Plain shell sessions through ptyhost, so terminals you open show up in the web UI too; closing a session | planned |
 | Settings rows and a menu entry; a phone-sized layout with an on-screen key row (Esc, Tab, Ctrl, arrows) | planned |
 | Other Windows users of the PC: their own `sandbox web` shows your sandbox when you share it, under the same rules as the CLI | planned |
 | From a phone on your network: opt-in HTTPS, pairing per device (QR code), revocable devices, a private-network firewall rule | planned |
 
-## Ideas
-
-| Item | Status |
-| --- | --- |
-| Contained storage (optional): persisted data in one VHDX disk image, mounted only while a sandbox runs (nothing it wrote is reachable on the PC at rest), with a size cap; needs one admin prompt per launch | idea: cannot be tested inside Windows Sandbox (its Virtual Disk Service does not start); needs testing on a PC before it is built |
-
 ## Backlog (not scheduled)
 
-- The menu remembers the last category and search per screen across runs.
+- Code signing for releases and HostTools.exe (Azure Trusted Signing), so antivirus heuristics stop flagging them.
 - Mouse input passed on to agents beyond what 1.4.1 covers, for programs that need raw mouse input (needs Node's raw VT
   input on Windows).
-- More catalogue apps on request; a "request an app" link in the Apps screen.
-- Export / import of settings (a `.json` you can share with a team).
+- More catalogue apps, as people ask for them (Apps > Request an app… opens the request form).
