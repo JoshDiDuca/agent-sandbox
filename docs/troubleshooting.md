@@ -2,6 +2,49 @@
 
 Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 
+## What doctor checks and repair can fix
+
+`sandbox doctor` and `sandbox repair` run the same checks, grouped under headings, one line each as it finishes. A line that is not fine says what it means and what to do. A check that takes more than 20 seconds (a stuck Windows tool, no network) is skipped with "took too long" and the rest go on.
+
+- `sandbox doctor` only looks. When some problems can be fixed it asks "N problems can be fixed. Fix them now?" (`--fix` does it without asking; without a terminal it only tells you).
+- `sandbox repair` lists exactly what it will change, asks once (`--yes` skips the question), makes the changes, looks again to see they worked and prints "fixed", "needs you" or "still not right" for each. The log of what it found and changed (before and after) is `<storage>\logs\repair-<time>.log`; its path is printed at the end. Repair never deletes your settings, logins, history or projects: it removes leftovers and links the sandbox made, and moves pointers back.
+- `--json` for both prints the results (`id`, `group`, `status`, `detail`, `fixable`, and after a fix what changed). With `--json`, repair changes nothing unless you add `--yes`.
+- Menu: Maintenance > Health > "Run the checks and fix what can be fixed" runs `sandbox repair` on the normal screen.
+
+| Group | Check | Fixed by repair |
+|---|---|---|
+| This PC | Windows, edition, CPU virtualization, memory, Node.js, a Windows restart waiting | no (it says what to turn on) |
+| Install | managed or npm install and its scope | no |
+| | `install.json` readable | no (run the installer again) |
+| | `active-version` and `active-node` name installed folders | yes: points them at the newest complete version and Node (nothing is deleted) |
+| | the commands (shims) in `bin` exist and read the active version | yes: rewrites them |
+| | `bin` is on the right PATH (yours, or the PC's for an all-users install) | yours: yes; the PC's: no (run the installer in an admin PowerShell) |
+| | all-users: the automatic-update task matches `install.json` | yes when this is an admin terminal, else it gives the command |
+| | all-users: a second install for just you next to it | no (shows the uninstall command) |
+| | the old `agent-sandbox` npm package, or an npm copy next to the managed install | no (shows the `npm uninstall -g` command) |
+| | all-users: you can read the settings for the PC, and you are in the group Agent Sandbox Users | no ("sign out and in", or the command an admin runs) |
+| Data folder | where it is, that it is not a link and that you can write there | no |
+| | free disk space | no |
+| | your data still in the old per-user folder, or in another known folder, or in two (a move that stopped half way) | no: points at `sandbox storage move` / `sandbox storage use`; nothing moves without you |
+| | all-users: your data folder is private to you, SYSTEM and Administrators | yes: makes it private (only that folder's permissions, not everything in it) |
+| | all-users: the group has no leftover permissions on your folders while nothing is shared; the run folder is open to the group while one is | yes: removes or restores those entries only |
+| | links made inside the data folder | yes: removes the links without following them |
+| | interrupted downloads, half-installed toolchains, a damaged `resolved-versions.json` | yes: removes them (the next start redoes them) |
+| Settings | `config.json` loads | yes when an update saved a good copy: shows what differs, puts it back, keeps the broken file as `config.json.broken-<time>` |
+| | updates to your saved settings are pending | yes: runs them (with a backup) |
+| | project files you approved that changed since | no (explains: the next launch there asks again) |
+| Sandbox | `WindowsSandbox.exe` and the Windows Sandbox feature | no (`sandbox setup`) |
+| | a sandbox running that is not yours or has no status files | no |
+| | run state, session and request files, and the hidden-window list of a sandbox that is gone | yes: clears them |
+| | records of sync watchers that are gone; watchers still running with no sandbox | yes: removes the records and stops the orphans (only a Node program whose record has been quiet for 10 minutes) |
+| | all-users: sharing records of sandboxes that are gone | yes: removes them |
+| | launch folders older than 7 days | yes: removes them |
+| | `HostTools.exe` built; the conpty and Windows Terminal downloads whole | yes: builds it; removes an incomplete download |
+| Agents & tools | the default agent is configured; each agent's saved login is in use | no (`sandbox account use`) |
+| Network | a proxy variable that makes sense; github.com reachable | no |
+
+A fix that touches the folders of a running sandbox waits until it is closed (the result says so).
+
 | Problem | Try |
 |---|---|
 | Windows Sandbox missing | `sandbox setup` checks the edition and virtualization, and offers to turn it on |
@@ -10,6 +53,9 @@ Start with `sandbox repair`, then `sandbox doctor` and `sandbox logs -f`.
 | Install commands fail | `npm install -g` needs Node.js 20+; the one-liner installs it. Check your internet and try again |
 | The first start is slow | Expected once: it downloads what the project needs. Later starts reuse it |
 | Disk filling up | `sandbox data` shows what is big; `sandbox data clean <part>` frees it |
+| A command is "not recognized" in a new terminal tab | Every shell rebuilds its PATH from the machine and user PATH at start. Run `sbx-agent list` for agents (a missing one installs on first use). `echo $env:Path` / `echo %PATH%` shows the PATH; `C:
+vminpathsync.exe` prints the one a new shell should have |
+| Codex says its local database is damaged (disk I/O error, code 8714) | SQLite cannot run in the shared data folder. Codex now runs its databases from the sandbox's disk (`harnesses.codex.localState`); a config that pins its own `harnesses.codex` needs that key |
 | Config errors | The message names the key and the problem; `sandbox config show` prints the effective config |
 | pnpm, Bun or npm workspaces fail with EPERM | Mapped folders allow no symlinks; see [mapped folders](toolchains.md#mapped-folders) |
 | A database didn't start | Check `sandbox logs`. Turn it on explicitly with `databases.<name>.enabled: true` |

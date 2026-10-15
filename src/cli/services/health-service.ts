@@ -1,30 +1,16 @@
-// Is this PC (and the sandbox) in good shape: doctor rows, repair checks, the setup checklist. Never prints.
-import path from 'node:path';
+// Is this PC (and the sandbox) in good shape: the doctor details, the setup checklist. The checks themselves are in
+// commands/repair (one engine for doctor and repair). Never prints.
 import { spawnSync } from 'node:child_process';
-import { loadConfig } from '../../core/config/index.js';
-import { errMsg, expandPath, fail, isWin, UserError } from '../../core/util/index.js';
+import { expandPath, fail, isWin } from '../../core/util/index.js';
 import { detectWsb, doctorRows, insideSandbox, isSandboxRunning } from '../../host/sandbox/index.js';
+import { machineDoctorRows } from '../../host/sharing/index.js';
 import { KnownProjects, ProjectRegistry } from '../../host/projects/index.js';
 import { nativeScript } from '../../host/native.js';
 import { refuseInSelfTest } from '../../host/test-guard.js';
 import { SYSTEM } from '../../shared/system.js';
 import type { Context } from '../commands/context.js';
-import { CHECKS } from '../commands/repair/checks.js';
-import type { RepairCheck, RepairEnv, RepairResult } from '../commands/repair/types.js';
 import { buildChecks, canEnableFeature, type Check } from '../commands/setup/checks.js';
 import { ENABLE_COMMAND, gatherFacts, type MachineFacts } from '../commands/setup/facts.js';
-
-/** Runs every check in order; a check that throws is reported, never stops the rest. */
-export function runChecks(env: RepairEnv, checks: RepairCheck[] = CHECKS): RepairResult[] {
-  return checks.map((check) => {
-    try {
-      return { name: check.name, ...check.run(env) };
-    } catch (e) {
-      const fix = e instanceof UserError && e.fix ? ' ' + e.fix : '';
-      return { name: check.name, status: 'needs-you', detail: 'check failed: ' + errMsg(e) + fix };
-    }
-  });
-}
 
 /** What `sandbox setup` found out about this PC. */
 export interface SetupReport {
@@ -59,6 +45,7 @@ export class HealthService {
     const wsb = p.wsbShare ? detectWsb() : null;
     return [
       ...rows,
+      ...machineDoctorRows(ctx.packageRoot, ctx.dataPath),
       [
         'Project roots',
         p.roots.length
@@ -88,29 +75,6 @@ export class HealthService {
             : 'not on this Windows (needs Windows 11 24H2+ with the updated Windows Sandbox): folders outside your roots need a restart',
       ],
     ];
-  }
-
-  /** Runs the repair checks (and the fixes they make). A config file that does not load is the first problem. */
-  repair(configError: UserError | null = null): RepairResult[] {
-    const { ctx } = this;
-    const env: RepairEnv = {
-      ctx,
-      running: isSandboxRunning(),
-      dataPath: ctx.dataPath,
-      storageRoot: ctx.storageRoot,
-      toolsDir: path.join(ctx.dataPath, 'tools'),
-      configError,
-    };
-    // Re-check the config file even when the context loaded (it may have been edited since, or come from --config).
-    if (!env.configError) {
-      try {
-        loadConfig(ctx.options.config);
-      } catch (e) {
-        if (e instanceof UserError) env.configError = e;
-        else throw e;
-      }
-    }
-    return runChecks(env);
   }
 
   /** Fails unless this is Windows: Windows Sandbox runs nowhere else. */
