@@ -4,12 +4,52 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { APP_CATEGORIES, APPS, type AppEntry } from '../../shared/apps/index.js';
+import { APPS, type AppCategory, type AppEntry } from '../../shared/apps/index.js';
 import { Text, Theme, type Category, type ListItem } from '../tui/index.js';
 import type { ConfigFile } from './settings/config-file.js';
 import type { Draft } from './settings/draft.js';
 
 export const CUSTOM = '@custom:';
+
+/** The catalogue has many small categories; the menu shows these few groups so the navigation stays short. */
+export const APP_GROUPS = [
+  {
+    id: 'editors',
+    label: 'Editors & docs',
+    description: 'Code and text editors (VS Code is on by default), plus diagrams and document conversion.',
+    members: ['editors', 'diagrams'],
+  },
+  {
+    id: 'clients',
+    label: 'DB & API clients',
+    description:
+      'GUIs for the sandbox databases, tools to send HTTP, REST and GraphQL requests, and to inspect traffic.',
+    members: ['databases', 'api', 'network'],
+  },
+  {
+    id: 'tools',
+    label: 'Git & utilities',
+    description: 'Git GUIs and terminal UIs, archives, file search and comparing, process tools, and decompilers.',
+    members: ['git', 'utilities', 'reversing'],
+  },
+  {
+    id: 'cli',
+    label: 'Command-line & cloud',
+    description: 'Small developer tools (JSON, search, builds, media ...) and tools for clouds and Kubernetes.',
+    members: ['cli', 'cloud'],
+  },
+  {
+    id: 'play',
+    label: 'Browsers & games',
+    description: 'Browsers for testing web apps, and game engines and editors (they draw with OpenGL on the CPU).',
+    members: ['browsers', 'gamedev'],
+  },
+] as const satisfies readonly { id: string; label: string; description: string; members: readonly AppCategory[] }[];
+
+/** The group an app category is shown under. */
+export function groupOf(category: AppCategory): string {
+  return APP_GROUPS.find((g) => (g.members as readonly string[]).includes(category))?.id ?? 'tools';
+}
 const INSTALL = ['apps', 'install'];
 
 export class AppsModel {
@@ -25,7 +65,7 @@ export class AppsModel {
 
   categories(): Category[] {
     return [
-      ...APP_CATEGORIES,
+      ...APP_GROUPS.map(({ id, label, description }) => ({ id, label, description })),
       ...(this.file.isProject
         ? []
         : [
@@ -95,13 +135,15 @@ export class AppsModel {
       ...(entry.needs?.includes('mesa')
         ? [Theme.muted('Graphics  ') + 'OpenGL on the CPU (Mesa) is added for it']
         : []),
-      ...(entry.fullGitOnly ? [Theme.warn('Needs provisioning.git.access "full" (it pushes with its own git).')] : []),
+      ...(entry.fullGitOnly
+        ? [Theme.warn('Needs full git access (Settings > Projects & setup > Git): it pushes with its own git.')]
+        : []),
       ...(entry.setting ? [Theme.muted('Setting   ') + entry.setting] : []),
     ];
     return {
       value: entry.id,
       label: entry.name,
-      category: entry.category,
+      category: groupOf(entry.category),
       description: entry.about,
       details: notes,
       keywords: entry.id,
@@ -141,7 +183,7 @@ export class AppsModel {
   }
 }
 
-/** For the Start tab and notices: "12 apps chosen". */
+/** For notices: "12 apps chosen". */
 export function appsSummary(file: ConfigFile): string {
   const config = file.userConfig();
   const n = config.apps.install.length + Object.keys(config.apps.custom).length;

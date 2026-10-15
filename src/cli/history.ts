@@ -9,7 +9,7 @@ type History = z.output<typeof HistorySchema>;
 function historyFile(): JsonFile<History> {
   return new JsonFile(HistorySchema, path.join(userDir(), 'history.json'));
 }
-const HIDDEN = new Set(['menu', '_watch', 'self-test']);
+const HIDDEN = new Set(['menu', '_watch', '_web', 'self-test']);
 
 export function readHistory(): History {
   return historyFile().read() ?? [];

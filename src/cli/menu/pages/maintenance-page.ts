@@ -1,5 +1,6 @@
-// Tab 7: keeping things in shape. What is stored (with clean-up), the logs, the doctor, repair, this PC's setup, and
-// the less common commands. Each is a category on the left and loads when you open it.
+// Section 7: keeping things in shape. Updates (the program and your saved settings), Data & storage (the data folder,
+// what is stored, clean-up), Health (doctor, repair and this PC's setup together), the logs, and the less common
+// commands. Each is a category on the left and loads when you open it.
 import _ from 'lodash';
 import type { DiskUsage } from '../../../core/disk.js';
 import { humanBytes } from '../../../core/disk.js';
@@ -33,10 +34,13 @@ import {
 } from '../../tui/index.js';
 import type { Step } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
+import { DataFolderFlow, dataFolderRow } from '../data-folder.js';
 import type { ShellExit } from '../shell.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface MaintenanceModel {
+  /** The data folder row (where the sandbox keeps its data). */
+  readonly dataFolder: { label: string; hint: string; description: string };
   /** Null until measured (measuring a big data folder takes a while). */
   readonly data: { entries: DataEntry[]; disks: DiskUsage[]; total: number } | null;
   readonly logs: readonly LogFile[];
@@ -54,17 +58,36 @@ export interface MaintenanceModel {
 }
 
 const CATEGORIES = [
-  { id: 'data', label: 'Stored data', description: 'What is kept between sandboxes, and deleting parts of it.' },
+  {
+    id: 'updates',
+    label: 'Updates',
+    description: 'Which version is installed, installing a newer one, and bringing your saved settings up to date.',
+  },
+  {
+    id: 'data',
+    label: 'Data & storage',
+    description: 'Where the sandbox keeps its data, what is stored, and deleting parts of it.',
+  },
+  {
+    id: 'health',
+    label: 'Health',
+    description: 'Checks this PC and your settings, repairs problems, and sets up Windows Sandbox.',
+  },
   { id: 'logs', label: 'Logs', description: "The sandbox's own logs." },
-  { id: 'doctor', label: 'Doctor', description: 'Checks this PC and your settings.' },
-  { id: 'repair', label: 'Repair', description: 'Finds common problems and fixes what it can.' },
-  { id: 'settings', label: 'Saved settings', description: 'Brings your saved settings up to date with this version.' },
-  { id: 'updates', label: 'Updates', description: 'Which version is installed, and installing a newer one.' },
-  { id: 'setup', label: 'Set up this PC', description: 'Can this PC run Windows Sandbox?' },
   { id: 'more', label: 'More commands', description: 'Less common commands.' },
 ];
 
 const MORE_COMMANDS = ['sync', 'audit', 'config', 'generate', 'exec', 'agent-commands'];
+
+/** Plain names for the commands under More commands. */
+const MORE_LABELS: Readonly<Record<string, string>> = {
+  sync: 'Copy history back now',
+  audit: 'What happened in the sandbox',
+  config: 'Your settings file',
+  generate: 'Preview a start',
+  exec: 'Run a command in the sandbox',
+  'agent-commands': 'Agent commands (Beta)',
+};
 
 const REPAIR_LABEL: Record<RepairStatus, [string, (t: string) => string]> = {
   ok: ['OK', Theme.ok],
@@ -84,17 +107,28 @@ const AREA_LABEL: Record<DataEntry['area'], string> = {
 };
 
 function dataItems(m: MaintenanceModel): ListItem<string>[] {
+  const folder: ListItem<string> = { value: 'data:folder', category: 'data', section: 'Data folder', ...m.dataFolder };
+  const clean: ListItem<string> = {
+    value: 'data:clean',
+    label: 'Clean up…',
+    category: 'data',
+    section: 'Clean up',
+    description: 'Delete caches, old sandboxes and other leftovers (the clean command, with its options).',
+  };
   if (!m.data)
     return [
+      folder,
       {
         value: 'data:measure',
         label: 'Measure what is stored',
         category: 'data',
-        hint: Theme.muted('press m'),
+        section: 'Stored data',
         description: 'Adds up the size of every folder. A big data folder takes a minute or more.',
       },
+      clean,
     ];
   return [
+    folder,
     ...m.data.disks.map((d) => ({
       value: 'disk:' + d.drive,
       label: d.drive,
@@ -112,6 +146,7 @@ function dataItems(m: MaintenanceModel): ListItem<string>[] {
       description: cleanTargetOf(e) ? 'x deletes it.' : 'Kept on this PC on purpose; it is not deleted here.',
       details: [Theme.muted('Folder  ') + e.path],
     })),
+    clean,
   ];
 }
 
@@ -126,6 +161,7 @@ function updateItems(m: MaintenanceModel): ListItem<string>[] {
     value: 'updates:' + id,
     label,
     category: 'updates',
+    section: 'This program',
     hint,
     description,
     details,
@@ -143,20 +179,22 @@ function updateItems(m: MaintenanceModel): ListItem<string>[] {
     row(
       'latest',
       'Newest version',
-      m.latest ? Theme.warn(m.latest) : Theme.muted('press c to look'),
-      m.latest ? 'Enter or u installs it.' : 'c looks on GitHub for a newer version.',
+      m.latest ? Theme.warn(m.latest) : Theme.muted('not looked yet'),
+      m.latest ? 'Enter installs it.' : 'Enter looks on GitHub for a newer version.',
     ),
     row(
       'auto',
       'Automatic updates',
       u.autoUpdate ? Theme.ok('on') : Theme.muted('off'),
-      'a switches them. ' +
+      'Enter switches them. ' +
         (u.scope === 'machine'
           ? 'For everyone: needs an admin terminal.'
           : 'A new version installs when no sandbox runs.'),
     ),
   ];
-  if (u.state.previous) rows.push(row('previous', 'Previous version', u.state.previous, 'r goes back to it.'));
+  if (u.autoOffText)
+    rows.push(row('autooff', 'Automatic updates turned off', Theme.warn('off'), u.autoOffText, [u.autoOffText]));
+  if (u.state.previous) rows.push(row('previous', 'Previous version', u.state.previous, 'Enter goes back to it.'));
   if (u.state.failed)
     rows.push(
       row('failed', 'Last failed update', Theme.error(u.state.failed.version), u.state.failed.reason, [
@@ -179,7 +217,8 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   const doctor: ListItem<string>[] = (m.doctor ?? []).map(([name, detail], i) => ({
     value: 'doctor:' + i,
     label: name,
-    category: 'doctor',
+    category: 'health',
+    section: 'Doctor',
     hint: Text.truncate(detail, 50),
     details: [detail],
   }));
@@ -189,7 +228,8 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
         return {
           value: 'repair:' + i,
           label: r.name,
-          category: 'repair',
+          category: 'health',
+          section: 'Repair',
           hint: paint(text),
           description: r.detail,
         };
@@ -198,20 +238,22 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
         {
           value: 'repair:run',
           label: 'Run the checks and fix what can be fixed',
-          category: 'repair',
-          hint: Theme.muted('press f'),
-          description: 'Each check confirms all is well, fixes the problem itself, or says what you need to do.',
+          category: 'health',
+          section: 'Repair',
+          description:
+            'Checks the install, data folder, settings and sandbox, lists what it would change, and asks before it fixes anything.',
         },
       ];
   const setup: ListItem<string>[] =
     m.setup === null
       ? []
       : 'error' in m.setup
-        ? [{ value: 'setup:error', label: m.setup.error, category: 'setup' }]
+        ? [{ value: 'setup:error', label: m.setup.error, category: 'health', section: 'Set up this PC' }]
         : m.setup.checks.map((c, i) => ({
             value: 'setup:' + i,
             label: c.name,
-            category: 'setup',
+            category: 'health',
+            section: 'Set up this PC',
             hint:
               c.status === 'ok'
                 ? Theme.ok('OK')
@@ -222,12 +264,13 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
           }));
   const settings: ListItem<string>[] =
     'error' in m.settings
-      ? [{ value: 'settings:error', label: m.settings.error, category: 'settings' }]
+      ? [{ value: 'settings:error', label: m.settings.error, category: 'updates', section: 'Saved settings' }]
       : m.settings.pending.length
         ? m.settings.pending.map((line, i) => ({
             value: 'settings:' + i,
             label: line.split(':')[0],
-            category: 'settings',
+            category: 'updates',
+            section: 'Saved settings',
             hint: Theme.warn('to update'),
             description: 'Enter updates your saved settings (a backup is kept first).',
             details: [line],
@@ -236,7 +279,8 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
             {
               value: 'settings:none',
               label: 'Up to date',
-              category: 'settings',
+              category: 'updates',
+              section: 'Saved settings',
               hint: Theme.ok('OK'),
               description: 'Nothing to update.',
             },
@@ -244,48 +288,78 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   const updates = updateItems(m);
   const more: ListItem<string>[] = m.more.map((c) => ({
     value: 'more:' + c.name,
-    label: Text.humanize(c.name),
+    label: MORE_LABELS[c.name] ?? Text.humanize(c.name),
     category: 'more',
-    hint: Theme.muted('sandbox ' + c.name),
     description: c.summary.replace(/^./, (x) => x.toUpperCase()) + '.',
   }));
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...dataItems(m), ...logs, ...doctor, ...repair, ...settings, ...updates, ...setup, ...more],
+    items: [...updates, ...settings, ...dataItems(m), ...doctor, ...repair, ...setup, ...logs, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
-    escapeLabel: 'quit',
+    enterLabel: (_category, id) => enterLabel(id ?? '', m),
   };
 }
 
-function maintenanceActions(m: MaintenanceModel): (category: string | undefined) => ListAction[] {
+/** What Enter does on a row ("" = the row only shows information). */
+function enterLabel(id: string, m: MaintenanceModel): string {
+  if (id === 'data:folder') return 'change';
+  if (id === 'data:measure') return 'measure';
+  if (id === 'data:clean') return 'choose what';
+  if (id === 'repair:run') return 'check and fix';
+  if (id === 'updates:latest') return m.latest ? 'install' : 'look';
+  if (id === 'updates:auto') return 'switch';
+  if (id === 'updates:previous') return 'go back';
+  if (id.startsWith('settings:') && id !== 'settings:none' && id !== 'settings:error') return 'update';
+  if (id.startsWith('log:')) return 'show';
+  if (id.startsWith('more:')) return 'open';
+  return '';
+}
+
+function maintenanceActions(m: MaintenanceModel): (category: string | undefined) => ListAction<string>[] {
   return (category) => {
     switch (category) {
-      case 'data':
-        return [{ key: 'm', label: 'measure' }, ...(m.data ? [{ key: 'x', label: 'delete' }] : [])];
+      case 'data': {
+        const deletable = new Set((m.data?.entries ?? []).flatMap((e, i) => (cleanTargetOf(e) ? ['entry:' + i] : [])));
+        return [
+          { key: 'm', label: 'measure again' },
+          { key: 'x', label: 'delete', applies: (id) => deletable.has(id) },
+        ];
+      }
       case 'logs':
         return [{ key: 'f', label: 'follow in the terminal' }];
-      case 'doctor':
-        return [{ key: 'l', label: 'check again' }];
-      case 'repair':
-        return [{ key: 'f', label: 'check and fix' }];
-      case 'settings':
-        return [{ key: 'u', label: 'update now' }];
-      case 'updates':
-        return 'error' in m.updates || !m.updates.managed
-          ? []
-          : [
-              { key: 'c', label: 'check now' },
-              { key: 'u', label: 'update now' },
-              { key: 'r', label: 'roll back' },
-              { key: 'a', label: 'automatic on/off' },
-            ];
-      case 'setup': {
+      case 'health': {
         const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
         return [
+          { key: 'f', label: 'check and fix' },
           { key: 'l', label: 'check again' },
           ...(canEnable ? [{ key: 'e', label: 'turn on Windows Sandbox' }] : []),
+        ];
+      }
+      case 'updates': {
+        const managed = !('error' in m.updates) && m.updates.managed;
+        const previous = !('error' in m.updates) && Boolean(m.updates.state.previous);
+        return [
+          ...(managed
+            ? [
+                { key: 'c', label: 'check now' },
+                { key: 'u', label: 'update now' },
+                { key: 'a', label: 'automatic on/off', applies: (id: string) => id === 'updates:auto' },
+                ...(previous
+                  ? [{ key: 'r', label: 'roll back', applies: (id: string) => id === 'updates:previous' }]
+                  : []),
+              ]
+            : []),
+          ...('pending' in m.settings && m.settings.pending.length
+            ? [
+                {
+                  key: 's',
+                  label: 'update saved settings',
+                  applies: (id: string) => id.startsWith('settings:') && id !== 'settings:none',
+                },
+              ]
+            : []),
         ];
       }
       default:
@@ -326,6 +400,7 @@ export class MaintenancePage extends ListPage<string> {
 
   private model(): MaintenanceModel {
     return {
+      dataFolder: dataFolderRow(this.ctx),
       data: this.data,
       logs: this.logs,
       doctor: this.doctorRows,
@@ -360,9 +435,9 @@ export class MaintenancePage extends ListPage<string> {
     const category = this.category;
     if (category === this.seen) return;
     this.seen = category;
-    if (category === 'doctor' && !this.doctorRows) await this.loadDoctor();
-    else if (category === 'setup' && !this.setupReport) await this.loadSetup();
-    else return;
+    if (category !== 'health' || (this.doctorRows && this.setupReport)) return;
+    if (!this.doctorRows) await this.loadDoctor();
+    if (!this.setupReport) await this.loadSetup();
     this.rebuild(undefined);
     return;
   }
@@ -466,24 +541,32 @@ export class MaintenancePage extends ListPage<string> {
     const key = result.kind === 'action' ? result.key : undefined;
     try {
       if (key === 'm' || id === 'data:measure') return this.measure();
+      if (id === 'data:folder' && result.kind === 'pick') {
+        const exit = await new DataFolderFlow(this.app, this.ctx).run();
+        return exit ? { exit } : { reload: true };
+      }
+      if (id === 'data:clean' && result.kind === 'pick') {
+        const argv = await new CommandForm(this.app, this.ctx, commandSpec('clean') as CommandSpec).run();
+        return argv ? { exit: { kind: 'run', argv } } : {};
+      }
       if (key === 'x') return await this.remove(id);
       if (key === 'f' && this.category === 'logs') return { exit: { kind: 'run', argv: ['logs', '--follow'] } };
       if (id?.startsWith('log:') && result.kind === 'pick') {
         const file = this.logs.find((l) => l.name === id.slice(4));
         return file ? { exit: { kind: 'view', file: file.path } } : {};
       }
-      if (this.category === 'updates') return await this.updates(key ?? (id === 'updates:latest' ? 'u' : undefined));
-      if (key === 'u' || (result.kind === 'pick' && id?.startsWith('settings:'))) return await this.updateSettings();
-      if (key === 'f' || id === 'repair:run') return this.repair();
-      if (key === 'l' && this.category === 'doctor') {
-        await this.loadDoctor();
-        return {};
+      if ((result.kind === 'pick' && id?.startsWith('settings:')) || (key === 's' && this.category === 'updates'))
+        return await this.updateSettings();
+      if (this.category === 'updates') return await this.updates(key ?? this.updateKey(id));
+      if (this.category === 'health') {
+        if (key === 'f' || id === 'repair:run') return this.repair();
+        if (key === 'l') {
+          await this.loadDoctor();
+          await this.loadSetup();
+          return {};
+        }
+        if (key === 'e') return await this.enable();
       }
-      if (key === 'l') {
-        await this.loadSetup();
-        return {};
-      }
-      if (key === 'e') return await this.enable();
       if (id?.startsWith('more:') && result.kind === 'pick') {
         const spec = commandSpec(id.slice(5)) as CommandSpec;
         const argv = await new CommandForm(this.app, this.ctx, spec).run();
@@ -493,6 +576,14 @@ export class MaintenancePage extends ListPage<string> {
       return { notice: Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) };
     }
     return {};
+  }
+
+  /** The key an Enter on an Updates row stands for. */
+  private updateKey(id: string | undefined): string | undefined {
+    if (id === 'updates:latest') return this.latest ? 'u' : 'c';
+    if (id === 'updates:auto') return 'a';
+    if (id === 'updates:previous') return 'r';
+    return undefined;
   }
 
   private measure(): Outcome<string> {
@@ -528,19 +619,9 @@ export class MaintenancePage extends ListPage<string> {
     return { notice: Theme.ok(Theme.glyph.ok + ' Freed ' + humanBytes(outcome.freedBytes) + '.') };
   }
 
+  /** Repair shows what it does as it goes and asks before it changes anything, so it runs on the normal screen. */
   private repair(): Outcome<string> {
-    this.busy('Checking and fixing…');
-    this.repairRows = this.health.repair();
-    const needs = this.repairRows.filter((r) => r.status === 'needs-you').length;
-    return {
-      notice: needs
-        ? Theme.warn(needs + ' thing(s) need you (see NEEDS YOU).')
-        : Theme.ok(
-            Theme.glyph.ok +
-              ' All good' +
-              (this.repairRows.some((r) => r.status === 'fixed') ? ': problems were fixed.' : '.'),
-          ),
-    };
+    return { exit: { kind: 'run', argv: ['repair'] } };
   }
 
   private async enable(): Promise<Outcome<string>> {

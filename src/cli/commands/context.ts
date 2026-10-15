@@ -53,17 +53,25 @@ export function createContext(packageRoot: string, entry: string, options: CliOp
   };
 }
 
+/** Reads the config again and takes the storage folder from it (after a migration or a move changed it). */
+export function refreshStorage(ctx: Context): void {
+  ctx.loaded = loadConfig(ctx.options.config);
+  ctx.storageRoot = expandPath(ctx.loaded.config.storage.root, ctx.loaded.base);
+  if (!insideSandbox()) ctx.dataPath = path.join(ctx.storageRoot, 'data', ctx.loaded.config.storage.dataName);
+}
+
 /** For commands that control the sandbox from your PC: inside the sandbox they make no sense. */
 export function requireOnPc(what: string): void {
   if (insideSandbox())
     fail(
       'You are inside the sandbox already, so "sandbox ' + what + '" has nothing to control.',
-      'Run it from a terminal on your PC.',
+      'Run it from a terminal on your PC. Inside the sandbox these work: sandbox status, sessions, config, data, db, doctor, logs.',
     );
 }
 
 export function requireRunning(hint = ''): void {
-  if (!isSandboxRunning()) fail('No Windows Sandbox is running.', hint || 'Start one with sandbox claude.');
+  if (!isSandboxRunning())
+    fail('No Windows Sandbox is running.', hint || 'Start one: sandbox start (no agent) or sandbox claude.');
 }
 
 /**

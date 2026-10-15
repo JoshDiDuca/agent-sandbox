@@ -15,9 +15,11 @@ import { accountsSuite } from './accounts.test.js';
 import { agentCommandsSuite } from './agent-commands.test.js';
 import { channelSuite } from './channel.test.js';
 import { cliSuite } from './cli.test.js';
+import { agentPathsSuite } from './agent-paths.test.js';
 import { cmdlineSuite } from './cmdline.test.js';
 import { configSuite } from './config.test.js';
 import { migrateSuite } from './migrate.test.js';
+import { storageSuite } from './storage.test.js';
 import { updateSuite } from './update.test.js';
 import { installSuite } from './install.test.js';
 import { sharedUseSuite } from './shared-use.test.js';
@@ -40,12 +42,14 @@ import { networkSuite } from './network.test.js';
 import { personalizationSuite } from './personalization.test.js';
 import { projectsSuite } from './projects.test.js';
 import { repairSuite } from './repair.test.js';
+import { healthSuite } from './health.test.js';
 import { repoGuardSuite } from './repo-guard.test.js';
 import { secretsSuite } from './secrets.test.js';
 import { setupSuite } from './setup.test.js';
 import { syncSuite } from './sync.test.js';
 import { testGuardSuite } from './test-guard.test.js';
 import { toolchainsSuite } from './toolchains.test.js';
+import { webSuite } from './web.test.js';
 import { workspaceSuite } from './workspace.test.js';
 import { workspaceViewSuite } from './workspace-view.test.js';
 import { liveNetworkSuite } from './live-network.test.js';
@@ -60,6 +64,7 @@ export const SUITES: Suite[] = [
   // settings and project files
   configSuite,
   migrateSuite,
+  storageSuite,
   updateSuite,
   updateServiceSuite,
   installSuite,
@@ -85,6 +90,7 @@ export const SUITES: Suite[] = [
   repoGuardSuite,
   secretsSuite,
   hostileInputSuite,
+  webSuite,
   testGuardSuite,
   // pure helpers and the command line
   layoutSuite,
@@ -93,9 +99,11 @@ export const SUITES: Suite[] = [
   networkSuite,
   personalizationSuite,
   cmdlineSuite,
+  agentPathsSuite,
   setupSuite,
   dataSuite,
   repairSuite,
+  healthSuite,
   cliSuite,
   menuSuite,
   agentCommandsSuite,
@@ -229,9 +237,12 @@ export async function selfTest(packageRoot: string, suiteNames: string[] = []): 
     home: process.env.AGENT_SANDBOX_HOME,
     machine: process.env.AGENT_SANDBOX_MACHINE_HOME,
     windir: process.env.WINDIR,
+    localAppData: process.env.LOCALAPPDATA,
   };
   process.env.AGENT_SANDBOX_HOME = path.join(t.temp, 'user-home');
   process.env.AGENT_SANDBOX_MACHINE_HOME = path.join(t.temp, 'machine-home');
+  // The old storage folder (%LOCALAPPDATA%\AgentSandbox) of this PC must not change what the migrations decide.
+  process.env.LOCALAPPDATA = t.dir('local-app-data');
   const results: Result[] = [];
   try {
     const f = createFixtures(t);
@@ -243,6 +254,8 @@ export async function selfTest(packageRoot: string, suiteNames: string[] = []): 
     else process.env.AGENT_SANDBOX_HOME = saved.home;
     if (saved.machine === undefined) delete process.env.AGENT_SANDBOX_MACHINE_HOME;
     else process.env.AGENT_SANDBOX_MACHINE_HOME = saved.machine;
+    if (saved.localAppData === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = saved.localAppData;
     if (saved.windir === undefined) delete process.env.WINDIR;
     else process.env.WINDIR = saved.windir;
     t.dispose();

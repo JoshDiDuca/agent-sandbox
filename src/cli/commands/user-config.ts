@@ -24,7 +24,11 @@ export function setSetting(ctx: Context, key: string[], value: unknown): void {
   const file = configFile(ctx);
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const result = editConfigText(text, key, value);
-  if ('problems' in result) fail('Could not change ' + key.join('.') + ':\n  ' + result.problems.join('\n  '));
+  if ('problems' in result)
+    fail(
+      'Could not change ' + key.join('.') + ':\n  ' + result.problems.join('\n  '),
+      'Nothing was written. Fix the value, or the settings file: ' + file,
+    );
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, result.text, 'utf8');
 }

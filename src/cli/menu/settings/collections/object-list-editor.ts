@@ -10,10 +10,13 @@ export class ObjectListEditor extends CollectionEditor<Record<string, unknown>[]
     return this.value.map((v, i) => ({ value: String(i), label: summary(v) }));
   }
   protected async add(): Promise<void> {
-    const edited = await new ObjectEditor(this.app, [...this.path, 'New'], this.node.element!, this.editor).run(
-      this.node.element!.initial() as Record<string, unknown>,
-      true,
-    );
+    const edited = await new ObjectEditor(
+      this.app,
+      [...this.path, 'New'],
+      this.node.element!,
+      this.editor,
+      this.key,
+    ).run(this.node.element!.initial() as Record<string, unknown>, true);
     if (edited) this.value.push(edited.value as Record<string, unknown>);
   }
   protected async open(id: string): Promise<void> {
@@ -22,6 +25,7 @@ export class ObjectListEditor extends CollectionEditor<Record<string, unknown>[]
       [...this.path, summary(this.value[Number(id)])],
       this.node.element!,
       this.editor,
+      this.key,
     ).run(this.value[Number(id)]);
     if (edited) this.value[Number(id)] = edited.value as Record<string, unknown>;
   }

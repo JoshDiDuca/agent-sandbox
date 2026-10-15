@@ -1,7 +1,8 @@
-// The menu's shell: tabs across the top (1-7), one page per tab, and the one rule for unsaved changes (Ctrl+S saves
-// them all; leaving asks Save / Discard / Cancel). A page that needs the terminal (attach, a log, a start) ends the
-// shell with what to run; the menu comes back afterwards.
-import type { App, FrameParts, Key, Screen, Size, Step, TabsState } from '../tui/index.js';
+// The menu's shell: the sections down the left (1-7, the open one shows its categories), one page per section, and the
+// one rule for unsaved changes (Ctrl+S saves them all; leaving asks Save / Discard / Cancel). The keyboard is either in
+// the list or in the navigation: Left or Esc in the list goes to the navigation, Right or Enter comes back. A page that
+// needs the terminal (attach, a log, a start) ends the shell with what to run; the menu comes back afterwards.
+import type { App, Category, FrameParts, Key, KeyHint, NavState, Screen, Size, Step } from '../tui/index.js';
 import { Theme } from '../tui/index.js';
 import type { Draft, DraftResult } from './settings/draft.js';
 
@@ -13,24 +14,48 @@ export type ShellExit =
   /** Show the end of a log file on the normal screen. */
   | { kind: 'view'; file: string };
 
-/** One tab. */
+/** Which section and category the menu shows. */
+export interface MenuView {
+  readonly section: number;
+  readonly category: string | undefined;
+}
+
+/** One section of the menu. */
 export interface Page {
   readonly label: string;
-  /** This page stages changes in the Draft (its tab is marked while something is unsaved). */
+  /** This page stages changes in the Draft (its section is marked while something is unsaved). */
   readonly stages: boolean;
-  /** Typing goes into a search box: digits are text, not tab numbers. */
+  /** Typing goes into a search box: digits are text, not section numbers. */
   readonly capturing: boolean;
-  /** The tab was opened (or the shell came back from a command): load what it shows again. */
+  /** The categories listed under the section while it is open (none: the section is one list). */
+  categories(): readonly Category[];
+  /** The id of the open category. */
+  readonly category: string | undefined;
+  /** Opens a category (the navigation moved onto it). */
+  selectCategory(id: string): Promise<void>;
+  /** Whether the list has the keyboard (its highlight is softer while the navigation has it). */
+  setFocus(list: boolean): void;
+  /** The section was opened (or the shell came back from a command): load what it shows again. */
   open(): Promise<void>;
   render(size: Size): FrameParts;
+  /** A `quit` from the page means "Esc with nothing left to close": the shell moves to the navigation. */
   handle(key: Key): Promise<Step<ShellExit>> | Step<ShellExit>;
 }
 
-/** The tab names, in order. Number keys 1-7 open them. */
-export const TAB_LABELS = ['Start', 'Sessions', 'Sandbox', 'Apps', 'Settings', 'Accounts', 'Maintenance'] as const;
+/** The section names, in order. Number keys 1-7 open them. */
+export const SECTION_LABELS = ['Agents', 'Sessions', 'Sandbox', 'Apps', 'Settings', 'Accounts', 'Maintenance'] as const;
+
+const NAV_KEYS: KeyHint[] = [
+  ['↑↓', 'move', 1],
+  ['→', 'open', 1],
+  ['1-7', 'jump', 4],
+  ['/', 'search', 6],
+  ['esc', 'quit', 0],
+];
 
 export class Shell implements Screen<ShellExit> {
   private active = 0;
+  private focus: 'nav' | 'list' = 'list';
   private notice: string | undefined;
 
   constructor(
@@ -40,28 +65,58 @@ export class Shell implements Screen<ShellExit> {
     /** Told after a save (the menu applies settings that act on this PC) and returns a note to add. */
     private readonly afterSave: (result: DraftResult) => string | undefined = () => undefined,
   ) {
-    app.tabs = () => this.tabs();
+    app.nav = () => this.nav();
   }
 
   get page(): Page {
     return this.pages[this.active];
   }
 
-  tabs(): TabsState {
+  /** Which pane has the keyboard. */
+  get focused(): 'nav' | 'list' {
+    return this.focus;
+  }
+
+  nav(): NavState {
     const unsaved = this.draft.count() > 0;
+    const current = this.page.category;
     return {
-      tabs: this.pages.map((p) => ({ label: p.label, marked: p.stages && unsaved })),
+      sections: this.pages.map((p, i) => ({
+        label: p.label,
+        marked: p.stages && unsaved,
+        categories: i === this.active ? p.categories().map((c) => ({ label: c.label, current: c.id === current })) : [],
+      })),
       active: this.active,
+      focused: this.focus === 'nav',
     };
   }
 
-  /** Opens a tab by index (loads its data). */
+  /** The section and category that are open (the menu opens on them again later in the same run). */
+  view(): MenuView {
+    return { section: this.active, category: this.page.category };
+  }
+
+  /** Opens the section and category a view names (a category that is gone is ignored). */
+  async restore(view: MenuView): Promise<void> {
+    await this.openTab(view.section);
+    if (view.category && this.page.categories().some((c) => c.id === view.category))
+      await this.page.selectCategory(view.category);
+  }
+
+  /** Opens a section by index (loads its data). */
   async openTab(index: number): Promise<void> {
     this.active = Math.max(0, Math.min(this.pages.length - 1, index));
+    this.page.setFocus(this.focus === 'list');
     await this.page.open();
   }
 
-  /** Loads the open tab again (after a command ran). */
+  /** Puts the keyboard in the navigation or in the list. */
+  setFocus(focus: 'nav' | 'list'): void {
+    this.focus = focus;
+    this.page.setFocus(focus === 'list');
+  }
+
+  /** Loads the open section again (after a command ran). */
   reload(): Promise<void> {
     return this.page.open();
   }
@@ -70,11 +125,14 @@ export class Shell implements Screen<ShellExit> {
     const parts = this.page.render(size);
     const unsaved = this.draft.count();
     const status = parts.status ?? this.app.status();
+    const category = this.page.categories().find((c) => c.id === this.page.category);
+    const keys = this.focus === 'nav' ? NAV_KEYS : parts.keys;
     return {
       ...parts,
+      path: parts.path.length ? parts.path : [this.page.label, ...(category ? [category.label] : [])],
       status: unsaved ? Theme.changed('unsaved: ' + unsaved) + '   ' + status : status,
       notice: this.notice ?? parts.notice,
-      keys: unsaved ? [['ctrl+s', 'save (' + unsaved + ')', 0], ...parts.keys] : parts.keys,
+      keys: unsaved ? [['ctrl+s', 'save (' + unsaved + ')', 0], ...keys] : keys,
     };
   }
 
@@ -106,9 +164,50 @@ export class Shell implements Screen<ShellExit> {
       if (index < this.pages.length && index !== this.active) await this.openTab(index);
       return;
     }
+    if (this.focus === 'nav') return this.navKey(key);
     const step = await this.page.handle(key);
-    if (step && step.done.kind === 'quit') return this.leave();
+    if (step && step.done.kind === 'quit') {
+      // Esc (or Left) in the list: nothing left to close there, so go to the navigation.
+      this.setFocus('nav');
+      return;
+    }
     return step;
+  }
+
+  /** A key while the navigation has the keyboard. */
+  private async navKey(key: Key): Promise<Step<ShellExit>> {
+    if (key.name === 'up' || key.name === 'down') {
+      await this.move(key.name === 'up' ? -1 : 1);
+      return;
+    }
+    if (key.name === 'right' || key.name === 'return') {
+      this.setFocus('list');
+      return;
+    }
+    if (key.name === 'escape') return this.leave();
+    // The scopes of Settings and Apps switch from anywhere; "/" starts a search in the list.
+    if (key.name === 'tab') return this.page.handle(key);
+    if (key.text === '/') {
+      this.setFocus('list');
+      return this.page.handle(key);
+    }
+    return;
+  }
+
+  /** One stop up or down the tree: the categories of the open section, then the next section. */
+  private async move(by: 1 | -1): Promise<void> {
+    const categories = this.page.categories();
+    const at = categories.findIndex((c) => c.id === this.page.category);
+    const next = at + by;
+    if (categories.length && next >= 0 && next < categories.length) {
+      await this.page.selectCategory(categories[next].id);
+      return;
+    }
+    const section = this.active + by;
+    if (section < 0 || section >= this.pages.length) return;
+    await this.openTab(section);
+    const entered = this.page.categories();
+    if (entered.length) await this.page.selectCategory(entered[by === 1 ? 0 : entered.length - 1].id);
   }
 
   /** Leaving with unsaved changes asks what to do with them. */

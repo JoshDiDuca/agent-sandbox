@@ -107,10 +107,11 @@ export interface Prepared {
 export async function prepare(ctx: Context, run: ResolvedRun): Promise<Prepared> {
   const { options, dataPath, storageRoot } = ctx;
   const { config } = run;
-  const accounts = new AccountStore(storageRoot);
+  const accounts = new AccountStore(storageRoot, config.claudeProfile.sharePluginsAcrossAccounts);
   const account = options.account ?? accounts.defaultName();
   if (account && run.harnessName === 'claude' && account !== accounts.activeFor(dataPath))
     accounts.activate(dataPath, account);
+  else if (run.harnessName === 'claude') accounts.syncPlugins(dataPath);
   const terminal = config.provisioning.terminal.enabled
     ? await ensureTerminal(dataPath, config.provisioning.refresh, { pwsh: config.toolchains.pwsh.enabled !== false })
     : { exe: null, message: 'disabled' };

@@ -20,7 +20,8 @@ export {
   type UpdateTaskPort,
 } from './update-service.js';
 export { LogsService, type LogFile } from './logs-service.js';
-export { HealthService, runChecks, type SetupReport } from './health-service.js';
+export { WebService, webSession } from './web-service.js';
+export { HealthService, type SetupReport } from './health-service.js';
 export { ProjectsService, type ProjectRow, type ProjectSettings, type ProjectsListing } from './projects-service.js';
 export {
   SandboxService,

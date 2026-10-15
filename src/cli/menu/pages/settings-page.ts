@@ -1,9 +1,10 @@
-// Tab 5: every setting, for all projects or just this project (two scopes), grouped into categories on the left and
+// Section 5: every setting, for all projects or just this project (two scopes), grouped into categories on the left and
 // searchable, with each value, its default and its description. Changes are staged in the Draft (marked *) and
 // written with Ctrl+S; Enter edits, r resets to the default, z undoes an unsaved change.
 import _ from 'lodash';
 import { NEVER_LOOSER } from '../../../core/local-config/index.js';
 import type { Config } from '../../../core/types.js';
+import type { Context } from '../../commands/context.js';
 import { errMsg } from '../../../core/util/index.js';
 import {
   Text,
@@ -14,6 +15,7 @@ import {
   type ListOptions,
   type ListResult,
 } from '../../tui/index.js';
+import { dataFolderRow, DataFolderFlow } from '../data-folder.js';
 import { CATEGORIES, categoryOf, nameOf } from '../settings/categories.js';
 import type { ConfigFile } from '../settings/config-file.js';
 import type { Draft } from '../settings/draft.js';
@@ -137,11 +139,25 @@ function item(
   };
 }
 
-/** The list for the settings tab. Pure (reads the files it is given). */
-export function settingsOptions(files: Record<Scope, ConfigFile>, scope: Scope, draft: Draft): ListOptions<string> {
+/** The row in General that opens the data folder flow (your own settings only). */
+export const DATA_FOLDER = '@data-folder';
+
+/** The list for the settings section. Pure (reads the files it is given). `extra` are rows that are not settings. */
+export function settingsOptions(
+  files: Record<Scope, ConfigFile>,
+  scope: Scope,
+  draft: Draft,
+  extra: readonly ListItem<string>[] = [],
+): ListOptions<string> {
   const file = files[scope];
   const config = file.userConfig();
-  const settings = settingsOf(file);
+  // The Data folder row stands in for the storage folder setting (changing it moves the data, which is asked about).
+  const hideRoot = !file.isProject && extra.some((e) => e.value === DATA_FOLDER);
+  const settings = settingsOf(file).filter((s) => !(hideRoot && s.key.join('.') === 'storage.root'));
+  const ids = (test: (s: Setting) => boolean): Set<string> =>
+    new Set(settings.filter(test).map((s) => s.key.join('.')));
+  const set = ids((s) => written(file, draft, s.key) !== undefined);
+  const unsaved = ids((s) => draft.has(file, s.key));
   const categories: Category[] = CATEGORIES.filter((c) => settings.some((s) => s.category === c.id)).map((c) => ({
     id: c.id,
     label: c.label,
@@ -151,14 +167,13 @@ export function settingsOptions(files: Record<Scope, ConfigFile>, scope: Scope, 
     path: [],
     status: scopeStatus(file),
     tabs: { items: SCOPES.map((x) => x.tab), active: SCOPES.findIndex((x) => x.scope === scope) },
-    items: settings.map((s) => item(s, files, scope, draft, config)),
+    items: [...settings.map((s) => item(s, files, scope, draft, config)), ...(file.isProject ? [] : extra)],
     categories,
     actions: [
-      { key: 'r', label: file.isProject ? 'remove' : 'reset' },
-      { key: 'z', label: 'undo' },
+      { key: 'r', label: file.isProject ? 'remove' : 'reset to default', applies: (id) => set.has(id) },
+      { key: 'z', label: 'undo', applies: (id) => unsaved.has(id) },
     ],
-    enterLabel: 'edit',
-    escapeLabel: 'quit',
+    enterLabel: (_category, id) => (id === DATA_FOLDER ? 'change' : 'edit'),
   };
 }
 
@@ -172,6 +187,7 @@ export class SettingsPage extends ListPage<string> {
     app: App,
     private readonly files: Record<Scope, ConfigFile>,
     private readonly draft: Draft,
+    private readonly ctx: Context,
   ) {
     super(app);
     this.editor = new ValueEditor(app, {
@@ -191,7 +207,8 @@ export class SettingsPage extends ListPage<string> {
   }
 
   protected options(): ListOptions<string> {
-    return settingsOptions(this.files, this.scope, this.draft);
+    const row = dataFolderRow(this.ctx);
+    return settingsOptions(this.files, this.scope, this.draft, [{ value: DATA_FOLDER, category: 'general', ...row }]);
   }
 
   /** Stages a value; your own file never keeps a line that only repeats the default. */
@@ -214,6 +231,11 @@ export class SettingsPage extends ListPage<string> {
     }
     if (result.kind !== 'pick' && result.kind !== 'action') return {};
     if (result.value === undefined) return {};
+    if (result.value === DATA_FOLDER) {
+      if (result.kind !== 'pick') return {};
+      const exit = await new DataFolderFlow(this.app, this.ctx).run();
+      return exit ? { exit } : { reload: true };
+    }
     const setting = settingsOf(this.file).find((s) => s.key.join('.') === result.value);
     if (!setting) return {};
     if (result.kind === 'action') {
@@ -224,8 +246,6 @@ export class SettingsPage extends ListPage<string> {
       this.stage(setting.key, undefined);
       return {};
     }
-    if (result.value === 'apps.install')
-      return { notice: Theme.muted('Choose apps on the Apps tab (press 4); the list is picked there, not typed.') };
     try {
       const config = this.file.userConfig();
       const current = this.file.isProject

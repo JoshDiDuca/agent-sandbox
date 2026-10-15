@@ -1,6 +1,6 @@
-// The interactive menu (`sandbox` with no arguments): a full-screen app with seven tabs (Start, Sessions, Sandbox,
-// Apps, Settings, Accounts, Maintenance). The tabs are real screens fed by the services; only what needs the terminal
-// (attach, a start, a log) leaves the menu for a moment, one keypress from its screen.
+// The interactive menu (`sandbox` with no arguments): a full-screen app with seven sections down the left (Agents,
+// Sessions, Sandbox, Apps, Settings, Accounts, Maintenance). The sections are real screens fed by the services; only
+// what needs the terminal (attach, a start, a log) leaves the menu for a moment, one keypress from its screen.
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from '../../core/config/index.js';
@@ -14,15 +14,18 @@ import { commandSpec } from '../manifest.js';
 import { AgentCommandsService, LogsService } from '../services/index.js';
 import { App, ExitRequested, Frame, Text, Theme } from '../tui/index.js';
 import { AccountsPage } from './pages/accounts-page.js';
+import { AgentsPage } from './pages/agents-page.js';
 import { AppsPage } from './pages/apps-page.js';
 import { MaintenancePage } from './pages/maintenance-page.js';
 import { SandboxPage } from './pages/sandbox-page.js';
 import { SessionsPage } from './pages/sessions-page.js';
 import { SettingsPage } from './pages/settings-page.js';
-import { StartPage } from './pages/start-page.js';
 import { ConfigFile } from './settings/config-file.js';
 import { Draft, type DraftResult } from './settings/draft.js';
-import { Shell } from './shell.js';
+import { Shell, type MenuView } from './shell.js';
+
+/** Where the menu was last left in this run: it opens there again (a new run opens on Agents). */
+let lastView: MenuView | undefined;
 
 export class Menu {
   private readonly app = new App();
@@ -63,7 +66,7 @@ export class Menu {
     );
   }
 
-  /** The tabs, in order. */
+  /** The sections, in order. */
   private shell(): Shell {
     const files = {
       user: ConfigFile.user(this.ctx.loaded.configPath),
@@ -74,11 +77,11 @@ export class Menu {
     return new Shell(
       app,
       [
-        new StartPage(app, ctx),
+        new AgentsPage(app, ctx, files.user, draft),
         new SessionsPage(app, ctx),
         new SandboxPage(app, ctx),
         new AppsPage(app, files, draft, ctx.dataPath),
-        new SettingsPage(app, files, draft),
+        new SettingsPage(app, files, draft, ctx),
         new AccountsPage(app, ctx),
         new MaintenancePage(app, ctx),
       ],
@@ -95,9 +98,10 @@ export class Menu {
     }
     try {
       const shell = this.shell();
-      await shell.openTab(0);
+      await shell.restore(lastView ?? { section: 0, category: undefined });
       for (;;) {
         const exit = await this.app.show(shell);
+        lastView = shell.view();
         if (exit.kind === 'quit') return 0;
         if (exit.kind === 'view') await this.view(exit.file);
         else {

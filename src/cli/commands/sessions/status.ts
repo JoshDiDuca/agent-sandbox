@@ -1,4 +1,3 @@
-import _ from 'lodash';
 import { safeText } from '../../../core/util/index.js';
 import type { RegistryEntry } from '../../../host/projects/index.js';
 import { printJson, table, ago, c, shortenMiddle, termWidth } from '../../output/index.js';
@@ -38,6 +37,13 @@ function printProject(p: ProjectInfo): void {
   for (const f of p.repoGuard) console.log('      ' + c.yellow('guard: ' + f));
 }
 
+/** "pong (2 session(s) running)" from the helper in the sandbox, in plain words. */
+export function helperText(answer: string): string {
+  const sessions = /^pong \((\d+) session/.exec(answer);
+  if (!sessions) return answer === '-' ? '-' : safeText(answer);
+  return 'responding, ' + sessions[1] + (sessions[1] === '1' ? ' session' : ' sessions') + ' running';
+}
+
 export async function status(asked: Context): Promise<number> {
   // Another user's sandbox: shared, it is shown from their folders; not shared, only whose it is.
   const view = lookAtSandbox(asked);
@@ -70,18 +76,35 @@ export async function status(asked: Context): Promise<number> {
     repoGuard: report.repoGuard,
   };
   if (printJson(ctx, info)) return 0;
-  const yesNo = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v ?? '-'));
+  const sb = info.sandbox;
   if (view.line) console.log(c.bold(view.line) + c.dim('. Its window is on their desktop; use its agents here.'));
-  table(Object.entries(info.sandbox).map(([k, v]) => [_.startCase(k), safeText(yesNo(v))]));
+  table([
+    ...(ctx.borrowed ? [['Started by', safeText(ctx.borrowed.user)]] : []),
+    ['Running', sb.running ? 'yes' : 'no'],
+    ...(sb.running
+      ? [
+          ['Phase', safeText(sb.phase ?? '-')],
+          ['Message', safeText(sb.message ?? '-')],
+          ['Window', sb.headless ? 'hidden (sandbox show opens it)' : 'shown'],
+          ['Uptime', sb.uptime ?? '-'],
+          ['Helper', helperText(sb.daemon)],
+        ]
+      : []),
+    ['Account', sb.account ? safeText(sb.account) : 'none selected (sandbox account use)'],
+    ['Background sync', sb.syncWatcher ? 'on' : 'off'],
+  ]);
   if (!state.running) return 0;
-  console.log(
-    '\n' +
-      c.bold('Projects') +
-      c.dim('  (* = this folder: ' + info.here.folder + (info.here.project ? '' : ', not in this sandbox') + ')'),
-  );
+  console.log('\n' + c.bold('Projects'));
   for (const p of info.projects) printProject(p);
   for (const r of info.roots)
     console.log('  root  ' + r.host + '  ->  ' + r.guest + c.dim('  (every project in it opens without a restart)'));
+  console.log(
+    c.dim(
+      info.projects.some((p) => p.here)
+        ? '* = the project of this folder'
+        : info.here.folder + ' is not in this sandbox (start it here: sandbox claude)',
+    ),
+  );
   for (const s of info.otherSessions) console.log('  session ' + s.id + '  ' + s.harness + '  ' + s.cwd);
   const findings = info.repoGuard.findings;
   console.log(

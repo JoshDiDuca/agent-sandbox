@@ -1,16 +1,68 @@
-// The menu's pure parts: the tab bar and key bar at every width, the dialog box, the Draft of unsaved changes, and
-// the tab pages' lists. With MENU_SCREENS_OUT set it also writes every screen as text there, for review.
+// The menu's pure parts: the navigation on the left and the key bar at every width, the shell's keys, the dialog
+// box, the Draft of unsaved changes, and the sections' lists. With MENU_SCREENS_OUT set it also writes every screen as
+// text there, for review.
 import fs from 'node:fs';
 import { ConfigFile } from '../cli/menu/settings/config-file.js';
 import { Draft } from '../cli/menu/settings/draft.js';
-import { hostAgentsToShow, startArgv } from '../cli/menu/pages/start-page.js';
-import { TAB_LABELS } from '../cli/menu/shell.js';
+import { z } from 'zod';
+import {
+  AddAgent,
+  agentNameProblem,
+  commandFromPackage,
+  makeDefaultAgent,
+  newAgent,
+  removeAgent,
+} from '../cli/menu/add-agent.js';
+import { APP_GROUPS, AppsModel } from '../cli/menu/apps.js';
+import { argPathKind, optionLabel, optionPathKind, plainDescription } from '../cli/menu/command-fields.js';
+import { CommandForm } from '../cli/menu/command-form.js';
+import { COMMANDS, commandSpec } from '../cli/manifest.js';
+import { accountsOptions } from '../cli/menu/pages/accounts-page.js';
+import {
+  addedAgents,
+  agentActions,
+  agentCategories,
+  agentsOptions,
+  hostAgentsToShow,
+  startArgv,
+  type AgentsModel,
+} from '../cli/menu/pages/agents-page.js';
+import { ListPage, type Outcome } from '../cli/menu/pages/list-page.js';
+import { sandboxOptions } from '../cli/menu/pages/sandbox-page.js';
+import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
+import { pathKindOf } from '../cli/menu/settings/path-kind.js';
+import { SchemaNode } from '../cli/menu/settings/schema-node.js';
+import { numberProblem, ValueEditor } from '../cli/menu/settings/value-editor.js';
+import { APP_CATEGORIES } from '../shared/apps/index.js';
+import { settingsOf, settingsOptions } from '../cli/menu/pages/settings-page.js';
+import { CATEGORIES, SETTINGS_ELSEWHERE } from '../cli/menu/settings/index.js';
+import { SECTION_LABELS, Shell, type Page, type ShellExit } from '../cli/menu/shell.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { HarnessSchema } from '../core/schema/index.js';
 import { profileLinkPairs } from '../shared/paths/index.js';
 import { AccountsService, parseDatabaseList } from '../cli/services/index.js';
-import { dialogBox, KeyBar, overlayBox, TabBar, Text, type KeyHint } from '../cli/tui/index.js';
-import { renderScreens } from './menu-screens.js';
+import {
+  App,
+  dialogBox,
+  Frame,
+  KeyBar,
+  ListScreen,
+  overlayBox,
+  SideNav,
+  Text,
+  type Category,
+  type FrameParts,
+  type Key,
+  type KeyHint,
+  type ListItem,
+  type ListOptions,
+  type ListResult,
+  type NavState,
+  type PathPickerOptions,
+  type Step,
+  type TextOptions,
+} from '../cli/tui/index.js';
+import { renderScreens, SIZES } from './menu-screens.js';
 import type { Suite } from './support/suite.js';
 
 const WIDTHS = [120, 80, 40];
@@ -19,17 +71,8 @@ export const menuSuite: Suite = {
   name: 'menu',
   title: 'menu tabs, key bar, dialogs and unsaved changes',
   run: async (t) => {
-    t.section('tab bar and key bar');
-    const tabs = TAB_LABELS.map((label) => ({ label }));
-    const tooWide: string[] = [];
-    for (const width of WIDTHS)
-      for (const active of [0, 3, 6]) {
-        const line = TabBar.render(tabs, active, width);
-        if (Text.width(line) > width || !Text.strip(line).includes(TAB_LABELS[active]))
-          tooWide.push(width + '/' + active);
-      }
-    t.equal(tooWide, [], 'the tab bar fits at every width and names the open tab');
-    const keys: KeyHint[] = [
+    t.section('key bar');
+    const hints: KeyHint[] = [
       ['ctrl+s', 'save (2)', 0],
       ['↵', 'edit', 1],
       ['r', 'reset', 2],
@@ -38,13 +81,732 @@ export const menuSuite: Suite = {
       ['/', 'search', 6],
       ['esc', 'quit', 0],
     ];
-    const bar = (width: number): string => Text.strip(KeyBar.render(keys, width));
+    const bar = (width: number): string => Text.strip(KeyBar.render(hints, width));
     t.check(
       WIDTHS.every((w) => Text.width(bar(w)) <= w && bar(w).includes('quit') && bar(w).includes('save (2)')) &&
         !bar(60).includes('search') &&
         bar(60).includes('edit') &&
         bar(200).includes('search'),
       'the key bar fits, keeps save and the way out, and drops the least important keys first',
+    );
+
+    t.section('navigation on the left');
+    const navState = (active: number, focused: boolean, dimmed = false): NavState => ({
+      sections: SECTION_LABELS.map((label, i) => ({
+        label,
+        marked: label === 'Settings',
+        categories:
+          i === active
+            ? ['General', 'Languages & tools', 'Network'].map((l, c) => ({ label: l, current: c === 1 }))
+            : [],
+      })),
+      active,
+      focused,
+      dimmed,
+    });
+    const navOdd: string[] = [];
+    for (const width of [40, 79, 80, 120, 200])
+      for (const height of [8, 18, 54])
+        for (const focused of [true, false]) {
+          const lines = SideNav.render(navState(4, focused), width, height);
+          if (lines.length !== height || lines.some((l) => Text.width(l) !== SideNav.width(width)))
+            navOdd.push(width + 'x' + height);
+          if (!lines.some((l) => Text.strip(l).includes(width < 80 ? '●' : 'Languages')))
+            navOdd.push('hidden ' + width + 'x' + height);
+        }
+    t.equal(navOdd, [], 'the navigation has the width and height asked for, and always shows the open category');
+    const wide = SideNav.render(navState(4, true), 100, 20).map((l) => Text.strip(l).trimEnd());
+    const slim = SideNav.render(navState(4, true), 60, 20).map((l) => Text.strip(l).trimEnd());
+    t.check(
+      wide[0].includes('1 Agents') &&
+        wide[4].startsWith('▾5 Settings') &&
+        wide[4].endsWith('✎') &&
+        wide[5].includes('├ General') &&
+        wide[6].includes('› Languages & tools') &&
+        wide[7].includes('└ Network') &&
+        wide[8].includes('6 Accounts'),
+      'wide: the sections are numbered, the open one is a tree, the open category has a marker, unsaved sections a mark',
+      wide.slice(0, 9).join('|'),
+    );
+    t.check(
+      !slim.join('').includes('Agents') && slim[0].includes('1') && slim[4].startsWith('▾5') && slim[6].includes('●'),
+      'narrow (under 80 columns): numbers only; the open section keeps dots for its categories',
+      slim.slice(0, 9).join('|'),
+    );
+    const bodyOdd: string[] = [];
+    for (const size of [
+      { width: 80, height: 24 },
+      { width: 200, height: 60 },
+    ]) {
+      const nav = navState(4, true);
+      const row = 'x'.repeat(Frame.bodyWidth(size.width, nav) - 1);
+      const body = Array.from({ length: Frame.bodyHeight(size.height) }, () => row);
+      const rows = Frame.render({ path: ['Settings'], body, keys: [['esc', 'quit', 0]], nav }, size.width, size.height);
+      if (rows.length !== size.height || rows.some((r) => Text.width(r) > size.width - 1))
+        bodyOdd.push(size.width + 'x' + size.height);
+    }
+    t.equal(bodyOdd, [], 'the frame fits the navigation, its divider and the body in the terminal');
+
+    t.section('navigation keys (Shell)');
+    const press = (name: string, text = ''): Key => ({ name, text, ctrl: false, meta: false, shift: false });
+    class FakePage implements Page {
+      readonly stages = false;
+      capturing = false;
+      category: string | undefined;
+      focusList = true;
+      constructor(
+        readonly label: string,
+        private readonly ids: string[],
+      ) {
+        this.category = ids[0];
+      }
+      categories(): Category[] {
+        return this.ids.map((id) => ({ id, label: id }));
+      }
+      selectCategory(id: string): Promise<void> {
+        this.category = id;
+        return Promise.resolve();
+      }
+      setFocus(list: boolean): void {
+        this.focusList = list;
+      }
+      open(): Promise<void> {
+        return Promise.resolve();
+      }
+      render(): FrameParts {
+        return { path: [], body: [], keys: [['↵', 'open']] };
+      }
+      handle(k: Key): Step<ShellExit> {
+        return k.name === 'escape' || k.name === 'left' ? { done: { kind: 'quit' } } : undefined;
+      }
+    }
+    const pages = [new FakePage('One', ['a', 'b']), new FakePage('Two', []), new FakePage('Three', ['c', 'd'])];
+    const shell = new Shell(new App(), pages, new Draft());
+    await shell.handle(press('escape'));
+    const toNav = shell.focused;
+    await shell.handle(press('down'));
+    const inOne = pages[0].category;
+    await shell.handle(press('down'));
+    const onTwo = [shell.page.label, shell.nav().sections[1].categories.length];
+    await shell.handle(press('down'));
+    const onThree = [shell.page.label, pages[2].category];
+    await shell.handle(press('up'));
+    await shell.handle(press('up'));
+    const backInOne = [shell.page.label, pages[0].category];
+    await shell.handle(press('right'));
+    const toList = [shell.focused, pages[0].focusList];
+    await shell.handle(press('left'));
+    await shell.handle(press('3', '3'));
+    pages[2].capturing = true;
+    await shell.handle(press('1', '1'));
+    t.equal(
+      [toNav, inOne, onTwo, onThree, backInOne, toList, shell.page.label, shell.focused],
+      ['nav', 'b', ['Two', 0], ['Three', 'c'], ['One', 'b'], ['list', true], 'Three', 'nav'],
+      'Esc/Left in the list go to the navigation; Up/Down walk categories then sections; Right returns; digits jump',
+    );
+    const keys = shell.render({ width: 100, height: 20 }).keys.map((k) => k[0] + ' ' + k[1]);
+    t.check(
+      keys.includes('→ open') && keys.includes('1-7 jump'),
+      'the key bar shows the navigation keys while it has the keyboard',
+      keys.join(', '),
+    );
+    const leave = await shell.handle(press('escape'));
+    t.check(leave !== undefined && leave.done.kind === 'quit', 'Esc in the navigation quits');
+    await shell.restore({ section: 2, category: 'd' });
+    t.equal(
+      [shell.page.label, pages[2].category, shell.view()],
+      ['Three', 'd', { section: 2, category: 'd' }],
+      'the menu can be put back on the section and category it was left on',
+    );
+
+    t.section('list categories driven from outside');
+    const catItems = (id: string, n: number): ListItem<string>[] =>
+      Array.from({ length: n }, (_, i) => ({ value: id + i, label: id + ' item ' + i, category: id }));
+    const catList: ListOptions<string> = {
+      path: [],
+      categories: [
+        { id: 'x', label: 'Ex' },
+        { id: 'y', label: 'Why' },
+      ],
+      items: [...catItems('x', 2), ...catItems('y', 3)],
+    };
+    const external = new ListScreen({ ...catList, categoryNav: 'external' });
+    const own = new ListScreen(catList);
+    const drawn = (l: ListScreen<string>): string => Text.strip(l.render({ width: 100, height: 20 }).body.join('\n'));
+    external.setCategory('y');
+    const left = external.handle(press('left'));
+    t.check(
+      external.currentCategory === 'y' &&
+        drawn(external).includes('y item 2') &&
+        !drawn(external).includes('x item 0') &&
+        !drawn(external).includes('Why') &&
+        drawn(own).includes('Why') &&
+        left !== undefined &&
+        left.done.kind === 'back',
+      'with external navigation the list shows no sidebar, switches category on request and hands Left back',
+    );
+
+    t.section('settings categories');
+    const settingsFile = ConfigFile.user(t.at('settings', 'config.json'));
+    const projectFile = ConfigFile.project(t.dir('settings', 'project'));
+    const listed = CATEGORIES.flatMap((c) => c.keys);
+    const topLevel = [...settingsFile.schema.children(), ...projectFile.schema.children()].map(([name]) => name);
+    t.check(
+      CATEGORIES.length <= 8 &&
+        topLevel.every((name) => listed.includes(name) || SETTINGS_ELSEWHERE.includes(name)) &&
+        listed.length === new Set(listed).size,
+      'settings are in at most 8 categories; each top-level setting is in exactly one, or covered by the Apps section',
+    );
+    const placed = settingsOf(settingsFile);
+    t.check(
+      CATEGORIES.every((c) => placed.some((s) => s.category === c.id)) &&
+        settingsFile.schema
+          .leaves()
+          .every((l) => SETTINGS_ELSEWHERE.includes(l.key[0]) || placed.some((s) => s.key[0] === l.key[0])),
+      'every category has settings, and every setting that is not an app choice appears in a list',
+    );
+    const row = { value: '@data-folder', label: 'Data folder', category: 'general' };
+    const files = { user: settingsFile, project: projectFile };
+    t.check(
+      settingsOptions(files, 'user', new Draft(), [row]).items.some((i) => i.value === row.value) &&
+        !settingsOptions(files, 'project', new Draft(), [row]).items.some((i) => i.value === row.value),
+      "the Data folder row is in your own settings, not in a project's",
+    );
+
+    t.section('agents');
+    const agentsModel: AgentsModel = {
+      folder: 'C:\\code\\api',
+      defaultAgent: 'codex',
+      agents: [
+        { name: 'claude', ready: true },
+        { name: 'codex', ready: false },
+      ],
+      last: ['launch'],
+      attach: false,
+      window: 'config',
+      hostAgents: [],
+    };
+    const agentList = agentsOptions(agentsModel, 'C:\\code\\api');
+    t.equal(
+      [
+        agentList.items.filter((i) => i.category === 'start').map((i) => i.value),
+        agentList.categories?.map((c) => c.id),
+      ],
+      [
+        ['repeat', 'agent:codex', 'agent:claude', 'add'],
+        ['start', 'options'],
+      ],
+      'Agents: Repeat last, the default agent first, the others, then Add an agent; no "On this PC" while it is empty',
+    );
+    t.check(
+      agentList.items
+        .filter((i) => i.category === 'options')
+        .map((i) => i.value)
+        .join() === 'opt:attach,opt:window,opt:folder,more,several,noagent' &&
+        agentsOptions({ ...agentsModel, hostAgents: ['claude'] }).items.some((i) => i.value === 'host:claude') &&
+        agentCategories({ ...agentsModel, hostAgents: ['claude'] }).some((c) => c.id === 'host'),
+      'Agents > Options holds the start options and the other ways to start; "On this PC" appears with entries',
+    );
+    t.equal(
+      [
+        agentNameProblem('my-agent', ['claude']),
+        agentNameProblem('Claude', ['claude']),
+        agentNameProblem('bad name', []),
+        agentNameProblem(' ', []),
+        commandFromPackage('@scope/my-cli@latest'),
+        commandFromPackage('aider-chat'),
+      ],
+      [
+        true,
+        'Claude is an agent already.',
+        'Use letters, numbers, - and _ only.',
+        'Type a name.',
+        'my-cli',
+        'aider-chat',
+      ],
+      'a new agent name is checked (letters, no duplicates); the command is guessed from the package',
+    );
+    const agentFile = ConfigFile.user(t.at('agents', 'config.json'));
+    t.write(agentFile.file, '{\n  // mine\n  "defaultHarness": "claude"\n}\n');
+    const typed = (...answers: string[]): App =>
+      ({
+        choose: () => Promise.resolve(answers.shift() === 'host' ? 'host' : 'npm'),
+        text: () => Promise.resolve(answers.shift()),
+        pickPath: () => Promise.resolve(answers.shift()),
+      }) as unknown as App;
+    const added = await new AddAgent(
+      typed('npm', 'my-agent', '@me/my-agent@latest', 'my-agent'),
+      agentFile,
+      new Draft(),
+      ['claude', 'codex'],
+    ).run();
+    const saved = agentFile.userConfig().harnesses['my-agent'];
+    t.check(
+      added?.name === 'my-agent' &&
+        added.saved &&
+        saved?.npmPackage === '@me/my-agent@latest' &&
+        saved.npmBin === 'my-agent' &&
+        agentFile.text().includes('// mine') &&
+        Boolean(agentFile.userConfig().harnesses.claude),
+      'Add an agent writes it to your config file (comments and the built-in agents stay)',
+      agentFile.text(),
+    );
+    const stagedAgents = new Draft();
+    stagedAgents.stage(agentFile, ['harnesses'], {
+      ...(agentFile.valueInFile(['harnesses']) as object),
+      other: newAgent('uv', 'tool', 'tool'),
+    });
+    const joined = await new AddAgent(typed('host', 'third', 'third.exe'), agentFile, stagedAgents, ['claude']).run();
+    t.check(
+      joined?.saved === false &&
+        Object.keys(stagedAgents.value(agentFile, ['harnesses']) as object).join() === 'my-agent,other,third',
+      'with unsaved changes to the agents, the new agent joins them instead of being written',
+    );
+
+    t.section('list keys follow the highlighted entry');
+    const keyList = new ListScreen<string>({
+      path: [],
+      items: [
+        { value: 'a', label: 'A' },
+        { value: 'b', label: 'B' },
+      ],
+      actions: [{ key: 'x', label: 'remove', applies: (v) => v === 'b' }],
+      enterLabel: (_c, v) => (v === 'a' ? '' : 'go'),
+    });
+    const barOf = (l: ListScreen<string>): string[] => l.render({ width: 100, height: 20 }).keys.map((k) => k[1]);
+    const onA = barOf(keyList);
+    const pressedOnA = keyList.handle(press('x', 'x'));
+    keyList.handle(press('down'));
+    const onB = barOf(keyList);
+    const pressedOnB = keyList.handle(press('x', 'x'));
+    t.check(
+      !onA.includes('remove') &&
+        !onA.includes('go') &&
+        pressedOnA === undefined &&
+        onB.includes('remove') &&
+        onB.includes('go') &&
+        pressedOnB !== undefined &&
+        pressedOnB.done.kind === 'action',
+      'a key (and Enter) shows in the key bar, and works, only while an entry it applies to is highlighted',
+    );
+    const long = new ListScreen<string>({
+      path: [],
+      items: Array.from({ length: 40 }, (_, i) => ({ value: 'v' + i, label: 'item ' + i })),
+    });
+    const longBody = Text.strip(long.render({ width: 100, height: 14 }).body.join('\n'));
+    t.check(longBody.includes('more') && longBody.includes('/ search'), 'a long list says how to search');
+    class OpenOn extends ListPage<string> {
+      readonly label = 'Open';
+      protected load(): Promise<void> {
+        return Promise.resolve();
+      }
+      protected options(): ListOptions<string> {
+        return {
+          path: [],
+          items: [
+            { value: 'a', label: 'Alpha' },
+            { value: 'b', label: 'Beta' },
+          ],
+        };
+      }
+      protected act(): Promise<Outcome<string>> {
+        return Promise.resolve({});
+      }
+      protected override initialFocus(): string {
+        return 'b';
+      }
+    }
+    const openOn = new OpenOn(new App());
+    await openOn.open();
+    const marked = openOn
+      .render({ width: 100, height: 12 })
+      .body.map((l) => Text.strip(l))
+      .find((l) => l.includes('›'));
+    t.check(marked?.includes('Beta') === true, 'a section opens with the cursor on the entry it asks for');
+
+    t.section('proper inputs');
+    const user2 = ConfigFile.user(t.at('inputs', 'config.json'));
+    const leaf = (...key: string[]): SchemaNode => {
+      let node: SchemaNode | undefined = user2.schema;
+      for (const k of key) node = node?.child(k);
+      if (!node) throw new Error('no setting ' + key.join('.'));
+      return node;
+    };
+    const port = new SchemaNode(z.number().int().min(1024).max(65535));
+    t.equal(
+      [
+        port.rangeText(),
+        numberProblem(port, '5000'),
+        numberProblem(port, '80'),
+        numberProblem(port, 'abc'),
+        numberProblem(port, '1.5'),
+        new SchemaNode(z.number().int().positive()).rangeText(),
+        new SchemaNode(z.number().int().min(2048)).rangeText(),
+      ],
+      [
+        '1024 to 65535',
+        true,
+        'Use 1024 to 65535.',
+        'Enter a number.',
+        'Enter a whole number.',
+        'more than 0',
+        'at least 2048',
+      ],
+      'a number is checked against the schema limits, with the range in the message',
+    );
+    interface Script {
+      text?: (string | undefined)[];
+      path?: (string | undefined)[];
+      choose?: unknown[];
+      list?: ListResult<string>[];
+    }
+    const fake = (
+      script: Script,
+    ): {
+      app: App;
+      text: TextOptions[];
+      path: PathPickerOptions[];
+      choose: { current: unknown; values: unknown[] }[];
+      list: ListOptions<string>[];
+    } => {
+      const seen = {
+        text: [] as TextOptions[],
+        path: [] as PathPickerOptions[],
+        choose: [] as { current: unknown; values: unknown[] }[],
+        list: [] as ListOptions<string>[],
+      };
+      const app = {
+        text: (o: TextOptions) => {
+          seen.text.push(o);
+          return Promise.resolve(script.text?.shift());
+        },
+        pickPath: (o: PathPickerOptions) => {
+          seen.path.push(o);
+          return Promise.resolve(script.path?.shift());
+        },
+        choose: (_p: string[], _i: string, choices: { value: unknown }[], current: unknown) => {
+          seen.choose.push({ current, values: choices.map((c) => c.value) });
+          return Promise.resolve(script.choose?.shift());
+        },
+        list: (o: ListOptions<string>) => {
+          seen.list.push(o);
+          return Promise.resolve(script.list?.shift() ?? { kind: 'back' as const });
+        },
+      } as unknown as App;
+      return { app, ...seen };
+    };
+    const flipped = await new ValueEditor(fake({}).app).edit(
+      ['S'],
+      ['sandbox', 'headless'],
+      leaf('sandbox', 'headless'),
+      false,
+    );
+    const choiceNode = user2.schema.leaves().find((l) => l.node.editor === 'choice');
+    const choiceFake = fake({ choose: [choiceNode?.node.choiceValues[0]] });
+    const chosenValue = choiceNode
+      ? await new ValueEditor(choiceFake.app).edit(
+          ['S'],
+          choiceNode.key,
+          choiceNode.node,
+          choiceNode.node.choiceValues[1],
+        )
+      : undefined;
+    t.check(
+      flipped?.value === true &&
+        choiceNode !== undefined &&
+        chosenValue?.value === choiceNode.node.choiceValues[0] &&
+        choiceFake.choose[0].current === choiceNode.node.choiceValues[1] &&
+        choiceFake.choose[0].values.length === choiceNode.node.choiceValues.length,
+      'an on/off setting flips; a choice setting offers its values with the current one marked',
+    );
+    const days = leaf('audit', 'days');
+    const numberFake = fake({ text: ['30'] });
+    const typedDays = await new ValueEditor(numberFake.app).edit(['S'], ['audit', 'days'], days, 7);
+    const numberOptions = numberFake.text[0];
+    t.check(
+      typedDays?.value === 30 &&
+        numberOptions.accept?.test('7') === true &&
+        numberOptions.accept?.test('a') === false &&
+        numberOptions.hint?.includes('1 to 365') === true &&
+        numberOptions.validate?.('400') === 'Use 1 to 365.' &&
+        numberOptions.validate?.('30') === true &&
+        numberOptions.initial === '7',
+      'a number setting takes digits only, shows its range, and refuses a value outside it as you type',
+    );
+    t.equal(
+      [
+        pathKindOf(['storage', 'root']),
+        pathKindOf(['projects', 'roots']),
+        pathKindOf(['mappings', 'host']),
+        pathKindOf(['claudeProfile', 'hostDir']),
+        pathKindOf(['claudeProfile', 'globalStateFile']),
+        pathKindOf(['sandbox', 'headless']),
+        pathKindOf(['defaultHarness']),
+      ],
+      ['dir', 'dir', 'dir', 'dir', 'file', undefined, undefined],
+      'folder and file settings are told apart from the rest',
+    );
+    const folderFake = fake({ path: ['C:\\Users\\me\\.claude'] });
+    const folderValue = await new ValueEditor(folderFake.app).edit(
+      ['S'],
+      ['claudeProfile', 'hostDir'],
+      leaf('claudeProfile', 'hostDir'),
+      'auto',
+    );
+    const fileFake = fake({ path: ['C:\\Users\\me\\.claude.json'] });
+    await new ValueEditor(fileFake.app).edit(
+      ['S'],
+      ['claudeProfile', 'globalStateFile'],
+      leaf('claudeProfile', 'globalStateFile'),
+      'auto',
+    );
+    t.check(
+      folderValue?.value === 'C:\\Users\\me\\.claude' &&
+        folderFake.path[0].files === false &&
+        folderFake.path[0].literals?.includes('auto') === true &&
+        folderFake.text.length === 0 &&
+        fileFake.path[0].files === true,
+      'a folder setting opens the path picker (a file setting a file picker); "auto" can still be typed',
+    );
+    const roots = leaf('projects', 'roots');
+    const listFake = fake({
+      path: ['C:\\Code', 'D:\\More'],
+      list: [
+        { kind: 'pick', value: '@add' },
+        { kind: 'pick', value: '@add' },
+        { kind: 'action', key: 'd', value: '0' },
+        { kind: 'back' },
+      ],
+    });
+    const rootsValue = await new ValueEditor(listFake.app).edit(['S'], ['projects', 'roots'], roots, []);
+    const keysOf = (o: ListOptions<string>, id: string): string[] =>
+      (typeof o.actions === 'function' ? o.actions(undefined) : (o.actions ?? []))
+        .filter((a) => !a.applies || a.applies(id))
+        .map((a) => a.key);
+    t.check(
+      JSON.stringify(rootsValue?.value) === '["D:\\\\More"]' &&
+        listFake.path.length === 2 &&
+        listFake.path.every((p) => p.files === false) &&
+        keysOf(listFake.list[0], '@add').length === 0 &&
+        keysOf(listFake.list[2], '0').join() === 'd,u,j',
+      'a folder list adds with the path picker and removes entries; reorder keys only appear on an entry',
+    );
+    const plainList = user2.schema.leaves().find((l) => l.node.editor === 'string-list' && !pathKindOf(l.key));
+    const moved = plainList
+      ? await new ValueEditor(
+          fake({
+            list: [
+              { kind: 'action', key: 'j', value: '0' },
+              { kind: 'action', key: 'd', value: '2' },
+              { kind: 'back' },
+            ],
+          }).app,
+        ).edit(['S'], plainList.key, plainList.node, ['a', 'b', 'c'])
+      : undefined;
+    t.equal(moved?.value, ['b', 'a'], 'list items move down and are removed (a, b, c: a down, then c removed)');
+    const envNode = user2.schema.leaves().find((l) => l.node.editor === 'string-map');
+    const envValue = envNode
+      ? await new ValueEditor(
+          fake({ text: ['FOO', 'bar'], list: [{ kind: 'pick', value: '@add' }, { kind: 'back' }] }).app,
+        ).edit(['S'], envNode.key, envNode.node, {})
+      : undefined;
+    t.equal(envValue?.value, { FOO: 'bar' }, 'a name-to-value setting is edited as names and values');
+
+    const mappingFake = fake({
+      path: ['C:\\data'],
+      list: [{ kind: 'pick', value: '@add' }, { kind: 'pick', value: 'host' }, { kind: 'back' }, { kind: 'back' }],
+    });
+    const mapped = await new ValueEditor(mappingFake.app).edit(['S'], ['mappings'], leaf('mappings'), []);
+    t.check(
+      JSON.stringify(mapped?.value) === '[{"host":"C:\\\\data","readOnly":false}]' &&
+        mappingFake.path.length === 1 &&
+        mappingFake.path[0].files === false,
+      'a field of a form inside a list (a mapped folder) is picked in the path picker too',
+      JSON.stringify(mapped),
+    );
+
+    t.section('command forms');
+    const formCtx = {
+      storageRoot: t.dir('forms', 'storage'),
+      dataPath: t.dir('forms', 'data'),
+      loaded: { config: structuredClone(DEFAULTS), configPath: null, base: t.temp },
+    } as unknown as ConstructorParameters<typeof CommandForm>[1];
+    const account = commandSpec('account')!;
+    const renameFake = fake({ list: [{ kind: 'pick', value: 'arg:action' }, { kind: 'back' }], choose: ['rename'] });
+    await new CommandForm(renameFake.app, formCtx, account).run();
+    const renameItems = renameFake.list[1].items;
+    t.check(
+      renameItems.some((i) => i.label === 'New name' && i.description === 'The new name') &&
+        !renameItems.some((i) => i.label === 'From host') &&
+        renameItems.every((i) => !i.label.startsWith('-') && !(i.description ?? '').startsWith('(')),
+      'a form filtered by action drops the "(rename)" prefix and the other actions\' options; no flag is a label',
+    );
+    t.check(
+      COMMANDS.every((c) => c.options.every((o) => !optionLabel(o).startsWith('-') && optionLabel(o).length > 2)) &&
+        plainDescription('(rename) the new name', ['rename', 'save']) === 'The new name' &&
+        plainDescription('(claude) use your profile', ['rename']) === 'For claude: use your profile' &&
+        plainDescription('stop here', []) === 'Stop here',
+      'every option has a plain label, and action prefixes read as plain descriptions',
+    );
+    const launch = commandSpec('launch')!;
+    const workspaceFake = fake({
+      list: [{ kind: 'pick', value: 'opt:--workspace' }, { kind: 'back' }],
+      path: ['C:\\work'],
+    });
+    await new CommandForm(workspaceFake.app, formCtx, launch).run();
+    t.check(
+      workspaceFake.path.length === 1 &&
+        workspaceFake.path[0].files === false &&
+        workspaceFake.text.length === 0 &&
+        (workspaceFake.list[1].items.find((i) => i.value === 'opt:--workspace')?.hint ?? '').includes('C:\\work'),
+      'a folder option (--workspace) is picked in the path picker',
+    );
+    const timeoutFake = fake({ list: [{ kind: 'pick', value: 'opt:--timeout' }, { kind: 'back' }], text: ['30'] });
+    await new CommandForm(timeoutFake.app, formCtx, commandSpec('exec')!).run();
+    const timeoutText = timeoutFake.text[0];
+    t.check(
+      timeoutText.accept?.test('x') === false &&
+        timeoutText.accept?.test('3') === true &&
+        timeoutText.hint?.includes('Default: 600') === true &&
+        typeof timeoutText.validate?.('0') === 'string',
+      'a number option takes digits only and shows its default',
+    );
+    const storageFake = fake({
+      list: [{ kind: 'pick', value: 'arg:action' }, { kind: 'pick', value: 'arg:folder' }, { kind: 'back' }],
+      choose: ['move'],
+      path: ['D:\\Data'],
+    });
+    await new CommandForm(storageFake.app, formCtx, commandSpec('storage')!).run();
+    t.check(
+      storageFake.path.length === 1 &&
+        (storageFake.list[2].items.find((i) => i.value === 'arg:folder')?.hint ?? '').includes('D:\\Data'),
+      'storage move takes its folder from the path picker',
+    );
+    const projectsFake = fake({
+      list: [{ kind: 'pick', value: 'arg:action' }, { kind: 'pick', value: 'arg:value' }, { kind: 'back' }],
+      choose: ['all', 'on'],
+    });
+    await new CommandForm(projectsFake.app, formCtx, commandSpec('projects')!).run();
+    t.check(
+      JSON.stringify(projectsFake.choose[1].values.slice(0, 2)) === '["on","off"]' &&
+        argPathKind({ name: 'folder', description: '', required: false }, 'storage', 'move') === 'dir' &&
+        optionPathKind({ flag: '--workspace', type: 'string', value: 'dir', description: '' }) === 'dir' &&
+        optionPathKind({ flag: '--script', type: 'list', value: 'file', description: '' }) === 'file' &&
+        optionPathKind({ flag: '--harness', type: 'string', value: 'name', description: '' }) === undefined,
+      'choices and paths are told apart: on/off for projects all, folders and files for the rest',
+    );
+
+    t.section('agents: make default and remove');
+    const actionModel: AgentsModel = {
+      folder: 'C:\\code\\api',
+      defaultAgent: 'claude',
+      agents: [
+        { name: 'claude', ready: true },
+        { name: 'codex', ready: false },
+        { name: 'mine', ready: false },
+      ],
+      last: undefined,
+      attach: false,
+      window: 'config',
+      hostAgents: [],
+      removable: addedAgents(['claude', 'codex', 'mine']),
+    };
+    const startActions = agentActions(actionModel);
+    const keyFor = (key: string, id: string): boolean =>
+      startActions.find((a) => a.key === key)?.applies?.(id) ?? false;
+    const actionList = agentsOptions(actionModel, 'C:\\code\\api');
+    t.check(
+      JSON.stringify(actionModel.removable) === '["mine"]' &&
+        keyFor('d', 'agent:codex') &&
+        !keyFor('d', 'agent:claude') &&
+        !keyFor('d', 'add') &&
+        keyFor('x', 'agent:mine') &&
+        !keyFor('x', 'agent:codex') &&
+        typeof actionList.actions === 'function' &&
+        actionList.actions('start').length === 2 &&
+        actionList.actions('options').length === 0,
+      'Make default shows on any other agent, Remove only on one you added; neither on built-in agents or other rows',
+    );
+    const agentsFile = ConfigFile.user(t.at('agents-actions', 'config.json'));
+    t.write(agentsFile.file, '{\n  // mine\n  "defaultHarness": "claude"\n}\n');
+    const agentDraft = new Draft();
+    await new AddAgent(
+      {
+        choose: () => Promise.resolve('npm'),
+        text: (() => {
+          const answers = ['mine', '@me/mine@latest', 'mine'];
+          return () => Promise.resolve(answers.shift());
+        })(),
+      } as unknown as App,
+      agentsFile,
+      agentDraft,
+      ['claude'],
+    ).run();
+    makeDefaultAgent(agentsFile, agentDraft, 'mine');
+    const becameDefault = agentsFile.userConfig().defaultHarness;
+    await t.throws(
+      () => removeAgent(agentsFile, agentDraft, 'mine'),
+      'default agent',
+      'the default agent is not removed',
+    );
+    makeDefaultAgent(agentsFile, agentDraft, 'codex');
+    removeAgent(agentsFile, agentDraft, 'mine');
+    await t.throws(() => removeAgent(agentsFile, agentDraft, 'claude'), 'built in', 'a built-in agent is not removed');
+    t.check(
+      becameDefault === 'mine' &&
+        agentsFile.userConfig().defaultHarness === 'codex' &&
+        !agentsFile.text().includes('mine"') &&
+        agentsFile.text().includes('// mine') &&
+        Boolean(agentsFile.userConfig().harnesses.claude),
+      'Make default and Remove change your config file (comments stay; the built-in agents stay)',
+      agentsFile.text(),
+    );
+
+    t.section('empty states offer the next step');
+    const sessionsEmpty = sessionsOptions({ sandboxRunning: true, sessions: [], defaultAgent: 'codex' });
+    const enter = sessionsEmpty.enterLabel;
+    t.check(
+      sessionsEmpty.items.length === 1 &&
+        sessionsEmpty.items[0].label === 'Start codex' &&
+        typeof enter === 'function' &&
+        enter(undefined, sessionsEmpty.items[0].value) === 'start',
+      'with no session, Sessions offers to start the default agent (Enter)',
+    );
+    const stoppedSandbox = {
+      report: { sandbox: { running: false }, repoGuard: { guarded: 0, findings: [] }, projects: [], otherSessions: [] },
+      projects: { all: false, roots: [], exclude: [], projects: [] },
+      databases: null,
+      defaultAgent: 'claude',
+    } as unknown as Parameters<typeof sandboxOptions>[0];
+    const stoppedItems = sandboxOptions(stoppedSandbox).items;
+    t.check(
+      stoppedItems.some((i) => i.value === 'act:start' && i.category === 'status') &&
+        stoppedItems.some((i) => i.value === 'act:start' && i.category === 'databases') &&
+        stoppedItems.some((i) => i.value === '@add-root') &&
+        !stoppedItems.some((i) => i.value === 'act:stop'),
+      'with no sandbox running, Sandbox offers to start one (Status and Databases) instead of dead rows',
+    );
+    const noLogins = accountsOptions({ agents: [{ name: 'claude', kept: true, canSavePc: true }], rows: {} });
+    t.equal(
+      noLogins.items.map((i) => i.value),
+      ['@save-sandbox', '@save-pc'],
+      'with no saved login, Accounts offers to save the sandbox login or this PC login (Enter)',
+    );
+
+    t.section('apps in a few groups');
+    const appsUser = new AppsModel(user2, t.dir('apps-groups'));
+    const groupIds = appsUser.categories().map((c) => c.id);
+    const appItems = appsUser.items(new Draft());
+    t.check(
+      groupIds.length <= 6 &&
+        new AppsModel(ConfigFile.project(t.dir('apps-groups', 'project')), t.dir('apps-groups')).categories().length <=
+          5 &&
+        APP_GROUPS.every((g) => appItems.some((i) => i.category === g.id)) &&
+        appItems.every((i) => groupIds.includes(i.category ?? '')) &&
+        appItems.length === appsUser.entries().length &&
+        APP_CATEGORIES.every((c) => APP_GROUPS.some((g) => (g.members as readonly string[]).includes(c.id))),
+      'the apps are in at most 6 groups; every catalogue category belongs to one and every app is listed',
+      groupIds.join(),
     );
 
     t.section('dialog box');
@@ -91,7 +853,7 @@ export const menuSuite: Suite = {
     t.check(draft.apply().problems.length > 0 && draft.count() === 1, 'an invalid change is refused and stays staged');
     draft.discard();
 
-    t.section('tab pages');
+    t.section('section pages');
     t.equal(
       startArgv(
         {
@@ -107,7 +869,7 @@ export const menuSuite: Suite = {
         'C:\\code\\other',
       ),
       ['launch', '--harness', 'codex', '--terminal', '--headless', '--workspace', 'C:\\code\\api'],
-      'the start tab builds the same command line the form would',
+      'the Agents section builds the same command line the form would',
     );
     t.equal(
       [
@@ -198,8 +960,20 @@ export const menuSuite: Suite = {
 
     t.section('every screen');
     const screens = renderScreens(t.dir('screens'));
+    const blocks = screens.split('\n=== ').slice(1);
+    const overflow = blocks.filter((block) => {
+      const [head, ...rows] = block.trimEnd().split('\n');
+      const size = /\((\d+)x(\d+)\)/.exec(head);
+      return !size || rows.length !== Number(size[2]) || rows.some((l) => Text.width(l) > Number(size[1]) - 1);
+    });
+    t.equal(
+      overflow.map((b) => b.slice(0, b.indexOf('\n'))),
+      [],
+      'every screen is exactly as tall as the terminal and never wider, at 200x60, 100x30, 80x24 and 60x20',
+    );
     t.check(
-      screens.includes('=== 7 Maintenance · repair (80x24) ===') &&
+      SIZES.length === 4 &&
+        screens.includes('=== 7 Maintenance · health (80x24) ===') &&
         screens.includes('unsaved: 2') &&
         screens.includes('Save'),
       'all screens render at both sizes; the settings screen shows its unsaved count and the leave dialog offers Save',

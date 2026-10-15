@@ -7,6 +7,14 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## 1.5.1
+
+- An all-users install could not start a sandbox when your storage held many files: every launch rewrote folder
+  permissions over everything inside it and stopped after two minutes with "Could not change the folder permissions
+  ... ETIMEDOUT". A launch now writes only the entries that change, on those folders alone, and takes under a second.
+- The installer no longer rewrites the permissions of `%ProgramData%\AgentSandbox` on every run when they are already
+  right (that also walked every user's storage).
+
 ## 1.5.0
 
 - The installer asks "Just me" or "Everyone on this PC", and installs side by side versions with a private Node.js and

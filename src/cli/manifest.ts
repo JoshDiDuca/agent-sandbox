@@ -28,6 +28,13 @@ export const OptionSpecSchema = z.strictObject({
   when: z.string().optional(),
   /** Never offered in the menu (dangerous shortcuts such as --yes); typing it on the command line still works. */
   noMenu: z.boolean().optional(),
+  /** Heading for this option in the command's --help (launch: Session, Folder ...). */
+  group: z.string().optional(),
+  /** The name shown in --help; `flag` stays accepted as a hidden alias (--agent shown, --harness still works). */
+  shownAs: z
+    .string()
+    .regex(/^--[a-z][a-z0-9-]*$/)
+    .optional(),
 });
 
 export const ArgSpecSchema = z.strictObject({
@@ -36,6 +43,8 @@ export const ArgSpecSchema = z.strictObject({
   required: z.boolean(),
   variadic: z.boolean().optional(),
   choices: ChoicesSchema.optional(),
+  /** Spellings accepted besides `choices` but not listed (old names). */
+  aliases: z.array(z.string()).optional(),
   /** Only asked in the menu when the command's first argument has this value, or one of these (data clean: targets). */
   when: z.union([z.string(), z.array(z.string())]).optional(),
 });
@@ -45,7 +54,7 @@ export function askedWhen(when: string | string[] | undefined, first: string): b
   return when === undefined || (Array.isArray(when) ? when.includes(first) : when === first);
 }
 
-export const GroupSchema = z.enum(['Agents', 'Sandbox', 'Sessions', 'Accounts', 'Data', 'Health', 'Config']);
+export const GroupSchema = z.enum(['Agents', 'Sessions', 'Projects & accounts', 'Data', 'Web', 'Health', 'Advanced']);
 
 export const CommandSpecSchema = z.strictObject({
   name: z.string(),
@@ -59,6 +68,8 @@ export const CommandSpecSchema = z.strictObject({
   /** Takes over the terminal or ends the session: the menu does not come back afterwards. */
   interactive: z.boolean().optional(),
   hidden: z.boolean().optional(),
+  /** Command lines shown in an Examples block at the end of the command's --help. */
+  examples: z.array(z.string()).optional(),
 });
 
 export type OptionSpec = z.output<typeof OptionSpecSchema>;
@@ -104,16 +115,26 @@ function labelled(options: OptionSpec[]): OptionSpec[] {
   return options.map((o) => (LABELS[o.flag] ? { ...o, label: LABELS[o.flag] } : o));
 }
 
+const SESSION = 'Session';
+const FOLDER = 'Folder';
+const VERSIONS = 'Versions & services';
+const TRUST = 'Trust';
+
 const SANDBOX_OPTIONS: OptionSpec[] = labelled([
-  bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", { short: '-t' }),
-  bool('--headless', 'hide the sandbox window (sbx-show brings it back)'),
-  bool('--new', 'always start a new session, even if this folder has an unattached one'),
-  text('--workspace', 'dir', 'use this folder instead of the current one'),
-  text('--node', 'version', 'Node version for nvm (default: .sandbox-config.json > .nvmrc > this PC)', {
-    advanced: true,
+  bool('--terminal', "attach this terminal (reuses this folder's session if nobody is watching it)", {
+    short: '-t',
+    group: SESSION,
   }),
-  text('--python', 'version', 'Python 3 version (default: .sandbox-config.json > .python-version > config)', {
+  bool('--headless', 'hide the sandbox window (sandbox show brings it back)', { group: SESSION }),
+  bool('--new', 'always start a new session, even if this folder has an unattached one', { group: SESSION }),
+  text('--workspace', 'dir', 'use this folder instead of the current one', { group: FOLDER }),
+  text('--node', 'version', "Node version (default: your project's .nvmrc or this PC's version)", {
     advanced: true,
+    group: VERSIONS,
+  }),
+  text('--python', 'version', "Python 3 version (default: your project's .python-version or your settings)", {
+    advanced: true,
+    group: VERSIONS,
   }),
   {
     flag: '--database',
@@ -122,6 +143,7 @@ const SANDBOX_OPTIONS: OptionSpec[] = labelled([
     description: 'also start this database (postgres, mysql, mongodb, redis, dynamodb; repeatable)',
     choices: ['postgres', 'mysql', 'mongodb', 'redis', 'dynamodb'],
     advanced: true,
+    group: VERSIONS,
   },
   {
     flag: '--script',
@@ -129,29 +151,26 @@ const SANDBOX_OPTIONS: OptionSpec[] = labelled([
     value: 'file',
     description: 'run this .ps1/.mjs/.cmd inside the sandbox first (repeatable)',
     advanced: true,
+    group: VERSIONS,
   },
-  bool('--window', 'show the sandbox window even if config says headless', { advanced: true }),
-  bool('--trust-config', "approve the folder's .sandbox-config.json without asking", { advanced: true }),
-  bool('--no-local-config', "ignore the folder's .sandbox-config.json", { advanced: true }),
-  bool(
-    '--yes',
-    'when this folder is not in the running sandbox, or wants what it started without (vGPU, folders), restart without asking',
-    { noMenu: true },
-  ),
+  bool('--window', 'show the sandbox window even if your settings say headless', { advanced: true, group: SESSION }),
+  bool('--trust-config', "approve the folder's .sandbox-config.json without asking", { advanced: true, group: TRUST }),
+  bool('--no-local-config', "ignore the folder's .sandbox-config.json", { advanced: true, group: TRUST }),
+  bool('--yes', 'restart the sandbox without asking if this folder needs it', { noMenu: true, group: TRUST }),
 ]);
 const AGENT_OPTIONS: OptionSpec[] = labelled([
-  text('--harness', 'name', 'agent to run', { choices: 'harnesses' }),
+  text('--harness', 'name', 'agent to run', { choices: 'harnesses', shownAs: '--agent', group: SESSION }),
   {
     flag: '--session',
     type: 'list',
     value: 'agent@folder',
-    description:
-      'start several sessions at once, e.g. --session claude@C:\\code\\api --session "codex@C:\\code\\web|--model o3" (repeatable; after | = that agent\'s own arguments; -t attaches the first)',
+    description: 'start several sessions at once (repeatable; see the examples below; -t attaches the first)',
     noMenu: true,
+    group: SESSION,
   },
-  text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts' }),
+  text('--account', 'name', 'Claude account for this sandbox', { choices: 'accounts', group: SESSION }),
   ...SANDBOX_OPTIONS,
-  bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true }),
+  bool('--no-agent', 'set up the sandbox but do not start an agent', { advanced: true, group: SESSION }),
 ]);
 const json = true;
 
@@ -171,11 +190,17 @@ const COMMAND_LIST = [
     options: AGENT_OPTIONS,
     passthrough: 'agent',
     interactive: true,
+    examples: [
+      'sandbox claude -t                  start Claude here and attach this terminal',
+      'sandbox launch --agent codex       start Codex in the current folder',
+      'sandbox launch --session claude@C:\\code\\api --session "codex@C:\\code\\web|--model o3"',
+      "                                   two sessions at once (after | = that agent's own arguments)",
+    ],
   },
   {
     name: 'start',
     summary: 'start a sandbox with no agent (tools and databases only)',
-    group: 'Sandbox',
+    group: 'Agents',
     args: [],
     options: SANDBOX_OPTIONS.filter((o) => o.flag !== '--new'),
     interactive: true,
@@ -183,7 +208,7 @@ const COMMAND_LIST = [
   {
     name: 'generate',
     summary: 'show what a start would do, without starting anything',
-    group: 'Health',
+    group: 'Advanced',
     args: [],
     options: AGENT_OPTIONS,
     passthrough: 'agent',
@@ -199,7 +224,7 @@ const COMMAND_LIST = [
   {
     name: 'resume',
     summary: 'reopen the sessions from the last sandbox',
-    group: 'Sessions',
+    group: 'Agents',
     args: [],
     options: [
       bool('--auto', 'used by the background sync after a crash: no questions', { noMenu: true, advanced: true }),
@@ -210,14 +235,14 @@ const COMMAND_LIST = [
     summary: 'list agent sessions and who is attached',
     group: 'Sessions',
     args: [],
-    options: [],
+    options: [bool('--wide', "also show each session's folder", { noMenu: true })],
     json,
   },
-  { name: 'status', summary: 'show what the sandbox is doing', group: 'Sandbox', args: [], options: [], json },
+  { name: 'status', summary: 'show what the sandbox is doing', group: 'Sessions', args: [], options: [], json },
   {
     name: 'db',
     summary: 'list, start or stop databases in the running sandbox',
-    group: 'Sandbox',
+    group: 'Sessions',
     args: [
       { name: 'action', description: 'list, start or stop', required: false, choices: ['list', 'start', 'stop'] },
       {
@@ -232,7 +257,11 @@ const COMMAND_LIST = [
   {
     name: 'exec',
     summary: 'run a command inside the sandbox and print its output',
-    group: 'Sandbox',
+    group: 'Sessions',
+    examples: [
+      'sandbox exec -- npm test            run a command in the running sandbox',
+      'sandbox exec --json -- node -v      the result as JSON',
+    ],
     args: [{ name: 'command', description: 'command and its arguments', required: true, variadic: true }],
     options: [
       {
@@ -250,25 +279,30 @@ const COMMAND_LIST = [
   {
     name: 'restart',
     summary: "restart this project's running agents in place; they resume their conversation",
-    group: 'Sessions',
+    group: 'Agents',
     args: [],
     options: [
-      text('--harness', 'name', 'only this agent', { choices: 'harnesses' }),
+      text('--harness', 'name', 'only this agent', { choices: 'harnesses', shownAs: '--agent' }),
       bool('--all', "every project's sessions, not only this folder's"),
     ],
   },
   {
     name: 'stop',
     summary: "shut the sandbox down (every project's sessions end)",
-    group: 'Sandbox',
+    group: 'Agents',
     args: [],
-    options: [bool('--yes', "do not ask when other projects' sessions would end", { noMenu: true })],
+    options: [bool('--yes', "do not ask when other projects' sessions would end", { short: '-y', noMenu: true })],
   },
   {
     name: 'projects',
     summary: 'the projects a sandbox can open without a restart: list, choose, roots, all/exclude',
-    group: 'Sandbox',
+    group: 'Projects & accounts',
     json,
+    examples: [
+      'sandbox projects                   list your projects',
+      'sandbox projects add .             remember this folder',
+      'sandbox projects roots add C:\\code   share every project in C:\\code',
+    ],
     args: [
       {
         name: 'action',
@@ -284,14 +318,18 @@ const COMMAND_LIST = [
       },
       { name: 'folder', description: '(roots add/remove) the folder', required: false, when: 'roots' },
     ],
-    options: [],
+    options: [bool('--yes', 'do not ask before removing', { short: '-y', when: 'remove', noMenu: true })],
   },
-  { name: 'show', summary: 'show the sandbox window', group: 'Sandbox', args: [], options: [] },
-  { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sandbox', args: [], options: [] },
+  { name: 'show', summary: 'show the sandbox window', group: 'Sessions', args: [], options: [] },
+  { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sessions', args: [], options: [] },
   {
     name: 'account',
     summary: 'Claude logins: list, save, use, set the default, remove',
-    group: 'Accounts',
+    group: 'Projects & accounts',
+    examples: [
+      'sandbox account save work          save the login you signed in with inside the sandbox',
+      'sandbox account use work           the sandbox uses it (running sessions restart)',
+    ],
     args: [
       {
         name: 'action',
@@ -309,6 +347,7 @@ const COMMAND_LIST = [
       }),
       bool('--from-host', "(save) save this PC's login instead of the sandbox's", { when: 'save' }),
       bool('--no-restart', '(use) do not restart running sessions', { when: 'use' }),
+      bool('--yes', '(remove) do not ask first', { short: '-y', when: 'remove', noMenu: true }),
     ],
     json,
   },
@@ -317,7 +356,13 @@ const COMMAND_LIST = [
     summary: 'show what is kept between sandboxes (tools, databases, logins, logs), or delete some of it',
     group: 'Data',
     args: [
-      { name: 'action', description: 'show or clean', required: false, choices: ['show', 'clean'] },
+      {
+        name: 'action',
+        description: 'show or clean',
+        required: false,
+        choices: ['show', 'clean'],
+        aliases: ['info', 'list', 'remove'],
+      },
       {
         name: 'targets',
         description: 'what to clean, e.g. tools/go databases logs',
@@ -326,7 +371,29 @@ const COMMAND_LIST = [
         when: 'clean',
       },
     ],
-    options: [bool('--yes', 'do not ask before deleting', { noMenu: true })],
+    options: [bool('--yes', 'do not ask before deleting', { short: '-y', noMenu: true })],
+    json,
+    examples: [
+      'sandbox data clean                 pick what to delete from a list',
+      'sandbox data clean logs tools/go   delete these',
+    ],
+  },
+  {
+    name: 'storage',
+    summary: 'where your saved data lives: show it, move it to another folder, or switch folders',
+    group: 'Data',
+    examples: [
+      'sandbox storage                    where the data is',
+      'sandbox storage move D:\\sandbox-data   move it (asks first)',
+    ],
+    args: [
+      { name: 'action', description: 'show, move or use', required: false, choices: ['show', 'move', 'use'] },
+      { name: 'folder', description: 'the folder to move to, or to use', required: false, when: ['move', 'use'] },
+    ],
+    options: [
+      bool('--yes', 'do not ask before moving or switching', { short: '-y', noMenu: true }),
+      bool('--keep-old', 'copy instead of moving: the old folder stays (needs room for both)', { when: 'move' }),
+    ],
     json,
   },
   {
@@ -342,12 +409,14 @@ const COMMAND_LIST = [
         description: 'launch folders older than this many days',
         default: 7,
       },
+      bool('--yes', 'do not ask before deleting', { short: '-y', noMenu: true }),
     ],
   },
   { name: 'sync', summary: 'copy conversation history back to this PC now', group: 'Data', args: [], options: [] },
   {
     name: 'audit',
-    summary: 'what happened in your sandboxes: programs started, files changed, sessions, repo guard (audit.enabled)',
+    summary:
+      'what happened in your sandboxes: programs started, files changed, sessions, repo guard (turn it on: sandbox config set audit.enabled true)',
     group: 'Health',
     json,
     args: [],
@@ -375,10 +444,14 @@ const COMMAND_LIST = [
   },
   {
     name: 'doctor',
-    summary: 'check this PC and show what will be copied or downloaded',
+    summary: 'check this PC, the install, your settings and the sandbox, and offer to fix what it finds',
     group: 'Health',
     args: [],
-    options: [text('--harness', 'name', 'agent to check', { choices: 'harnesses' })],
+    options: [
+      text('--harness', 'name', 'agent to check', { choices: 'harnesses', shownAs: '--agent' }),
+      bool('--fix', 'fix what can be fixed without asking', { noMenu: true }),
+    ],
+    json: true,
   },
   {
     name: 'migrate',
@@ -390,6 +463,7 @@ const COMMAND_LIST = [
       text('--restore', 'backup', 'put back the files saved before an update (a folder under <storage>\\backups)', {
         advanced: true,
       }),
+      bool('--yes', '(--restore) do not ask first', { short: '-y', noMenu: true }),
     ],
   },
   {
@@ -400,6 +474,7 @@ const COMMAND_LIST = [
     options: [
       bool('--check', 'only look whether a newer version exists'),
       bool('--rollback', 'go back to the version before the last update'),
+      bool('--yes', '(--rollback) do not ask first', { short: '-y', noMenu: true }),
       text(
         '--auto',
         'on|off',
@@ -417,15 +492,17 @@ const COMMAND_LIST = [
   },
   {
     name: 'repair',
-    summary: 'find and fix common problems (stale state, broken downloads, half-installed tools)',
+    summary: 'find and fix problems (install, data folder, settings, stale state, half-installed tools)',
     group: 'Health',
     args: [],
-    options: [],
+    options: [bool('--yes', 'do not ask before fixing', { short: '-y', noMenu: true })],
+    json: true,
   },
   {
     name: 'self-test',
     summary: 'run the built-in tests',
     group: 'Health',
+    hidden: true,
     args: [
       {
         name: 'suite',
@@ -439,32 +516,42 @@ const COMMAND_LIST = [
   {
     name: 'config',
     summary: "show or create your settings file, or check a project's .sandbox-config.json",
-    group: 'Config',
+    group: 'Health',
     args: [
       {
         name: 'action',
         description: 'what to do',
         required: false,
-        choices: ['show', 'path', 'init', 'schema', 'check'],
+        choices: ['show', 'path', 'init', 'schema', 'check', 'get', 'set'],
+        aliases: ['summary'],
       },
+      {
+        name: 'key',
+        description: '(get, set) the setting, e.g. sandbox.memoryMb',
+        required: false,
+        when: ['get', 'set'],
+      },
+      { name: 'value', description: '(set) the new value', required: false, when: 'set' },
     ],
     options: [text('--workspace', 'dir', '(check) the project folder; default: the current one')],
+    examples: ['sandbox config set sandbox.memoryMb 8192', 'sandbox config get sandbox.memoryMb'],
   },
   {
     name: 'agent-commands',
     summary: '(Beta) make claude, codex ... on this PC start in a hidden sandbox and attach',
-    group: 'Agents',
+    group: 'Advanced',
     args: [{ name: 'action', description: 'on, off or status', required: false, choices: ['status', 'on', 'off'] }],
     options: [],
   },
   {
     name: 'host-claude',
-    summary: 'run Claude on this PC, NOT sandboxed, with its own profile',
+    summary: 'run Claude on this PC, NOT sandboxed, with its own profile (same as: sandbox host claude)',
     group: 'Agents',
     args: [],
     options: [bool('--personal', 'use your normal Claude profile')],
     passthrough: 'agent',
     interactive: true,
+    hidden: true,
   },
   {
     name: 'host',
@@ -478,13 +565,37 @@ const COMMAND_LIST = [
   {
     name: 'menu',
     summary: 'the interactive menu (what `sandbox` opens with no arguments)',
-    group: 'Config',
+    group: 'Advanced',
     args: [],
     options: [],
     hidden: true,
     interactive: true,
   },
+  {
+    name: 'web',
+    summary: '(beta) your sandbox sessions in a browser on this PC: start, stop, status or open',
+    group: 'Web',
+    examples: ['sandbox web open               start the web UI and open it in your browser'],
+    args: [
+      {
+        name: 'action',
+        description: 'start the server, stop it, show whether it runs, or open it in your browser',
+        required: false,
+        choices: ['start', 'stop', 'status', 'open'],
+      },
+    ],
+    options: [],
+    json,
+  },
   { name: '_watch', summary: 'background history sync', group: 'Data', args: [], options: [], hidden: true },
+  {
+    name: '_web',
+    summary: 'the web UI server (started by sandbox web start)',
+    group: 'Web',
+    args: [],
+    options: [],
+    hidden: true,
+  },
 ] as const satisfies readonly Frozen<CommandSpec>[];
 
 export type CommandName = (typeof COMMAND_LIST)[number]['name'];

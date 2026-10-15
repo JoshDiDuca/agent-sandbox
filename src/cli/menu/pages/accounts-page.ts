@@ -1,13 +1,19 @@
-// Tab 6: saved logins for every agent. Agents on the left (each with its logins), actions on the right: save the
+// Section 6: saved logins for every agent. Agents on the left (each with its logins), actions on the right: save the
 // sandbox's login or this PC's, use one, make one the default, rename, remove.
 import { errMsg, safeText } from '../../../core/util/index.js';
 import type { AccountRow } from '../../../host/profile/index.js';
 import type { Context } from '../../commands/context.js';
 import { AccountsService, type AgentAccounts } from '../../services/index.js';
-import { Theme, type App, type ListAction, type ListOptions, type ListResult } from '../../tui/index.js';
+import { Theme, type App, type ListAction, type ListItem, type ListOptions, type ListResult } from '../../tui/index.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
+
+const SAVE_SANDBOX = '@save-sandbox';
+const SAVE_PC = '@save-pc';
+
+/** A saved login (not a "save a login" row or a note). */
+const isLogin = (id: string): boolean => !id.startsWith('@') && !id.startsWith('info:');
 
 export interface AccountsModel {
   readonly agents: readonly AgentAccounts[];
@@ -29,6 +35,26 @@ export function accountsOptions(m: AccountsModel): ListOptions<string> {
     })),
     items: m.agents.flatMap((a) => {
       const rows = m.rows[a.name] ?? [];
+      const save: ListItem<string>[] = [
+        {
+          value: SAVE_SANDBOX,
+          label: "+ Save the sandbox's login…",
+          category: a.name,
+          section: 'Save a login',
+          description: 'Saves the ' + a.name + ' login you signed in with inside the sandbox, under a name you choose.',
+        },
+        ...(a.canSavePc
+          ? [
+              {
+                value: SAVE_PC,
+                label: "+ Save this PC's login…",
+                category: a.name,
+                section: 'Save a login',
+                description: 'Saves the ' + a.name + ' login of this PC, under a name you choose.',
+              },
+            ]
+          : []),
+      ];
       if (!a.kept)
         return [
           {
@@ -38,39 +64,42 @@ export function accountsOptions(m: AccountsModel): ListOptions<string> {
             description: 'Sign in again in each new sandbox, or use an API key in the agent’s environment.',
           },
         ];
-      return rows.map((r) => ({
-        value: a.name + ':' + r.name,
-        label: r.name,
-        category: a.name,
-        hint:
-          (r.isActive ? Theme.ok('in the sandbox') : '') +
-          (r.isActive && r.isDefault ? Theme.muted(' · ') : '') +
-          (r.isDefault ? Theme.accent('default') : ''),
-        description: 'Enter makes the sandbox use this login.',
-        details: [
-          Theme.muted('Agent  ') + a.name,
-          Theme.muted('Email  ') + safeText(r.email ?? '-'),
-          Theme.muted('Saved  ') + r.savedAt.slice(0, 16).replace('T', ' '),
-        ],
-      }));
+      return [
+        ...save,
+        ...rows.map((r) => ({
+          value: a.name + ':' + r.name,
+          label: r.name,
+          category: a.name,
+          section: 'Saved logins',
+          hint:
+            (r.isActive ? Theme.ok('in the sandbox') : '') +
+            (r.isActive && r.isDefault ? Theme.muted(' · ') : '') +
+            (r.isDefault ? Theme.accent('default') : ''),
+          description: 'Enter makes the sandbox use this login.',
+          details: [
+            Theme.muted('Agent  ') + a.name,
+            Theme.muted('Email  ') + safeText(r.email ?? '-'),
+            Theme.muted('Saved  ') + r.savedAt.slice(0, 16).replace('T', ' '),
+          ],
+        })),
+      ];
     }),
-    empty: "No saved logins. Sign in inside the sandbox, then press s to save that login (p saves this PC's).",
+    empty: 'No agents.',
     actions: accountActions(m.agents),
-    enterLabel: 'use',
-    escapeLabel: 'quit',
+    enterLabel: (_category, id) => (id === SAVE_SANDBOX || id === SAVE_PC ? 'save' : id && isLogin(id) ? 'use' : ''),
   };
 }
 
-function accountActions(agents: readonly AgentAccounts[]): (category: string | undefined) => ListAction[] {
+function accountActions(agents: readonly AgentAccounts[]): (category: string | undefined) => ListAction<string>[] {
   return (category) => {
     const agent = agents.find((a) => a.name === category);
     if (!agent?.kept) return [];
     return [
-      { key: 's', label: 'save sandbox', importance: 1 },
-      ...(agent.canSavePc ? [{ key: 'p', label: 'save PC', importance: 1 }] : []),
-      { key: 'd', label: 'default', importance: 1 },
-      { key: 'r', label: 'rename', importance: 2 },
-      { key: 'x', label: 'remove', importance: 1 },
+      { key: 's', label: 'save sandbox login', importance: 3 },
+      ...(agent.canSavePc ? [{ key: 'p', label: 'save PC login', importance: 3 }] : []),
+      { key: 'd', label: 'make default', importance: 1, applies: isLogin },
+      { key: 'r', label: 'rename', importance: 2, applies: isLogin },
+      { key: 'x', label: 'remove', importance: 1, applies: isLogin },
     ];
   };
 }
@@ -109,7 +138,7 @@ export class AccountsPage extends ListPage<string> {
   }
   private static nameOf(value: string | undefined): string | undefined {
     const i = value?.indexOf(':') ?? -1;
-    return value && i >= 0 && !value.startsWith('info:') ? value.slice(i + 1) : undefined;
+    return value && i >= 0 && isLogin(value) ? value.slice(i + 1) : undefined;
   }
 
   protected async act(result: ListResult<string>): Promise<Outcome<string>> {
@@ -118,6 +147,8 @@ export class AccountsPage extends ListPage<string> {
     try {
       if (result.kind === 'action' && (result.key === 's' || result.key === 'p'))
         return await this.save(agent, result.key === 'p');
+      if (result.kind === 'pick' && (result.value === SAVE_SANDBOX || result.value === SAVE_PC))
+        return await this.save(agent, result.value === SAVE_PC);
       if (result.kind === 'pick' && name) return await this.use(agent, name);
       if (result.kind === 'action' && name) {
         if (result.key === 'd') {
@@ -171,6 +202,7 @@ export class AccountsPage extends ListPage<string> {
   private async use(agent: string, name: string): Promise<Outcome<string>> {
     const account = this.service.activate(name, agent);
     let note = Theme.ok(Theme.glyph.ok + ' The sandbox now uses "' + account.name + '" for ' + agent + '.');
+    if (account.note) note += ' ' + safeText(account.note);
     if (
       this.service.hasRunningSessions(agent) &&
       (await this.app.ask(

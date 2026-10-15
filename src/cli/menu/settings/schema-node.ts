@@ -21,7 +21,9 @@ type ZodLike = z.ZodType & {
   description?: string;
   minValue?: number | null;
   maxValue?: number | null;
+  isInt?: boolean;
 };
+type NumberCheck = { _zod: { def: { check?: string; value?: number; inclusive?: boolean } } };
 
 /** The editor a setting gets. */
 export type EditorKind =
@@ -76,6 +78,28 @@ export class SchemaNode {
   }
   get max(): number | undefined {
     return this.inner.maxValue ?? undefined;
+  }
+  /** A number that must be whole. */
+  get integer(): boolean {
+    return Boolean(this.inner.isInt);
+  }
+  /** May the setting be left out (optional or with a default)? */
+  get optional(): boolean {
+    return ['optional', 'default'].includes(this.schema._zod.def.type);
+  }
+
+  /** The numbers allowed, in words: "1 to 65535", "at least 2048", "more than 0", "" without limits. */
+  rangeText(): string {
+    const checks = ((this.inner._zod.def as { checks?: NumberCheck[] }).checks ?? []).map((c) => c._zod.def);
+    const lower = checks.find((c) => c.check === 'greater_than');
+    const upper = checks.find((c) => c.check === 'less_than');
+    const lo = lower?.value;
+    const hi = upper?.value;
+    if (lo !== undefined && hi !== undefined && lower?.inclusive !== false && upper?.inclusive !== false)
+      return lo + ' to ' + hi;
+    const low = lo === undefined ? '' : (lower?.inclusive === false ? 'more than ' : 'at least ') + lo;
+    const high = hi === undefined ? '' : (upper?.inclusive === false ? 'less than ' : 'at most ') + hi;
+    return [low, high].filter(Boolean).join(' and ');
   }
 
   /** The fields of an object, in schema order. */

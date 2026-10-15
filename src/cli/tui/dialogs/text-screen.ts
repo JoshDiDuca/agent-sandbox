@@ -17,6 +17,10 @@ export interface TextOptions {
   validate?: (value: string) => true | string;
   /** Allow an empty answer (otherwise Enter on an empty field cancels). */
   allowEmpty?: boolean;
+  /** Only characters this matches can be typed (a number field takes digits only). */
+  accept?: RegExp;
+  /** A muted line under the field while nothing is wrong (what is allowed: "1 to 65536"). */
+  hint?: string;
 }
 
 /** One line of text. Resolves to the text, or undefined when you press Esc. */
@@ -52,7 +56,11 @@ export class TextScreen implements Screen<string | undefined> {
       '  ' + Theme.accent('╭' + '─'.repeat(width - 2) + '╮'),
       '  ' + Theme.accent('│') + ' ' + Text.fit(text, inner) + ' ' + Theme.accent('│'),
       '  ' + Theme.accent('╰' + '─'.repeat(width - 2) + '╯'),
-      this.problem ? '  ' + Theme.error(Theme.glyph.cross + ' ' + this.problem) : '',
+      this.problem
+        ? '  ' + Theme.error(Theme.glyph.cross + ' ' + this.problem)
+        : this.o.hint
+          ? '  ' + Theme.muted(this.o.hint)
+          : '',
     ];
     return {
       path: this.o.path,
@@ -112,7 +120,9 @@ export class TextScreen implements Screen<string | undefined> {
       return;
     }
     if (key.text) {
-      const add = [...key.text.replace(/[\r\n]/g, '')];
+      const accept = this.o.accept;
+      const add = [...key.text.replace(/[\r\n]/g, '')].filter((c) => !accept || accept.test(c));
+      if (!add.length) return;
       set([...chars.slice(0, this.cursor), ...add, ...chars.slice(this.cursor)], this.cursor + add.length);
     }
     return;

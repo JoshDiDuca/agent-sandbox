@@ -1,11 +1,12 @@
 // `sandbox projects`: which projects a sandbox can open without a restart. Project roots (whole folders of projects),
-// the projects this tool has started before, and projects.all / projects.exclude. Changes to what is mapped take
+// the projects this tool has started before, and the all-projects and exclude settings. Changes to what is mapped take
 // effect at the next start; a project you start while a sandbox runs joins it when it can (projects.ts in host/).
 import path from 'node:path';
 import { checkbox } from '@inquirer/prompts';
+import { askChoice } from '../../../core/prompt.js';
 import { fail } from '../../../core/util/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
-import { c, pageSizeFor, shortenMiddle, termWidth, printJson, table } from '../../output/index.js';
+import { c, nextStep, pageSizeFor, shortenMiddle, termWidth, printJson, table } from '../../output/index.js';
 import { ProjectsService } from '../../services/index.js';
 import { type Context } from '../context.js';
 
@@ -21,7 +22,7 @@ function list(ctx: Context, service: ProjectsService): number {
   const rows = listing.projects;
   if (printJson(ctx, { all: listing.all, roots: listing.roots, exclude: listing.exclude, projects: rows })) return 0;
   console.log(
-    c.bold('projects.all') +
+    c.bold('All projects') +
       ': ' +
       (listing.all ? 'on (every project below is mapped at every start, except excluded ones)' : 'off') +
       c.dim('   sandbox projects all on|off'),
@@ -49,7 +50,7 @@ function list(ctx: Context, service: ProjectsService): number {
   return 0;
 }
 
-/** Ticks the projects mapped at every start (turns projects.all on when any is ticked); the rest are excluded. */
+/** Ticks the projects mapped at every start (any ticked turns all-projects on); the rest are excluded. */
 async function choose(service: ProjectsService): Promise<number> {
   const rows = service.rows().filter((r) => !r.root);
   if (!rows.length) {
@@ -79,16 +80,25 @@ async function choose(service: ProjectsService): Promise<number> {
   return 0;
 }
 
+/** The folder typed, or one picked from the known projects (or this folder) when it was left out. */
+async function folderOf(service: ProjectsService, action: string, given: string | undefined): Promise<string> {
+  if (given) return given;
+  const rows = service.rows();
+  return askChoice(
+    'Which folder?',
+    [
+      { name: 'This folder (' + shortenMiddle(process.cwd(), termWidth() - 30) + ')', value: '.' },
+      ...rows.filter((r) => !r.here).map((r) => ({ name: shortenMiddle(r.folder, termWidth() - 12), value: r.folder })),
+    ],
+    'Usage: sandbox projects ' + action + ' <folder>   (. = this folder)',
+  );
+}
+
 function add(service: ProjectsService, value: string): number {
   const dir = service.add(value);
-  console.log(
-    'Added ' +
-      dir +
-      ' to your projects.' +
-      (service.settings().all
-        ? ' ' + NEXT_START
-        : ' It is mapped at every start once projects.all is on (sandbox projects all on).'),
-  );
+  const all = service.settings().all;
+  console.log('Added ' + dir + ' to your projects.' + (all ? ' ' + NEXT_START : ''));
+  if (!all) nextStep('sandbox projects all on   (map every project at every start)');
   return 0;
 }
 
@@ -109,7 +119,7 @@ function includeOrExclude(service: ProjectsService, action: 'include' | 'exclude
       ? (action === 'exclude' ? 'Excluded ' : 'Included ') + path.resolve(value) + '. ' + NEXT_START
       : 'Nothing changed.') +
       (action === 'include' && !service.settings().all
-        ? ' projects.all is off: sandbox projects all on maps your projects at every start.'
+        ? ' Mapping all projects is off: sandbox projects all on maps your projects at every start.'
         : '') +
       (changed ? runningNote() : ''),
   );
@@ -118,12 +128,12 @@ function includeOrExclude(service: ProjectsService, action: 'include' | 'exclude
 
 function all(service: ProjectsService, value: string | undefined): number {
   if (value === undefined) {
-    console.log('projects.all is ' + (service.settings().all ? 'on' : 'off') + '.');
+    console.log('Mapping all projects at every start is ' + (service.settings().all ? 'on' : 'off') + '.');
     return 0;
   }
   service.setAll(value === 'on');
   console.log(
-    'projects.all is ' +
+    'Mapping all projects at every start is ' +
       value +
       '. ' +
       NEXT_START +
@@ -166,17 +176,20 @@ export async function projects(ctx: Context): Promise<number> {
     case 'choose':
       return choose(service);
     case 'add':
-      return add(service, value);
+      return add(service, await folderOf(service, action, value));
     case 'remove':
-      return remove(service, value);
+      return remove(service, await folderOf(service, action, value));
     case 'include':
     case 'exclude':
-      return includeOrExclude(service, action, value);
+      return includeOrExclude(service, action, await folderOf(service, action, value));
     case 'all':
       return all(service, value);
     case 'roots':
       return roots(service, value, folder);
     default:
-      return fail('Unknown projects action "' + action + '".');
+      return fail(
+        'Unknown projects action "' + action + '".',
+        'Use: sandbox projects list | choose | add | remove | include | exclude | all | roots',
+      );
   }
 }

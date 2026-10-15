@@ -108,11 +108,19 @@ virtualization). Compose projects use the databases above.
 | opencode, Qwen Code, Crush, GitHub Copilot CLI, Kilo Code, Amp, Cline, Continue, Kimi, Aider | untested, each from its official package |
 | Reasonix, CodeWhale (`deepseek`) | untested; community agents for DeepSeek, which has no official CLI |
 
+Every configured agent is a command in every terminal tab (`claude`, `codex` ...): installed ones start, the others install on first use (`sbx-agent list` shows which). Codex keeps its SQLite databases on the sandbox's own disk (`harnesses.codex.localState`): they are restored at start and saved when its sessions end, so they survive between sandboxes.
+
+### PATH
+
+One planner decides the machine PATH: ordered, no duplicates (case, trailing slash), no missing folders, no pinned Node version (`nvm use` moves the `C:
+vm
+odejs` link instead). Every new PowerShell, PowerShell 7, cmd and Git Bash starts with the current machine and user PATH, whatever started it (an all-users profile, cmd's AutoRun and a Git `profile.d` file call `pathsync.exe`), Explorer and Windows Terminal are told when it changes, and agent sessions and `sandbox exec` get the machine PATH folders added since the sandbox started.
+
 Add your own under `harnesses` in the config, with `npmPackage` / `npmBin`, `uvPackage` / `uvBin` or `hostExecutable`.
 
 ## Apps and tools
 
-Optional desktop apps and command-line tools, chosen in the menu (**Apps & tools**: by category, searchable, with
+Optional desktop apps and command-line tools, chosen in the menu (**Apps**: by category, searchable, with
 sizes and what is installed already) or in `apps.install`:
 
 | Category | Apps |

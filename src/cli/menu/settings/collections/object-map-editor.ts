@@ -21,14 +21,17 @@ export class ObjectMapEditor extends CollectionEditor<Record<string, Record<stri
             : 'Letters, digits, . _ and - only.',
     });
     if (name === undefined) return;
-    const edited = await new ObjectEditor(this.app, [...this.path, name], this.node.element!, this.editor).run(
-      this.node.element!.initial() as Record<string, unknown>,
-      true,
-    );
+    const edited = await new ObjectEditor(
+      this.app,
+      [...this.path, name],
+      this.node.element!,
+      this.editor,
+      this.key,
+    ).run(this.node.element!.initial() as Record<string, unknown>, true);
     if (edited) this.value[name] = edited.value as Record<string, unknown>;
   }
   protected async open(id: string): Promise<void> {
-    const edited = await new ObjectEditor(this.app, [...this.path, id], this.node.element!, this.editor).run(
+    const edited = await new ObjectEditor(this.app, [...this.path, id], this.node.element!, this.editor, this.key).run(
       this.value[id],
     );
     if (edited) this.value[id] = edited.value as Record<string, unknown>;

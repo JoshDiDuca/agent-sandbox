@@ -1,5 +1,6 @@
-// How the settings are grouped on screen: categories in the sidebar, readable names for sections and toolchains. Every
-// top-level setting of both files must belong to a category (a self-test checks it), so nothing is ever hidden.
+// How the settings are grouped on screen: categories in the navigation, readable names for sections and toolchains.
+// Every top-level setting of both files must belong to a category or be covered by another section (a self-test checks
+// it), so nothing is ever hidden.
 import { Text } from '../../tui/index.js';
 
 export interface SettingsCategory {
@@ -13,27 +14,22 @@ export const CATEGORIES: SettingsCategory[] = [
   {
     id: 'general',
     label: 'General',
-    description: 'Which agent starts, where the project appears in the sandbox, and extra folders from this PC.',
+    description:
+      'Which agent starts, where the project appears in the sandbox, extra folders from this PC, and where the sandbox keeps its data.',
     keys: ['defaultHarness', 'harness', 'guestWorkspace', 'readOnly', 'mappings', 'scripts'],
   },
   {
     id: 'machine',
     label: 'Sandbox machine',
-    description: 'Memory, CPU, window, GPU, clipboard, audio and network of the sandbox itself.',
-    keys: ['sandbox'],
+    description:
+      'Memory, CPU, window, GPU, clipboard, audio and networking of the sandbox itself, and its desktop look (theme, accent colour, taskbar, wallpaper).',
+    keys: ['sandbox', 'personalization'],
   },
   {
     id: 'languages',
     label: 'Languages & tools',
-    description: 'Toolchains installed in the sandbox. "auto" follows your project\'s files and what this PC has.',
+    description: 'Toolchains installed in the sandbox. "auto" follows the files of your project and what this PC has.',
     keys: ['toolchains'],
-  },
-  {
-    id: 'apps',
-    label: 'Apps',
-    description:
-      'Desktop apps installed in the sandbox: editors, database clients, API clients, game engines ... (also: Apps catalogue on the home screen).',
-    keys: ['apps'],
   },
   {
     id: 'databases',
@@ -43,15 +39,10 @@ export const CATEGORIES: SettingsCategory[] = [
   },
   {
     id: 'agents',
-    label: 'Agents & attaching',
-    description: 'The agents you can start, attaching your terminal to them, and the (Beta) agent commands.',
-    keys: ['harnesses', 'attach', 'agentCommands'],
-  },
-  {
-    id: 'claude',
-    label: 'Claude profile',
-    description: 'Which of your Claude settings, history and memory are copied in and synced back.',
-    keys: ['claudeProfile'],
+    label: 'Agents & sessions',
+    description:
+      'The agents you can start (also: Agents section), attaching your terminal to them, the (Beta) web UI and agent commands, which of your Claude settings are copied in, and reopening sessions.',
+    keys: ['harnesses', 'attach', 'web', 'agentCommands', 'claudeProfile', 'resume'],
   },
   {
     id: 'network',
@@ -68,37 +59,23 @@ export const CATEGORIES: SettingsCategory[] = [
     keys: ['workspaceFilter', 'audit', 'secrets', 'downloads', 'storage', 'sharing'],
   },
   {
-    id: 'setup',
-    label: 'Setup & hooks',
-    description:
-      'How tools get into the sandbox (copied from this PC or downloaded), Git, the terminal, and hook scripts.',
-    keys: ['provisioning', 'hooks'],
-  },
-  {
     id: 'projects',
-    label: 'Projects',
-    description: 'Several projects in one sandbox: project roots mapped at every start, adding folders while it runs.',
-    keys: ['projects'],
-  },
-  {
-    id: 'resume',
-    label: 'Reopening sessions',
-    description: 'Open the sessions of the last sandbox again when a new one starts, or after a crash.',
-    keys: ['resume'],
-  },
-  {
-    id: 'desktop',
-    label: 'Desktop look',
-    description: 'Copy your theme, accent colour, taskbar and wallpaper into the sandbox.',
-    keys: ['personalization'],
+    label: 'Projects & setup',
+    description:
+      'Several projects in one sandbox (roots mapped at every start, adding folders while it runs), how tools get into the sandbox (copied from this PC or downloaded), Git, the terminal, and hook scripts.',
+    keys: ['projects', 'provisioning', 'hooks'],
   },
 ];
+
+/** Settings not listed here because their own section covers them (Apps: the catalogue and your own programs). */
+export const SETTINGS_ELSEWHERE: readonly string[] = ['apps'];
 
 /** Readable names for sections and toolchains (anything missing gets a name made from its key). */
 const NAMES: Record<string, string> = {
   sandbox: 'Sandbox machine',
   attach: 'Attaching your terminal',
   agentCommands: 'Agent commands (Beta)',
+  web: 'Web UI (Beta)',
   provisioning: 'Provisioning',
   downloads: 'Downloads',
   secrets: 'Secrets',

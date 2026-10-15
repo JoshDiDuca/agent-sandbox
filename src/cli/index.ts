@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { buildProgram, parseCli } from './args.js';
-import { commandSpec } from './manifest.js';
+import { COMMANDS, commandSpec } from './manifest.js';
 import { recordHistory } from './history.js';
 import { menu } from './menu/index.js';
-import { validateOptions } from './validate.js';
+import { closest, validateOptions } from './validate.js';
 import { loadConfig } from '../core/config/index.js';
 import * as commands from './commands/index.js';
 import { fail } from '../core/util/index.js';
@@ -18,6 +18,17 @@ const entry = path.join(PACKAGE_ROOT, 'dist', 'bin', 'agent-sandbox.js');
 export interface Preset {
   harness?: string;
   command?: string;
+}
+
+/** A first word that is no command and no agent, but close to one: "Did you mean: sandbox status?". */
+function failOnTypo(word: string, agents: readonly string[]): void {
+  const names = [...COMMANDS.filter((c) => !c.hidden).map((c) => c.name), ...agents];
+  const hint = closest(word, names);
+  if (hint)
+    fail(
+      'Unknown command "' + word + '". Did you mean: sandbox ' + hint + '?',
+      'Run sandbox --help for the list of commands, or sandbox for the menu.',
+    );
 }
 
 /** Runs an argv from the menu exactly as if it had been typed, reporting errors instead of throwing. */
@@ -45,6 +56,17 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     if (argv.length === 0)
       return process.stdin.isTTY ? main(['menu']) : (buildProgram(() => undefined).outputHelp(), 0);
     if (isAgent(argv[0])) return main(argv.slice(1), { harness: argv[0] });
+    const first = argv.slice(0, 1)[0] as string | undefined;
+    if (first && !first.startsWith('-') && !commandSpec(first) && first !== 'help') {
+      const at = argv.indexOf('--config');
+      let agents: string[] = [];
+      try {
+        agents = Object.keys(loadConfig(at >= 0 ? argv[at + 1] : undefined).config.harnesses);
+      } catch {
+        // A broken settings file: the commands alone are suggested.
+      }
+      failOnTypo(first, agents);
+    }
   }
   const options = parseCli(preset.command ? [preset.command, ...argv] : argv, Boolean(preset.harness));
   if (preset.harness) options.harness = preset.harness;
@@ -57,6 +79,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     const menuCtx = commands.createContext(PACKAGE_ROOT, entry, options);
     await commands.migrateBeforeCommand(menuCtx, options.command);
     commands.updatesBeforeCommand(entry, options.command);
+    await commands.storageBeforeCommand(menuCtx, options.command);
     return menu(menuCtx, runFromMenu(options.config));
   }
   // Loaded only when asked for: normal commands never load test code.
@@ -79,6 +102,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
   validateOptions(ctx);
   await commands.migrateBeforeCommand(ctx, options.command);
   commands.updatesBeforeCommand(entry, options.command);
+  await commands.storageBeforeCommand(ctx, options.command);
   // Only what parsed and validated is offered again by the menu, without the --config (it is the same every time).
   recordHistory(withoutConfig(typed));
   return (await handler(ctx)) ?? 0;

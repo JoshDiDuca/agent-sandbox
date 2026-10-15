@@ -31,7 +31,7 @@ export async function audit(ctx: Context): Promise<number> {
     console.log(
       settings.enabled
         ? 'Nothing in the audit log for the last ' + ctx.options.days + ' day(s).'
-        : 'The audit log is off. Turn it on in the menu (Settings > Security & privacy > Audit log) or with audit.enabled in your config.',
+        : 'The audit log is off. Turn it on in the menu (Settings > Security & privacy > Audit log) or with: sandbox config set audit.enabled true',
     );
     return 0;
   }

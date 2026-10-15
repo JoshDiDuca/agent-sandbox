@@ -9,6 +9,7 @@ import { isWithin } from '../../shared/paths/index.js';
 import type { Context } from '../commands/context.js';
 import { commandLine } from '../history.js';
 import { Text, Theme, type App } from '../tui/index.js';
+import { askPath } from './settings/path-kind.js';
 
 /** Folders worth offering: this one, the projects started before, and the folders inside your roots. */
 export function candidateFolders(ctx: Context, cwd: string = process.cwd()): string[] {
@@ -69,12 +70,12 @@ export class SeveralAgents {
     const headless = await this.app.confirm({
       path: this.path,
       question: 'Hide the sandbox window (headless)?',
-      about: ['sandbox show brings it back.'],
+      about: ['Sandbox > Show the window brings it back.'],
       initial: this.ctx.loaded.config.sandbox.headless,
     });
     const attach = await this.app.choose<number>(
       this.path,
-      'Attach this terminal to one of them? Each session also has a tab inside the sandbox; sandbox attach shows any of them later.',
+      'Attach this terminal to one of them? Each session also has a tab inside the sandbox; Sessions shows any of them later.',
       [
         { value: -1, label: 'None' },
         ...sessions.map((s, i) => ({ value: i, label: s.harness + ' in ' + Text.middle(s.folder, 60) })),
@@ -127,9 +128,10 @@ export class SeveralAgents {
     if (picked.kind !== 'multi') return null;
     const folders = picked.values.filter((f) => f !== ADD);
     if (picked.values.includes(ADD)) {
-      const extra = await this.app.text({
+      const extra = await askPath(this.app, {
         path: this.path,
-        label: 'Folder to add',
+        title: 'Choose the folder to add',
+        kind: 'dir',
         validate: (v) => {
           const dir = path.resolve(v.trim());
           if (!v.trim() || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return 'Not a folder: ' + dir;
@@ -141,7 +143,7 @@ export class SeveralAgents {
           }
         },
       });
-      if (extra) folders.push(path.resolve(extra.trim()));
+      if (extra) folders.push(path.resolve(extra));
     }
     return folders;
   }

@@ -14,7 +14,7 @@ npm test          # must end with ALL TESTS PASSED
 ```
 
 `npm test` only runs inside a Windows Sandbox or on GitHub Actions (it refuses on a normal PC). Use `sandbox start` and
-run it there; `npm run build` works anywhere. Running one suite, and the test helpers, are in
+run it there (`sandbox self-test [suite...]` is the same command, hidden from `--help`); `npm run build` works anywhere. Running one suite, and the test helpers, are in
 [docs/development.md](docs/development.md#tests).
 
 Developing this tool with an agent inside its own sandbox? Install a copy (`npm run install:global`), never a link.

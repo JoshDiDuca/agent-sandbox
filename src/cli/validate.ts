@@ -57,11 +57,11 @@ const LAUNCHING = new Set(['launch', 'generate', 'host-claude']);
 export const PROJECT_ACTIONS = ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'] as const;
 
 /** `sandbox projects <action> [value] [folder]`: the action, then what it needs. Pure (no file checks). */
-export function validateProjectsArgs(args: string[]): void {
+export function validateProjectsArgs(args: string[], canAsk = false): void {
   const [action = 'list', value, folder] = args;
   if (!(PROJECT_ACTIONS as readonly string[]).includes(action))
     unknownValue('projects action', action, PROJECT_ACTIONS, 'sandbox projects with no action lists your projects.');
-  if (['add', 'remove', 'include', 'exclude'].includes(action) && !value)
+  if (['add', 'remove', 'include', 'exclude'].includes(action) && !value && !canAsk)
     fail('Which folder?', 'Usage: sandbox projects ' + action + ' <folder>   (. = this folder)');
   if (action === 'all' && value !== undefined && !['on', 'off'].includes(value))
     unknownValue('value for projects all', value, ['on', 'off'], 'sandbox projects all on|off');
@@ -81,7 +81,7 @@ export function validateOptions(ctx: Context): void {
   const o: CliOptions = ctx.options;
   const harnesses = Object.keys(ctx.loaded.config.harnesses);
   if (['launch', 'generate', 'restart', 'doctor'].includes(o.command)) checkHarness(o.harness, harnesses);
-  if (o.command === 'projects') validateProjectsArgs(o.positionals);
+  if (o.command === 'projects') validateProjectsArgs(o.positionals, Boolean(process.stdin.isTTY));
   if (!LAUNCHING.has(o.command)) return;
   if (o.node !== undefined && !validNodeSpec(o.node))
     fail('"' + o.node + '" is not a Node version.', 'Use a number like 22 or 22.11.0, or lts, latest.');

@@ -11,17 +11,32 @@ import { maintenanceOptions, type MaintenanceModel } from '../cli/menu/pages/mai
 import { sandboxOptions, type SandboxModel } from '../cli/menu/pages/sandbox-page.js';
 import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
 import { settingsOf, settingsOptions } from '../cli/menu/pages/settings-page.js';
-import { startOptions } from '../cli/menu/pages/start-page.js';
-import { TAB_LABELS } from '../cli/menu/shell.js';
+import { CATEGORIES } from '../cli/menu/settings/categories.js';
+import { agentsOptions } from '../cli/menu/pages/agents-page.js';
+import { SECTION_LABELS } from '../cli/menu/shell.js';
 import type { ListedSession } from '../cli/services/index.js';
-import { Frame, ListScreen, OverlayScreen, Text, type ListOptions } from '../cli/tui/index.js';
+import { Frame, ListScreen, OverlayScreen, Text, type ListOptions, type NavState } from '../cli/tui/index.js';
 
-const SIZES = [
+export const SIZES = [
+  { width: 200, height: 60 },
   { width: 100, height: 30 },
   { width: 80, height: 24 },
+  { width: 60, height: 20 },
 ];
 
 const NOW = Date.now();
+const API_FOLDER = 'C:\\Projects\\api';
+
+/** The Data folder row of General (in the menu it comes from data-folder.ts). */
+const DATA_FOLDER_ROW = [
+  {
+    value: '@data-folder',
+    category: 'general',
+    label: 'Data folder',
+    hint: 'C:\\ProgramData\\AgentSandbox\\users\\me',
+    description: 'Where the sandbox keeps its data. Enter changes it.',
+  },
+];
 
 const ACCOUNTS: AccountsModel = {
   agents: [
@@ -61,22 +76,46 @@ const SESSIONS = [
   },
 ] as unknown as ListedSession[];
 
-/** Frame for one screen: the tabs, a status line, the list, the keys. */
+/** The navigation the shell would show: every section, the open one with the categories of `options`. */
+export function navFor(
+  active: number,
+  options: ListOptions<string>,
+  focused: boolean,
+  unsaved = 0,
+  dimmed = false,
+): NavState {
+  const list = new ListScreen({ ...options, categoryNav: 'external' });
+  return {
+    sections: SECTION_LABELS.map((label, i) => ({
+      label,
+      marked: unsaved > 0 && (label === 'Settings' || label === 'Apps'),
+      categories:
+        i === active ? list.categories.map((c) => ({ label: c.label, current: c.id === list.currentCategory })) : [],
+    })),
+    active,
+    focused,
+    dimmed,
+  };
+}
+
+/** Frame for one screen: the navigation, a status line, the list, the keys. */
 function draw(
   active: number,
   options: ListOptions<string>,
   size: { width: number; height: number },
   status = '',
   unsaved = 0,
+  focusNav = false,
 ): string[] {
-  const body = { width: size.width, height: Frame.bodyHeight(size.height, true) };
-  const parts = new ListScreen(options).render(body);
+  const nav = navFor(active, options, focusNav, unsaved);
+  const body = { width: Frame.bodyWidth(size.width, nav), height: Frame.bodyHeight(size.height) };
+  const parts = new ListScreen({ ...options, categoryNav: 'external', escapeLabel: 'sections' }).render(body);
   return Frame.render(
     {
       ...parts,
       keys: unsaved ? [['ctrl+s', 'save (' + unsaved + ')', 0], ...parts.keys] : parts.keys,
       status: (unsaved ? 'unsaved: ' + unsaved + '   ' : '') + (parts.status ?? status),
-      tabs: { tabs: TAB_LABELS.map((label) => ({ label })), active },
+      nav,
     },
     size.width,
     size.height,
@@ -142,6 +181,12 @@ export function renderScreens(dir: string): string {
       { name: 'postgres', running: true, port: 5432, title: 'PostgreSQL 18' },
       { name: 'redis', running: false, port: 6379, title: 'Redis' },
     ],
+    defaultAgent: 'claude',
+  };
+  const stopped: SandboxModel = {
+    ...sandbox,
+    report: { ...sandbox.report, sandbox: { ...sandbox.report.sandbox, running: false, phase: 'stopped' } },
+    databases: null,
   };
   const maintenance: MaintenanceModel = {
     data: {
@@ -168,11 +213,17 @@ export function renderScreens(dir: string): string {
       { name: 'Toolchain cache', status: 'needs-you', detail: 'close the sandbox first' },
     ],
     settings: { pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'] },
+    dataFolder: {
+      label: 'Data folder',
+      hint: 'C:\\ProgramData\\AgentSandbox\\users\\me',
+      description: 'Where the sandbox keeps its tools, databases and agent state. Enter changes it.',
+    },
     updates: {
       managed: true,
       version: '1.4.3',
       scope: 'user',
       autoUpdate: true,
+      autoOffText: null,
       state: {
         previous: '1.4.2',
         failed: { version: '1.4.4', at: '2026-10-13T03:00:00Z', reason: 'it did not start' },
@@ -204,35 +255,55 @@ export function renderScreens(dir: string): string {
 
   const out: string[] = [];
   for (const size of SIZES) {
+    const agentsModel = {
+      folder: API_FOLDER,
+      defaultAgent: 'claude',
+      agents: [
+        { name: 'claude', ready: true },
+        { name: 'codex', ready: false },
+        { name: 'gemini', ready: false },
+      ],
+      last: ['launch', '--harness', 'claude', '--terminal'],
+      attach: true,
+      window: 'config' as const,
+      hostAgents: ['codex'],
+      removable: ['gemini'],
+    };
     out.push(
       block(
-        '1 Start',
-        draw(
-          0,
-          startOptions(
-            {
-              folder: 'C:\\Projects\\api',
-              defaultAgent: 'claude',
-              agents: [
-                { name: 'claude', ready: true },
-                { name: 'codex', ready: false },
-                { name: 'gemini', ready: false },
-              ],
-              last: ['launch', '--harness', 'claude', '--terminal'],
-              attach: true,
-              window: 'config',
-              hostAgents: ['codex'],
-            },
-            'C:\\Projects\\api',
-          ),
-          size,
-          status,
-        ),
+        '1 Agents · Start',
+        draw(0, { ...agentsOptions(agentsModel, API_FOLDER), startCategory: 'start' }, size, status),
         size,
       ),
-      block('2 Sessions', draw(1, sessionsOptions({ sandboxRunning: true, sessions: SESSIONS }), size, status), size),
-      block('2 Sessions (no sandbox)', draw(1, sessionsOptions({ sandboxRunning: false, sessions: [] }), size), size),
+      block(
+        '1 Agents · Options (navigation focused)',
+        draw(0, { ...agentsOptions(agentsModel, API_FOLDER), startCategory: 'options' }, size, status, 0, true),
+        size,
+      ),
+      block(
+        '1 Agents · On this PC',
+        draw(0, { ...agentsOptions(agentsModel, API_FOLDER), startCategory: 'host' }, size, status),
+        size,
+      ),
+      block(
+        '2 Sessions',
+        draw(1, sessionsOptions({ sandboxRunning: true, sessions: SESSIONS, defaultAgent: 'claude' }), size, status),
+        size,
+      ),
+      block(
+        '2 Sessions (no sandbox)',
+        draw(1, sessionsOptions({ sandboxRunning: false, sessions: [], defaultAgent: 'claude' }), size),
+        size,
+      ),
     );
+    for (const category of ['status', 'databases'])
+      out.push(
+        block(
+          '3 Sandbox (stopped) · ' + category,
+          draw(2, { ...sandboxOptions(stopped), startCategory: category }, size),
+          size,
+        ),
+      );
     for (const category of ['status', 'projects', 'databases'])
       out.push(
         block(
@@ -247,15 +318,26 @@ export function renderScreens(dir: string): string {
         draw(3, appsOptions(apps, user, appsDraft, 'user'), size, status, appsDraft.count()),
         size,
       ),
-      block(
-        '5 Settings (2 unsaved)',
-        draw(4, settingsOptions(files, 'user', draft), size, status, draft.count()),
-        size,
-      ),
     );
+    for (const category of CATEGORIES)
+      out.push(
+        block(
+          '5 Settings · ' + category.label + ' (2 unsaved)',
+          draw(
+            4,
+            { ...settingsOptions(files, 'user', draft, DATA_FOLDER_ROW), startCategory: category.id },
+            size,
+            status,
+            draft.count(),
+          ),
+          size,
+        ),
+      );
     // The leave dialog over the settings screen.
-    const background = new ListScreen(settingsOptions(files, 'user', draft));
-    const bodySize = { width: size.width, height: Frame.bodyHeight(size.height, true) };
+    const settingsList = settingsOptions(files, 'user', draft, DATA_FOLDER_ROW);
+    const nav = navFor(4, settingsList, false, draft.count(), true);
+    const background = new ListScreen({ ...settingsList, categoryNav: 'external' });
+    const bodySize = { width: Frame.bodyWidth(size.width, nav), height: Frame.bodyHeight(size.height) };
     const dialog = new OverlayScreen(background, {
       title: 'Unsaved changes',
       lines: ['You have 2 unsaved changes in Settings and Apps.'],
@@ -269,11 +351,9 @@ export function renderScreens(dir: string): string {
     out.push(
       block(
         '5 Settings: Save / Discard / Cancel',
-        Frame.render(
-          { ...dialog.render(bodySize), tabs: { tabs: TAB_LABELS.map((label) => ({ label })), active: 4 } },
-          size.width,
-          size.height,
-        ).map((l) => Text.strip(l).replace(/\s+$/, '')),
+        Frame.render({ ...dialog.render(bodySize), nav }, size.width, size.height).map((l) =>
+          Text.strip(l).replace(/\s+$/, ''),
+        ),
         size,
       ),
       block('6 Accounts', draw(5, accountsOptions(ACCOUNTS), size, status), size),
@@ -288,7 +368,7 @@ export function renderScreens(dir: string): string {
         size,
       ),
     );
-    for (const category of ['data', 'logs', 'doctor', 'repair', 'settings', 'updates', 'setup', 'more'])
+    for (const category of ['updates', 'data', 'health', 'logs', 'more'])
       out.push(
         block(
           '7 Maintenance · ' + category,

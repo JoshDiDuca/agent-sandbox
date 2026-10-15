@@ -14,6 +14,18 @@ Status: **in progress**, **planned**, **idea** (needs a design decision or a tes
 | Kill switch: no traffic leaves the sandbox when the tunnel is down | planned |
 | Warnings: a VPN login inside the sandbox is readable by the agent; free VPNs see all traffic; shown in the menu and at launch | planned |
 
+## 1.9 — Web UI (the release before 2.0)
+
+Design and security model: [web-ui.md](web-ui.md).
+
+| Item | Status |
+| --- | --- |
+| Foundation: `sandbox web` (loopback only, token + cookie login), the terminal bridge, a React app with sessions, a live terminal and new sessions; off by default | in progress |
+| Plain shell sessions through ptyhost, so terminals you open show up in the web UI too; closing a session | planned |
+| Settings rows and a menu entry; a phone-sized layout with an on-screen key row (Esc, Tab, Ctrl, arrows) | planned |
+| Other Windows users of the PC: their own `sandbox web` shows your sandbox when you share it, under the same rules as the CLI | planned |
+| From a phone on your network: opt-in HTTPS, pairing per device (QR code), revocable devices, a private-network firewall rule | planned |
+
 ## Ideas
 
 | Item | Status |

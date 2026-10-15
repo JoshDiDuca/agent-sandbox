@@ -1,20 +1,38 @@
-// One command as a form: its arguments and options listed with their current values, each changed in place, and the
-// exact command line it will run shown live (the same line you could type yourself). Built from manifest.ts, so a new
-// command or option appears here on its own.
+// One command as a form: its arguments and options listed with their current values, each changed in place with the
+// input that fits it (a switch flips, a choice is picked, a number is typed within its limits, a folder or file is
+// picked in the path picker, a list is edited item by item), and the exact command line it will run shown live (the
+// same line you could type yourself). Built from manifest.ts, so a new command or option appears here on its own.
+import { z } from 'zod';
 import { humanBytes } from '../../core/disk.js';
-import { fail, plainText } from '../../core/util/index.js';
+import { plainText } from '../../core/util/index.js';
 import { SandboxChannel } from '../../host/channel/index.js';
 import { isSandboxRunning } from '../../host/sandbox/index.js';
+import { moveProblem } from '../../host/storage/index.js';
 import { splitArgs } from '../args.js';
 import type { Context } from '../commands/context.js';
 import { cleanTargetOf } from '../commands/data/collect.js';
-import { AccountsService, DataService } from '../services/index.js';
+import { AccountsService, DataService, ProjectsService } from '../services/index.js';
 import { commandLine } from '../history.js';
 import { askedWhen, type CommandSpec, type OptionSpec } from '../manifest.js';
 import { Text, Theme, type App, type ListItem } from '../tui/index.js';
-import { type Field, optionProblem } from './command-fields.js';
+import {
+  actionOf,
+  argLabel,
+  argPathKind,
+  type Field,
+  optionLabel,
+  optionPathKind,
+  optionProblem,
+  plainDescription,
+  plainSummary,
+} from './command-fields.js';
+import { StringListEditor } from './settings/collections/string-list-editor.js';
+import { askPath, type PathKind } from './settings/path-kind.js';
+import { SchemaNode } from './settings/schema-node.js';
+import { ValueEditor } from './settings/value-editor.js';
 
 const MORE = '@more';
+const OTHER = '@other';
 
 export class CommandForm {
   /** Advanced options stay folded away until asked for. */
@@ -40,6 +58,12 @@ export class CommandForm {
     }
   }
 
+  /** The actions the command's first argument offers (account: save, use, rename ...). */
+  private actions(): readonly string[] {
+    const choices = this.spec.args[0]?.choices;
+    return Array.isArray(choices) ? choices : [];
+  }
+
   /** Values a choices list names, filled in from config and the running sandbox. */
   private choices(choices: OptionSpec['choices']): string[] {
     if (Array.isArray(choices)) return choices;
@@ -56,13 +80,20 @@ export class CommandForm {
     return (this.values.get('arg:' + this.spec.args[0]?.name) as string[] | undefined)?.[0] ?? '';
   }
 
+  private valueOf(name: string): string {
+    return (this.values.get('arg:' + name) as string[] | undefined)?.[0] ?? '';
+  }
+
   /** Options the form may ask for at all (advanced ones included). */
   private askable(): OptionSpec[] {
     const first = this.first();
-    return this.spec.options.filter(
-      (o) =>
-        !o.noMenu && askedWhen(o.when, first) && !(typeof o.choices === 'string' && !this.choices(o.choices).length),
-    );
+    return this.spec.options.filter((o) => {
+      if (o.noMenu || !askedWhen(o.when, first)) return false;
+      if (typeof o.choices === 'string' && !this.choices(o.choices).length) return false;
+      // "(check) the folder": asked only for that action.
+      const action = actionOf(o.description, this.actions());
+      return !action || action === first;
+    });
   }
 
   private hiddenCount(): number {
@@ -109,7 +140,7 @@ export class CommandForm {
     const field = this.fields().find(
       (f) => f.kind === 'arg' && f.spec.required && !(this.values.get(this.id(f)) as string[] | undefined)?.length,
     );
-    return field?.kind === 'arg' ? Text.humanize(field.spec.name) : undefined;
+    return field?.kind === 'arg' ? argLabel(field.spec) : undefined;
   }
 
   private item(f: Field): ListItem<string> {
@@ -130,12 +161,13 @@ export class CommandForm {
           : Array.isArray(v) && v.length
             ? v.join(' ')
             : Theme.muted('not set');
+    const actions = this.actions();
     if (f.kind === 'arg')
       return {
         value: this.id(f),
-        label: Text.humanize(f.spec.name),
+        label: argLabel(f.spec),
         hint: shown,
-        description: f.spec.description,
+        description: plainDescription(f.spec.description, actions),
         section: 'What',
         keywords: f.spec.name,
       };
@@ -144,8 +176,9 @@ export class CommandForm {
         value: 'json',
         label: 'Machine-readable output',
         hint: shown,
-        description: 'Print JSON instead of a table (--json).',
+        description: 'Print JSON instead of a table.',
         section: 'Output',
+        flip: true,
       };
     if (f.kind === 'extra')
       return {
@@ -160,16 +193,12 @@ export class CommandForm {
       };
     return {
       value: this.id(f),
-      label:
-        f.spec.label ??
-        f.spec.flag
-          .replace(/^--/, '')
-          .replace(/-/g, ' ')
-          .replace(/^./, (c) => c.toUpperCase()),
+      label: optionLabel(f.spec),
       hint: shown,
-      description: f.spec.description,
+      description: plainDescription(f.spec.description, actions),
       section: f.spec.advanced ? 'Advanced' : 'Options',
       keywords: f.spec.flag,
+      flip: f.spec.type === 'boolean',
     };
   }
 
@@ -184,7 +213,7 @@ export class CommandForm {
       const line = commandLine(this.argv());
       const picked = await this.app.list<string>({
         path,
-        intro: this.spec.summary.replace(/^./, (c) => c.toUpperCase()) + '.',
+        intro: plainSummary(this.spec.summary),
         status: Theme.muted('$ ') + Theme.accent(line),
         items: [
           ...fields.map((f) => this.item(f)),
@@ -195,8 +224,9 @@ export class CommandForm {
         startAt: focus,
         actions: [
           { key: 'r', label: 'start', ctrl: true },
-          { key: 'r', label: 'clear' },
+          { key: 'r', label: 'clear', applies: (id) => this.values.has(id) },
         ],
+        enterLabel: (_category, id) => (id === MORE ? 'show' : this.isSwitch(id) ? 'flip' : 'change'),
         notice,
       });
       notice = undefined;
@@ -220,43 +250,84 @@ export class CommandForm {
         this.values.delete(this.id(field));
         continue;
       }
-      await this.edit(field, path);
+      notice = await this.edit(field, path);
       // Enter on the last field starts it (a switch only flips).
       const isSwitch = field.kind === 'json' || (field.kind === 'option' && field.spec.type === 'boolean');
       if (field === fields[fields.length - 1] && !isSwitch && !hidden && !this.missing()) return this.argv();
     }
   }
 
-  private async edit(f: Field, path: string[]): Promise<void> {
+  private isSwitch(id: string | undefined): boolean {
+    const f = this.fields().find((x) => this.id(x) === id);
+    return f?.kind === 'json' || (f?.kind === 'option' && f.spec.type === 'boolean');
+  }
+
+  /** Sets (or, with no value, clears) a field's answer. */
+  private set(id: string, value: string[]): void {
+    if (value.length) this.values.set(id, value);
+    else this.values.delete(id);
+  }
+
+  /** The kind of path a field takes (a folder or a file), if it is one. */
+  private pathKind(f: Field): PathKind | undefined {
+    if (f.kind === 'option') return optionPathKind(f.spec);
+    return f.kind === 'arg' ? argPathKind(f.spec, this.spec.name, this.first()) : undefined;
+  }
+
+  /** A name that does not exist yet (the new login's name): typed, not picked. */
+  private freeText(f: Field): boolean {
+    return f.kind === 'arg' && this.spec.name === 'account' && f.spec.name === 'name' && this.first() === 'save';
+  }
+
+  /** The values to pick from for a field with a fixed or looked-up set of answers. */
+  private options(f: Field): string[] {
+    if (f.kind === 'extra' || f.kind === 'json' || this.freeText(f)) return [];
+    const fixed = this.choices(f.spec.choices);
+    if (fixed.length || f.kind !== 'arg' || this.spec.name !== 'projects') return fixed;
+    const first = this.first();
+    if (f.spec.name === 'value' && first === 'all') return ['on', 'off'];
+    if (f.spec.name === 'value' && first === 'roots') return ['list', 'add', 'remove'];
+    if (f.spec.name === 'folder' && this.valueOf('value') === 'remove')
+      return new ProjectsService(this.ctx).list().roots;
+    return [];
+  }
+
+  /** Changes one field with the input that fits it. Returns a notice to show (when there is something to say). */
+  private async edit(f: Field, path: string[]): Promise<string | undefined> {
     const id = this.id(f);
     const current = this.values.get(id);
     if (f.kind === 'json' || (f.kind === 'option' && f.spec.type === 'boolean')) {
       this.values.set(id, current !== true);
-      return;
+      return undefined;
     }
-    const label = f.kind === 'extra' ? 'Arguments' : f.kind === 'arg' ? Text.humanize(f.spec.name) : f.spec.flag;
-    const about = f.kind === 'extra' ? [] : [f.spec.description];
+    const label = f.kind === 'extra' ? 'Arguments' : f.kind === 'arg' ? argLabel(f.spec) : optionLabel(f.spec);
+    const about = f.kind === 'extra' ? [] : [plainDescription(f.spec.description, this.actions())];
+    const here = [...path, label];
     if (f.kind === 'arg' && this.spec.name === 'data' && f.spec.name === 'targets') {
       const picked = await this.dataTargets(path);
       if (picked) this.values.set(id, picked);
-      return;
+      return undefined;
     }
-    const list = f.kind === 'extra' ? [] : this.choices(f.spec.choices);
     const many = (f.kind === 'option' && f.spec.type === 'list') || (f.kind === 'arg' && f.spec.variadic);
+    const list = this.options(f);
     if (list.length && many) {
       const picked = await this.app.list<string>({
-        path: [...path, label],
+        path: here,
         intro: about,
         multi: true,
         items: list.map((v) => ({ value: v, label: v, checked: Array.isArray(current) && current.includes(v) })),
       });
-      if (picked.kind === 'multi') this.values.set(id, picked.values);
-      return;
+      if (picked.kind === 'multi') this.set(id, picked.values);
+      return undefined;
+    }
+    if (f.kind === 'arg' && this.spec.name === 'projects' && f.spec.name === 'value' && this.projectAction()) {
+      await this.projectFolder(id, here, about);
+      return undefined;
     }
     if (list.length) {
       const optional = !(f.kind === 'arg' && f.spec.required);
       const picked = await this.app.choose<string>(
-        [...path, label],
+        here,
         about.join(' '),
         [
           ...list.map((v) => ({ value: v, label: v })),
@@ -264,24 +335,36 @@ export class CommandForm {
         ],
         Array.isArray(current) ? current[0] : undefined,
       );
-      if (picked !== undefined) {
-        if (picked === '') this.values.delete(id);
-        else this.values.set(id, [picked]);
-      }
-      return;
+      if (picked !== undefined) this.set(id, picked === '' ? [] : [picked]);
+      return undefined;
     }
-    if (f.kind === 'arg' && typeof f.spec.choices === 'string')
-      fail(
-        'There is nothing to choose from: no ' + f.spec.choices + ' yet.',
-        f.spec.choices === 'accounts'
-          ? 'Sign in inside the sandbox, then run: sandbox account save <name>'
-          : 'Start one first (sandbox claude).',
-      );
+    if (f.kind !== 'extra' && typeof f.spec.choices === 'string' && !this.freeText(f))
+      return this.nothingToChoose(f.spec.choices);
+    const kind = this.pathKind(f);
+    if (kind && f.kind !== 'extra') {
+      if (many) return this.pathList(id, here, about, kind);
+      const picked = await askPath(this.app, {
+        path: here,
+        title: kind === 'file' ? 'Choose the file' : 'Choose the folder',
+        about,
+        kind,
+        initial: Array.isArray(current) ? current[0] : '',
+        validate: (v) => this.pathProblem(f, v),
+      });
+      if (picked !== undefined) this.set(id, [picked]);
+      return undefined;
+    }
+    if (f.kind === 'option' && f.spec.type === 'list') return this.pathList(id, here, about, undefined);
+    const number = f.kind === 'option' && f.spec.type === 'number' ? f.spec : undefined;
     const typed = await this.app.text({
-      path: [...path, label],
+      path: here,
       label,
       about,
       allowEmpty: true,
+      accept: number ? /[0-9]/ : undefined,
+      hint: number
+        ? 'A whole number greater than 0' + (number.default !== undefined ? '. Default: ' + number.default : '') + '.'
+        : undefined,
       initial: Array.isArray(current)
         ? many || f.kind === 'extra'
           ? current.map((x) => (/\s/.test(x) ? '"' + x + '"' : x)).join(' ')
@@ -289,10 +372,68 @@ export class CommandForm {
         : '',
       validate: (v) => (f.kind === 'option' ? (optionProblem(f.spec, v) ?? true) : true),
     });
-    if (typed === undefined) return;
-    const value = many || f.kind === 'extra' ? splitArgs(typed) : typed.trim() ? [typed.trim()] : [];
-    if (value.length) this.values.set(id, value);
-    else this.values.delete(id);
+    if (typed === undefined) return undefined;
+    this.set(id, many || f.kind === 'extra' ? splitArgs(typed) : typed.trim() ? [typed.trim()] : []);
+    return undefined;
+  }
+
+  /** Is the problem with a picked path (true = fine)? Moving or switching the data folder has its own rules. */
+  private pathProblem(f: Field, picked: string): true | string {
+    if (this.spec.name === 'storage' && f.kind === 'arg') {
+      const problem = moveProblem(this.ctx.storageRoot, picked, true);
+      return problem ? problem.message : true;
+    }
+    return f.kind === 'option' ? (optionProblem(f.spec, picked) ?? true) : true;
+  }
+
+  /** Several folders or files (--script ...): a list to add to, change and remove from. */
+  private async pathList(id: string, path: string[], about: string[], kind: PathKind | undefined): Promise<undefined> {
+    const node = new SchemaNode(z.array(z.string()).describe(about.join(' ')));
+    const edited = await new StringListEditor(
+      this.app,
+      path,
+      node,
+      new ValueEditor(this.app),
+      [],
+      kind,
+      'Esc keeps it for the command',
+    ).run(Array.isArray(this.values.get(id)) ? [...(this.values.get(id) as string[])] : []);
+    if (edited) this.set(id, edited.value as string[]);
+    return undefined;
+  }
+
+  /** projects remove / include / exclude pick from the known projects (or any folder); add takes a folder. */
+  private projectAction(): boolean {
+    return ['remove', 'include', 'exclude'].includes(this.first());
+  }
+
+  private async projectFolder(id: string, path: string[], about: string[]): Promise<void> {
+    const known = new ProjectsService(this.ctx).list().projects.map((p) => p.folder);
+    const current = this.values.get(id);
+    const picked = await this.app.choose<string>(
+      path,
+      about.join(' '),
+      [...known.map((v) => ({ value: v, label: v })), { value: OTHER, label: 'Another folder…' }],
+      Array.isArray(current) ? current[0] : undefined,
+    );
+    if (picked === undefined) return;
+    if (picked !== OTHER) {
+      this.set(id, [picked]);
+      return;
+    }
+    const folder = await askPath(this.app, { path, title: 'Choose the folder', about, kind: 'dir' });
+    if (folder !== undefined) this.set(id, [folder]);
+  }
+
+  /** Nothing to pick from (no saved logins, no running session): say what to do, in the form, without an error. */
+  private nothingToChoose(what: string): string {
+    return Theme.warn(
+      what === 'accounts'
+        ? 'No saved logins yet: sign in inside the sandbox, then save it in Accounts.'
+        : what === 'sessions'
+          ? 'No session is running: start an agent first.'
+          : 'There is nothing to choose from yet.',
+    );
   }
 
   /** `data clean` targets, ticked from a list with their sizes (never "all": that is typed on purpose). */

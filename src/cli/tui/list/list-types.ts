@@ -27,9 +27,11 @@ export interface Category {
   label: string;
   description?: string;
 }
-export interface ListAction {
+export interface ListAction<T = unknown> {
   key: string;
   label: string;
+  /** Only while an entry this accepts is highlighted: the key bar and the key itself ignore it otherwise. */
+  applies?: (value: T) => boolean;
   /** Pressed with Ctrl (ctrl+s ...); works while searching too. */
   ctrl?: boolean;
   /** How long it survives in a narrow footer: 0 never goes, bigger goes earlier (default 2). */
@@ -63,12 +65,14 @@ export interface ListOptions<T> {
   startAt?: T;
   startCategory?: string;
   /** Extra keys; a function picks them by the open category. */
-  actions?: ListAction[] | ((category: string | undefined) => ListAction[]);
+  actions?: ListAction<T>[] | ((category: string | undefined) => ListAction<T>[]);
   notice?: string;
   empty?: string;
   tabs?: { items: Tab[]; active: number };
   /** What Esc does, for the footer ("back", "quit"). */
   escapeLabel?: string;
-  /** What Enter does, for the footer ("open", "edit", "start"). */
-  enterLabel?: string;
+  /** What Enter does, for the footer ("open", "edit", "start"); a function picks it by entry ("": none). */
+  enterLabel?: string | ((category: string | undefined, value: T | undefined) => string);
+  /** Where the categories are listed: in a sidebar of the list itself (default) or in the menu's own navigation. */
+  categoryNav?: 'own' | 'external';
 }

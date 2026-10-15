@@ -2,7 +2,8 @@
 // (cli/manifest.ts) drives both the flags and the menu.
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildProgram, parseCli } from '../cli/args.js';
+import { buildProgram, friendlyError, parseCli } from '../cli/args.js';
+import { askRequired } from '../core/prompt.js';
 import { COMMANDS } from '../cli/manifest.js';
 import { commandLine, readHistory, recordHistory } from '../cli/history.js';
 import { splitArgs } from '../cli/args.js';
@@ -11,7 +12,7 @@ import { cleanTargetOf, type DataEntry } from '../cli/commands/data/collect.js';
 import { ago, colorEnabled, shorten } from '../cli/output/index.js';
 import { hoistConfig, withoutConfig } from '../cli/argv.js';
 import { closest, validNodeSpec, validPythonSpec } from '../cli/validate.js';
-import { CATEGORIES, editConfigText, SchemaNode } from '../cli/menu/settings/index.js';
+import { CATEGORIES, editConfigText, SchemaNode, SETTINGS_ELSEWHERE } from '../cli/menu/settings/index.js';
 import { Frame, ListScreen, Text, TextScreen, type Key } from '../cli/tui/index.js';
 import { ConfigSchema, LocalOverridesSchema } from '../core/schema/index.js';
 import type { Suite } from './support/suite.js';
@@ -192,8 +193,12 @@ export const cliSuite: Suite = {
     const userLeaves = userSchema.leaves();
     const uncategorised = [...userSchema.children(), ...projectSchema.children()]
       .map(([name]) => name)
-      .filter((name) => !CATEGORIES.some((c) => c.keys.includes(name)));
-    t.equal(uncategorised, [], 'settings screen: every top-level setting belongs to a category');
+      .filter((name) => !CATEGORIES.some((c) => c.keys.includes(name)) && !SETTINGS_ELSEWHERE.includes(name));
+    t.equal(
+      uncategorised,
+      [],
+      'settings screen: every top-level setting belongs to a category (or to the Apps section)',
+    );
     t.equal(
       userLeaves.filter((l) => l.node.editor === 'json').map((l) => l.key.join('.')),
       [],
@@ -262,5 +267,54 @@ export const cliSuite: Suite = {
       [undefined, { done: '8' }],
       'text field: an invalid value is not accepted, a valid one is',
     );
+
+    t.section('command line: grouped help, did you mean, choices, --agent, required questions');
+    const rootHelp = buildProgram(() => undefined).helpInformation();
+    const headings = ['Agents:', 'Sessions:', 'Projects & accounts:', 'Data:', 'Web:', 'Health:', 'Advanced:'];
+    const at = headings.map((h) => rootHelp.indexOf('\n' + h + '\n'));
+    t.check(
+      at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1])),
+      'root help: the command groups come in the order Agents, Sessions, Projects & accounts, Data, Web, Health, Advanced',
+    );
+    t.check(
+      !/^\s+(self-test|host-claude)\b/m.test(rootHelp) &&
+        !buildProgram(() => undefined)
+          .commands.find((c) => c.name() === 'status')!
+          .helpInformation()
+          .includes('--config'),
+      'self-test and host-claude are hidden, and --config is not in a command help',
+    );
+    t.check(
+      friendlyError("error: unknown command 'statu'\n(Did you mean status?)\n").includes(
+        'Did you mean: sandbox status?',
+      ) && closest('cluade', ['claude', 'codex', 'status']) === 'claude',
+      'an unknown command says "Did you mean: sandbox status?"; a mistyped agent finds the closest',
+    );
+    await t.throws(
+      () => parseCli(['data', 'bogus']),
+      'Allowed choices are show, clean',
+      'a typo in an action lists the valid ones',
+    );
+    t.check(
+      parseCli(['data', 'info']).positionals[0] === 'info',
+      'an old spelling that is not listed is still accepted',
+    );
+    t.equal(
+      [
+        parseCli(['launch', '--agent', 'codex']).harness,
+        parseCli(['launch', '--harness', 'codex']).harness,
+        parseCli(['restart', '--agent', 'claude']).harness,
+        parseCli(['account', 'list', '--agent', 'codex']).accountAgent,
+        parseCli(['--agent', 'reviewer', '-p', 'hi'], true).passthrough,
+      ],
+      ['codex', 'codex', 'claude', 'codex', ['--agent', 'reviewer', '-p', 'hi']],
+      '--agent names the agent (--harness still works); sandbox claude leaves --agent to Claude',
+    );
+    if (!process.stdin.isTTY)
+      await t.throws(
+        () => askRequired('Delete it?'),
+        'Add --yes to answer yes.',
+        'a required question with no terminal fails and names --yes',
+      );
   },
 };

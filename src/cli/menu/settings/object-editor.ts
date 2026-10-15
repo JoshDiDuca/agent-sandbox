@@ -11,6 +11,8 @@ export class ObjectEditor {
     private readonly path: string[],
     private readonly node: SchemaNode,
     private readonly editor: ValueEditor,
+    /** The setting's key (the object's own, without list positions), so a field knows what it is. */
+    private readonly key: string[] = [],
   ) {}
 
   async run(start: Record<string, unknown>, isNew = false): Promise<Edited> {
@@ -33,10 +35,17 @@ export class ObjectEditor {
             hint: formatValue(value[name]),
             description: field.description,
             section: 'Fields',
+            flip: field.editor === 'boolean',
           })),
         ],
         startAt: focus,
-        actions: [{ key: 'r', label: 'clear' }],
+        actions: [
+          {
+            key: 'r',
+            label: 'clear',
+            applies: (name) => Boolean(this.node.child(name)?.optional) && value[name] !== undefined,
+          },
+        ],
       });
       notice = undefined;
       if (picked.kind === 'back') {
@@ -62,7 +71,12 @@ export class ObjectEditor {
         delete value[name];
         continue;
       }
-      const edited = await this.editor.edit([...this.path, Text.humanize(name)], [name], field, value[name]);
+      const edited = await this.editor.edit(
+        [...this.path, Text.humanize(name)],
+        [...this.key, name],
+        field,
+        value[name],
+      );
       if (edited) value[name] = edited.value;
     }
   }

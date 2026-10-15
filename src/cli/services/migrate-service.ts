@@ -55,7 +55,7 @@ export class MigrateService {
 }
 
 /** Commands that never update the settings first: they must work whatever state the settings are in. */
-const NO_AUTO_MIGRATION: readonly string[] = ['self-test', 'migrate', 'update', '_watch'];
+const NO_AUTO_MIGRATION: readonly string[] = ['self-test', 'migrate', 'update', '_watch', '_web'];
 
 /** Does this command update the saved settings before it runs (when the version changed)? Never inside a sandbox. */
 export function autoMigrates(command: string, inSandbox: boolean): boolean {

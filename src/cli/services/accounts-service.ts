@@ -30,6 +30,8 @@ export interface AgentAccounts {
 export interface AccountRef {
   readonly name: string;
   readonly email: string | null;
+  /** Something worth telling after a switch (e.g. plugins were copied, or could not be). */
+  readonly note?: string;
 }
 
 const CLAUDE = 'claude';
@@ -38,7 +40,7 @@ export class AccountsService {
   private readonly claude: AccountStore;
 
   constructor(private readonly ctx: AccountsContext) {
-    this.claude = new AccountStore(ctx.storageRoot);
+    this.claude = new AccountStore(ctx.storageRoot, ctx.loaded.config.claudeProfile.sharePluginsAcrossAccounts);
   }
 
   /** Claude first, then the other agents that keep a login, then the ones that cannot. */
@@ -107,7 +109,7 @@ export class AccountsService {
   activate(name: string, agent = CLAUDE): AccountRef {
     if (agent === CLAUDE) {
       const a = this.claude.activate(this.ctx.dataPath, name);
-      return { name: a.name, email: a.email };
+      return { name: a.name, email: a.email, note: this.claude.pluginNote ?? undefined };
     }
     const { store, stateDir } = this.other(agent);
     store.activate(this.ctx.dataPath, name, stateDir);

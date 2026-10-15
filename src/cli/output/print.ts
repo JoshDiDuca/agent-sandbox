@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import type { Context } from '../commands/context.js';
+import { c } from './colors.js';
 
 /** Prints rows as aligned columns (the last column is not padded). */
 export function table(rows: string[][]): void {
@@ -21,4 +22,9 @@ export function printJson(ctx: Context, value: unknown): boolean {
       ),
     );
   return ctx.options.json;
+}
+
+/** A dim "Next: ..." line after a command: the usual thing to do now. */
+export function nextStep(text: string): void {
+  console.log(c.dim('Next: ' + text));
 }

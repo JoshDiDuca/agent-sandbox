@@ -3,8 +3,10 @@
 import { ConfirmScreen, type ConfirmOptions } from './dialogs/confirm-screen.js';
 import { MessageScreen } from './dialogs/message-screen.js';
 import { TextScreen, type TextOptions } from './dialogs/text-screen.js';
+import { PathPickerScreen, type PathPickerOptions } from './dialogs/path-picker.js';
 import { OverlayScreen, type OverlayOptions } from './dialogs/overlay.js';
-import { Frame, type TabsState } from './frame.js';
+import { Frame } from './frame.js';
+import type { NavState } from './nav.js';
 import { ListScreen } from './list/list-screen.js';
 import { type ListOptions, type ListResult } from './list/list-types.js';
 import { Terminal } from './terminal.js';
@@ -14,8 +16,8 @@ import type { Screen } from './screen.js';
 export class App {
   /** The status line for screens that do not set their own (refreshed on every draw). */
   status: () => string = () => '';
-  /** The tabs shown across the top of every screen (none: no tab row). */
-  tabs: () => TabsState | undefined = () => undefined;
+  /** The navigation on the left of every screen (none: no navigation column). */
+  nav: () => NavState | undefined = () => undefined;
   /** The screens being shown, innermost last: a dialog is drawn over the one below it. */
   private readonly shown: Screen<unknown>[] = [];
   private redrawNow: (() => void) | null = null;
@@ -34,10 +36,16 @@ export class App {
     const outer = this.redrawNow;
     const draw = (): void => {
       const { width, height } = this.terminal;
-      const tabs = this.tabs();
-      const parts = screen.render({ width, height: Frame.bodyHeight(height, Boolean(tabs)) });
+      const nav = this.nav();
+      // A screen over the menu (a dialog, an editor) leaves the navigation visible but grey.
+      const covered = this.shown.length > 1;
+      const parts = screen.render({ width: Frame.bodyWidth(width, nav), height: Frame.bodyHeight(height) });
       this.terminal.render(
-        Frame.render({ ...parts, status: parts.status ?? this.status(), tabs: parts.tabs ?? tabs }, width, height),
+        Frame.render(
+          { ...parts, status: parts.status ?? this.status(), nav: nav && { ...nav, dimmed: nav.dimmed || covered } },
+          width,
+          height,
+        ),
       );
     };
     this.redrawNow = draw;
@@ -80,6 +88,10 @@ export class App {
   }
   text(o: TextOptions): Promise<string | undefined> {
     return this.show(new TextScreen(o));
+  }
+  /** Choose a folder (or a file): the path on top, the folders to browse below. Undefined = cancelled. */
+  pickPath(o: PathPickerOptions): Promise<string | undefined> {
+    return this.show(new PathPickerScreen(o));
   }
   confirm(o: ConfirmOptions): Promise<boolean> {
     return this.show(new ConfirmScreen(o));

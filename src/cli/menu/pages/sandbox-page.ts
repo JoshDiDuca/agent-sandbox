@@ -1,5 +1,6 @@
-// Tab 3: the sandbox as a whole. Status (a card, the window, stopping it), Projects (roots and known projects) and
+// Section 3: the sandbox as a whole. Status (a card, the window, stopping it), Projects (roots and known projects) and
 // Databases (start and stop), each a category on the left.
+import fs from 'node:fs';
 import path from 'node:path';
 import { errMsg, safeText } from '../../../core/util/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
@@ -29,6 +30,8 @@ export interface SandboxModel {
   readonly projects: ProjectsListing;
   /** Null: the sandbox is not running or did not answer. */
   readonly databases: DatabaseRow[] | null;
+  /** The agent "Start the sandbox" offers while nothing runs. */
+  readonly defaultAgent: string;
 }
 
 const CATEGORIES = [
@@ -55,9 +58,9 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
     section: 'Sandbox',
     ...extra,
   });
-  const off = running ? {} : { disabled: 'No sandbox is running.' };
   const sessions = m.report.projects.reduce((n, p) => n + p.sessions.length, 0) + m.report.otherSessions.length;
   const status: ListItem<string>[] = [
+    ...(running ? [] : startRows(m.defaultAgent, 'status')),
     row(
       'info:state',
       'State',
@@ -80,29 +83,37 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
         details: repoGuard.findings.slice(-8).map((f) => Theme.warn(safeText(f))),
       },
     ),
-    row('act:show', 'Show the window', '', {
-      section: 'Actions',
-      description: 'Brings the sandbox window to the front.',
-      ...off,
-    }),
-    row('act:hide', 'Hide the window', '', {
-      section: 'Actions',
-      description: 'Hides the window; sbx-show inside the sandbox (or Show the window here) brings it back.',
-      ...off,
-    }),
-    row('act:stop', 'Stop the sandbox…', '', {
-      section: 'Actions',
-      description: 'Shuts the sandbox down; history and claude-mem sync back when it closes.',
-      ...off,
-    }),
+    ...(running
+      ? [
+          row('act:show', 'Show the window', '', {
+            section: 'Actions',
+            description: 'Brings the sandbox window to the front.',
+          }),
+          row('act:hide', 'Hide the window', '', {
+            section: 'Actions',
+            description: 'Hides the window. Show the window brings it back.',
+          }),
+          row('act:stop', 'Stop the sandbox…', '', {
+            section: 'Actions',
+            description: 'Shuts the sandbox down; your history syncs back when it closes.',
+          }),
+        ]
+      : []),
   ];
+  const addRoot: ListItem<string> = {
+    value: ADD_ROOT,
+    label: '+ Add a project root…',
+    category: 'projects',
+    section: 'Project roots',
+    description: 'Pick a folder that holds your projects: every project in it (also new ones) opens without a restart.',
+  };
   const roots: ListItem<string>[] = m.projects.roots.map((r) => ({
     value: 'root:' + r,
     label: Text.middle(r, 60),
     hint: Theme.muted('root'),
     category: 'projects',
     section: 'Project roots',
-    description: 'Every project in this folder (also new ones) opens without a restart.',
+    description: 'Every project in this folder (also new ones) opens without a restart. f removes the root.',
   }));
   const projects: ListItem<string>[] = m.projects.projects.map((p) => ({
     value: 'project:' + p.folder,
@@ -116,6 +127,20 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
       Theme.muted('In sandbox ') + (p.running ?? '-'),
     ],
   }));
+  const noDatabases: ListItem<string>[] = m.databases
+    ? []
+    : running
+      ? [
+          {
+            value: 'info:db',
+            label: 'The sandbox is not ready yet',
+            category: 'databases',
+            section: 'Databases',
+            description: 'Its databases are listed once it is ready. l looks again.',
+            disabled: 'Not ready yet: l looks again.',
+          },
+        ]
+      : startRows(m.defaultAgent, 'databases');
   const databases: ListItem<string>[] = (m.databases ?? []).map((d) => ({
     value: 'db:' + d.name,
     label: d.name,
@@ -126,28 +151,66 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
   }));
   return {
     path: [],
-    items: [...status, ...roots, ...projects, ...databases],
+    items: [...status, addRoot, ...roots, ...projects, ...databases, ...noDatabases],
     categories: CATEGORIES,
-    empty: running ? 'Nothing here yet.' : 'No sandbox is running.',
-    actions: sandboxActions,
-    enterLabel: 'run',
-    escapeLabel: 'quit',
+    empty: 'Nothing here yet.',
+    actions: (category) => sandboxActions(category, running),
+    enterLabel: (_category, id) => enterLabel(id ?? '', m),
   };
 }
 
-function sandboxActions(category: string | undefined): ListAction[] {
+const ADD_ROOT = '@add-root';
+const REFRESH: ListAction<string> = { key: 'l', label: 'refresh', importance: 3 };
+
+/** The rows that start a sandbox, shown where the sandbox has to run for anything to be there. */
+function startRows(agent: string, category: string): ListItem<string>[] {
+  return [
+    {
+      value: 'act:start',
+      label: 'Start the sandbox with ' + agent,
+      hint: Theme.muted('default agent'),
+      category,
+      section: 'No sandbox is running',
+      description: 'Starts the sandbox and ' + agent + ' in this folder.',
+    },
+    {
+      value: 'act:start-bare',
+      label: 'Start the sandbox without an agent',
+      category,
+      section: 'No sandbox is running',
+      description: 'Tools and databases only.',
+    },
+  ];
+}
+
+/** What Enter does on a row ("" = the row only shows information). */
+function enterLabel(id: string, m: SandboxModel): string {
+  if (id === 'act:show') return 'show';
+  if (id === 'act:hide') return 'hide';
+  if (id === 'act:stop') return 'stop';
+  if (id.startsWith('act:start')) return 'start';
+  if (id === ADD_ROOT) return 'choose folder';
+  if (id.startsWith('db:')) return m.databases?.find((d) => 'db:' + d.name === id)?.running ? 'stop' : 'start';
+  return '';
+}
+
+function sandboxActions(category: string | undefined, running: boolean): ListAction<string>[] {
   if (category === 'projects')
     return [
-      { key: 'a', label: 'add root' },
-      { key: 'f', label: 'forget / remove' },
+      { key: 'a', label: 'add root', importance: 1 },
+      { key: 'f', label: 'remove root', importance: 1, applies: (id) => id.startsWith('root:') },
+      { key: 'f', label: 'forget project', importance: 1, applies: (id) => id.startsWith('project:') },
+      REFRESH,
     ];
-  return category === 'databases'
-    ? []
-    : [
-        { key: 'w', label: 'show window' },
-        { key: 'h', label: 'hide window' },
-        { key: 'x', label: 'stop' },
-      ];
+  if (category === 'databases') return [REFRESH];
+  return running
+    ? [
+        { key: 'w', label: 'show window', importance: 3 },
+        { key: 'h', label: 'hide window', importance: 3 },
+        { key: 'x', label: 'stop', importance: 1 },
+        REFRESH,
+      ]
+    : [REFRESH];
 }
 
 export class SandboxPage extends ListPage<string> {
@@ -176,7 +239,7 @@ export class SandboxPage extends ListPage<string> {
         /* the sandbox did not answer: the list stays empty */
       }
     }
-    this.model = { report, projects: this.projects.list(), databases };
+    this.model = { report, projects: this.projects.list(), databases, defaultAgent: this.defaultAgent() };
   }
 
   /** The folder `sbx-db` runs in: the sandbox's own workspace. */
@@ -193,16 +256,25 @@ export class SandboxPage extends ListPage<string> {
     const id = result.kind === 'pick' || result.kind === 'action' ? result.value : undefined;
     const key = result.kind === 'action' ? result.key : undefined;
     try {
+      if (key === 'l') return { reload: true };
+      if (id === 'act:start' && !key)
+        return { exit: { kind: 'run', argv: ['launch', '--harness', this.defaultAgent()] } };
+      if (id === 'act:start-bare' && !key) return { exit: { kind: 'run', argv: ['start'] } };
+      if (id === ADD_ROOT && !key) return await this.addRoot();
       if (id === 'act:show' || key === 'w') return this.show();
       if (id === 'act:hide' || key === 'h') return await this.hide();
       if (id === 'act:stop' || key === 'x') return await this.stop();
       if (key === 'a') return await this.addRoot();
-      if (key === 'f') return this.forget(id);
+      if (key === 'f') return await this.forget(id);
       if (id?.startsWith('db:') && result.kind === 'pick') return await this.toggleDatabase(id.slice(3));
     } catch (e) {
       return { notice: Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) };
     }
     return {};
+  }
+
+  private defaultAgent(): string {
+    return this.ctx.loaded.config.defaultHarness;
   }
 
   private noSandbox(): Outcome<string> | null {
@@ -222,7 +294,7 @@ export class SandboxPage extends ListPage<string> {
     await this.sandbox.hideWindow();
     return {
       reload: true,
-      notice: Theme.ok(Theme.glyph.ok + ' Window hidden.') + Theme.muted(' sbx-show brings it back.'),
+      notice: Theme.ok(Theme.glyph.ok + ' Window hidden.'),
     };
   }
 
@@ -252,16 +324,17 @@ export class SandboxPage extends ListPage<string> {
   }
 
   private async addRoot(): Promise<Outcome<string>> {
-    const typed = await this.app.text({
+    const picked = await this.app.pickPath({
       path: ['Sandbox', 'Add a project root'],
-      label: 'Folder that holds your projects',
+      title: 'Choose the folder that holds your projects',
       about: [
         'Every project inside it (also new ones) opens without a restart. Every agent in the sandbox can see them.',
       ],
-      validate: (v) => (v.trim() ? true : 'Type a folder.'),
+      use: 'add this root',
+      validate: (v) => (fs.existsSync(v) ? true : 'That folder does not exist.'),
     });
-    if (!typed) return {};
-    const { dir, added } = this.projects.addRoot(typed.trim());
+    if (!picked) return {};
+    const { dir, added } = this.projects.addRoot(picked);
     return {
       reload: true,
       notice: added
@@ -270,8 +343,23 @@ export class SandboxPage extends ListPage<string> {
     };
   }
 
-  private forget(id: string | undefined): Outcome<string> {
-    if (id?.startsWith('root:')) {
+  private async forget(id: string | undefined): Promise<Outcome<string>> {
+    const root = id?.startsWith('root:');
+    if (!id || (!root && !id.startsWith('project:'))) return {};
+    const folder = id.slice(root ? 5 : 8);
+    const ok = await this.app.ask(
+      (root ? 'Remove the root ' : 'Forget ') + path.basename(folder) + '?',
+      [
+        root
+          ? 'Its projects are no longer opened without a restart.'
+          : 'The project is dropped from your list of projects.',
+        'Nothing in ' + folder + ' is touched.',
+      ],
+      root ? 'Remove' : 'Forget',
+      true,
+    );
+    if (!ok) return {};
+    if (id.startsWith('root:')) {
       const { dir, removed } = this.projects.removeRoot(id.slice(5));
       return {
         reload: true,

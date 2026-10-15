@@ -1,6 +1,14 @@
 // The common shape of a tab that is a list: it loads its data, builds a list screen from it, and acts on what the list
 // returns. After every action the list is built again from fresh data, on the same entry.
-import { ListScreen, type App, type FrameParts, type Key, type ListOptions, type ListResult } from '../../tui/index.js';
+import {
+  ListScreen,
+  type App,
+  type Category,
+  type FrameParts,
+  type Key,
+  type ListOptions,
+  type ListResult,
+} from '../../tui/index.js';
 import type { Size, Step } from '../../tui/index.js';
 import type { Page, ShellExit } from '../shell.js';
 
@@ -19,6 +27,10 @@ export abstract class ListPage<T> implements Page {
   readonly stages: boolean = false;
   private list: ListScreen<T> | undefined;
   private notice: string | undefined;
+  /** The list has the keyboard (the menu's navigation does not). */
+  private focused = true;
+  /** The entry that was last acted on: the cursor returns to it when the section opens again. */
+  private lastFocus: T | undefined;
 
   constructor(protected readonly app: App) {}
 
@@ -26,6 +38,10 @@ export abstract class ListPage<T> implements Page {
   protected abstract load(): Promise<void>;
   /** The list for the data loaded (pure: no I/O). */
   protected abstract options(): ListOptions<T>;
+  /** The entry the cursor starts on the first time the section opens (default: the first). */
+  protected initialFocus(): T | undefined {
+    return undefined;
+  }
   /** Does what the list returned. */
   protected abstract act(result: ListResult<T>): Promise<Outcome<T>>;
 
@@ -33,9 +49,35 @@ export abstract class ListPage<T> implements Page {
     return this.list?.isSearching ?? false;
   }
 
-  /** The id of the open sidebar category, if the list has one. */
-  protected get category(): string | undefined {
+  /** The id of the open category, if the list has any. */
+  get category(): string | undefined {
     return this.list?.currentCategory;
+  }
+
+  categories(): readonly Category[] {
+    return this.screen().categories;
+  }
+
+  async selectCategory(id: string): Promise<void> {
+    this.screen().setCategory(id);
+    await this.afterKey();
+  }
+
+  setFocus(list: boolean): void {
+    this.focused = list;
+    this.list?.setActive(list);
+  }
+
+  /** The list on screen, built when there is none yet. */
+  private screen(): ListScreen<T> {
+    return (this.list ??= this.build({}));
+  }
+
+  /** A list from the current data; its categories are shown by the menu's navigation. */
+  private build(extra: Partial<ListOptions<T>>): ListScreen<T> {
+    const list = new ListScreen<T>({ ...this.options(), ...extra, categoryNav: 'external', escapeLabel: 'sections' });
+    list.setActive(this.focused);
+    return list;
   }
 
   /** The entries ticked in a multi-select list. */
@@ -45,13 +87,17 @@ export abstract class ListPage<T> implements Page {
 
   async open(): Promise<void> {
     await this.load();
-    this.rebuild(undefined);
+    // Back on the entry used last, when it is still in the category that is open.
+    const wanted = this.lastFocus ?? this.initialFocus();
+    const open = this.list?.currentCategory;
+    const item = wanted === undefined ? undefined : this.options().items.find((i) => i.value === wanted);
+    this.rebuild(item && (!open || !item.category || item.category === open) ? wanted : undefined);
   }
 
   /** Builds the list again, on `focus` when it is still there. */
   protected rebuild(focus: T | undefined, notice?: string): void {
     const startCategory = this.list?.currentCategory;
-    this.list = new ListScreen<T>({ ...this.options(), startAt: focus, startCategory, notice: notice ?? this.notice });
+    this.list = this.build({ startAt: focus, startCategory, notice: notice ?? this.notice });
     this.notice = undefined;
   }
 
@@ -67,19 +113,18 @@ export abstract class ListPage<T> implements Page {
   }
 
   render(size: Size): FrameParts {
-    this.list ??= new ListScreen<T>(this.options());
-    return this.list.render(size);
+    return this.screen().render(size);
   }
 
   async handle(key: Key): Promise<Step<ShellExit>> {
-    this.list ??= new ListScreen<T>(this.options());
-    const step = this.list.handle(key);
+    const step = this.screen().handle(key);
     if (!step) return this.afterKey();
     const result = step.done;
     const outcome = result.kind === 'back' ? { exit: { kind: 'quit' } as ShellExit } : await this.act(result);
     if (outcome.exit) return { done: outcome.exit };
     if (outcome.reload) await this.load();
     const here = result.kind === 'pick' || result.kind === 'action' ? result.value : undefined;
+    this.lastFocus = outcome.focus ?? here ?? this.lastFocus;
     this.rebuild(outcome.focus ?? here, outcome.notice);
     return;
   }

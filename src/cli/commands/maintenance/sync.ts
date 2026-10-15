@@ -1,5 +1,6 @@
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
 import { syncBack } from '../../../sync/index.js';
+import { nextStep } from '../../output/index.js';
 import { type Context } from '../context.js';
 
 export function sync(ctx: Context): number {
@@ -12,5 +13,6 @@ export function sync(ctx: Context): number {
       result.claudeMem +
       (running ? ' (claude-mem syncs when the sandbox closes)' : ''),
   );
+  nextStep('sandbox claude   (carry on where you left off)');
   return 0;
 }

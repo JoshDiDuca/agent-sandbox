@@ -5,12 +5,14 @@ import type { ResolvedRun } from '../../../core/types.js';
 import { assertSafeMapping, assertSafeWorkspace } from '../../../core/safe-paths.js';
 import { isRootPath } from '../../../core/util/index.js';
 import { autoGuestWorkspace, placeInRoot } from '../../../core/run/index.js';
+import { c } from '../../output/index.js';
 import { type Context } from '../context.js';
 import { addToList, setSetting } from '../user-config.js';
 
 /**
- * Asked once per parent folder: map it at every start (a project root), so the projects next to this one open in the
- * running sandbox without a restart. The answer is saved to your config.
+ * Asked at a start from a folder whose parent is not shared yet ("Not now" asks again next time): map it at every
+ * start (a project root), so the projects next to this one open in the running sandbox without a restart. The answer is
+ * saved to your config.
  */
 export async function maybeAddRoot(ctx: Context, run: ResolvedRun): Promise<void> {
   const { projects } = run.config;
@@ -30,22 +32,22 @@ export async function maybeAddRoot(ctx: Context, run: ResolvedRun): Promise<void
   }
   const answer = await select({
     message:
-      'Map ' +
+      'Share all projects in ' +
       parent +
-      ' at every start, so other projects there (also new ones) open in the running sandbox without a restart? Agents in the sandbox can then see every project in it.',
+      ' with the sandbox?\n  ' +
+      c.dim('Projects there, also new ones, then open without a restart. Agents can see every one of them.'),
     choices: [
-      { name: 'Yes, from now on', value: 'yes' },
-      { name: 'No (and do not ask again for this folder)', value: 'no' },
-      { name: 'Never ask this again', value: 'never' },
+      { name: 'Yes, share ' + parent, value: 'yes' },
+      { name: 'Not now', value: 'no' },
+      { name: 'No, and stop asking', value: 'never' },
     ],
   });
   if (answer === 'yes') {
     addToList(ctx, ['projects', 'roots'], parent);
     run.config.projects.roots.push(parent);
-    console.log('Added ' + parent + ' to projects.roots (sandbox projects roots remove ' + parent + ' undoes it).');
+    console.log('Added ' + parent + '. Undo: sandbox projects roots remove ' + parent);
     moveUnderRoot(run);
   }
-  if (answer === 'no') addToList(ctx, ['projects', 'declinedRoots'], parent);
   if (answer === 'never') setSetting(ctx, ['projects', 'askToAddRoot'], false);
 }
 

@@ -10,6 +10,18 @@ import { MapEditor } from './collections/map-editor.js';
 import { ObjectListEditor } from './collections/object-list-editor.js';
 import { ObjectMapEditor } from './collections/object-map-editor.js';
 import { ObjectEditor } from './object-editor.js';
+import { askPath, pathKindOf, pathLiterals } from './path-kind.js';
+
+/** What is wrong with the text typed for a number setting (true = fine), in words that name the allowed range. */
+export function numberProblem(node: SchemaNode, text: string): true | string {
+  const n = Number(text);
+  if (text.trim() === '' || !Number.isFinite(n)) return 'Enter a number.';
+  if (node.integer && !Number.isInteger(n)) return 'Enter a whole number.';
+  const verdict = node.check(n);
+  if (verdict === true) return true;
+  const range = node.rangeText();
+  return range ? 'Use ' + range + '.' : verdict;
+}
 
 /** The new value, or undefined when you backed out without changing anything. */
 export type Edited = { value: unknown } | undefined;
@@ -59,21 +71,11 @@ export class ValueEditor {
           ? this.edit(path, key, open, node.choiceValues.includes(current) ? undefined : current)
           : { value: picked };
       }
-      case 'number': {
-        const range =
-          node.min !== undefined || node.max !== undefined
-            ? ' (' + (node.min ?? '…') + ' to ' + (node.max ?? '…') + ')'
-            : '';
-        const typed = await this.app.text({
-          path,
-          label: Text.humanize(key[key.length - 1]) + range,
-          about,
-          initial: current === undefined ? '' : String(current),
-          validate: (v) => (v.trim() === '' || !Number.isFinite(Number(v)) ? 'Enter a number.' : node.check(Number(v))),
-        });
-        return typed === undefined ? undefined : { value: Number(typed) };
-      }
+      case 'number':
+        return this.number(path, key, node, current);
       case 'string': {
+        const kind = pathKindOf(key);
+        if (kind) return this.folderOrFile(path, key, node, current, kind);
         const typed = await this.app.text({
           path,
           label: Text.humanize(key[key.length - 1]),
@@ -95,28 +97,62 @@ export class ValueEditor {
         return picked.kind === 'multi' ? { value: picked.values } : undefined;
       }
       case 'string-list':
-        return new StringListEditor(this.app, path, node, this).run(
+        return new StringListEditor(this.app, path, node, this, key, pathKindOf(key)).run(
           Array.isArray(current) ? (current as string[]) : [],
         );
       case 'string-map':
-        return new MapEditor(this.app, path, node, this).run(
+        return new MapEditor(this.app, path, node, this, key).run(
           _.isPlainObject(current) ? (current as Record<string, unknown>) : {},
         );
       case 'object-list':
-        return new ObjectListEditor(this.app, path, node, this).run(
+        return new ObjectListEditor(this.app, path, node, this, key).run(
           Array.isArray(current) ? (current as Record<string, unknown>[]) : [],
         );
       case 'object-map':
-        return new ObjectMapEditor(this.app, path, node, this).run(
+        return new ObjectMapEditor(this.app, path, node, this, key).run(
           _.isPlainObject(current) ? (current as Record<string, Record<string, unknown>>) : {},
         );
       case 'object':
-        return new ObjectEditor(this.app, path, node, this).run(
+        return new ObjectEditor(this.app, path, node, this, key).run(
           _.isPlainObject(current) ? (current as Record<string, unknown>) : (node.initial() as Record<string, unknown>),
         );
       default:
         return this.json(path, key, node, current);
     }
+  }
+
+  private async number(path: string[], key: string[], node: SchemaNode, current: unknown): Promise<Edited> {
+    const range = node.rangeText();
+    const typed = await this.app.text({
+      path,
+      label: Text.humanize(key[key.length - 1]),
+      about: node.description ? [node.description] : [],
+      hint: 'A ' + (node.integer ? 'whole number' : 'number') + (range ? ': ' + range : '') + '.',
+      accept: node.integer ? (node.min !== undefined && node.min >= 0 ? /[0-9]/ : /[-0-9]/) : /[-0-9.]/,
+      initial: current === undefined ? '' : String(current),
+      validate: (v) => numberProblem(node, v),
+    });
+    return typed === undefined ? undefined : { value: Number(typed) };
+  }
+
+  /** A folder or file on this PC: the path picker (typing a path still works). */
+  private async folderOrFile(
+    path: string[],
+    key: string[],
+    node: SchemaNode,
+    current: unknown,
+    kind: 'dir' | 'file',
+  ): Promise<Edited> {
+    const picked = await askPath(this.app, {
+      path,
+      title: 'Choose ' + (kind === 'file' ? 'the file' : 'the folder') + ': ' + Text.humanize(key[key.length - 1]),
+      about: node.description ? [node.description] : [],
+      kind,
+      initial: typeof current === 'string' && current !== 'auto' ? current : '',
+      literals: pathLiterals(node),
+      validate: (v) => node.check(v),
+    });
+    return picked === undefined ? undefined : { value: picked };
   }
 
   private async pick(path: string[], node: SchemaNode, current: unknown, values: unknown[]): Promise<Edited> {

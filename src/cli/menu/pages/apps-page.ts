@@ -1,4 +1,4 @@
-// Tab 4: the apps catalogue. Groups on the left, space ticks, and the ticks are staged until Ctrl+S saves them. Two
+// Section 4: the apps catalogue. Groups on the left, space ticks, and the ticks are staged until Ctrl+S saves them. Two
 // scopes like Settings: apps for every project, or for this project only.
 import { errMsg } from '../../../core/util/index.js';
 import { Theme, type App, type ListOptions, type ListResult } from '../../tui/index.js';
@@ -23,7 +23,6 @@ export function appsOptions(model: AppsModel, file: ConfigFile, draft: Draft, sc
     categories: model.categories(),
     items: model.items(draft),
     actions: file.isProject ? [] : [{ key: 'c', label: 'your own programs' }],
-    escapeLabel: 'quit',
   };
 }
 

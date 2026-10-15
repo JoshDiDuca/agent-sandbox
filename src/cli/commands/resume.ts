@@ -34,7 +34,7 @@ export async function resume(ctx: Context): Promise<number> {
   const { storageRoot, dataPath, options } = ctx;
   const saved = new SessionLedger(storageRoot, dataPath).read();
   if (!saved) {
-    console.log('Nothing to reopen: no sandbox of this tool has been recorded yet.');
+    console.log('Nothing to resume. Start one: sandbox claude.');
     return 0;
   }
   // By hand, you asked for it. From the watcher, the setting decides.
@@ -42,7 +42,7 @@ export async function resume(ctx: Context): Promise<number> {
   const life = new LifeRecord(storageRoot, dataPath).read();
   const reopening = !options.auto || shouldReopen(setting === 'ask' ? 'always' : setting, life, saved) === 'reopen';
   if (!options.auto && !saved.sessions.length) {
-    console.log('Nothing to reopen: no agent sessions were running in the last sandbox.');
+    console.log('Nothing to resume. Start one: sandbox claude.');
     return 0;
   }
   if (reopening && saved.sessions.length) console.log('Last time: ' + describeLast(saved.sessions) + '.');

@@ -1,19 +1,24 @@
-// The one list screen every menu is built from: an optional sidebar of categories, a list with section headings and a
-// value column, a details pane for the highlighted entry, search (/), ticking several entries, and extra keys a screen
-// can add (r = reset, d = delete ...). Arrow keys move; Enter opens; Esc goes back.
+// The one list screen every menu is built from: categories (in its own sidebar, or in the menu's navigation), a list
+// with section headings and a value column, a details pane for the highlighted entry, search (/), ticking several
+// entries, and extra keys a screen can add (r = reset, d = delete ...). Arrow keys move; Enter opens; Esc goes back.
 import type { FrameParts } from '../frame.js';
 import type { KeyHint } from '../key-bar.js';
 import type { Screen, Size, Step } from '../screen.js';
 import type { Key } from '../terminal.js';
 import { Text } from '../text.js';
 import { Theme } from '../theme.js';
-import type { ListAction, ListResult, ListOptions } from './list-types.js';
+import type { Category, ListAction, ListResult, ListOptions } from './list-types.js';
+
+/** Lists longer than this say how to search. */
+const LONG_LIST = 12;
 
 type Row = { kind: 'section'; text: string } | { kind: 'item'; index: number };
 
 export class ListScreen<T> implements Screen<ListResult<T>> {
   private category = 0;
   private focus: 'side' | 'list' = 'list';
+  /** The list has the keyboard (false while the menu's navigation has it): the highlight is drawn softer. */
+  private active = true;
   private cursor = 0;
   private offset = 0;
   private query = '';
@@ -71,28 +76,29 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
   render(size: Size): FrameParts {
     const visible = this.visible();
     this.cursor = Math.min(this.cursor, Math.max(0, visible.length - 1));
-    const sideWidth = this.o.categories
-      ? Math.min(32, Math.max(...this.o.categories.map((c) => Text.width(c.label))) + 7)
-      : 0;
+    const sideWidth =
+      this.o.categories && !this.external
+        ? Math.min(32, Math.max(...this.o.categories.map((c) => Text.width(c.label))) + 7)
+        : 0;
     const rest = size.width - 1 - (sideWidth ? sideWidth + 3 : 0);
     const detailsRight = rest >= 100;
     const detailsWidth = detailsRight ? Math.min(52, Math.floor(rest * 0.38)) : rest;
     const listWidth = detailsRight ? rest - detailsWidth - 3 : rest;
 
     const top: string[] = [];
-    if (this.o.tabs)
-      top.push(
+    if (this.o.tabs) {
+      const row =
         ' ' +
-          this.o.tabs.items
-            .map((tab, i) =>
-              i === this.o.tabs!.active
-                ? tab.paint(' ' + tab.badge + ' ' + tab.label + ' ')
-                : Theme.muted('  ' + tab.label + '  '),
-            )
-            .join(' ') +
-          Theme.muted('   tab switches'),
-        '',
-      );
+        this.o.tabs.items
+          .map((tab, i) =>
+            i === this.o.tabs!.active
+              ? tab.paint(' ' + tab.badge + ' ' + tab.label + ' ')
+              : Theme.muted('  ' + tab.label + '  '),
+          )
+          .join(' ') +
+        Theme.muted('   tab switches');
+      top.push(Text.truncate(row, size.width - 1), '');
+    }
     const intro = typeof this.o.intro === 'string' ? [this.o.intro] : (this.o.intro ?? []);
     for (const line of intro) top.push(...Text.wrap(line, size.width - 3).map((l) => ' ' + Theme.muted(l)));
     if (this.searching || this.query)
@@ -137,12 +143,13 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
           '   ' +
             (above > 0 ? '▲ ' + above + ' above' : '') +
             (above > 0 && below > 0 ? '   ' : '') +
-            (below > 0 ? '▼ ' + below + ' more' : ''),
+            (below > 0 ? '▼ ' + below + ' more' : '') +
+            (this.searching || this.query ? '' : '   / search'),
         ),
       );
     }
 
-    const sideLines = this.sideLines(sideWidth);
+    const sideLines = sideWidth ? this.sideLines(sideWidth) : [];
     const body: string[] = [...top];
     const height = Math.max(listLines.length, detailsRight ? details.length : 0, sideLines.length);
     for (let i = 0; i < Math.min(height, size.height - top.length); i++) {
@@ -185,7 +192,9 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       (hintWidth ? '  ' + Text.fit(hint, hintWidth, 'right') : '') +
       ' ';
     if (!selected) return ' ' + line;
-    return this.focus === 'list' ? ' ' + Theme.selected(Text.strip(line)) : ' ' + Theme.accent(Text.strip(line));
+    return this.focus === 'list' && this.active
+      ? ' ' + Theme.selected(Text.strip(line))
+      : ' ' + Theme.accent(Text.strip(line));
   }
 
   private sideLines(width: number): string[] {
@@ -229,12 +238,14 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     if (this.searching)
       return [
         ['type', 'to search', 1],
-        ['↵', this.o.multi ? 'done' : (this.o.enterLabel ?? 'open'), 1],
+        ['↵', this.o.multi ? 'done' : this.enterLabel(this.valueAt(this.visible()[this.cursor])), 1],
         ['esc', 'clear search', 0],
         ['↑↓', 'move', 4],
       ];
     const current = this.visible()[this.cursor];
+    const value = current === undefined ? undefined : this.o.items[current].value;
     const flips = current !== undefined && this.o.items[current].flip;
+    const long = this.o.items.length > LONG_LIST;
     return [
       ...(this.o.multi
         ? ([
@@ -242,16 +253,19 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
             ...(this.o.enterTicks ? [] : [['↵', 'done', 1]]),
             ['a', 'tick all shown', 6],
           ] as KeyHint[])
-        : ([['↵', this.o.enterLabel ?? 'open', 1], ...(flips ? [['space', 'flip', 1]] : [])] as KeyHint[])),
-      ...this.actionsNow().map((a): KeyHint => [
+        : ([
+            ...(this.enterLabel(value) ? [['↵', this.enterLabel(value), 1]] : []),
+            ...(flips ? [['space', 'flip', 1]] : []),
+          ] as KeyHint[])),
+      ...this.actionsNow(value).map((a): KeyHint => [
         a.ctrl ? 'ctrl+' + a.key : a.key,
         a.label,
         a.ctrl ? 0 : (a.importance ?? 2),
       ]),
       ...(this.o.tabs ? ([['tab', 'scope', 3]] as KeyHint[]) : []),
-      ...(this.o.categories ? ([['←→', 'categories', 3]] as KeyHint[]) : []),
+      ...(this.o.categories && !this.external ? ([['←→', 'categories', 3]] as KeyHint[]) : []),
       ['↑↓', 'move', 5],
-      ['/', 'search', 6],
+      ['/', 'search', long ? 3 : 6],
       ['esc', this.o.escapeLabel ?? 'back', 0],
     ];
   }
@@ -261,15 +275,51 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     this.notice = text;
   }
 
+  /** The categories are shown by the menu's navigation, which drives them (no sidebar of its own). */
+  private get external(): boolean {
+    return this.o.categoryNav === 'external';
+  }
+
+  private enterLabel(value: T | undefined): string {
+    const label = this.o.enterLabel;
+    return (typeof label === 'function' ? label(this.currentCategory, value) : label) ?? 'open';
+  }
+
+  private valueAt(index: number | undefined): T | undefined {
+    return index === undefined ? undefined : this.o.items[index].value;
+  }
+
+  /** The categories of the list (empty without any). */
+  get categories(): readonly Category[] {
+    return this.o.categories ?? [];
+  }
+
+  /** Opens a category (the menu's navigation does this); a search in progress ends. */
+  setCategory(id: string): void {
+    const index = this.categories.findIndex((c) => c.id === id);
+    if (index < 0 || index === this.category) return;
+    this.category = index;
+    this.query = '';
+    this.searching = false;
+    this.cursor = 0;
+    this.offset = 0;
+  }
+
+  /** Whether the list has the keyboard (the highlight is drawn softer when it has not). */
+  setActive(on: boolean): void {
+    this.active = on;
+  }
+
   /** The id of the category open in the sidebar (undefined without a sidebar). */
   get currentCategory(): string | undefined {
     return this.o.categories?.[this.category]?.id;
   }
 
-  /** The extra keys that work now (they may depend on the category). */
-  private actionsNow(): ListAction[] {
+  /** The extra keys that work now (they may depend on the category and on the highlighted entry). */
+  private actionsNow(value: T | undefined): ListAction<T>[] {
     const actions = this.o.actions;
-    return typeof actions === 'function' ? actions(this.currentCategory) : (actions ?? []);
+    const all = typeof actions === 'function' ? actions(this.currentCategory) : (actions ?? []);
+    return all.filter((a) => !a.applies || (value !== undefined && a.applies(value)));
   }
 
   /** Keys are going into the search box (digits and letters are text, not shortcuts). */
@@ -286,15 +336,9 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const visible = this.visible();
     const current = visible[this.cursor];
     this.notice = undefined;
-    const ctrlAction = key.ctrl ? this.actionsNow().find((a) => a.ctrl && a.key === key.name) : undefined;
-    if (ctrlAction)
-      return {
-        done: {
-          kind: 'action',
-          key: 'ctrl+' + ctrlAction.key,
-          value: current === undefined ? undefined : this.o.items[current].value,
-        },
-      };
+    const value = this.valueAt(current);
+    const ctrlAction = key.ctrl ? this.actionsNow(value).find((a) => a.ctrl && a.key === key.name) : undefined;
+    if (ctrlAction) return { done: { kind: 'action', key: 'ctrl+' + ctrlAction.key, value } };
     const move = (by: number): void => {
       this.cursor = Math.max(0, Math.min(visible.length - 1, this.cursor + by));
     };
@@ -348,7 +392,8 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       const n = this.o.tabs.items.length;
       return { done: { kind: 'tab', index: (this.o.tabs.active + (key.shift ? n - 1 : 1)) % n } };
     }
-    if (this.o.categories && !this.query) {
+    if (this.external && !this.query && !this.searching && key.name === 'left') return { done: { kind: 'back' } };
+    if (this.o.categories && !this.external && !this.query) {
       if (key.name === 'left' && this.focus === 'list') {
         this.focus = 'side';
         return;
@@ -401,15 +446,8 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
       return { done: { kind: 'pick', value: it.value } };
     }
     const action =
-      !this.searching && key.text ? this.actionsNow().find((a) => !a.ctrl && a.key === key.text) : undefined;
-    if (action)
-      return {
-        done: {
-          kind: 'action',
-          key: action.key,
-          value: current === undefined ? undefined : this.o.items[current].value,
-        },
-      };
+      !this.searching && key.text ? this.actionsNow(value).find((a) => !a.ctrl && a.key === key.text) : undefined;
+    if (action) return { done: { kind: 'action', key: action.key, value } };
     return;
   }
 

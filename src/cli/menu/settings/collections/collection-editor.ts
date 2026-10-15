@@ -17,6 +17,8 @@ export abstract class CollectionEditor<C> {
     protected readonly path: string[],
     protected readonly node: SchemaNode,
     protected readonly editor: ValueEditor,
+    /** The setting's key (a list's own, without positions): what the entries are is read from it. */
+    protected readonly key: string[] = [],
   ) {}
 
   protected abstract entries(): ListItem<string>[];
@@ -25,6 +27,8 @@ export abstract class CollectionEditor<C> {
   protected abstract remove(id: string): void;
   protected move?(id: string, by: number): string | undefined;
   protected noun = 'entry';
+  /** What leaving with changes does, shown under the list (settings: they wait for Ctrl+S). */
+  protected keepNote = 'Esc keeps it for saving with Ctrl+S';
 
   async run(start: C): Promise<Edited> {
     this.original = structuredClone(start);
@@ -36,9 +40,7 @@ export abstract class CollectionEditor<C> {
       const picked = await this.app.list<string>({
         path: this.path,
         intro: this.node.description,
-        status: dirty
-          ? Theme.changed(Theme.glyph.changed + ' changed: Esc keeps it for saving with Ctrl+S')
-          : undefined,
+        status: dirty ? Theme.changed(Theme.glyph.changed + ' changed: ' + this.keepNote) : undefined,
         items: [
           { value: ADD, label: '+ Add ' + this.noun, section: 'Actions' },
           ...entries.map((e) => ({
@@ -48,11 +50,11 @@ export abstract class CollectionEditor<C> {
         ],
         startAt: focus,
         actions: [
-          { key: 'd', label: 'delete' },
-          ...(this.move
+          { key: 'd', label: 'remove', applies: (id) => id !== ADD },
+          ...(this.move && entries.length > 1
             ? [
-                { key: 'u', label: 'move up' },
-                { key: 'j', label: 'move down' },
+                { key: 'u', label: 'move up', applies: (id: string) => id !== ADD },
+                { key: 'j', label: 'move down', applies: (id: string) => id !== ADD },
               ]
             : []),
         ],

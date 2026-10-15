@@ -11,6 +11,7 @@ import {
   isSandboxRunning,
   spawnDetached,
   startSandbox,
+  confirmSandboxStarted,
   probeHost,
   hideSandboxWindow,
 } from '../../../host/sandbox/index.js';
@@ -27,6 +28,7 @@ import { c, table } from '../../output/index.js';
 import { syncAgentCommands } from '../agent-commands.js';
 import { requireOnPc, type Context } from '../context.js';
 import { joinHere } from '../projects/index.js';
+import { offerSetupWhenOff } from '../setup/index.js';
 import { useSharedSandbox } from '../shared-use.js';
 import {
   beginSharing,
@@ -82,6 +84,10 @@ class Launcher {
       options.terminal = true;
     if (!generateOnly) requireOnPc('launch');
     if (!generateOnly) this.syncAgentCommands();
+    if (!generateOnly) {
+      const setUp = await offerSetupWhenOff(this.ctx);
+      if (setUp !== undefined) return setUp;
+    }
     if (!generateOnly && isSandboxRunning()) {
       // Another user's sandbox: an agent session in a project it has, when it is shared; nothing else.
       const ctx = await useSharedSandbox(
@@ -177,6 +183,7 @@ class Launcher {
     this.record(run, generated);
     this.share(generated);
     startSandbox(generated.wsbPath);
+    await confirmSandboxStarted(generated.wsbPath);
     this.startWatcher();
     if (reopen.length) await this.reopenAfterBoot(generated.launchId, reopen);
     return this.afterStart(run, generated);
@@ -247,6 +254,8 @@ class Launcher {
         ),
       );
     const shared = this.ctx.loaded.config.sharing.otherUsers && inSharedTree;
+    // Only an opened folder has permissions to write; a closed one is checked in a moment and usually needs nothing.
+    if (shared) console.log('Setting folder permissions...');
     const rows = listProcesses();
     beginSharing(deps, {
       user: currentUserName(),

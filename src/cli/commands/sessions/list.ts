@@ -28,9 +28,10 @@ export async function sessions(asked: Context): Promise<number> {
     return 0;
   }
   // Harness, cwd and times are written by the sandbox.
+  const wide = ctx.options.wide;
   const folderWidth = Math.max(16, termWidth() - 80);
   table([
-    ['', 'ID', 'AGENT', 'PROJECT', 'STATE', 'ATTACHED', 'FOLDER', 'STARTED'],
+    ['', 'ID', 'AGENT', 'PROJECT', 'STATE', 'ATTACHED', ...(wide ? ['FOLDER'] : []), 'STARTED'],
     ...service
       .ordered(list)
       .map((s) => [
@@ -40,10 +41,11 @@ export async function sessions(asked: Context): Promise<number> {
         safeText(s.projectName ?? '-'),
         s.phase + (s.exitCode !== undefined ? ' (' + s.exitCode + ')' : ''),
         viewerText(s.viewers),
-        shortenMiddle(safeText(s.cwd), folderWidth),
+        ...(wide ? [shortenMiddle(safeText(s.cwd), folderWidth)] : []),
         ago(s.startedAt),
       ]),
   ]);
   if (list.some((s) => s.here)) console.log(c.dim('* = the project of this folder'));
+  if (!wide) console.log(c.dim('Folders: sandbox sessions --wide'));
   return 0;
 }

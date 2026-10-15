@@ -29,6 +29,7 @@ Commonly changed:
 | `attach.auto` | starting an agent attaches this terminal automatically (like `-t`) |
 | `agentCommands.enabled` | **(Beta)** typing `claude`, `codex` ... on this PC starts the agent in a hidden sandbox and attaches (default off) |
 | `agentCommands.agents` | `"auto"` = every agent installed on this PC, or a list such as `["claude", "codex"]` |
+| `web.enabled`, `web.port` | **(Beta)** the web UI ([web-ui.md](web-ui.md)): off by default and not settable from a project; `sandbox web start` works either way and runs it on `127.0.0.1:<port>` (default `47800`) until `sandbox web stop` |
 | `attach.autoHide` | the sandbox window hides whenever this terminal attaches (`sandbox show` brings it back) |
 | `provisioning.git.access` | `full`, `readonly` or `none` |
 | `secrets.allow`, `secrets.patterns` | let named variables through, or strip more |
@@ -39,13 +40,13 @@ Commonly changed:
 | `toolchains.rust.linker`, `.linkSlots` | GNU host: `"lld"` (default, far less memory than GNU ld) or `"gnu"`, and how many programs may link at once in the whole sandbox (`"auto"` = one per 8 GB, 2 to 4) |
 | `toolchains.cli.gh`, `.zstd`, `.openssl` | small command-line tools |
 | `toolchains.mesa.enabled`, `.vulkan` | software OpenGL / Vulkan when there is no GPU |
-| `harnesses` | agents and how to install them; `home` says where an agent keeps its login (variable -> folder in the saved state, the login files, the folder on this PC) so logins can be saved and switched. An agent with no variable for it lists `profileDirs` (folders in the sandbox's user profile, such as `.qwen`): each is linked to `state\<agent>\profile\<folder>`, so its login survives the sandbox, and its `loginFiles` start with `profile/` |
+| `harnesses` | agents and how to install them; `home` says where an agent keeps its login (variable -> folder in the saved state, the login files, the folder on this PC) so logins can be saved and switched. An agent with no variable for it lists `profileDirs` (folders in the sandbox's user profile, such as `.qwen`): each is linked to `state\<agent>\profile\<folder>`, so its login survives the sandbox, and its `loginFiles` start with `profile/`. `localState` (variable -> folder in the agent's saved state) is for agents that keep SQLite databases (codex): SQLite cannot run in the shared data folder, so the agent runs from a copy on the sandbox's own disk (the variable points to it); the copy is restored at start and saved again after the agent exits. Every configured agent also gets its command (`claude`, `codex` ...) in every terminal tab: when it is not installed yet, the command installs it on first use (`sbx-agent list` shows them) |
 
 ## Paths
 
 | Setting | Default | |
 |---|---|---|
-| `storage.root` | `%LOCALAPPDATA%\AgentSandbox` | everything on your PC. The name `AgentSandbox` is from before the rename and is kept on purpose, so existing users' data stays where it is |
+| `storage.root` | `%ProgramData%\AgentSandbox\users\%USERNAME%` | everything kept on your PC between sandboxes (see [Where your data is kept](#where-your-data-is-kept)). The name `AgentSandbox` is from before the rename and is kept on purpose |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
 | `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`). Where projects appear with several projects: [projects](projects.md#where-a-project-appears-inside-the-sandbox) |
 | `mappings` | none | more folders from your PC, read-only or read/write: `{ "host": "F:\\SteamLibrary\\steamapps\\common\\Game", "readOnly": true }`; `guest` (where it appears) is optional, `optional: true` skips a folder that is not on this PC |
@@ -70,6 +71,25 @@ exists in the sandbox is left alone.
 Under `storage.root`: `data\<name>` (tools, databases, logins, logs), `launches\` (one per start; cleaned after 7
 days), `accounts\`, `sync\`, `known-projects.json` (the folders you started projects in) and `run\projects.json` (the
 running sandbox's projects). The last two are host-only: the sandbox cannot read or change them.
+
+### Where your data is kept
+
+New installs keep everything in `%ProgramData%\AgentSandbox\users\<you>`, a folder only you (and SYSTEM and
+administrators) can read. It works for an install for just you and for one for everyone, so switching between them
+needs no move.
+
+- **Upgrading** from a version that kept it in `%LOCALAPPDATA%\AgentSandbox`: nothing moves. The update pins
+  `storage.root` to that folder in your `config.json` (comments kept), and the next `sandbox` command or the menu asks
+  once whether to move the data to the default folder, with its size and an estimate ("Move now", "Not now" for two
+  weeks, "Don't ask again"). Without a terminal nothing is asked.
+- **Moving later**: `sandbox storage` shows where the data is; `sandbox storage move <folder>` moves it (a rename on the
+  same drive, a verified copy to another drive, a warning above 5 GB or 200,000 files, refused when the target drive
+  lacks room or a sandbox runs). The menu has the same under Settings > General > Data folder, with a folder browser.
+  If a move fails, the old folder and your config are left as they were.
+- **Always pinned**: after a move or `sandbox storage use`, `storage.root` is written to your `config.json`, so an older
+  version you go back to finds the data too. A downgrade followed by an upgrade is offered the move again when the
+  configured folder is empty and an earlier one holds data (earlier folders are remembered in
+  `~\.agent-sandbox\storage-history.json`).
 
 ## Several projects in one sandbox
 
@@ -214,6 +234,14 @@ sandbox account save work --from-host  # or this PC's login
 sandbox account default personal       # for new sandboxes
 sandbox account use work               # switch now: Claude restarts and continues the conversation
 ```
+
+All accounts of one data set share one Claude folder, so plugins installed in the sandbox already stay when you switch.
+They do not reach another data set (`storage.dataName`). Set `claudeProfile.sharePluginsAcrossAccounts` to `true` (off by
+default) and switching to an account in a data set that has no plugins yet copies them in from your other accounts: the
+plugins folder and the `enabledPlugins` / `extraKnownMarketplaces` entries of `settings.json` (your own entries win,
+nothing else in `settings.json` and no login is touched). The copy is kept in `<storage>\accounts\shared-plugins`, is
+refreshed at every Claude launch and when a sandbox stops, refused when it holds links or is bigger than 1 GB / 20,000 files, and a project's `.sandbox-config.json` cannot turn it on. Plugins are code: turning this on lets a plugin installed in one sandbox run in your other
+sandboxes too.
 
 ## Hooks
 
