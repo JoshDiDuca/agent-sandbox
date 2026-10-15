@@ -175,15 +175,17 @@ static class MemGov
             {
                 using (Process p = Process.GetProcessById(pid))
                 {
+                    // Read everything first: a process that ends half way must not leave half an entry behind.
+                    string entry = "{\"pid\":" + pid.ToString(CultureInfo.InvariantCulture)
+                        + ",\"name\":" + Json(p.ProcessName)
+                        + ",\"mb\":" + Mb((ulong)p.PrivateMemorySize64)
+                        + ",\"prio\":\"" + PriorityName(pid) + "\"}";
                     if (!first)
                     {
                         sb.Append(',');
                     }
                     first = false;
-                    sb.Append("{\"pid\":").Append(pid.ToString(CultureInfo.InvariantCulture));
-                    sb.Append(",\"name\":").Append(Json(p.ProcessName));
-                    sb.Append(",\"mb\":").Append(Mb((ulong)p.PrivateMemorySize64));
-                    sb.Append(",\"prio\":\"").Append(PriorityName(pid)).Append("\"}");
+                    sb.Append(entry);
                 }
             }
             catch (Exception)

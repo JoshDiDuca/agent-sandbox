@@ -7,6 +7,12 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## Unreleased
+
+- The VPN is labelled alpha everywhere it shows (settings, `sandbox vpn`, the launch warnings, docs): it has not been tried on a real PC yet.
+- The memory governor no longer writes a broken sample when a process ends while it is being read (it logged "bad
+  sample" and skipped that round).
+
 ## 1.10.0
 
 - The web UI starts with every sandbox when `web.enabled` is on (before, nothing started it, so nothing answered on its

@@ -559,14 +559,18 @@ export const heavyLoadSuite: Suite = {
     const firstLine = (served.stdout ?? '').split(/\r?\n/)[0] ?? '';
     let sampleOk = false;
     try {
-      const parsedSample = JSON.parse(firstLine) as { procs: unknown[]; ramTotalMb: number };
-      sampleOk = Array.isArray(parsedSample.procs) && parsedSample.procs.length === 0 && parsedSample.ramTotalMb > 0;
+      // In a sandbox started by 1.10 or later the real agents job exists, so the list may hold its processes.
+      const parsedSample = JSON.parse(firstLine) as { procs: { pid?: unknown; name?: unknown }[]; ramTotalMb: number };
+      sampleOk =
+        Array.isArray(parsedSample.procs) &&
+        parsedSample.procs.every((p) => typeof p.pid === 'number' && typeof p.name === 'string') &&
+        parsedSample.ramTotalMb > 0;
     } catch {
       // Not JSON: the check below fails.
     }
     t.check(
       sampleOk && served.status === 0,
-      'memgov serve prints a sample (no job yet: no processes) and ends when its input closes',
+      'memgov serve prints a well-formed sample and ends when its input closes',
       firstLine,
     );
     for (const script of ['memory-status.ps1', 'stop-events.ps1']) {
