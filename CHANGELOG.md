@@ -7,13 +7,30 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
-## Unreleased
+## 1.10.0
+
+- The web UI starts with every sandbox when `web.enabled` is on (before, nothing started it, so nothing answered on its
+  port), and the new `web.openOnLaunch` opens it in your browser already signed in.
+- Boot fixes: the firewall rule that limits the terminal channel to this PC was never created (its program path was a
+  short 8.3 name netsh cannot resolve); it is now made from the full path, retried, and a missing protection shows in
+  the boot summary. App shortcuts failed whenever there were two or more (Windows PowerShell 5.1 passed the list as one
+  object). Node is copied from this PC when the version matches before nvm is tried; copies that robocopy cannot finish
+  are retried; claude-mem saves skip files the agent removes mid-copy and never copy SQLite journals.
+- A compiler paused by the memory governor is always resumed, also when the governor itself is killed mid-pause.
 
 - One shared core for the command line, the menu and the web UI (`src/app`, docs/design/shared-core.md): status,
   sessions, restart, stop, show/hide and settings are each written once and drawn by all three. The web UI moved from
   Bootstrap to Mantine, with the menu's sections down the left, and gained the Sandbox and Settings pages (change or
   reset any setting; secrets show as `***`).
 - New: `sandbox config reset <setting>` and `sandbox config list [--json]`.
+- Heavy load slows builds down instead of closing the sandbox (docs/troubleshooting.md): memory sizing also respects
+  this PC's commit limit, everything the agents start shares one job object with a memory limit
+  (`sandbox.agentMemoryHeadroomMb`), a governor in the sandbox lowers the priority of compilers and pauses the biggest
+  one for a few seconds when memory runs low (`sandbox.pressureResponse`), the background sync asks the sandbox to
+  slow down when this PC itself runs low on memory or CPU, and cargo jobs fit the memory. With vGPU on the sandbox
+  runs gentler (CPU cap 15 points lower, earlier thresholds, at most max(2, cores / 4) compilers at once). The PC watchdog also watches the disk queue. doctor checks the PC's paging file and warns about vGPU.
+- `sandbox logs --crash` prints the last crash report, now with the freeze gap, blue-screen codes, WHEA and
+  resource-exhaustion events, crash dumps, this PC's memory log and whether vGPU was on.
 
 ## 1.9.0
 
