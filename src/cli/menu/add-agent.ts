@@ -7,9 +7,9 @@ import { HarnessSchema, NameSchema, describeIssues } from '../../core/schema/ind
 import type { Harness } from '../../core/types.js';
 import { fail } from '../../core/util/index.js';
 import type { App } from '../tui/index.js';
-import type { ConfigFile } from './settings/config-file.js';
+import type { ConfigFile } from '../../app/features/settings/index.js';
 import type { Draft } from './settings/draft.js';
-import { askPath } from './settings/path-kind.js';
+import { askPath } from './settings/ask-path.js';
 
 /** How a new agent gets into the sandbox. */
 export type AgentSource = 'npm' | 'uv' | 'host';

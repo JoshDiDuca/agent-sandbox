@@ -1,15 +1,17 @@
+// A session's terminal inside the shell: a toolbar (back, the connection's state, detach) over xterm.js.
+import { Badge, Button, Group, Text, type MantineColor } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { useCallback, useRef, useState } from 'react';
-import { navigate } from '../router';
+import { navigate, viewPath } from '../router';
 import { TerminalView } from '../terminal/TerminalView';
 import type { ConnectionState } from '../terminal/connection';
-import { Badge, Button, Layout, type Variant } from '../ui';
 
-const STATE_TEXT: Record<ConnectionState, { text: string; variant: Variant }> = {
-  connecting: { text: 'Connecting', variant: 'secondary' },
-  connected: { text: 'Connected', variant: 'success' },
-  reconnecting: { text: 'Reconnecting', variant: 'warning' },
-  ended: { text: 'Ended', variant: 'secondary' },
-  failed: { text: 'Cannot connect', variant: 'danger' },
+const STATE_TEXT: Record<ConnectionState, { text: string; color: MantineColor }> = {
+  connecting: { text: 'Connecting', color: 'gray' },
+  connected: { text: 'Connected', color: 'green' },
+  reconnecting: { text: 'Reconnecting', color: 'orange' },
+  ended: { text: 'Ended', color: 'gray' },
+  failed: { text: 'Cannot connect', color: 'red' },
 };
 
 export function TerminalPage({ id }: { readonly id: string }) {
@@ -26,25 +28,36 @@ export function TerminalPage({ id }: { readonly id: string }) {
   const shown = STATE_TEXT[state];
   const leave = (): void => {
     detach.current();
-    navigate('/');
+    navigate(viewPath('sessions'));
   };
   return (
-    <Layout active="terminal" bare>
-      <div className="terminal-page">
-        <div className="terminal-toolbar d-flex align-items-center gap-2 border-bottom px-2 py-1">
-          <Button small outline variant="secondary" onClick={leave}>
-            Back
-          </Button>
-          <span className="text-truncate fw-semibold">Session {id}</span>
-          <Badge variant={shown.variant}>{shown.text}</Badge>
-          {detail && <span className="small text-secondary text-truncate">{detail}</span>}
-          <span className="ms-auto" />
-          <Button small outline variant="secondary" onClick={leave} title="Close this view; the session keeps running">
-            Detach
-          </Button>
-        </div>
-        <TerminalView sessionId={id} onState={onState} onReady={onReady} />
-      </div>
-    </Layout>
+    <div className="terminal-page">
+      <Group gap="xs" px="sm" py={6} wrap="nowrap" className="terminal-toolbar">
+        <Button size="compact-sm" variant="default" leftSection={<IconArrowLeft size={14} />} onClick={leave}>
+          Back
+        </Button>
+        <Text fw={600} size="sm" truncate>
+          Session {id}
+        </Text>
+        <Badge color={shown.color} variant="light">
+          {shown.text}
+        </Badge>
+        {detail && (
+          <Text size="xs" c="dimmed" truncate>
+            {detail}
+          </Text>
+        )}
+        <Button
+          size="compact-sm"
+          variant="default"
+          ml="auto"
+          onClick={leave}
+          title="Close this view; the session keeps running"
+        >
+          Detach
+        </Button>
+      </Group>
+      <TerminalView sessionId={id} onState={onState} onReady={onReady} />
+    </div>
   );
 }

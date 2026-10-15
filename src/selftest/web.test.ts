@@ -1,12 +1,14 @@
 // The web UI's server: login and cookie, the Host / Origin / CSRF checks, static files that cannot leave their folder,
-// sessions without tokens, and the terminal bridge against a fake ptyhost on loopback (the real address check is the
-// backend's, so the fake is only reachable here).
+// sessions without tokens, the terminal bridge against a fake ptyhost on loopback (the real address check is the
+// backend's, so the fake is only reachable here), and the RPC socket of the shared core against a fake RpcHost.
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import WebSocket from 'ws';
+import { cancelled, type RpcHost, type ServerMessage } from '../app/kernel/index.js';
 import { webSession } from '../cli/services/index.js';
 import type { SessionStatus } from '../core/types.js';
+import { fail } from '../core/util/index.js';
 import {
   cookieValue,
   csrfOk,
@@ -128,6 +130,33 @@ class Tab {
     });
     this.socket.on('close', (code: number) => (this.closeCode = code));
   }
+}
+
+/** A stand-in for the shared core: one operation that reports, asks and may fail, and one live query. */
+function fakeRpc(): { host: RpcHost; ran: string[]; live: { value: number } } {
+  const ran: string[] = [];
+  const live = { value: 1 };
+  const host: RpcHost = {
+    kind: (id) => (id === 'test.work' ? 'operation' : id === 'test.live' ? 'query' : undefined),
+    liveMs: (id) => (id === 'test.live' ? 50 : undefined),
+    run: async (id, input, io) => {
+      ran.push(id);
+      if (id === 'test.live') return { value: live.value };
+      const how = (input ?? {}) as { fail?: boolean; bug?: boolean };
+      io.progress('Working');
+      io.log('one line', 'muted');
+      if (!(await io.confirm({ title: 'Go on?' }))) cancelled();
+      if (how.fail) fail('It broke.', 'Fix it like this.');
+      if (how.bug) throw new Error('internal detail C:\\Users\\secret');
+      return { done: true };
+    },
+  };
+  return { host, ran, live };
+}
+
+/** The server's messages on an RPC socket, parsed. */
+function rpcMessages(tab: Tab): ServerMessage[] {
+  return tab.texts.map((text) => JSON.parse(text) as ServerMessage);
 }
 
 const session = (id: string, attach?: SessionStatus['attach']): SessionStatus => ({
@@ -266,7 +295,15 @@ export const webSuite: Suite = {
       },
     };
     let stopped = false;
-    const server = new WebServer({ port: 0, token: TOKEN, backend, staticRoot: root, onStop: () => (stopped = true) });
+    const rpc = fakeRpc();
+    const server = new WebServer({
+      port: 0,
+      token: TOKEN,
+      backend,
+      staticRoot: root,
+      rpc: rpc.host,
+      onStop: () => (stopped = true),
+    });
     await server.start();
     const { port } = server;
     const origin = 'http://127.0.0.1:' + port;
@@ -422,6 +459,97 @@ export const webSuite: Suite = {
       leaving.socket.close();
       await t.waitFor(() => fake.closed >= 3, 5000);
       t.check(fake.closed >= 3, 'closing the browser side closes the connection to the session');
+
+      t.section('the RPC socket');
+      const rpcUrl = 'ws://127.0.0.1:' + port + '/api/rpc';
+      const refusedRpc = [
+        new Tab(rpcUrl, { Cookie }),
+        new Tab(rpcUrl, { Origin: 'http://evil.example', Cookie }),
+        new Tab(rpcUrl, { Origin: origin }),
+      ];
+      await t.waitFor(() => refusedRpc.every((a) => a.failed), 5000);
+      t.check(
+        refusedRpc.every((a) => !a.opened),
+        'the RPC socket needs the cookie and this page as its Origin, like the terminal',
+      );
+      const browser = new Tab(rpcUrl, { Origin: origin, Cookie });
+      await t.waitFor(() => browser.opened, 5000);
+      const reply = (id: string, kind: ServerMessage['t']): ServerMessage | undefined =>
+        rpcMessages(browser).find((m) => m.id === id && m.t === kind);
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'c1', op: 'test.work', input: {} }));
+      await t.waitFor(() => reply('c1', 'ask'), 5000);
+      t.check(
+        reply('c1', 'progress') !== undefined && reply('c1', 'log') !== undefined,
+        'a call streams its progress and log lines before it asks',
+      );
+      browser.socket.send(JSON.stringify({ t: 'answer', id: 'c1', value: true }));
+      await t.waitFor(() => reply('c1', 'result'), 5000);
+      t.equal(reply('c1', 'result'), { t: 'result', id: 'c1', output: { done: true } }, 'the answer lets it finish');
+
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'c2', op: 'test.work', input: {} }));
+      await t.waitFor(() => reply('c2', 'ask'), 5000);
+      browser.socket.send(JSON.stringify({ t: 'answer', id: 'c2', value: 'yes please' }));
+      await t.waitFor(() => reply('c2', 'error'), 5000);
+      const declinedCall = reply('c2', 'error');
+      t.check(
+        declinedCall?.t === 'error' && declinedCall.error.kind === 'cancelled',
+        'an answer of the wrong kind counts as no: nothing changes',
+      );
+
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'c3', op: 'test.work', input: { fail: true } }));
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'c4', op: 'test.work', input: { bug: true } }));
+      await t.waitFor(() => reply('c3', 'ask') && reply('c4', 'ask'), 5000);
+      browser.socket.send(JSON.stringify({ t: 'answer', id: 'c3', value: true }));
+      browser.socket.send(JSON.stringify({ t: 'answer', id: 'c4', value: true }));
+      await t.waitFor(() => reply('c3', 'error') && reply('c4', 'error'), 5000);
+      t.equal(
+        reply('c3', 'error'),
+        { t: 'error', id: 'c3', error: { kind: 'user', message: 'It broke.', fix: 'Fix it like this.' } },
+        'a failure arrives as its message and fix',
+      );
+      t.equal(
+        reply('c4', 'error'),
+        { t: 'error', id: 'c4', error: { kind: 'bug', message: 'Something went wrong.' } },
+        "a bug's details stay on this PC",
+      );
+
+      const before = rpc.ran.length;
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'c5', op: 'sandbox.notThere', input: {} }));
+      await t.waitFor(() => reply('c5', 'error'), 5000);
+      const unknown = reply('c5', 'error');
+      t.check(
+        unknown?.t === 'error' && unknown.error.kind === 'invalid' && rpc.ran.length === before,
+        'an operation that is not allowed on the web is never run',
+      );
+
+      browser.socket.send(JSON.stringify({ t: 'subscribe', id: 's1', query: 'test.live', input: {} }));
+      await t.waitFor(() => reply('s1', 'data'), 5000);
+      rpc.live.value = 2;
+      await t.waitFor(() => rpcMessages(browser).filter((m) => m.id === 's1' && m.t === 'data').length === 2, 5000);
+      const updates = rpcMessages(browser).filter((m) => m.id === 's1' && m.t === 'data');
+      t.equal(
+        updates.map((m) => (m.t === 'data' ? m.output : null)),
+        [{ value: 1 }, { value: 2 }],
+        'a live query sends its result, then again only when it changed',
+      );
+      browser.socket.send(JSON.stringify({ t: 'unsubscribe', id: 's1' }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const reads = rpc.ran.filter((id) => id === 'test.live').length;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      t.equal(rpc.ran.filter((id) => id === 'test.live').length, reads, 'unsubscribing stops the reads');
+
+      browser.socket.send(JSON.stringify({ t: 'call', id: 'bad id!', op: 'test.work', input: {} }));
+      await t.waitFor(() => browser.closeCode !== null, 5000);
+      t.equal(browser.closeCode, 1008, 'a message that does not fit the schema closes the socket');
+
+      const leaver = new Tab(rpcUrl, { Origin: origin, Cookie });
+      await t.waitFor(() => leaver.opened, 5000);
+      const runs = rpc.ran.length;
+      leaver.socket.send(JSON.stringify({ t: 'call', id: 'c1', op: 'test.work', input: {} }));
+      await t.waitFor(() => leaver.texts.some((m) => m.includes('"ask"')), 5000);
+      leaver.socket.close();
+      await t.waitFor(() => leaver.closeCode !== null, 5000);
+      t.check(rpc.ran.length === runs + 1, 'a browser that leaves mid-question answers no (the call ends)');
 
       t.section('stopping');
       t.equal(

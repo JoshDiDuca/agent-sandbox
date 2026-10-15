@@ -1,10 +1,12 @@
-// Signs in from the #k= fragment (then removes it from the address bar), and shows the page the address names.
+// Signs in from the #k= fragment (then removes it from the address bar), and shows the page the address names inside
+// the shell: a view, or a session's terminal.
+import { Center, Loader, Stack, Text, Title } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { api } from './api';
-import { SessionsPage } from './pages/SessionsPage';
 import { TerminalPage } from './pages/TerminalPage';
+import { ViewPage } from './pages/ViewPage';
 import { useRoute } from './router';
-import { Empty, Spinner } from './ui';
+import { Shell } from './shell/Shell';
 
 type Auth = 'checking' | 'in' | 'out';
 
@@ -42,15 +44,28 @@ export function App() {
 
   if (auth === 'checking')
     return (
-      <div className="p-4">
-        <Spinner />
-      </div>
+      <Center h="100dvh">
+        <Loader />
+      </Center>
     );
   if (auth === 'out')
     return (
-      <Empty title="Not signed in">
-        Open this page with <code>sandbox web open</code> on this PC. It signs you in.
-      </Empty>
+      <Center h="100dvh" p="md">
+        <Stack gap="xs" align="center">
+          <Title order={3}>Not signed in</Title>
+          <Text>Open this page with sandbox web open on this PC. It signs you in.</Text>
+        </Stack>
+      </Center>
     );
-  return route.page === 'terminal' ? <TerminalPage id={route.id} /> : <SessionsPage />;
+  if (route.page === 'terminal')
+    return (
+      <Shell active="sessions" bare>
+        <TerminalPage id={route.id} />
+      </Shell>
+    );
+  return (
+    <Shell active={route.view}>
+      <ViewPage view={route.view} params={route.params} />
+    </Shell>
+  );
 }

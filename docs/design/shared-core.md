@@ -1,7 +1,10 @@
 # One core for the CLI, the menu and the web UI (design and plan)
 
-Status: **in progress** (core and reference features first; then feature-by-feature parity; then the web UI grows to
-everything the menu does). This document is the contract every contributor (human or agent) follows.
+Status: **phases 1 and 2 built** (the kernel, the three surfaces' renderers and IO, the RPC endpoint and the Mantine
+web shell; the reference features sandbox, sessions and settings). Next: feature-by-feature parity
+([web-ui-tasks.md](web-ui-tasks.md)), then the web UI grows to everything the menu does. This document is the contract
+every contributor (human or agent) follows; [As built](#as-built-phases-1-and-2) says where the code differs from the
+sketches below and why, and [How to add a feature](#how-to-add-a-feature-walkthrough) walks through one.
 
 ## The rule
 
@@ -153,18 +156,20 @@ One WebSocket per page session on the existing server, after the existing cookie
 
 1. `features/<area>/<area>.def.ts`: the operation/query/view definitions (zod in/out, labels, CLI hints).
 2. `<area>.run.ts`: the implementation, using services and `io` only.
-3. Register both in `app/registry.ts` (and the def in `features/defs.ts`).
-4. Nothing else: the CLI command, the menu row/page and the web page/button appear from the definitions. If a surface
-   cannot have it, declare `surfaces: { except: { web: 'reason' } }`.
-5. Tests: one test of `run` with fakes; the parity test checks reachability; the view snapshot test checks the Page.
-6. Docs: docs/commands.md.
+3. Register the implementation in `app/registry.ts` and the definitions in `features/defs.ts`.
+4. An operation on a view that is already shown needs nothing else: the CLI command comes from its hint, the menu key
+   and the web button from the view's Page. A new area's view goes in `NAV` (web) and `menu/views.ts` with a menu page
+   that renders it (`menu/render-view.ts` does the drawing). If a surface cannot have it, declare
+   `surfaces: { except: { web: 'reason' } }`.
+5. Tests: one test of `run` with `fakeIO`; the parity test (`npm test app`) checks reachability; check the Page.
+6. Docs: docs/commands.md. The [walkthrough](#how-to-add-a-feature-walkthrough) goes through it with a real example.
 
 ## Plan
 
-1. **Kernel** (this phase): define.ts, fields.ts (moved from menu/settings), view.ts, io.ts, errors.ts, rpc.ts; the
+1. **Kernel** (built): define.ts, fields.ts (moved from menu/settings), view.ts, io.ts, errors.ts, rpc.ts; the
    CLI/menu/web renderers of views and fields; the three IO adapters; the RPC endpoint and the web client; the parity
    and boundary tests; Mantine shell (layout with left navigation mirroring the menu's sections, theme, notifications).
-2. **Reference features**, end to end on all three surfaces: `sandbox.status` + `sandbox.stop` + window show/hide,
+2. **Reference features** (built), end to end on all three surfaces: `sandbox.status` + `sandbox.stop` + window show/hide,
    `sessions.list` + `sessions.restart` (+ the terminal page), `settings` (view + get/set/reset via Fields). These are
    the examples every later feature copies.
 3. **Parity, area by area** (spec in [web-ui-tasks.md](web-ui-tasks.md)): agents, projects, accounts, data, storage,
@@ -174,3 +179,112 @@ One WebSocket per page session on the existing server, after the existing cookie
 
 Acceptance for 1:1: every menu page is a view; every CLI command is an operation or query; the parity test lists no
 gaps; `npm test` passes; the menu looks and behaves as before (the existing menu tests and overflow checks pass).
+
+## As built (phases 1 and 2)
+
+Where the code differs from the sketches above, and why. The code is the reference; these notes say where to look.
+
+### Files
+
+```
+src/app/
+  kernel/            define.ts, view.ts, fields.ts, io.ts, errors.ts, rpc.ts, plus schema-node.ts (zod introspection,
+                     moved from menu/settings; fields.ts builds Fields from it) and text.ts (ago, plural, humanize: one
+                     wording on every surface)
+  features/defs.ts   OPERATIONS, QUERIES, VIEWS (typed tuples the web client infers from), NAV (the web's sections)
+  features/<area>/   <area>.def.ts (pure), <area>.run.ts (Node), index.ts; settings also has categories.def.ts (pure
+                     labels), settings-file.ts (ConfigFile, moved from menu/settings) and settings-rows.ts (rows)
+  context.ts         AppContext (= the CLI's Context) and implement() bound to it; typedConfirm(io)
+  registry.ts        IMPLEMENTATIONS, runDefinition, readQuery (typed, no questions), createRpcHost (web-allowed only)
+src/cli/operations/  spec.ts (CLI hints -> manifest commands and actions), input.ts (command line -> input),
+                     io-cli.ts (OperationIO on the terminal), handler.ts (run + print), index.ts
+src/cli/output/render-view.ts   Page -> text lines
+src/cli/menu/        render-view.ts (Page -> ListScreen rows, keys, Enter labels, resolve()), io-menu.ts
+                     (MenuOperations: perform an Action, run with the TUI dialogs), views.ts (MENU_VIEWS: which views the
+                     menu shows, read by the parity test)
+src/host/web/rpc.ts  RpcSession: one browser's RPC socket; server.ts upgrades /api/rpc after the usual checks
+web/src/             rpc/ (client, typed run(), hooks), render/ (PageView, FieldInput, ActionForm, QuestionModal,
+                     actions, tones), shell/Shell.tsx, pages/ (ViewPage, TerminalPage, NewSessionModal)
+```
+
+### Contracts, as built
+
+- **CLI hints** (`TypedCliHint` in define.ts): `{ name, action?, group, summary?, positional?: [field], flags?:
+  { field: { flag, short?, shownAs?, value?, choices?, noMenu?, advanced?, label? } }, yes?: '<help line>', json?,
+  shapeJson?(output), examples? }`. Field names are checked against the input at compile time. A hint with `action`
+  adds an action to a hand-written command (`config get|set|reset|list`); without one it is a command of its own,
+  added to `COMMANDS` (so `--help`, the parser and the menu's command list see it like any other). Help text comes from
+  the schema's `.describe()`. `shapeJson` keeps a command's old `--json` shape (status, sessions) while the output
+  schema is the one the web uses. Why: the menu's command forms and `--help` already read the manifest, so generating
+  manifest entries kept both unchanged.
+- **`text(output)`** (not `done`) is on operations and queries: one line for the CLI's output, the menu's notice and the
+  web's notification (`config get` prints its value through it). A query without `text` prints the page of the view
+  that shows only it (status, sessions, config list), or JSON.
+- **`danger: true`** marks an operation red on every surface; it does not ask by itself. The operation asks through
+  `io.confirm`, because what to say depends on what it finds (stop names the sessions that end). `ConfirmQuestion`
+  grew `implied` (a typed command is answer enough: the CLI does not ask, the menu and web still do), `typed` (type a
+  word: another user's sandbox) and `noTerminal` (the CLI's message and fix without a terminal; default "Add --yes").
+  `-y/--yes` (from the hint's `yes`) answers confirmations on the CLI. A declined question ends the operation with
+  `cancelled()`: the CLI prints "Nothing changed." and exits 1, the menu and web say nothing.
+- **IO**: every surface builds its `OperationIO` from one `Asker` (`ioFromAsker`); typed questions take an in-process
+  `validate` and are asked again with `problem` (so the web needs no functions over the wire). `fakeIO([...answers])`
+  is the test double; `NO_QUESTIONS` is the IO for queries. The menu shows what an operation logged above its next
+  question.
+- **Views** declare `operations` (everything the page may offer: the parity test reads it), optional `tabs` (a
+  parameter switched with tabs: Settings' scope) and `inputs(params)`. `AnyView` is the type for lists of views.
+- **Page** (view.ts): `notice`, `sections` (`facts`, `items`, `columns` + `columnsOn`, `actions`, `notes` with
+  `only: 'cli'`), page `actions` (key bar / header buttons), `empty` (`text`, `action`, `cliText`). An `Action` is an
+  operation (`input`, optional `fields` + `initial` to ask first) or a link to a `Target`: `terminal` (menu: attach;
+  web: terminal page), `start-agent` (menu: launch; web: new-session dialog), `view`, or `command` (a command line of
+  an area that is not a feature yet: the menu runs it, the web hides it; these go away as areas move).
+- **RPC**: subscriptions carry an id (`subscribe {id, query, input}`, `data {id, output}`, `unsubscribe {id}`), so a page
+  can follow several queries; an `error` on a subscription does not end it. One question per call at a time, so
+  `answer {id, value}` needs no question id. The server checks the answer against the question's kind.
+- **Fields**: `fieldOf(schema | SchemaNode, key)`; kinds `boolean`, `enum` (with `open` when a value of your own is
+  allowed: `"auto"` or a number), `number`, `text`, `secret`, `path`, `list`, `map`, `object`, `json`. The menu's
+  `ValueEditor` dispatches on the Field's kind and keeps the SchemaNode for checking as you type; the web's
+  `FieldInput` renders the Field and `ActionForm` checks with the operation's input schema (zod resolver) plus
+  `fieldProblem`. The web's path question is a text field for now (no folder browser on the server yet).
+
+### Deviations and why
+
+- **Settings in the menu** keep their own page (drafts staged until Ctrl+S, two scopes, the Data folder, VPN login and
+  export/import rows), but its rows are the feature's (`settingsOf`, `settingRow` with a draft-aware `SettingsSource`):
+  which settings exist, labels, sections, Fields, values with secrets as `***`. The web and the CLI write at once
+  through `settings.set`/`settings.reset`. Moving the draft model into the core is not worth it until another surface
+  wants staging.
+- **The Sandbox page in the menu** shows the sandbox view as its Status category (rows prefixed `status:`); Projects and
+  Databases stay the page's own until those areas are features (tasks 2 and later).
+- **Text output changed a little** where a page is now shared: `status` lists a Sessions row and the repo guard also
+  when no sandbox runs, other projects' sessions under their own heading; `show` prints "Sandbox window shown.";
+  the menu's Status rows use the CLI's words (Running, Phase, Uptime, Helper ...). `--json`, flags, names, exit codes
+  and every other line are as before. New: `sandbox config reset <setting>` and `sandbox config list [--json]`.
+- **`settings.get`** is CLI only (`surfaces: { except: { menu, web } }`): the Settings pages show every value.
+- **Not a package boundary but a lint one**: `npm run lint` enforces that the kernel and `*.def.ts` import only zod,
+  the kernel, other `*.def.ts` and `core/util/errors`; that host code imports only `app/kernel`; that `*.run.ts` never
+  imports the TUI, the menu, output or React; that `web/` imports only `src/shared/web`, `src/app/kernel` and
+  `src/app/features/defs`. The `layout` self-test checks the same on the compiled code.
+- **Bundle size**: the web bundle is about 1.3 MB (zod 4 is a third of it). It is served from this PC only.
+
+## How to add a feature (walkthrough)
+
+Using `sessions.restart` (src/app/features/sessions) as the example.
+
+1. **Define it** in `sessions.def.ts`: id, title, summary, zod `input` and `output` with `.describe()` on every field,
+   `text` (the one line it says), the CLI hint (`{ name: 'restart', group: 'Agents', flags: { harness: { flag:
+   '--harness', shownAs: '--agent', value: 'name', choices: 'harnesses' }, all: { flag: '--all' } } }`).
+2. **Implement it** in `sessions.run.ts` with `implement(restartSessions, async (ctx, input, io) => ...)`: use the
+   services, ask with `io.confirm({ ..., implied: true })`, report with `io.progress`, end a "no" with `cancelled()`,
+   fail with `fail(message, fix)`. Never print, never prompt, never import the TUI.
+3. **Register** the definition in `features/defs.ts` (`OPERATIONS`) and the implementation in `app/registry.ts`
+   (`IMPLEMENTATIONS`).
+4. **Offer it** in a view: `sessionsView.operations` lists it and `sessionsPage` puts
+   `action(restartSessions, { all: false }, { key: 'r', verb: 'restart agents' })` in the page's actions. The menu's
+   Sessions page (it renders `sessionsView`, listed in `menu/views.ts`) shows the `r` key and runs it with dialogs; the
+   web's Sessions page (the view is in `NAV`) shows a button and runs it over RPC; `sandbox restart` exists because of
+   the hint. A new area's view goes in `NAV` (web) and in `MENU_VIEWS` with a page that renders it (menu).
+5. **Delete** the old command and menu code that did the same (here: `commands/sessions/control.ts` and the restart
+   branch of the Sessions page).
+6. **Test**: `npm test app` (parity: no gaps; your page in the reference-view checks if it has rules worth pinning);
+   a test of `run` with `fakeIO` where it needs no sandbox (see the settings checks in `app.test.ts`).
+7. **Docs**: docs/commands.md when a command changed.

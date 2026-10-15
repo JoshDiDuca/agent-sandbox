@@ -13,6 +13,7 @@ export { openBrowser, openIssuePage } from './browser.js';
 export { TerminalBridge } from './bridge.js';
 export { WebControl, type WebStatus } from './control.js';
 export { WebRunner } from './runner.js';
-export { WebServer, CONTENT_SECURITY_POLICY, type WebServerOptions } from './server.js';
+export { RpcSession } from './rpc.js';
+export { WebServer, CONTENT_SECURITY_POLICY, RPC_PATH, type WebServerOptions } from './server.js';
 export { StaticFiles } from './static-files.js';
 export { WebStore, WebStateSchema, type WebState } from './state.js';

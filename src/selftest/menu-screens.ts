@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Draft } from '../cli/menu/settings/draft.js';
-import { ConfigFile } from '../cli/menu/settings/config-file.js';
+import { ConfigFile } from '../app/features/settings/index.js';
 import { AppsModel } from '../cli/menu/apps.js';
 import { accountsOptions, type AccountsModel } from '../cli/menu/pages/accounts-page.js';
 import { appsOptions } from '../cli/menu/pages/apps-page.js';
@@ -11,10 +11,10 @@ import { maintenanceOptions, type MaintenanceModel } from '../cli/menu/pages/mai
 import { sandboxOptions, type SandboxModel } from '../cli/menu/pages/sandbox-page.js';
 import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
 import { settingsOf, settingsOptions } from '../cli/menu/pages/settings-page.js';
-import { CATEGORIES } from '../cli/menu/settings/categories.js';
+import { CATEGORIES } from '../app/features/settings/index.js';
 import { agentsOptions } from '../cli/menu/pages/agents-page.js';
 import { SECTION_LABELS } from '../cli/menu/shell.js';
-import type { ListedSession } from '../cli/services/index.js';
+import type { SessionRow } from '../app/features/sessions/index.js';
 import { Frame, ListScreen, OverlayScreen, Text, type ListOptions, type NavState } from '../cli/tui/index.js';
 
 export const SIZES = [
@@ -63,6 +63,7 @@ const SESSIONS = [
     projectName: 'api',
     here: true,
     viewers: { remote: 1, viewers: 1 },
+    canOpen: true,
   },
   {
     id: '1791927991436-cc22dd',
@@ -73,8 +74,9 @@ const SESSIONS = [
     projectName: 'web',
     here: false,
     viewers: { remote: 0, viewers: 0 },
+    canOpen: true,
   },
-] as unknown as ListedSession[];
+] as unknown as SessionRow[];
 
 /** The navigation the shell would show: every section, the open one with the categories of `options`. */
 export function navFor(

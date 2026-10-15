@@ -13,6 +13,10 @@ User docs: README.md and docs/. Contributor summary: CONTRIBUTING.md. Releases: 
 - New setting or command: docs updated; `config.example.json` equals `DEFAULTS` (the self-test checks it).
 
 ## Hard rules
+- **Features are written once in `src/app`; surfaces only render.** An operation, query or view is defined in
+  `src/app/features/<area>` (docs/design/shared-core.md); the CLI, the menu and the web UI draw its Page and run it
+  through the registry, with no logic of their own. The kernel and `*.def.ts` are pure (the web bundle imports them);
+  `npm test app` fails when an operation is not reachable on every surface and declares no exemption.
 - **Never on a real PC.** The self-test refuses to run outside a Windows Sandbox or GitHub Actions
   (`onThrowawayMachine`). Tests use only temp folders they create: never the real `~/.agent-sandbox`, registry, PATH,
   profile or global git config. Never read, set or override HOME / USERPROFILE (`$home` in PowerShell): use explicit paths.
@@ -48,7 +52,8 @@ import siblings directly, never your own barrel. Guest code imports files direct
 
 | Folder | What lives there |
 | --- | --- |
-| `src/cli/` | Only cli/ prints. `manifest.ts` defines every command, argument and option once (zod, `CommandName`); `args.ts` builds commander from it, `index.ts` dispatches through `commands/registry.ts` (`HANDLERS`). `output/` (colours, progress, `follow()`, table), `tui/` (screen toolkit), `menu/` (the interactive menu), `services/` (data for commands and menu, no printing), `commands/` by feature. `commands/projects/here.ts` is the ONE way to find "the project this folder is in" (`locateHere`, `joinHere`). |
+| `src/app/` | The shared core (no printing, no terminal, no DOM). `kernel/` (pure: `define.ts` operations/queries/views, `view.ts` the Page model, `fields.ts` zod -> Fields, `io.ts` questions, `errors.ts`, `rpc.ts`), `features/<area>/` (`*.def.ts` pure definitions and view builders, `*.run.ts` the work over services and `io`), `features/defs.ts` (pure registry, the web's `NAV`), `registry.ts` (implementations, `createRpcHost`), `context.ts` (`implement`). |
+| `src/cli/` | Only cli/ prints. `manifest.ts` defines every hand-written command, argument and option once (zod, `CommandName`) and adds the shared core's commands from their CLI hints (`operations/`); `args.ts` builds commander from it, `index.ts` dispatches an operation command through `operations/` and the rest through `commands/registry.ts` (`HANDLERS`). `output/` (colours, progress, `follow()`, table), `tui/` (screen toolkit), `menu/` (the interactive menu; `render-view.ts` and `io-menu.ts` draw and run the shared core's views), `services/` (data for commands and menu, no printing), `commands/` by feature. `commands/projects/here.ts` is the ONE way to find "the project this folder is in" (`locateHere`, `joinHere`). |
 | `src/core/` | Pure or host-side basics: `schema/` (zod by area: `XxxSchema` constants, `Xxx` types; JSON Schemas in `schemas/` are generated), `config/` (`DEFAULTS`, loader, machine config), `local-config/` (`.sandbox-config.json`: overrides, trust, policy), `run/` (`resolveRun`), `detect/` (pure project detection), `util/` (`fail`, fs, paths, jsonc, process). |
 | `src/shared/` | Host and guest: `channel/` (message schemas, `RunDir`, the one-shot `secrets.ts` file), `io/` (`JsonFile`, atomic writes, `safeRemove`), `download/` (`Downloader`, checksums, GitHub page fallback), `pty/` (ptyhost protocol and client), `paths/` (guest paths, project ids, host <-> guest folders), `network/`, `apps/`, `scripts.ts`, `system.ts` (`SYSTEM.*`). |
 | `src/host/` | On the PC: `launch/` (`generateSandbox`, .wsb, mappings), `channel/` (`SandboxChannel`), `projects/`, `guard/` (`RepoGuard`), `profile/` (secrets stripping, Claude profile, accounts), `sandbox/` (platform, probe, window), `life/` (stop events, `SessionLedger`, keep-awake), `install/` + `update/` (managed install, updater), `secrets/` (`SecretStore`: DPAPI at rest; the one-shot secrets files), `vpn/` (login, NordVPN, `prepareVpn`), `sharing/` (other Windows users, folder ACLs), `migrate/`, `storage/`, `workspace-view/`, `network/`, `tools/`, `native.ts`. |
@@ -56,6 +61,7 @@ import siblings directly, never your own barrel. Guest code imports files direct
 | `src/guest/` | In the sandbox, bundled by esbuild from `entries/` into `dist/runtime/*.js`: `boot/` (`Boot` steps), `daemon/` (sessions, provisioning, idle shutdown), `sessions/` (ptyhost, viewer), `agents/` (`AgentInstaller`), `toolchains/` (steps from `plan.ts`, one module per toolchain), `databases/` (`sbx-db`), `apps/`, `setup/`, `git/`, `network/`, `audit/`, `vpn/` (boot step: OpenVPN, kill switch, tunnel). |
 | `sandbox/` | Copied into every launch folder: `boot/` (`logon.cmd` -> `trust.cmd` -> `bootstrap.ps1` -> `runtime\main.js`), `scripts/` (verb-noun `.ps1`), `csharp/` (csc helpers: `PtyHost.cs`, `GitShim.cs`, ...; Add-Type files). |
 | `native/` | Shipped, runs on the PC: `csharp/HostTools/` (built on first use into `<storage>\bin`), `csharp/*.cs` Add-Type helpers, `scripts/` (PowerShell fallbacks and helpers). |
+| `web/` | The web UI (React, Mantine, TanStack Query, xterm.js; bundled into `dist/web` by `scripts/bundle-web.mjs`): `rpc/` (typed client of the RPC socket), `render/` (Page and Fields as Mantine), `shell/`, `pages/`. Imports only `src/shared/web`, `src/app/kernel` and `src/app/features/defs`. |
 | `scripts/` | `install.ps1` (the `irm \| iex` installer, PowerShell 5.1, keeps its inline C#), bundle, schemas, publishing. |
 | `src/selftest/` | `npm test`: one suite per area (`<area>.test.ts`), helpers in `support/`. Live tests need Windows (csc + ConPTY). |
 

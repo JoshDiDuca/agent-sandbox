@@ -4,7 +4,7 @@ import { launch } from './launch/index.js';
 import { setup } from './setup/index.js';
 import { data } from './data/index.js';
 import { storage } from './storage/index.js';
-import { attach, db, exec, hide, restart, sessions, show, status, stop } from './sessions/index.js';
+import { attach, db, exec } from './sessions/index.js';
 import { account } from './accounts.js';
 import { projects } from './projects/index.js';
 import {
@@ -31,16 +31,10 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   launch: (ctx) => launch(ctx),
   generate: (ctx) => launch(ctx, true),
   attach: attach,
-  sessions: sessions,
-  status: status,
   exec: exec,
   'agent-commands': agentCommandsCommand,
   db: db,
-  restart: restart,
   resume: resume,
-  stop: stop,
-  show: show,
-  hide: hide,
   account: account,
   projects: projects,
   sync: sync,

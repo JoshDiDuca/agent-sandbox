@@ -1,6 +1,10 @@
 // Every command, defined once: name, group, arguments and options with their types. args.ts builds the commander
-// parser from it and menu.ts builds the interactive menu from it, so a command added here works both ways.
+// parser from it and menu.ts builds the interactive menu from it, so a command added here works both ways. Commands of
+// the shared core (status, sessions, stop ... and actions such as config get) come from their definitions' CLI hints
+// (cli/operations/spec.ts); this list shrinks as areas move into src/app.
 import { z } from 'zod';
+// The file rather than the barrel: the barrel's handlers need the registry, which needs the commands.
+import { withOperationCommands } from './operations/spec.js';
 
 const ChoicesSchema = z
   .union([z.array(z.string()), z.enum(['harnesses', 'accounts', 'sessions'])])
@@ -231,15 +235,6 @@ const COMMAND_LIST = [
     ],
   },
   {
-    name: 'sessions',
-    summary: 'list agent sessions and who is attached',
-    group: 'Sessions',
-    args: [],
-    options: [bool('--wide', "also show each session's folder", { noMenu: true })],
-    json,
-  },
-  { name: 'status', summary: 'show what the sandbox is doing', group: 'Sessions', args: [], options: [], json },
-  {
     name: 'db',
     summary: 'list, start or stop databases in the running sandbox',
     group: 'Sessions',
@@ -277,23 +272,6 @@ const COMMAND_LIST = [
     json,
   },
   {
-    name: 'restart',
-    summary: "restart this project's running agents in place; they resume their conversation",
-    group: 'Agents',
-    args: [],
-    options: [
-      text('--harness', 'name', 'only this agent', { choices: 'harnesses', shownAs: '--agent' }),
-      bool('--all', "every project's sessions, not only this folder's"),
-    ],
-  },
-  {
-    name: 'stop',
-    summary: "shut the sandbox down (every project's sessions end)",
-    group: 'Agents',
-    args: [],
-    options: [bool('--yes', "do not ask when other projects' sessions would end", { short: '-y', noMenu: true })],
-  },
-  {
     name: 'projects',
     summary: 'the projects a sandbox can open without a restart: list, choose, roots, all/exclude',
     group: 'Projects & accounts',
@@ -320,8 +298,6 @@ const COMMAND_LIST = [
     ],
     options: [bool('--yes', 'do not ask before removing', { short: '-y', when: 'remove', noMenu: true })],
   },
-  { name: 'show', summary: 'show the sandbox window', group: 'Sessions', args: [], options: [] },
-  { name: 'hide', summary: 'hide the sandbox window (it keeps running)', group: 'Sessions', args: [], options: [] },
   {
     name: 'account',
     summary: 'Claude logins: list, save, use, set the default, remove',
@@ -561,7 +537,7 @@ const COMMAND_LIST = [
       },
       {
         name: 'key',
-        description: '(get, set) the setting, e.g. sandbox.memoryMb; (export, import) the .json file',
+        description: '(get, set, reset) the setting, e.g. sandbox.memoryMb; (export, import) the .json file',
         required: false,
         when: ['get', 'set', 'export', 'import'],
       },
@@ -575,6 +551,8 @@ const COMMAND_LIST = [
     examples: [
       'sandbox config set sandbox.memoryMb 8192',
       'sandbox config get sandbox.memoryMb',
+      'sandbox config reset sandbox.memoryMb',
+      'sandbox config list',
       'sandbox config export team-settings.json',
       'sandbox config import team-settings.json',
     ],
@@ -657,9 +635,12 @@ const COMMAND_LIST = [
   },
 ] as const satisfies readonly Frozen<CommandSpec>[];
 
+/** The hand-written commands (the shared core's own commands are not in this union). */
 export type CommandName = (typeof COMMAND_LIST)[number]['name'];
 
-export const COMMANDS: CommandSpec[] = z.array(CommandSpecSchema).parse(COMMAND_LIST);
+export const COMMANDS: CommandSpec[] = z
+  .array(CommandSpecSchema)
+  .parse(withOperationCommands(z.array(CommandSpecSchema).parse(COMMAND_LIST)));
 
 export function commandSpec(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);

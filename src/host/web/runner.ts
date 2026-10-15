@@ -1,5 +1,6 @@
 // The background process behind `sandbox web start`: starts the server, records pid, port and token in the private
 // state file, and removes it again when the server stops.
+import type { RpcHost } from '../../app/kernel/index.js';
 import { fail } from '../../core/util/index.js';
 import type { WebBackend } from './backend.js';
 import { newToken } from './auth.js';
@@ -10,6 +11,7 @@ export interface WebRunOptions {
   readonly storageRoot: string;
   readonly port: number;
   readonly backend: WebBackend;
+  readonly rpc?: RpcHost;
   readonly staticRoot: string;
 }
 
@@ -29,6 +31,7 @@ export class WebRunner {
       port: this.options.port,
       token,
       backend: this.options.backend,
+      rpc: this.options.rpc,
       staticRoot: this.options.staticRoot,
       onStop: stop,
     });

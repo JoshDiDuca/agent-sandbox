@@ -4,14 +4,8 @@ import path from 'node:path';
 import { askRequired } from '../../../core/prompt.js';
 import { fail, safeText, writeJson } from '../../../core/util/index.js';
 import { c } from '../../output/index.js';
-import {
-  ConfigFile,
-  diffText,
-  exportSettings,
-  planImport,
-  skippedLine,
-  type ImportPlan,
-} from '../../menu/settings/index.js';
+import { ConfigFile } from '../../../app/features/settings/index.js';
+import { diffText, exportSettings, planImport, skippedLine, type ImportPlan } from '../../menu/settings/index.js';
 import type { Context } from '../context.js';
 
 /** The file `config export` writes when none is named. */

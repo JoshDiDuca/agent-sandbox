@@ -42,14 +42,8 @@ export function shortenMiddle(text: string, max: number): string {
   return text.slice(0, head) + '…' + text.slice(text.length - (keep - head));
 }
 
-/** 1536 -> "1.5 KB" is in the data command; this is "3 min ago" for the tables. */
-export function ago(then: number | string | Date, now: number = Date.now()): string {
-  const secs = Math.max(0, Math.round((now - new Date(then).getTime()) / 1000));
-  if (secs < 45) return 'just now';
-  if (secs < 3600) return Math.round(secs / 60) + ' min ago';
-  if (secs < 86400) return Math.round(secs / 3600) + ' h ago';
-  return Math.round(secs / 86400) + ' d ago';
-}
+/** "3 min ago" for the tables (the kernel's, so every surface says it the same way). */
+export { ago } from '../../app/kernel/index.js';
 
 /** Width to lay text out in (terminal columns, 80 when unknown, never absurdly small). */
 export function termWidth(): number {

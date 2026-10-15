@@ -1,16 +1,16 @@
-// Editing one value with the screen that fits it: on/off flips, choices are picked from a list, numbers and text are
-// typed and checked as you type, lists and maps get an editor of their own (add, change, remove), and objects (a
-// mapped folder, an agent) open as a small form. JSON is only the last resort for shapes none of these fit.
+// Editing one value with the screen that fits its Field (app/kernel/fields.ts, the same descriptor the web's inputs
+// read): on/off flips, choices are picked from a list, numbers and text are typed and checked as you type, lists and
+// maps get an editor of their own (add, change, remove), and objects (a mapped folder, an agent) open as a small form.
+// JSON is only the last resort for shapes none of these fit.
 import _ from 'lodash';
 import { type App, Text } from '../../tui/index.js';
-import { type SchemaNode } from './schema-node.js';
-import { choiceLabel } from './format.js';
+import { choiceLabel, fieldOf, pathLiterals, type Field, type SchemaNode } from '../../../app/kernel/index.js';
 import { StringListEditor } from './collections/string-list-editor.js';
 import { MapEditor } from './collections/map-editor.js';
 import { ObjectListEditor } from './collections/object-list-editor.js';
 import { ObjectMapEditor } from './collections/object-map-editor.js';
 import { ObjectEditor } from './object-editor.js';
-import { askPath, pathKindOf, pathLiterals } from './path-kind.js';
+import { askPath } from './ask-path.js';
 
 /** What is wrong with the text typed for a number setting (true = fine), in words that name the allowed range. */
 export function numberProblem(node: SchemaNode, text: string): true | string {
@@ -38,81 +38,41 @@ export class ValueEditor {
   ) {}
 
   async edit(path: string[], key: string[], node: SchemaNode, current: unknown): Promise<Edited> {
-    const about = node.description ? [node.description] : [];
+    const field = fieldOf(node, key);
     const suggestions = this.hints.suggestions?.(key);
     if (suggestions?.length && node.type === 'string') return this.suggest(path, key, node, current, suggestions);
-    switch (node.editor) {
+    switch (field.kind) {
       case 'boolean':
         return { value: !(current ?? false) };
-      case 'choice':
-        return this.pick(path, node, current, node.choiceValues);
-      case 'union': {
-        const open = node.openOption;
-        const custom = '@custom';
-        const picked = await this.app.choose(
-          path,
-          node.description ?? '',
-          [
-            ...node.choiceValues.map((v) => ({ value: v as unknown, label: choiceLabel(v) })),
-            ...(open
-              ? [
-                  {
-                    value: custom as unknown,
-                    label: 'Custom ' + open.type + '…',
-                    description: 'Type a ' + open.type + ' of your own.',
-                  },
-                ]
-              : []),
-          ],
-          node.choiceValues.includes(current) ? current : open && current !== undefined ? custom : undefined,
-        );
-        if (picked === undefined) return undefined;
-        return picked === custom && open
-          ? this.edit(path, key, open, node.choiceValues.includes(current) ? undefined : current)
-          : { value: picked };
-      }
+      case 'enum':
+        return field.open ? this.custom(path, key, node, current) : this.pick(path, node, current, node.choiceValues);
       case 'number':
         return this.number(path, key, node, current);
-      case 'string': {
-        const kind = pathKindOf(key);
-        if (kind) return this.folderOrFile(path, key, node, current, kind);
+      case 'path':
+        return this.folderOrFile(path, key, node, current, field.pathKind ?? 'dir');
+      case 'text':
+      case 'secret': {
         const typed = await this.app.text({
           path,
           label: Text.humanize(key[key.length - 1]),
-          about,
+          about: field.help ? [field.help] : [],
           initial: typeof current === 'string' ? current : '',
           allowEmpty: node.check('') === true,
-          masked: node.secret,
+          masked: field.kind === 'secret',
           validate: (v) => node.check(v),
         });
         return typed === undefined ? undefined : { value: typed };
       }
-      case 'choice-list': {
-        const ticked = Array.isArray(current) ? current : [];
-        const picked = await this.app.list<unknown>({
-          path,
-          intro: node.description,
-          multi: true,
-          items: node.element!.choices.map((v) => ({ value: v, label: String(v), checked: ticked.includes(v) })),
-        });
-        return picked.kind === 'multi' ? { value: picked.values } : undefined;
-      }
-      case 'string-list':
-        return new StringListEditor(this.app, path, node, this, key, pathKindOf(key)).run(
-          Array.isArray(current) ? (current as string[]) : [],
-        );
-      case 'string-map':
-        return new MapEditor(this.app, path, node, this, key).run(
-          _.isPlainObject(current) ? (current as Record<string, unknown>) : {},
-        );
-      case 'object-list':
-        return new ObjectListEditor(this.app, path, node, this, key).run(
-          Array.isArray(current) ? (current as Record<string, unknown>[]) : [],
-        );
-      case 'object-map':
-        return new ObjectMapEditor(this.app, path, node, this, key).run(
-          _.isPlainObject(current) ? (current as Record<string, Record<string, unknown>>) : {},
-        );
+      case 'list':
+        return this.list(path, key, node, field, current);
+      case 'map':
+        return field.element?.kind === 'object'
+          ? new ObjectMapEditor(this.app, path, node, this, key).run(
+              _.isPlainObject(current) ? (current as Record<string, Record<string, unknown>>) : {},
+            )
+          : new MapEditor(this.app, path, node, this, key).run(
+              _.isPlainObject(current) ? (current as Record<string, unknown>) : {},
+            );
       case 'object':
         return new ObjectEditor(this.app, path, node, this, key).run(
           _.isPlainObject(current) ? (current as Record<string, unknown>) : (node.initial() as Record<string, unknown>),
@@ -120,6 +80,51 @@ export class ValueEditor {
       default:
         return this.json(path, key, node, current);
     }
+  }
+
+  /** A choice with "Custom…" for a value of your own (a number or a text besides the fixed values). */
+  private async custom(path: string[], key: string[], node: SchemaNode, current: unknown): Promise<Edited> {
+    const open = node.openOption!;
+    const custom = '@custom';
+    const picked = await this.app.choose(
+      path,
+      node.description ?? '',
+      [
+        ...node.choiceValues.map((v) => ({ value: v as unknown, label: choiceLabel(v) })),
+        {
+          value: custom as unknown,
+          label: 'Custom ' + open.type + '…',
+          description: 'Type a ' + open.type + ' of your own.',
+        },
+      ],
+      node.choiceValues.includes(current) ? current : current !== undefined ? custom : undefined,
+    );
+    if (picked === undefined) return undefined;
+    return picked === custom
+      ? this.edit(path, key, open, node.choiceValues.includes(current) ? undefined : current)
+      : { value: picked };
+  }
+
+  /** A list: ticks for fixed values, a form per entry for objects, otherwise text (or paths) one per entry. */
+  private async list(path: string[], key: string[], node: SchemaNode, field: Field, current: unknown): Promise<Edited> {
+    const kind = field.element?.kind;
+    if (kind === 'enum') {
+      const ticked = Array.isArray(current) ? current : [];
+      const picked = await this.app.list<unknown>({
+        path,
+        intro: node.description,
+        multi: true,
+        items: node.element!.choices.map((v) => ({ value: v, label: String(v), checked: ticked.includes(v) })),
+      });
+      return picked.kind === 'multi' ? { value: picked.values } : undefined;
+    }
+    if (kind === 'object')
+      return new ObjectListEditor(this.app, path, node, this, key).run(
+        Array.isArray(current) ? (current as Record<string, unknown>[]) : [],
+      );
+    return new StringListEditor(this.app, path, node, this, key, field.element?.pathKind).run(
+      Array.isArray(current) ? (current as string[]) : [],
+    );
   }
 
   private async number(path: string[], key: string[], node: SchemaNode, current: unknown): Promise<Edited> {

@@ -4,7 +4,7 @@ import { errMsg } from '../../../core/util/index.js';
 import { Theme, type App, type ListOptions, type ListResult } from '../../tui/index.js';
 import { openIssuePage } from '../../../host/web/index.js';
 import { AppsModel, requestAppUrl } from '../apps.js';
-import type { ConfigFile } from '../settings/config-file.js';
+import type { ConfigFile } from '../../../app/features/settings/index.js';
 import type { Draft } from '../settings/draft.js';
 import { ValueEditor } from '../settings/value-editor.js';
 import { SCOPES, scopeStatus, type Scope } from './scopes.js';

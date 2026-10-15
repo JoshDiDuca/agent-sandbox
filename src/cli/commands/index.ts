@@ -4,7 +4,7 @@ export { setup } from './setup/index.js';
 export { data } from './data/index.js';
 export { storage, storageBeforeCommand } from './storage/index.js';
 export { repairCommand } from './repair/index.js';
-export { attach, db, exec, hide, show, restart, stop, sessions, status } from './sessions/index.js';
+export { attach, db, exec } from './sessions/index.js';
 export { account } from './accounts.js';
 export { resume } from './resume.js';
 export { projects } from './projects/index.js';

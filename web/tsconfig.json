@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["src", "../src/shared/web"]
+  "include": ["src", "../src/shared/web", "../src/app/kernel", "../src/app/features/defs.ts"]
 }

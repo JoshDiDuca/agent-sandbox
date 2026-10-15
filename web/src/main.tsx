@@ -1,15 +1,32 @@
-import 'bootstrap/dist/css/bootstrap.min.css';
+// The web UI's entry: Mantine (its static stylesheets: no CSS-in-JS script, so the CSP holds), dark or light with the
+// operating system, notifications and modals, TanStack Query, and the RPC client.
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+import { createTheme, MantineProvider } from '@mantine/core';
+import { ModalsProvider } from '@mantine/modals';
+import { Notifications } from '@mantine/notifications';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { followSystemTheme } from './theme';
-import { ToastProvider } from './ui';
+import { RpcClient } from './rpc/client';
+import { RpcProvider } from './rpc/hooks';
 import './app.css';
 
-followSystemTheme();
+const theme = createTheme({ primaryColor: 'blue', defaultRadius: 'md' });
+const queries = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
+const rpc = new RpcClient();
+
 const root = document.getElementById('root');
 if (root)
   createRoot(root).render(
-    <ToastProvider>
-      <App />
-    </ToastProvider>,
+    <MantineProvider theme={theme} defaultColorScheme="auto">
+      <QueryClientProvider client={queries}>
+        <RpcProvider client={rpc}>
+          <ModalsProvider>
+            <Notifications position="bottom-right" />
+            <App />
+          </ModalsProvider>
+        </RpcProvider>
+      </QueryClientProvider>
+    </MantineProvider>,
   );

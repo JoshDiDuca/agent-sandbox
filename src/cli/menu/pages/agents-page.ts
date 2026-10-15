@@ -21,9 +21,9 @@ import {
 } from '../../tui/index.js';
 import { AddAgent, makeDefaultAgent, removeAgent } from '../add-agent.js';
 import { CommandForm } from '../command-form.js';
-import type { ConfigFile } from '../settings/config-file.js';
+import type { ConfigFile } from '../../../app/features/settings/index.js';
 import type { Draft } from '../settings/draft.js';
-import { askPath } from '../settings/path-kind.js';
+import { askPath } from '../settings/ask-path.js';
 import { SeveralAgents } from '../several.js';
 import { ListPage, type Outcome } from './list-page.js';
 

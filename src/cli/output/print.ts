@@ -3,13 +3,19 @@ import type { Context } from '../commands/context.js';
 import { scrubSecrets } from '../../core/schema/index.js';
 import { c } from './colors.js';
 
-/** Prints rows as aligned columns (the last column is not padded). */
-export function table(rows: string[][]): void {
+/** Rows as aligned columns (the last column is not padded). */
+export function tableLines(rows: readonly (readonly string[])[]): string[] {
   const widths = _.range(_.max(rows.map((r) => r.length)) ?? 0).map(
     (i) => _.max(rows.map((r) => (r[i] ?? '').length)) ?? 0,
   );
-  for (const row of rows)
-    console.log(row.map((cell, i) => (i === row.length - 1 ? cell : _.padEnd(cell, widths[i] + 2))).join(''));
+  return rows.map((row) =>
+    row.map((cell, i) => (i === row.length - 1 ? cell : _.padEnd(cell, widths[i] + 2))).join(''),
+  );
+}
+
+/** Prints rows as aligned columns (the last column is not padded). */
+export function table(rows: readonly (readonly string[])[]): void {
+  for (const line of tableLines(rows)) console.log(line);
 }
 
 /** Prints `value` as JSON when --json was given; returns whether it did. */

@@ -13,6 +13,8 @@ export interface CliOptions {
   command: string;
   positionals: string[];
   passthrough: string[];
+  /** The options as commander parsed them, by attribute name (operation commands build their input from these). */
+  raw: Readonly<Record<string, unknown>>;
   config?: string;
   workspace?: string;
   harness?: string;
@@ -273,6 +275,7 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
     command: name === 'start' ? 'launch' : name,
     positionals: forAgent || name === 'exec' ? [] : operands,
     passthrough: forAgent || name === 'exec' ? operands : [],
+    raw: o,
     config: o.config as string | undefined,
     workspace: o.workspace as string | undefined,
     harness:
@@ -332,6 +335,7 @@ function defaults(): CliOptions {
     command: '',
     positionals: [],
     passthrough: [],
+    raw: {},
     scripts: [],
     databases: [],
     terminal: false,

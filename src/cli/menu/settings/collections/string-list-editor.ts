@@ -1,8 +1,8 @@
 import type { App, ListItem } from '../../../tui/index.js';
 import { Theme } from '../../../tui/index.js';
 import { CollectionEditor } from './collection-editor.js';
-import { askPath, type PathKind } from '../path-kind.js';
-import type { SchemaNode } from '../schema-node.js';
+import type { PathKind, SchemaNode } from '../../../../app/kernel/index.js';
+import { askPath } from '../ask-path.js';
 import type { ValueEditor } from '../value-editor.js';
 
 /** A list of strings (project roots, scripts, extra packages ...). */

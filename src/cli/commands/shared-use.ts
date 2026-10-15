@@ -75,23 +75,32 @@ export function lookAtSandbox(ctx: Context): SandboxView {
   return { ctx, line, limited: owner.kind !== 'mine' && owner.kind !== 'none', owner };
 }
 
+/** Asks for a typed confirmation ("Type alice to confirm"); true when it was typed. */
+export type TypedConfirm = (prompt: string, expected: string) => Promise<boolean>;
+
+/** On the terminal: no terminal fails and says how to do it in a script. */
+const terminalTypedConfirm: TypedConfirm = async (prompt, expected) => {
+  if (!(process.stdin.isTTY && process.stdout.isTTY))
+    fail(prompt + ' It was not stopped.', 'In a script, add --yes to do it anyway.');
+  return askTyped(prompt, expected);
+};
+
 /**
  * For a command that acts on the running sandbox: refuses with the reason when this user may not, asks for the typed
- * confirmation when the rule wants one (--yes in a script), and returns the context to use.
+ * confirmation when the rule wants one (--yes in a script; `confirm` asks it, by default on the terminal), and returns
+ * the context to use.
  */
 export async function useSharedSandbox(
   ctx: Context,
   action: OwnerAction | ((shared: Context) => OwnerAction),
+  confirm: TypedConfirm = terminalTypedConfirm,
 ): Promise<Context> {
   const owner = ownerNow();
   if (!owner || owner.kind === 'mine' || owner.kind === 'none') return ctx;
   const target = owner.kind === 'other' && owner.shared ? borrowedContext(ctx, owner) : ctx;
   const rule = ownerRule(owner, typeof action === 'function' ? action(target) : action);
   if (rule.kind === 'refuse') return fail(rule.reason, rule.fix);
-  if (rule.kind === 'confirm' && !ctx.options.yes) {
-    if (!(process.stdin.isTTY && process.stdout.isTTY))
-      fail(rule.prompt + ' It was not stopped.', 'In a script, add --yes to do it anyway.');
-    if (!(await askTyped(rule.prompt, rule.expected))) fail('Nothing changed.');
-  }
+  if (rule.kind === 'confirm' && !ctx.options.yes && !(await confirm(rule.prompt, rule.expected)))
+    fail('Nothing changed.');
   return target;
 }

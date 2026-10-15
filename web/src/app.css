@@ -1,33 +1,8 @@
+/* The few layout tokens Mantine's components do not cover: the terminal fills the main area. */
 html,
 body,
 #root {
   height: 100%;
-}
-
-.app-shell {
-  display: flex;
-  height: 100%;
-}
-
-.app-nav {
-  width: 220px;
-  flex: none;
-  background: var(--bs-tertiary-bg);
-}
-
-.app-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: auto;
-}
-
-.app-bare {
-  flex: 1;
-  min-height: 0;
-  display: flex;
 }
 
 .terminal-page {
@@ -38,10 +13,14 @@ body,
   flex-direction: column;
 }
 
+.terminal-toolbar {
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
 .terminal-host {
   flex: 1;
   min-height: 0;
   padding: 6px;
   overflow: hidden;
-  background: var(--bs-body-bg);
+  background: var(--mantine-color-body);
 }

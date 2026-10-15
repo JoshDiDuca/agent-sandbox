@@ -6,6 +6,7 @@ import { fail, sleep } from '../../core/util/index.js';
 import { spawnDetached } from '../../host/sandbox/index.js';
 import { openBrowser, WebControl, WebRunner, WebStore } from '../../host/web/index.js';
 import { printJson } from '../output/index.js';
+import { createRpcHost } from '../../app/registry.js';
 import { WebService } from '../services/index.js';
 import { requireOnPc, type Context } from './context.js';
 
@@ -96,6 +97,7 @@ export async function webServer(ctx: Context): Promise<void> {
     storageRoot: ctx.storageRoot,
     port: ctx.loaded.config.web.port,
     backend: new WebService(ctx),
+    rpc: createRpcHost(ctx),
     staticRoot,
   }).run();
   process.exit(0);

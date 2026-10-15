@@ -27,7 +27,9 @@ first. In short:
 
 - New setting: schema in `src/core/schema/`, the default in `DEFAULTS` (`src/core/config/defaults.ts`), then
   `config.example.json` and the docs.
-- New command: `src/cli/manifest.ts` (the flags and the menu both come from it), then [docs/commands.md](docs/commands.md).
+- New feature or command: define it once in `src/app/features/<area>` (an operation, query or view with a CLI hint);
+  the command line, the menu and the web UI render it ([shared-core.md](docs/design/shared-core.md#how-to-add-a-feature-walkthrough)).
+  Commands not moved yet live in `src/cli/manifest.ts`. Then [docs/commands.md](docs/commands.md).
 - Every change gets a test in `src/selftest/`.
 
 ## Pull requests

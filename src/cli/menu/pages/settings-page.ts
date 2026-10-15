@@ -1,8 +1,20 @@
 // Section 5: every setting, for all projects or just this project (two scopes), grouped into categories on the left and
-// searchable, with each value, its default and its description. Changes are staged in the Draft (marked *) and
-// written with Ctrl+S; Enter edits, r resets to the default, z undoes an unsaved change.
+// searchable, with each value, its default and its description. The rows (which settings, their values, secrets as
+// ***) are the settings feature's; this page lays the unsaved changes over them: changes are staged in the Draft
+// (marked *) and written with Ctrl+S; Enter edits, r resets to the default, z undoes an unsaved change.
 import _ from 'lodash';
-import { NEVER_LOOSER } from '../../../core/local-config/index.js';
+import {
+  CATEGORIES,
+  labelOf,
+  nameOf,
+  settingRow,
+  settingsOf,
+  type ConfigFile,
+  type Setting,
+  type SettingRow,
+  type SettingsSource,
+} from '../../../app/features/settings/index.js';
+import { valueText } from '../../../app/kernel/index.js';
 import type { Config } from '../../../core/types.js';
 import type { Context } from '../../commands/context.js';
 import { errMsg } from '../../../core/util/index.js';
@@ -18,127 +30,73 @@ import {
 import { dataFolderRow, DataFolderFlow } from '../data-folder.js';
 import { EXPORT_SETTINGS, IMPORT_SETTINGS, ShareSettingsFlow, shareSettingsRows } from '../share-settings.js';
 import { VpnLoginFlow, vpnLoginRow, VPN_LOGIN } from '../vpn-login.js';
-import { CATEGORIES, categoryOf, nameOf } from '../settings/categories.js';
-import type { ConfigFile } from '../settings/config-file.js';
 import type { Draft } from '../settings/draft.js';
-import { formatValue } from '../settings/format.js';
-import type { SchemaNode } from '../settings/schema-node.js';
 import { ValueEditor } from '../settings/value-editor.js';
 import { SCOPES, scopeStatus, type Scope } from './scopes.js';
 import { ListPage, type Outcome } from './list-page.js';
 
-export interface Setting {
-  readonly key: string[];
-  readonly node: SchemaNode;
-  readonly category: string;
-  readonly section?: string;
+export { settingsOf, type Setting };
+
+/** The files with the menu's unsaved changes laid over them. */
+function draftSource(draft: Draft): SettingsSource {
+  const written = (file: ConfigFile, key: string[]): unknown =>
+    draft.has(file, key) ? draft.value(file, key) : file.valueInFile(key);
+  return {
+    written,
+    effective: (file, key, config) =>
+      file.isProject
+        ? written(file, key)
+        : draft.has(file, key)
+          ? (draft.value(file, key) ?? file.defaultOf(key))
+          : _.get(config, key),
+  };
 }
 
-/** Every editable setting with the category and heading it is shown under. */
-export function settingsOf(file: ConfigFile): Setting[] {
-  return file.schema.children().flatMap(([top, node]) => {
-    const category = categoryOf(top);
-    if (!category) return [];
-    const several = category.keys.filter((k) => file.schema.child(k)).length > 1;
-    if (!node.isSection)
-      return [
-        {
-          key: [top],
-          node,
-          category: category.id,
-          section: several && category.id !== 'general' ? nameOf(top) : undefined,
-        },
-      ];
-    return node.leaves([top]).map(({ key, node: leaf }) => {
-      const heading = [
-        several ? nameOf(top) : undefined,
-        key.length > 2 ? key.slice(1, -1).map(nameOf).join(' › ') : undefined,
-      ]
-        .filter(Boolean)
-        .join(' › ');
-      return { key, node: leaf, category: category.id, section: heading || undefined };
-    });
-  });
+/** A value of a row in one short line, painted like every value in the menu. */
+function shown(row: SettingRow, value: unknown, max = 60): string {
+  const v = valueText(value, row.field, max);
+  return v.tone === 'ok' ? Theme.ok(v.text) : v.tone === 'muted' ? Theme.muted(v.text) : v.text;
 }
 
-/** What the file will say for a setting once the staged changes are saved (undefined = not set there). */
-function written(file: ConfigFile, draft: Draft, key: string[]): unknown {
-  return draft.has(file, key) ? draft.value(file, key) : file.valueInFile(key);
-}
-
-/** What is in effect for a setting once the staged changes are saved. */
-function effective(file: ConfigFile, draft: Draft, key: string[], config: Config): unknown {
-  if (file.isProject) return written(file, draft, key);
-  return draft.has(file, key) ? (draft.value(file, key) ?? file.defaultOf(key)) : _.get(config, key);
-}
-
-/** Plain words for settings whose key is jargon (the key itself stays in the details pane). */
-const LABELS: Readonly<Record<string, string>> = {
-  mappings: 'Extra folders from this PC',
-  'sandbox.vGpu': 'Graphics acceleration',
-  'sandbox.headless': 'Hide the sandbox window',
-  'sandbox.memoryMb': 'Memory (MB)',
-  'sandbox.pageFileMb': 'Swap file (MB)',
-  'network.dns': 'DNS servers',
-  'projects.wsbShare': 'Add folders while the sandbox runs',
-  'projects.all': 'Map all known projects at start',
-  'claudeProfile.hostDir': 'Claude folder on this PC',
-  'claudeProfile.globalStateFile': 'Claude state file on this PC',
-};
-
-function labelOf(key: string[]): string {
-  return LABELS[key.join('.')] ?? Text.humanize(key[key.length - 1]);
-}
-
-function item(
-  s: Setting,
-  files: Record<Scope, ConfigFile>,
-  scope: Scope,
-  draft: Draft,
-  config: Config,
-): ListItem<string> {
-  const file = files[scope];
-  const id = s.key.join('.');
-  const set = written(file, draft, s.key) !== undefined;
-  const unsaved = draft.has(file, s.key);
-  const yours = effective(files.user, draft, s.key, config);
-  const project = files.project;
-  const inProject = project.schema.leaves().some((l) => l.key.join('.') === id)
-    ? written(project, draft, s.key)
-    : undefined;
+function item(row: SettingRow, file: ConfigFile, draft: Draft): ListItem<string> {
+  const unsaved = draft.has(file, row.key);
   const paint = file.isProject ? Theme.project : Theme.changed;
   const value =
-    file.isProject && !set
-      ? Theme.muted('all projects: ') + formatValue(yours, 40)
-      : formatValue(effective(file, draft, s.key, config));
+    file.isProject && !row.set ? Theme.muted('all projects: ') + shown(row, row.yours, 40) : shown(row, row.value);
   const details = [
-    Theme.muted('Setting       ') + id,
+    Theme.muted('Setting       ') + row.id,
     Theme.muted('All projects  ') +
-      formatValue(yours, 40) +
-      Theme.muted(written(files.user, draft, s.key) === undefined ? '  (built-in default)' : '  (your file)'),
+      shown(row, row.yours, 40) +
+      Theme.muted(row.yoursSet ? '  (your file)' : '  (built-in default)'),
     Theme.muted('This project  ') +
-      (inProject === undefined ? Theme.muted('not set') : Theme.project(Text.strip(formatValue(inProject, 40)))),
-    ...(!file.isProject ? [Theme.muted('Default       ') + formatValue(file.defaultOf(s.key), 40)] : []),
+      (row.inProject === undefined ? Theme.muted('not set') : Theme.project(Text.strip(shown(row, row.inProject, 40)))),
+    ...(!file.isProject ? [Theme.muted('Default       ') + shown(row, row.default, 40)] : []),
     ...(unsaved ? [Theme.warn('Unsaved: Ctrl+S saves, z undoes this change.')] : []),
-    ...(file.isProject && NEVER_LOOSER.includes(id)
+    ...(file.isProject && row.locked
       ? [Theme.warn(Theme.glyph.lock + ' A project can only make this stricter than your own setting.')]
       : []),
   ];
   return {
-    value: id,
-    label: labelOf(s.key),
+    value: row.id,
+    label: row.label,
     hint: unsaved
       ? paint(Text.strip(value)) + ' ' + Theme.warn('*')
-      : set
+      : row.set
         ? paint(Text.strip(value)) + ' ' + paint(Theme.glyph.changed)
         : value,
-    description: s.node.description,
+    description: row.field.help,
     details,
-    section: s.section,
-    category: s.category,
-    keywords: id,
-    flip: s.node.editor === 'boolean',
+    section: row.section,
+    category: row.category,
+    keywords: row.id,
+    flip: row.field.kind === 'boolean',
   };
+}
+
+/** What a setting is now for editing: the staged value, else the file's (a project), else what is in effect. */
+function current(file: ConfigFile, draft: Draft, key: string[], config: Config): unknown {
+  const source = draftSource(draft);
+  return file.isProject ? (source.written(file, key) ?? _.get(config, key)) : source.effective(file, key, config);
 }
 
 /** The row in General that opens the data folder flow (your own settings only). */
@@ -152,14 +110,13 @@ export function settingsOptions(
   extra: readonly ListItem<string>[] = [],
 ): ListOptions<string> {
   const file = files[scope];
-  const config = file.userConfig();
+  const config = files.user.userConfig();
   // The Data folder row stands in for the storage folder setting (changing it moves the data, which is asked about).
   const hideRoot = !file.isProject && extra.some((e) => e.value === DATA_FOLDER);
   const settings = settingsOf(file).filter((s) => !(hideRoot && s.key.join('.') === 'storage.root'));
-  const ids = (test: (s: Setting) => boolean): Set<string> =>
-    new Set(settings.filter(test).map((s) => s.key.join('.')));
-  const set = ids((s) => written(file, draft, s.key) !== undefined);
-  const unsaved = ids((s) => draft.has(file, s.key));
+  const rows = settings.map((s) => settingRow(s, files, scope, draftSource(draft), config));
+  const set = new Set(rows.filter((r) => r.set).map((r) => r.id));
+  const unsaved = new Set(rows.filter((r) => draft.has(file, r.key)).map((r) => r.id));
   const categories: Category[] = CATEGORIES.filter((c) => settings.some((s) => s.category === c.id)).map((c) => ({
     id: c.id,
     label: c.label,
@@ -169,7 +126,7 @@ export function settingsOptions(
     path: [],
     status: scopeStatus(file),
     tabs: { items: SCOPES.map((x) => x.tab), active: SCOPES.findIndex((x) => x.scope === scope) },
-    items: [...settings.map((s) => item(s, files, scope, draft, config)), ...(file.isProject ? [] : extra)],
+    items: [...rows.map((r) => item(r, file, draft)), ...(file.isProject ? [] : extra)],
     categories,
     actions: [
       { key: 'r', label: file.isProject ? 'remove' : 'reset to default', applies: (id) => set.has(id) },
@@ -268,12 +225,9 @@ export class SettingsPage extends ListPage<string> {
       return {};
     }
     try {
-      const config = this.file.userConfig();
-      const current = this.file.isProject
-        ? (written(this.file, this.draft, setting.key) ?? _.get(config, setting.key))
-        : effective(this.file, this.draft, setting.key, config);
+      const now = current(this.file, this.draft, setting.key, this.file.userConfig());
       const path = ['Settings', ...setting.key.slice(0, -1).map(nameOf), labelOf(setting.key)];
-      const edited = await this.editor.edit(path, setting.key, setting.node, current);
+      const edited = await this.editor.edit(path, setting.key, setting.node, now);
       if (edited) this.stage(setting.key, edited.value);
     } catch (e) {
       return { notice: Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) };

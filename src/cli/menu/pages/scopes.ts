@@ -1,7 +1,7 @@
 // The two scopes Settings and Apps edit: your own file ("All projects", blue) and this folder's .sandbox-config.json
 // ("This project", purple).
 import { Text, Theme, type Tab } from '../../tui/index.js';
-import type { ConfigFile } from '../settings/config-file.js';
+import type { ConfigFile } from '../../../app/features/settings/index.js';
 
 export type Scope = 'user' | 'project';
 

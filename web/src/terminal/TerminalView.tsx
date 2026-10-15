@@ -3,8 +3,8 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
+import { useComputedColorScheme } from '@mantine/core';
 import { useEffect, useRef } from 'react';
-import { currentTheme } from '../theme';
 import { TerminalConnection, type ConnectionState } from './connection';
 
 const DARK = { background: '#0d1117', foreground: '#e6edf3', cursor: '#e6edf3' };
@@ -19,6 +19,10 @@ interface TerminalViewProps {
 
 export function TerminalView({ sessionId, onState, onReady }: TerminalViewProps) {
   const host = useRef<HTMLDivElement>(null);
+  const terminal = useRef<Terminal | null>(null);
+  // Dark or light follows the app (which follows the operating system).
+  const dark = useComputedColorScheme('dark') === 'dark';
+  const startDark = useRef(dark);
 
   useEffect(() => {
     const element = host.current;
@@ -29,7 +33,7 @@ export function TerminalView({ sessionId, onState, onReady }: TerminalViewProps)
       fontSize: 14,
       cursorBlink: true,
       scrollback: 5000,
-      theme: currentTheme() === 'dark' ? DARK : LIGHT,
+      theme: startDark.current ? DARK : LIGHT,
       linkHandler: {
         activate: (_event, uri) => {
           if (!/^https?:\/\//i.test(uri)) return;
@@ -40,6 +44,7 @@ export function TerminalView({ sessionId, onState, onReady }: TerminalViewProps)
     });
     term.loadAddon(fit);
     term.open(element);
+    terminal.current = term;
     fit.fit();
 
     const connection = new TerminalConnection(sessionId, {
@@ -53,22 +58,21 @@ export function TerminalView({ sessionId, onState, onReady }: TerminalViewProps)
     term.onResize(({ cols, rows }) => connection.resize(cols, rows));
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(element);
-    const colors = window.matchMedia('(prefers-color-scheme: dark)');
-    const recolor = (): void => {
-      term.options.theme = currentTheme() === 'dark' ? DARK : LIGHT;
-    };
-    colors.addEventListener('change', recolor);
 
     onReady(() => connection.close());
     connection.open(term.cols, term.rows);
     term.focus();
     return () => {
-      colors.removeEventListener('change', recolor);
       observer.disconnect();
       connection.close();
       term.dispose();
+      terminal.current = null;
     };
   }, [sessionId, onState, onReady]);
+
+  useEffect(() => {
+    if (terminal.current) terminal.current.options.theme = dark ? DARK : LIGHT;
+  }, [dark]);
 
   return <div ref={host} className="terminal-host" />;
 }

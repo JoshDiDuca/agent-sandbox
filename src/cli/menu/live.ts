@@ -2,6 +2,7 @@
 // read the last copy: the process list is fetched without blocking (every few seconds, and after an action), and the
 // screen is told when what it shows has changed. While it runs, the host's own "is the sandbox running?" questions are
 // answered from the same copy, so no page waits for a child process.
+import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { readTasklistAsync, useTasklistCache } from '../../host/sandbox/index.js';
 
 export interface LiveOptions {
@@ -14,7 +15,8 @@ export interface LiveOptions {
   readonly intervalMs?: number;
 }
 
-const DEFAULT_INTERVAL_MS = 2500;
+/** The same rule as the web's live status: the sandbox status query's interval. */
+const DEFAULT_INTERVAL_MS = sandboxStatus.live?.everyMs ?? 2500;
 
 export class LiveStatus {
   private tasklist: string | undefined;

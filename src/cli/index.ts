@@ -15,6 +15,7 @@ import { withConfig, hoistConfig, withoutConfig } from './argv.js';
 import { report } from './report.js';
 import { versionText } from './version.js';
 import { HANDLERS } from './commands/index.js';
+import { operationHandler } from './operations/index.js';
 
 const entry = path.join(PACKAGE_ROOT, 'dist', 'bin', 'agent-sandbox.js');
 
@@ -111,7 +112,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
   }
   // update works on the install, not on a sandbox: it needs no settings (and a broken file must not stop it).
   if (options.command === 'update') return commands.update(options);
-  const handler = HANDLERS[options.command];
+  const handler = operationHandler(options.command, options.positionals) ?? HANDLERS[options.command];
   if (!handler)
     return fail(
       'Unknown command "' + options.command + '".',

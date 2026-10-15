@@ -6,8 +6,8 @@ import _ from 'lodash';
 import { DEFAULTS, mergeConfig } from '../../../core/config/index.js';
 import { ConfigSchema, describeIssues, secretPaths } from '../../../core/schema/index.js';
 import type { Config } from '../../../core/types.js';
-import { pathKindOf } from './path-kind.js';
-import type { SettingChange } from './config-file.js';
+import type { SettingChange } from '../../../app/features/settings/index.js';
+import { pathKindOf } from '../../../app/kernel/index.js';
 
 /** Settings that are about this PC and never travel (the data folder). */
 const MACHINE_ONLY: readonly string[] = ['storage.root'];

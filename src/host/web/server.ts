@@ -1,10 +1,12 @@
-// The web UI's HTTP server: the app's files, a small JSON API for sessions, and the terminal WebSocket. Loopback only;
-// nothing works without the token's cookie, and Host / Origin / CSRF checks keep other sites out (docs/web-ui.md).
+// The web UI's HTTP server: the app's files, a small JSON API for sessions, the terminal WebSocket and the RPC
+// WebSocket of the shared core. Loopback only; nothing works without the token's cookie, and Host / Origin / CSRF
+// checks keep other sites out (docs/web-ui.md).
 import fs from 'node:fs';
 import http from 'node:http';
 import type net from 'node:net';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
+import type { RpcHost } from '../../app/kernel/index.js';
 import { UserError, safeText } from '../../core/util/index.js';
 import type { Endpoint } from '../../shared/pty/index.js';
 import {
@@ -18,6 +20,7 @@ import {
 import { cookieHeader, csrfOk, hostAllowed, originAllowed, WebAuth } from './auth.js';
 import type { WebBackend } from './backend.js';
 import { TerminalBridge } from './bridge.js';
+import { RpcSession } from './rpc.js';
 import { StaticFiles } from './static-files.js';
 
 /** No inline script: the page and its script are files from this server. Inline styles are what xterm.js needs. */
@@ -27,7 +30,9 @@ export const CONTENT_SECURITY_POLICY =
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_TERMINALS = 16;
+const MAX_RPC_SOCKETS = 8;
 const SESSION_PATH = /^\/api\/sessions\/([A-Za-z0-9_-]{1,64})\/terminal$/;
+export const RPC_PATH = '/api/rpc';
 
 export interface WebServerOptions {
   /** 0 picks a free port (tests). */
@@ -40,6 +45,8 @@ export interface WebServerOptions {
   readonly onStop?: () => void;
   /** How terminals reach a session (tests use a fake on loopback). */
   readonly dial?: (endpoint: Endpoint) => Promise<net.Socket>;
+  /** The shared core's operations and queries the browser may run (none: /api/rpc is not served). */
+  readonly rpc?: RpcHost;
 }
 
 class HttpFailure extends Error {
@@ -61,6 +68,7 @@ export class WebServer {
   private readonly auth: WebAuth;
   private readonly files: StaticFiles;
   private terminals = 0;
+  private rpcSockets = 0;
   private actualPort = 0;
 
   constructor(private readonly options: WebServerOptions) {
@@ -209,10 +217,13 @@ export class WebServer {
     };
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const match = SESSION_PATH.exec(url.pathname);
-    if (!match) return refuse('404 Not Found');
+    const rpc = url.pathname === RPC_PATH ? this.options.rpc : undefined;
+    if (!match && !rpc) return refuse('404 Not Found');
     // The Origin must be this page (a page of another site can open WebSockets too) and the cookie is the login.
     if (!originAllowed(req.headers.origin, req.headers.host, this.actualPort)) return refuse('403 Forbidden');
     if (!this.auth.signedIn(req.headers.cookie)) return refuse('401 Unauthorized');
+    if (rpc) return this.upgradeRpc(req, socket, head, rpc, refuse);
+    if (!match) return refuse('404 Not Found');
     if (this.terminals >= MAX_TERMINALS) return refuse('503 Service Unavailable');
     const endpoint = this.options.backend.endpoint(match[1]);
     if (!endpoint) return refuse('404 Not Found');
@@ -222,6 +233,22 @@ export class WebServer {
       this.terminals++;
       ws.on('close', () => this.terminals--);
       void new TerminalBridge(ws, endpoint, cols, rows, this.options.dial).start();
+    });
+  }
+
+  /** The RPC socket (after the same Origin and cookie checks as a terminal). */
+  private upgradeRpc(
+    req: http.IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    rpc: RpcHost,
+    refuse: (status: string) => void,
+  ): void {
+    if (this.rpcSockets >= MAX_RPC_SOCKETS) return refuse('503 Service Unavailable');
+    this.sockets.handleUpgrade(req, socket, head, (ws) => {
+      this.rpcSockets++;
+      ws.on('close', () => this.rpcSockets--);
+      new RpcSession(ws, rpc).start();
     });
   }
 }

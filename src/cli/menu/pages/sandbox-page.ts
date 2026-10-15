@@ -1,19 +1,13 @@
-// Section 3: the sandbox as a whole. Status (a card, the window, stopping it), Projects (roots and known projects) and
-// Databases (start and stop), each a category on the left.
+// Section 3: the sandbox as a whole. Status (the sandbox view: its facts, the window, stopping it), Projects (roots and
+// known projects) and Databases (start and stop), each a category on the left.
 import fs from 'node:fs';
 import path from 'node:path';
+import { sandboxPage, sandboxStatus, type SandboxStatus } from '../../../app/features/sandbox/index.js';
+import { readQuery } from '../../../app/registry.js';
 import { errMsg, safeText } from '../../../core/util/index.js';
 import { RunDir } from '../../../shared/channel/index.js';
 import type { Context } from '../../commands/context.js';
-import { ago } from '../../output/index.js';
-import {
-  DatabasesService,
-  ProjectsService,
-  SandboxService,
-  type DatabaseRow,
-  type ProjectsListing,
-  type SandboxReport,
-} from '../../services/index.js';
+import { DatabasesService, ProjectsService, type DatabaseRow, type ProjectsListing } from '../../services/index.js';
 import {
   Text,
   Theme,
@@ -23,10 +17,12 @@ import {
   type ListOptions,
   type ListResult,
 } from '../../tui/index.js';
+import { MenuOperations } from '../io-menu.js';
+import { menuView, type MenuView } from '../render-view.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface SandboxModel {
-  readonly report: SandboxReport;
+  readonly report: SandboxStatus;
   readonly projects: ProjectsListing;
   /** Null: the sandbox is not running or did not answer. */
   readonly databases: DatabaseRow[] | null;
@@ -44,62 +40,16 @@ const CATEGORIES = [
   { id: 'databases', label: 'Databases', description: 'Databases the sandbox can run: start and stop them.' },
 ];
 
-const yesNo = (v: boolean | undefined): string => (v === undefined ? '-' : v ? 'yes' : 'no');
+/** The status category: the sandbox view's rows (prefixed, so they never clash with the projects' rows). */
+function statusView(m: SandboxModel): MenuView {
+  return menuView(sandboxPage(m.report), { category: 'status', prefix: 'status:', refresh: false });
+}
 
 /** The list for the sandbox tab. Pure. */
 export function sandboxOptions(m: SandboxModel): ListOptions<string> {
-  const { sandbox, repoGuard } = m.report;
-  const running = sandbox.running;
-  const row = (id: string, label: string, hint: string, extra: Partial<ListItem<string>> = {}): ListItem<string> => ({
-    value: id,
-    label,
-    hint,
-    category: 'status',
-    section: 'Sandbox',
-    ...extra,
-  });
-  const sessions = m.report.projects.reduce((n, p) => n + p.sessions.length, 0) + m.report.otherSessions.length;
-  const status: ListItem<string>[] = [
-    ...(running ? [] : startRows(m.defaultAgent, 'status')),
-    row(
-      'info:state',
-      'State',
-      running ? Theme.ok(Theme.glyph.on + ' ' + sandbox.phase) : Theme.muted(Theme.glyph.off + ' stopped'),
-      { description: sandbox.message ? safeText(sandbox.message) : undefined },
-    ),
-    row('info:uptime', 'Up for', sandbox.startedAt && running ? ago(sandbox.startedAt).replace(' ago', '') : '-'),
-    row('info:daemon', 'Sandbox agent', running ? safeText(sandbox.daemon) : '-'),
-    row('info:window', 'Window', running ? (sandbox.headless ? 'hidden' : 'shown') : '-'),
-    row('info:sessions', 'Sessions', running ? String(sessions) : '-'),
-    row('info:account', 'Claude account', sandbox.account ?? '-'),
-    row('info:sync', 'History sync running', yesNo(sandbox.syncWatcher)),
-    row(
-      'info:guard',
-      'Repo guard',
-      repoGuard.guarded +
-        ' folder(s) guarded' +
-        (repoGuard.findings.length ? ', ' + repoGuard.findings.length + ' change(s) neutralised' : ''),
-      {
-        details: repoGuard.findings.slice(-8).map((f) => Theme.warn(safeText(f))),
-      },
-    ),
-    ...(running
-      ? [
-          row('act:show', 'Show the window', '', {
-            section: 'Actions',
-            description: 'Brings the sandbox window to the front.',
-          }),
-          row('act:hide', 'Hide the window', '', {
-            section: 'Actions',
-            description: 'Hides the window. Show the window brings it back.',
-          }),
-          row('act:stop', 'Stop the sandbox…', '', {
-            section: 'Actions',
-            description: 'Shuts the sandbox down; your history syncs back when it closes.',
-          }),
-        ]
-      : []),
-  ];
+  const running = m.report.sandbox.running;
+  const status = statusView(m);
+  const statusItems: ListItem<string>[] = [...(running ? [] : startRows(m.defaultAgent, 'status')), ...status.items];
   const addRoot: ListItem<string> = {
     value: ADD_ROOT,
     label: '+ Add a project root…',
@@ -151,11 +101,12 @@ export function sandboxOptions(m: SandboxModel): ListOptions<string> {
   }));
   return {
     path: [],
-    items: [...status, addRoot, ...roots, ...projects, ...databases, ...noDatabases],
+    items: [...statusItems, addRoot, ...roots, ...projects, ...databases, ...noDatabases],
     categories: CATEGORIES,
     empty: 'Nothing here yet.',
-    actions: (category) => sandboxActions(category, running),
-    enterLabel: (_category, id) => enterLabel(id ?? '', m),
+    actions: (category) =>
+      category === 'projects' || category === 'databases' ? sandboxActions(category) : [...status.actions, REFRESH],
+    enterLabel: (category, id) => status.enterLabel(category, id) || enterLabel(id ?? '', m),
   };
 }
 
@@ -183,18 +134,15 @@ function startRows(agent: string, category: string): ListItem<string>[] {
   ];
 }
 
-/** What Enter does on a row ("" = the row only shows information). */
+/** What Enter does on a row of Projects and Databases ("" = the row only shows information). */
 function enterLabel(id: string, m: SandboxModel): string {
-  if (id === 'act:show') return 'show';
-  if (id === 'act:hide') return 'hide';
-  if (id === 'act:stop') return 'stop';
   if (id.startsWith('act:start')) return 'start';
   if (id === ADD_ROOT) return 'choose folder';
   if (id.startsWith('db:')) return m.databases?.find((d) => 'db:' + d.name === id)?.running ? 'stop' : 'start';
   return '';
 }
 
-function sandboxActions(category: string | undefined, running: boolean): ListAction<string>[] {
+function sandboxActions(category: 'projects' | 'databases'): ListAction<string>[] {
   if (category === 'projects')
     return [
       { key: 'a', label: 'add root', importance: 1 },
@@ -202,34 +150,26 @@ function sandboxActions(category: string | undefined, running: boolean): ListAct
       { key: 'f', label: 'forget project', importance: 1, applies: (id) => id.startsWith('project:') },
       REFRESH,
     ];
-  if (category === 'databases') return [REFRESH];
-  return running
-    ? [
-        { key: 'w', label: 'show window', importance: 3 },
-        { key: 'h', label: 'hide window', importance: 3 },
-        { key: 'x', label: 'stop', importance: 1 },
-        REFRESH,
-      ]
-    : [REFRESH];
+  return [REFRESH];
 }
 
 export class SandboxPage extends ListPage<string> {
   readonly label = 'Sandbox';
   private model: SandboxModel | undefined;
-  private readonly sandbox: SandboxService;
   private readonly projects: ProjectsService;
+  private readonly operations: MenuOperations;
 
   constructor(
     app: App,
     private readonly ctx: Context,
   ) {
     super(app);
-    this.sandbox = new SandboxService(ctx);
     this.projects = new ProjectsService(ctx);
+    this.operations = new MenuOperations(app, ctx);
   }
 
   protected async load(): Promise<void> {
-    const report = await this.sandbox.status();
+    const report = await readQuery(sandboxStatus, this.ctx);
     const guest = report.sandbox.running && report.sandbox.phase === 'ready' ? this.guestWorkspace() : null;
     let databases: DatabaseRow[] | null = null;
     if (guest) {
@@ -257,13 +197,13 @@ export class SandboxPage extends ListPage<string> {
     const key = result.kind === 'action' ? result.key : undefined;
     try {
       if (key === 'l') return { reload: true };
+      const chosen = this.model ? statusView(this.model).resolve(result) : undefined;
+      if (chosen?.kind === 'action')
+        return await this.operations.perform(chosen.action, [this.label], (text) => this.busy(text, id));
       if (id === 'act:start' && !key)
         return { exit: { kind: 'run', argv: ['launch', '--harness', this.defaultAgent()] } };
       if (id === 'act:start-bare' && !key) return { exit: { kind: 'run', argv: ['start'] } };
       if (id === ADD_ROOT && !key) return await this.addRoot();
-      if (id === 'act:show' || key === 'w') return this.show();
-      if (id === 'act:hide' || key === 'h') return await this.hide();
-      if (id === 'act:stop' || key === 'x') return await this.stop();
       if (key === 'a') return await this.addRoot();
       if (key === 'f') return await this.forget(id);
       if (id?.startsWith('db:') && result.kind === 'pick') return await this.toggleDatabase(id.slice(3));
@@ -279,48 +219,6 @@ export class SandboxPage extends ListPage<string> {
 
   private noSandbox(): Outcome<string> | null {
     return this.model?.report.sandbox.running ? null : { notice: Theme.warn('No sandbox is running.') };
-  }
-
-  private show(): Outcome<string> {
-    const none = this.noSandbox();
-    if (none) return none;
-    this.sandbox.showWindow();
-    return { notice: Theme.ok(Theme.glyph.ok + ' Window shown.') };
-  }
-
-  private async hide(): Promise<Outcome<string>> {
-    const none = this.noSandbox();
-    if (none) return none;
-    await this.sandbox.hideWindow();
-    return {
-      reload: true,
-      notice: Theme.ok(Theme.glyph.ok + ' Window hidden.'),
-    };
-  }
-
-  private async stop(): Promise<Outcome<string>> {
-    const none = this.noSandbox();
-    if (none) return none;
-    const plan = this.sandbox.stopPlan();
-    const named = plan.running.map(
-      (s) => safeText(s.harness) + ' in ' + safeText(s.project ?? path.win32.basename(s.cwd)),
-    );
-    const lines = [
-      plan.running.length
-        ? 'Stopping ends ' +
-          plan.running.length +
-          ' session' +
-          (plan.running.length === 1 ? '' : 's') +
-          ': ' +
-          named.join(', ') +
-          '.'
-        : 'No session is running.',
-      ...(plan.others.length ? [plan.others.length + ' of them belong to other projects.'] : []),
-      'History and claude-mem sync back when it closes.',
-    ];
-    if (!(await this.app.ask('Stop the sandbox?', lines, 'Stop', true))) return {};
-    await this.sandbox.shutdown(plan.sandbox);
-    return { reload: true, notice: Theme.ok(Theme.glyph.ok + ' The sandbox is shutting down.') };
   }
 
   private async addRoot(): Promise<Outcome<string>> {

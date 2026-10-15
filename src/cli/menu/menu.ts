@@ -20,7 +20,7 @@ import { MaintenancePage } from './pages/maintenance-page.js';
 import { SandboxPage } from './pages/sandbox-page.js';
 import { SessionsPage } from './pages/sessions-page.js';
 import { SettingsPage } from './pages/settings-page.js';
-import { ConfigFile } from './settings/config-file.js';
+import { ConfigFile } from '../../app/features/settings/index.js';
 import { Draft, type DraftResult } from './settings/draft.js';
 import { LiveStatus } from './live.js';
 import { readMenuView, saveMenuView } from './memory.js';

@@ -7,6 +7,14 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## Unreleased
+
+- One shared core for the command line, the menu and the web UI (`src/app`, docs/design/shared-core.md): status,
+  sessions, restart, stop, show/hide and settings are each written once and drawn by all three. The web UI moved from
+  Bootstrap to Mantine, with the menu's sections down the left, and gained the Sandbox and Settings pages (change or
+  reset any setting; secrets show as `***`).
+- New: `sandbox config reset <setting>` and `sandbox config list [--json]`.
+
 ## 1.9.0
 
 Everything new here is opt-in; with the defaults a sandbox starts exactly as before (a test compares the files

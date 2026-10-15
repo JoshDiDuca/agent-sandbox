@@ -2,7 +2,7 @@
 // box, the Draft of unsaved changes, and the sections' lists. With MENU_SCREENS_OUT set it also writes every screen as
 // text there, for review.
 import fs from 'node:fs';
-import { ConfigFile } from '../cli/menu/settings/config-file.js';
+import { CATEGORIES, ConfigFile, SETTINGS_ELSEWHERE } from '../app/features/settings/index.js';
 import { Draft } from '../cli/menu/settings/draft.js';
 import { z } from 'zod';
 import {
@@ -32,12 +32,10 @@ import {
 import { ListPage, type Outcome } from '../cli/menu/pages/list-page.js';
 import { sandboxOptions } from '../cli/menu/pages/sandbox-page.js';
 import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
-import { pathKindOf } from '../cli/menu/settings/path-kind.js';
-import { SchemaNode } from '../cli/menu/settings/schema-node.js';
+import { pathKindOf, SchemaNode } from '../app/kernel/index.js';
 import { numberProblem, ValueEditor } from '../cli/menu/settings/value-editor.js';
 import { APP_CATEGORIES } from '../shared/apps/index.js';
 import { settingsOf, settingsOptions } from '../cli/menu/pages/settings-page.js';
-import { CATEGORIES, SETTINGS_ELSEWHERE } from '../cli/menu/settings/index.js';
 import { SECTION_LABELS, Shell, type Page, type ShellExit } from '../cli/menu/shell.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { HarnessSchema } from '../core/schema/index.js';

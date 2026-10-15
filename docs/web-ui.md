@@ -19,9 +19,11 @@ browser (React app, xterm.js)  ──HTTP + WebSocket──>  sandbox web (Node,
 ```
 
 - **One repo, one package.** The server reuses `shared/pty` (protocol, client), `host/channel` (`SandboxChannel`,
-  session requests) and `host/sharing` (who may do what). The app lives in `web/` (React + TypeScript, Bootstrap 5 CSS,
-  `@xterm/xterm`), is bundled by esbuild (already a dependency; no Vite) into `dist/web/` and ships in the package. Its
-  dependencies are dev dependencies: only the built files ship.
+  session requests) and `host/sharing` (who may do what). Every page besides the terminal is a view of the shared core
+  ([design/shared-core.md](design/shared-core.md)): the browser runs its operations and queries over an RPC socket, and
+  draws its pages with the same pure definitions the CLI and the menu use. The app lives in `web/` (React + TypeScript,
+  Mantine 7, TanStack Query, `@xterm/xterm`), is bundled by esbuild (already a dependency; no Vite) into `dist/web/` and
+  ships in the package. Its dependencies are dev dependencies: only the built files ship.
 - **Server:** `src/host/web/` (the HTTP server, the WebSocket bridge, auth) with `node:http` and the `ws` package (small,
   no dependencies of its own, bundled). Started by `sandbox web` (start / stop / status / open), runs in the background
   like the sync watcher, and keeps running when no sandbox does (the page says so).
@@ -79,15 +81,27 @@ The server is a way into every agent you run, so it is treated like a login:
   sets them.
 - **API:** `GET /api/info` (sandbox state, owner line, agents, projects), `GET /api/sessions` (no attach address or
   token), `POST /api/sessions` `{harness, project}` (an agent in a project the running sandbox has), `POST /api/stop`,
-  `WS /api/sessions/:id/terminal?cols=&rows=`. Sharing rules: nothing of another user's sandbox unless it is shared
+  `WS /api/sessions/:id/terminal?cols=&rows=`, and `WS /api/rpc` (below).
+- **RPC socket** (`WS /api/rpc`, `host/web/rpc.ts`): the same Origin and cookie checks as a terminal, at most 8 per
+  server and 32 open calls or subscriptions per socket. Every message is checked against the kernel's zod schemas
+  (`src/app/kernel/rpc.ts`); anything else (binary, not JSON, unknown fields, a bad id) closes the socket with 1008. Only
+  definitions registered in `src/app/registry.ts` whose `surfaces` include the web run (`createRpcHost`); their input
+  and output are checked like on every surface. Questions an operation asks go to the browser and its answer is checked
+  against the question's kind (anything else counts as no); a browser that leaves mid-question answers no. Errors reach
+  the browser as message and fix; a bug says only "Something went wrong." Live queries are read again at their
+  `live.everyMs` and sent only when the result changed. Outputs never carry an attach token, and secrets are `***`. Sharing rules: nothing of another user's sandbox unless it is shared
   (`ownerRule`, `use`); restarting and launching are not offered. The address check is the backend's
   (`hostEndpoint` in `host/channel/attach.ts`, `isSandboxAddress`); the bridge connects to what it is given.
 - **Terminal socket:** browser to server, binary = keystrokes, text = `{t:'resize',cols,rows}` (anything else closes it
   with 1008); server to browser, binary = output (through the same `OutputFilter` as `attach`, so OSC 52 never
   arrives), text = `ready` / `restarting` / `exit` / `error`. The server sends HELLO with the session token and PING
   every 5 s, holds output back when the browser is slow and closes it after a minute.
-- **App** (`web/`, React 18, Bootstrap 5, xterm.js; bundled by `scripts/bundle-web.mjs` into `dist/web` with hashed
-  names): sessions page, terminal page (fit, reconnect with backoff, back / detach), new-session dialog, light or dark
-  with the OS. Links in the terminal (OSC 8 only) ask before opening.
+- **App** (`web/`, React 18, Mantine 7 with its static stylesheets (no CSS-in-JS script, so the CSP holds), TanStack
+  Query, xterm.js; bundled by `scripts/bundle-web.mjs` into `dist/web` with hashed names): a shell with the menu's
+  sections down the left (a section that is not in the web UI yet says where it is), each page a view of the shared
+  core drawn from its Page (`web/src/render`), operations with their questions as modals and their progress and result
+  as notifications, the terminal page (fit, reconnect with backoff, back / detach), the new-session dialog, light or
+  dark with the OS. Links in the terminal (OSC 8 only) ask before opening.
 - **Tests:** `npm test web` (`src/selftest/web.test.ts`): login, Host / Origin / CSRF, path traversal, sessions without
-  tokens, and the bridge against a fake ptyhost.
+  tokens, the bridge against a fake ptyhost, and the RPC socket against a fake host (checks, questions, errors, live
+  queries, refusals). `npm test app` covers the shared core it serves.

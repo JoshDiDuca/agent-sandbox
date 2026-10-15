@@ -14,7 +14,7 @@ import {
 import { insideSandbox } from '../../host/sandbox/index.js';
 import { writeFileAtomic } from '../../shared/io/index.js';
 import type { Context } from '../commands/context.js';
-import { editConfigText } from '../menu/settings/index.js';
+import { editConfigText } from '../../app/features/settings/index.js';
 
 export type AgentCommand = ReturnType<typeof agentCommands>[number];
 

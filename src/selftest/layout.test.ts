@@ -155,5 +155,25 @@ export const layoutSuite: Suite = {
         .map((d) => f + ' -> ' + d),
     );
     t.check(!intoEntries.length, 'nothing imports an entry point (guest/entries)', list(intoEntries));
+
+    t.section('the shared core');
+    const pure = (f: string): boolean =>
+      f.startsWith('app/kernel/') || /^app\/features\/(.+\/)?[^/]+\.def\.js$/.test(f) || f === 'app/features/defs.js';
+    const pureReach = new Set(files.filter(pure).flatMap((f) => [...closure(modules, f)]));
+    const strays = [...pureReach].filter((f) => !pure(f) && f !== 'core/util/errors.js');
+    const packages = [...pureReach].flatMap((f) => modules.get(f)?.bare ?? []).filter((b) => b !== 'zod');
+    t.check(
+      files.some((f) => f === 'app/features/defs.js') && !strays.length && !packages.length,
+      'the kernel and the *.def files (what the web bundle imports) reach only each other, core/util/errors and zod',
+      list([...strays, ...packages]),
+    );
+    const intoApp = files
+      .filter((f) => !['app', 'cli', 'selftest', 'bin'].includes(area(f)) && f !== 'api.js')
+      .flatMap((f) =>
+        [...modules.get(f)!.statics, ...modules.get(f)!.dynamics]
+          .filter((d) => area(d) === 'app' && !(area(f) === 'host' && d.startsWith('app/kernel/')))
+          .map((d) => f + ' -> ' + d),
+      );
+    t.check(!intoApp.length, 'below the CLI only host code uses the shared core, and only its kernel', list(intoApp));
   },
 };

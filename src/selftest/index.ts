@@ -59,6 +59,7 @@ import { workspaceSuite } from './workspace.test.js';
 import { workspaceViewSuite } from './workspace-view.test.js';
 import { liveNetworkSuite } from './live-network.test.js';
 import { liveTerminalSuite } from './live-terminal.test.js';
+import { appSuite } from './app.test.js';
 import { auditSuite } from './audit.test.js';
 import { layoutSuite } from './layout.test.js';
 import { menuSuite } from './menu.test.js';
@@ -115,6 +116,7 @@ export const SUITES: Suite[] = [
   dataSuite,
   repairSuite,
   healthSuite,
+  appSuite,
   cliSuite,
   menuSuite,
   menuPerfSuite,

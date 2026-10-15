@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULTS } from '../core/config/index.js';
 import { ConfigSchema, HarnessSchema, redactSecrets, scrubSecrets, secretPaths } from '../core/schema/index.js';
-import { SchemaNode } from '../cli/menu/settings/index.js';
+import { SchemaNode } from '../app/kernel/index.js';
 import { SandboxChannel } from '../host/channel/index.js';
 import { AccountStore, AgentAccountStore } from '../host/profile/index.js';
 import { clearSecrets, SecretStore, withoutSecrets } from '../host/secrets/index.js';

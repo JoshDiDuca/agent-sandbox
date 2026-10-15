@@ -9,7 +9,7 @@ import { isWithin } from '../../shared/paths/index.js';
 import type { Context } from '../commands/context.js';
 import { commandLine } from '../history.js';
 import { Text, Theme, type App } from '../tui/index.js';
-import { askPath } from './settings/path-kind.js';
+import { askPath } from './settings/ask-path.js';
 
 /** Folders worth offering: this one, the projects started before, and the folders inside your roots. */
 export function candidateFolders(ctx: Context, cwd: string = process.cwd()): string[] {

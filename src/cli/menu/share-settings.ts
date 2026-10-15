@@ -7,7 +7,7 @@ import { errMsg } from '../../core/util/index.js';
 import { applyImport, DEFAULT_EXPORT, readImport, writeExport } from '../commands/maintenance/config-share.js';
 import type { Context } from '../commands/context.js';
 import { Theme, type App } from '../tui/index.js';
-import { askPath } from './settings/path-kind.js';
+import { askPath } from './settings/ask-path.js';
 import { diffText, skippedLine } from './settings/index.js';
 
 /** The rows' ids in the settings list. */

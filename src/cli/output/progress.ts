@@ -138,3 +138,52 @@ export async function working<T>(
     err.write('\r\x1b[2K');
   }
 }
+
+/**
+ * A progress line that follows an operation (its io.progress): on a terminal one line redrawn in place until stop();
+ * without one, each new text once as "text...". Prompts and log lines call stop() first.
+ */
+export class ProgressLine {
+  private text = '';
+  private timer: NodeJS.Timeout | undefined;
+  private frame = 0;
+  private start = 0;
+  private readonly animate = canAnimate(process.env, Boolean(process.stderr.isTTY));
+
+  show(text: string): void {
+    if (text === this.text && (this.timer || !this.animate)) return;
+    this.text = text;
+    if (!this.animate) {
+      process.stderr.write(text + '...\n');
+      return;
+    }
+    if (!this.timer) {
+      this.start = Date.now();
+      this.timer = setInterval(() => this.draw(), 120);
+    }
+    this.draw();
+  }
+
+  private draw(): void {
+    const colour = colorEnabled(process.env, true);
+    process.stderr.write(
+      '\r\x1b[2K' +
+        (colour ? '\x1b[36m' : '') +
+        FRAMES[this.frame++ % FRAMES.length] +
+        (colour ? '\x1b[0m' : '') +
+        ' ' +
+        shorten(this.text, termWidth() - 14) +
+        (Date.now() - this.start > 3000 ? ' (' + elapsed(Date.now() - this.start) + ')' : ''),
+    );
+  }
+
+  /** Removes the line (the next show() starts it again). */
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+      process.stderr.write('\r\x1b[2K');
+    }
+    this.text = '';
+  }
+}

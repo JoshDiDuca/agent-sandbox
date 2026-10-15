@@ -6,7 +6,7 @@ import { splitArgs } from '../args.js';
 import { type ArgSpec, type OptionSpec } from '../manifest.js';
 import { Text } from '../tui/index.js';
 import { validNodeSpec, validPythonSpec } from '../validate.js';
-import type { PathKind } from './settings/path-kind.js';
+import type { PathKind } from '../../app/kernel/index.js';
 
 /** What an option accepts, checked while typing (undefined = fine). */
 export function optionProblem(o: OptionSpec, v: string): string | undefined {

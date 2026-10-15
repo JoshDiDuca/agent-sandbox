@@ -6,7 +6,7 @@ import path from 'node:path';
 import _ from 'lodash';
 import { APPS, type AppCategory, type AppEntry } from '../../shared/apps/index.js';
 import { Text, Theme, type Category, type ListItem } from '../tui/index.js';
-import type { ConfigFile } from './settings/config-file.js';
+import type { ConfigFile } from '../../app/features/settings/index.js';
 import type { Draft } from './settings/draft.js';
 
 export const CUSTOM = '@custom:';

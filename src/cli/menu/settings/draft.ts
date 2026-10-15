@@ -1,7 +1,7 @@
 // Changes made in the menu but not saved yet: Settings and Apps stage here, Ctrl+S writes them (one write per file,
 // comments kept) and leaving asks what to do with them.
 import _ from 'lodash';
-import type { ConfigFile, SettingChange } from './config-file.js';
+import type { ConfigFile, SettingChange } from '../../../app/features/settings/index.js';
 
 /** What saving did: how many settings were written and why a file was refused. */
 export interface DraftResult {

@@ -27,8 +27,9 @@ import {
   plainSummary,
 } from './command-fields.js';
 import { StringListEditor } from './settings/collections/string-list-editor.js';
-import { askPath, type PathKind } from './settings/path-kind.js';
-import { SchemaNode } from './settings/schema-node.js';
+import type { PathKind } from '../../app/kernel/index.js';
+import { askPath } from './settings/ask-path.js';
+import { SchemaNode } from '../../app/kernel/index.js';
 import { ValueEditor } from './settings/value-editor.js';
 
 const MORE = '@more';
