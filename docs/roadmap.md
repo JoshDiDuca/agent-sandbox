@@ -26,13 +26,16 @@ switches them off again. Design: [design/hcs-backend.md](design/hcs-backend.md).
 
 ## 2.0 — Web UI
 
-Being built separately; reviewed and merged here. Design and security model: [web-ui.md](web-ui.md).
+Being built here, one area at a time. Design and security model: [web-ui.md](web-ui.md); how pages look:
+[design/web-ui-standard.md](design/web-ui-standard.md); the area tasks: [design/web-ui-tasks.md](design/web-ui-tasks.md).
 
 | Item | Status |
 | --- | --- |
-| Foundation: `sandbox web` (loopback only, token + cookie login), the terminal bridge, a React app with sessions, a live terminal and new sessions; off by default | built (1.6.0), being extended |
+| Foundation: `sandbox web` (loopback only, token + cookie login), the terminal bridge, a React app with sessions, a live terminal and new sessions; off by default; starts with every sandbox when `web.enabled` is on | done (1.6.0, 1.10.0) |
+| Redesign: design system, sidebar with live state, Ctrl+K search, one renderer for every page, settings by category with controls in place, folder picker, terminal find / text size / full screen / phone key row | done |
+| Every area in the web UI through the shared core: agents, projects, accounts, data, storage, apps, health, updates, logs, VPN, engine, settings export / import | in progress (areas 1, 3 and 6 first) |
 | Plain shell sessions through ptyhost, so terminals you open show up in the web UI too; closing a session | planned |
-| Settings rows and a menu entry; a phone-sized layout with an on-screen key row (Esc, Tab, Ctrl, arrows) | planned |
+| The sandbox's desktop in the browser (mouse and keyboard), for using it from another device | idea (needs a security review: [web-ui.md](web-ui.md#phases)) |
 | Other Windows users of the PC: their own `sandbox web` shows your sandbox when you share it, under the same rules as the CLI | planned |
 | From a phone on your network: opt-in HTTPS, pairing per device (QR code), revocable devices, a private-network firewall rule | planned |
 
@@ -41,4 +44,6 @@ Being built separately; reviewed and merged here. Design and security model: [we
 - Code signing for releases and HostTools.exe (Azure Trusted Signing), so antivirus heuristics stop flagging them.
 - Mouse input passed on to agents beyond what 1.4.1 covers, for programs that need raw mouse input (needs Node's raw VT
   input on Windows).
+- Reopening an agent's conversation after a crash: `sandbox resume` reopens the terminals, but agents do not always
+  continue their last conversation yet (to look into).
 - More catalogue apps, as people ask for them (Apps > Request an app… opens the request form).
