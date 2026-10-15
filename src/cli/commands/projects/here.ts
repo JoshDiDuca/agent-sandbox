@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { select } from '@inquirer/prompts';
 import type { SandboxStatus } from '../../../core/types.js';
-import { describeMissing, missingTip, type Missing } from '../../../core/local-config/index.js';
+import { describeMissing, missingTip, protectionsOf, type Missing } from '../../../core/local-config/index.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { fail, isInsideOrEqual } from '../../../core/util/index.js';
 import { ownerName } from '../../../host/sharing/index.js';
@@ -13,8 +13,10 @@ import { SandboxChannel } from '../../../host/channel/index.js';
 import {
   BorrowedRegistry,
   ProjectRegistry,
+  type Registry,
   type RegistryEntry,
   joinRunning,
+  runningRegistry,
   type MissingChoice,
 } from '../../../host/projects/index.js';
 import type { ProjectSpec } from '../../../shared/channel/index.js';
@@ -37,18 +39,22 @@ export interface Located {
   guestDir: string | null;
 }
 
+/**
+ * Your running sandbox's registry, rebuilt from its launch folder when the file is missing, unreadable or an earlier
+ * sandbox's (another copy or version of this tool started it). null only for a sandbox without one at all.
+ */
+function ownRegistry(ctx: Context): Registry | null {
+  return runningRegistry(ctx.storageRoot, ctx.dataPath, protectionsOf(ctx.loaded.config));
+}
+
 /** Where this folder is in the running sandbox, if it is in it at all (nothing is registered). */
 export function locateHere(ctx: Context, status: SandboxStatus | null): Located {
   const dir = hereDir(ctx);
+  const own = ctx.borrowed ? null : ownRegistry(ctx);
   const here = registryOf(ctx).here(dir);
   if (here) return here;
   // A sandbox started before projects existed: only its launch folder.
-  if (
-    !ctx.borrowed &&
-    !new ProjectRegistry(ctx.storageRoot).read() &&
-    status &&
-    isInsideOrEqual(status.workspaceHost, dir)
-  )
+  if (!ctx.borrowed && !own && status && isInsideOrEqual(status.workspaceHost, dir))
     return { project: null, guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace) };
   return { project: null, guestDir: null };
 }
@@ -88,7 +94,7 @@ export async function joinHere(ctx: Context, status: SandboxStatus, o: { noResta
     return { project: known.project, guestDir: known.guestDir, spec: null, harness: null, notes: [] };
   }
   // A sandbox started before projects existed: only its launch folder (guestPathFor explains why otherwise).
-  if (!new ProjectRegistry(storageRoot).read())
+  if (!ownRegistry(ctx))
     return {
       project: null,
       guestDir: guestPathFor(dir, status.workspaceHost, status.guestWorkspace),

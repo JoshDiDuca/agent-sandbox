@@ -21,18 +21,37 @@ import { IdSchema, RunDir, type ProjectSpec } from '../../shared/channel/index.j
 import { syncProjectIn } from '../../sync/index.js';
 import { decideProjectToolchains, planDatabases, stageScripts } from '../launch/index.js';
 import { RepoGuardStore } from '../guard/index.js';
-import { ProjectRegistry, type RegistryEntry } from './registry.js';
+import { ProjectRegistry, type Registry, type RegistryEntry } from './registry.js';
 import { NeedsRestart, projectMapper, type ProjectMapper } from './mapper.js';
 import { KnownProjects } from './known.js';
+
+/** A launch id as the launch writes it (it comes back from the guest, so it is checked before it names a folder). */
+const LAUNCH_ID = /^\d+-[0-9a-f]{6}$/;
+
+/**
+ * The running sandbox's registry. When run\projects.json is missing, cannot be read or belongs to an earlier sandbox
+ * (another copy or version of this tool started this one), it is rebuilt from the launch folder, so a folder in one of
+ * the sandbox's roots can still join. null: no running sandbox reported a launch, or nothing to rebuild it from.
+ */
+export function runningRegistry(
+  storageRoot: string,
+  dataPath: string,
+  protections: Registry['protections'],
+): Registry | null {
+  const file = new ProjectRegistry(storageRoot);
+  const current = file.read();
+  const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
+  if (!launchId || !LAUNCH_ID.test(launchId)) return current;
+  if (current?.launchId === launchId) return current;
+  const launchPath = path.join(storageRoot, 'launches', launchId);
+  assertNoLinks(storageRoot, launchPath);
+  return file.rebuild(launchPath, launchId, protections);
+}
 
 /** The launch folder of the running sandbox (host-only storage; its id comes from the guest, so it is checked). */
 export function runningLaunchPath(storageRoot: string, dataPath: string): string | null {
   const launchId = new RunDir(dataPath).readSandboxStatus()?.launchId;
-  if (
-    !launchId ||
-    !/^\d+-[0-9a-f]{6}$/.test(launchId) ||
-    new ProjectRegistry(storageRoot).read()?.launchId !== launchId
-  )
+  if (!launchId || !LAUNCH_ID.test(launchId) || new ProjectRegistry(storageRoot).read()?.launchId !== launchId)
     return null;
   const launchPath = path.join(storageRoot, 'launches', launchId);
   assertNoLinks(storageRoot, launchPath);
@@ -93,8 +112,8 @@ export async function joinRunning(o: {
   const registry =
     registryFile.read() ??
     fail(
-      'The running sandbox was started by an older version, so it cannot take another folder.',
-      'Stop it (sandbox stop) and start it again.',
+      "The record of the running sandbox's projects is missing, and its launch folder could not replace it.",
+      'Run sandbox doctor (it shows which copy of sandbox runs), or stop the sandbox (sandbox stop) and start it again.',
     );
   // A folder below a project already in the sandbox uses that project; anything else becomes a project of its own.
   const root = here?.project.host ?? path.resolve(o.hostDir);

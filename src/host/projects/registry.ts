@@ -26,26 +26,28 @@ export const AbsolutePathSchema = z
   .string()
   .max(1024)
   .refine((p) => path.isAbsolute(p), 'must be an absolute path');
-const RegistryEntrySchema = z.strictObject({
+// Not strict: another copy or version of this tool may have written the file with more fields, and a registry that
+// reads as nothing would make a running sandbox look like one that cannot take another folder.
+const RegistryEntrySchema = z.object({
   name: IdSchema,
   host: AbsolutePathSchema,
   guest: z.string().max(1024),
   primary: z.boolean(),
-  mechanism: z.enum(['launch', 'root', 'boot', 'wsb']),
+  mechanism: z.enum(['launch', 'root', 'boot', 'wsb']).catch('root'),
   registeredAt: z.string().max(64),
 });
-const RegistrySchema = z.strictObject({
+const RegistrySchema = z.object({
   launchId: z.string().max(64),
   /** The running sandbox's protections (core/project-policy.ts), fixed at boot. */
   protections: z.record(z.string(), z.union([z.boolean(), z.string()])),
-  roots: z.array(z.strictObject({ host: AbsolutePathSchema, guest: z.string().max(1024) })).max(64),
+  roots: z.array(z.object({ host: AbsolutePathSchema, guest: z.string().max(1024) })).max(64),
   projects: z.array(RegistryEntrySchema).max(1024),
   /** What the sandbox booted with that a joining project may also want (missing in registries of 1.4.0 and older). */
   atBoot: z
-    .strictObject({
+    .object({
       memoryMb: z.number().int().positive().nullable(),
       mappings: z
-        .array(z.strictObject({ host: z.string().max(1024), guest: z.string().max(1024), readOnly: z.boolean() }))
+        .array(z.object({ host: z.string().max(1024), guest: z.string().max(1024), readOnly: z.boolean() }))
         .max(1024),
       /** Boot settings turned on for a project mapped at boot (setting -> project): other projects share them. */
       widened: z.record(z.string().max(100), z.string().max(100)),
@@ -145,6 +147,71 @@ export class ProjectRegistry {
   /** The running sandbox's root containing this folder, if any. */
   rootHere(hostDir: string): RootMapping | null {
     return projectForHostDir(this.read()?.roots ?? [], hostDir);
+  }
+
+  /**
+   * The record rebuilt from the running sandbox's launch folder (host-only storage), for when run\projects.json is
+   * missing, cannot be read or belongs to an earlier sandbox: the launch folder, and every folder mapped for other
+   * projects at boot as a root. Saved and returned; null when the launch folder does not have what it takes.
+   */
+  rebuild(launchPath: string, launchId: string, protections: Registry['protections']): Registry | null {
+    const session = readBounded(path.join(launchPath, 'session.json'), MAX_SESSION_BYTES);
+    const wsb = readBounded(path.join(launchPath, 'agent.wsb'), MAX_WSB_BYTES);
+    if (session === null || wsb === null) return null;
+    let parsed: z.output<typeof LaunchSessionSchema>;
+    try {
+      const result = LaunchSessionSchema.safeParse(JSON.parse(session));
+      if (!result.success || result.data.launchId !== launchId) return null;
+      parsed = result.data;
+    } catch {
+      return null;
+    }
+    const atBoot = parseWsbBoot(wsb);
+    const forProjects = new Set(parsed.roots.map((guest) => guest.toLowerCase()));
+    const roots = atBoot.mappings
+      .filter((m) => forProjects.has(m.guest.toLowerCase()) && path.isAbsolute(m.host))
+      .slice(0, 64)
+      .map((m) => ({ host: m.host, guest: m.guest }));
+    const registry: Registry = {
+      launchId,
+      protections,
+      roots,
+      projects: [
+        {
+          name: hubName(parsed.workspaceHost, []),
+          host: parsed.workspaceHost,
+          guest: parsed.workspace,
+          primary: true,
+          mechanism: 'launch',
+          registeredAt: new Date().toISOString(),
+        },
+      ],
+      atBoot,
+    };
+    this.save(registry);
+    return registry;
+  }
+}
+
+const MAX_SESSION_BYTES = 4 * 1024 * 1024;
+const MAX_WSB_BYTES = 1024 * 1024;
+
+/** What rebuild() needs from a launch folder's session.json (written on this PC by the launch). */
+const LaunchSessionSchema = z.object({
+  launchId: z.string().max(64),
+  workspace: z.string().min(1).max(1024),
+  workspaceHost: AbsolutePathSchema,
+  roots: z.array(z.string().max(1024)).max(1024).default([]),
+});
+
+/** A file's text when it exists, is not a link and is at most `max` bytes; null otherwise. */
+function readBounded(file: string, max: number): string | null {
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > max) return null;
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
   }
 }
 

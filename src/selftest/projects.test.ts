@@ -18,7 +18,7 @@ import { buildWsb } from '../host/launch/index.js';
 import { projectSpec, joinRunning } from '../host/projects/index.js';
 import { allProjectsToMap, KnownProjects } from '../host/projects/index.js';
 import { NeedsRestart, projectMapper } from '../host/projects/index.js';
-import { parseWsbBoot, ProjectRegistry } from '../host/projects/index.js';
+import { parseWsbBoot, ProjectRegistry, runningRegistry } from '../host/projects/index.js';
 import { RepoGuardStore } from '../host/guard/index.js';
 import { findWsb, parseCommands, parseIp, parseList, parseVersion } from '../host/sandbox/index.js';
 import { baseEnvFor } from '../guest/boot/project-env.js';
@@ -183,6 +183,67 @@ export const projectsSuite: Suite = {
         noWsb.register(inRoot).name === web.name &&
         new ProjectRegistry(storage).read()?.projects.filter((p) => p.host === inRoot).length === 1,
       'a folder inside a root joins at once, and only once',
+    );
+
+    t.section('projects: a registry another copy wrote, lost or left from an earlier sandbox');
+    const lostStorage = t.at('proj-lost');
+    const lostData = t.dir('proj-lost', 'data', 'testdata');
+    const lostRoot = t.dir('proj-lost-root');
+    const lostWeb = t.dir('proj-lost-root', 'web');
+    const lostLaunch = '1700000000001-abc123';
+    t.write(
+      path.join(lostStorage, 'launches', lostLaunch, 'session.json'),
+      JSON.stringify({
+        launchId: lostLaunch,
+        workspace: 'C:\\Workspace\\work-a',
+        workspaceHost: f.workA,
+        roots: ['C:\\Projects\\proj-lost-root'],
+      }),
+    );
+    t.write(
+      path.join(lostStorage, 'launches', lostLaunch, 'agent.wsb'),
+      '<Configuration><MappedFolders><MappedFolder><HostFolder>' +
+        lostRoot +
+        '</HostFolder><SandboxFolder>C:\\Projects\\proj-lost-root</SandboxFolder><ReadOnly>false</ReadOnly>' +
+        '</MappedFolder></MappedFolders></Configuration>',
+    );
+    const lostStatus = (id: string): string =>
+      t.write(
+        path.join(lostData, 'run', 'sandbox.json'),
+        JSON.stringify({
+          launchId: id,
+          phase: 'ready',
+          message: 'ready',
+          updatedAt: new Date().toISOString(),
+          workspaceHost: f.workA,
+          guestWorkspace: 'C:\\Workspace\\work-a',
+          headless: false,
+        }),
+      );
+    lostStatus(lostLaunch);
+    const lostRebuilt = runningRegistry(lostStorage, lostData, base);
+    t.check(
+      lostRebuilt?.launchId === lostLaunch &&
+        lostRebuilt.projects[0]?.host === f.workA &&
+        new ProjectRegistry(lostStorage).rootHere(lostWeb)?.guest === 'C:\\Projects\\proj-lost-root',
+      'no registry file: it is rebuilt from the launch folder, and a folder in a root is found',
+    );
+    const lostFile = path.join(lostStorage, 'run', 'projects.json');
+    const lostWritten = JSON.parse(fs.readFileSync(lostFile, 'utf8')) as Record<string, unknown>;
+    fs.writeFileSync(lostFile, JSON.stringify({ ...lostWritten, addedByANewerVersion: { x: 1 } }));
+    t.check(
+      new ProjectRegistry(lostStorage).read()?.launchId === lostLaunch,
+      'a registry with fields from another version is still read',
+    );
+    fs.writeFileSync(lostFile, JSON.stringify({ ...lostWritten, launchId: '1699999999999-000000', roots: [] }));
+    t.check(
+      runningRegistry(lostStorage, lostData, base)?.roots.length === 1,
+      "a registry left from an earlier sandbox is replaced by the running one's",
+    );
+    lostStatus('1700000000002-def456');
+    t.check(
+      runningRegistry(lostStorage, lostData, base) === null,
+      'no launch folder for the running sandbox: no registry (never an earlier sandbox one)',
     );
     const needs = caught(() => noWsb.register(outside));
     const shareOff = caught(() =>
