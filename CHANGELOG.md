@@ -9,6 +9,15 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
 
 ## Unreleased
 
+- **Web UI (beta), rebuilt.** A new look in dark and light; a sidebar with the sandbox's live state; a search over
+  pages, sessions and every setting (Ctrl+K). Settings show one category at a time with a search, and each setting's
+  control sits in its row: switches and choices save at once, text and numbers when you press Enter. Folders and files
+  are picked with a folder browser instead of typed. Sessions show as cards with a New session button. The terminal
+  has find, text size, full screen, clickable links and, on phones, a row of the keys a phone keyboard lacks. Areas
+  that are not in the web UI yet are no longer dead links. Everything still runs through the same shared code as the
+  CLI and the menu.
+- The menu's Sessions page has a New session key (n).
+
 - The VPN is labelled alpha everywhere it shows (settings, `sandbox vpn`, the launch warnings, docs): it has not been tried on a real PC yet.
 - Terminals no longer show a second copy of the agent's screen at the bottom when another viewer (the web UI, a
   terminal on the PC) joins or types: with conpty.dll the session is resized only when the size really changes, and a

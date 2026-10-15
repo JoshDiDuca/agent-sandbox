@@ -2,7 +2,8 @@
 // operating system, notifications and modals, TanStack Query, and the RPC client.
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
-import { createTheme, MantineProvider } from '@mantine/core';
+import '@mantine/spotlight/styles.css';
+import { MantineProvider } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,9 +11,9 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { RpcClient } from './rpc/client';
 import { RpcProvider } from './rpc/hooks';
+import { theme } from './theme';
 import './app.css';
 
-const theme = createTheme({ primaryColor: 'blue', defaultRadius: 'md' });
 const queries = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 const rpc = new RpcClient();
 
@@ -23,7 +24,7 @@ if (root)
       <QueryClientProvider client={queries}>
         <RpcProvider client={rpc}>
           <ModalsProvider>
-            <Notifications position="bottom-right" />
+            <Notifications position="bottom-right" limit={4} />
             <App />
           </ModalsProvider>
         </RpcProvider>

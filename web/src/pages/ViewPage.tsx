@@ -1,9 +1,10 @@
 // A page that is a view: its queries read over RPC (live ones kept fresh), its Page built in the browser by the view's
 // own pure build() and drawn by PageView. A view with tabs (Settings: all projects / this project) gets them above it.
-import { Alert, Loader, SegmentedControl } from '@mantine/core';
+import { SegmentedControl } from '@mantine/core';
 import { viewById } from '../../../src/app/features/defs';
 import { viewInputs, type AnyView } from '../../../src/app/kernel/index';
 import { PageView } from '../render/PageView';
+import { ErrorState, PageSkeleton } from '../render/states';
 import { useQueryData } from '../rpc/hooks';
 import { navigate, viewPath } from '../router';
 
@@ -28,29 +29,25 @@ function LoadedView({ view, params }: { readonly view: AnyView; readonly params:
   const failed = results.find(([, r]) => r.error);
   if (failed) {
     const error = failed[1].error as Error & { fix?: string };
-    return (
-      <Alert color="red" title={error.message}>
-        {error.fix ?? 'Try again in a moment.'}
-      </Alert>
-    );
+    return <ErrorState message={error.message} fix={error.fix} retry={() => location.reload()} />;
   }
-  if (results.some(([, r]) => r.pending)) return <Loader />;
+  if (results.some(([, r]) => r.pending)) return <PageSkeleton />;
   const page = view.build(Object.fromEntries(results.map(([name, r]) => [name, r.data])) as never, params as never);
   const tabs = view.tabs;
   const toolbar = tabs ? (
     <SegmentedControl
-      size="xs"
+      size="sm"
       data={tabs.choices.map((c) => ({ value: c.value, label: c.label }))}
       value={params[tabs.param]}
       onChange={(value) => navigate(viewPath(view.id, { [tabs.param]: value }))}
     />
   ) : undefined;
-  return <PageView page={page} toolbar={toolbar} />;
+  return <PageView page={page} summary={view.summary} toolbar={toolbar} />;
 }
 
 export function ViewPage({ view: id, params }: ViewPageProps) {
   const view = viewById(id);
-  if (!view) return <Alert color="orange">There is no page called {id}.</Alert>;
+  if (!view) return <ErrorState message={'There is no page called ' + id + '.'} fix="Pick a page on the left." />;
   const p = paramsOf(view, params);
   return <LoadedView key={id + JSON.stringify(p)} view={view} params={p} />;
 }
