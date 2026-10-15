@@ -1,7 +1,8 @@
 export { generateSandbox } from './generate.js';
 export { decideProjectToolchains } from './toolchains.js';
 export { hostToolsOf, logonEnv } from './session-file.js';
-export { GUEST, buildWsb, resolveMemoryMb } from './wsb-file.js';
+export { GUEST, resolveMemoryMb } from './wsb-file.js';
+export { buildLaunchPlan, buildWsb } from './launch-plan.js';
 export { MAX_BOOT_PROJECTS, planBootProjects, shownByRoot, type BootProjects } from './boot-projects.js';
 export { databaseCatalog, planDatabases } from './database-plan.js';
 export { msvcHint, projectEntries, readProjectFiles, uvHint } from './project-scan.js';

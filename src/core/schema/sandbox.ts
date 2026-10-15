@@ -23,6 +23,11 @@ export const MappingSchema = z.strictObject({
 });
 
 export const SandboxSchema = z.strictObject({
+  engine: z
+    .enum(['windows-sandbox', 'hcs'])
+    .describe(
+      '(beta) What runs the sandbox. "windows-sandbox" = Windows Sandbox (the default: desktop, Windows Terminal, GPU, clipboard, audio, printers). "hcs" = a headless Hyper-V isolated container for agents; it is not available yet (coming in 1.9) and a launch with it stops with a message. sandbox engine shows what each engine can do. Yours only: a project file (.sandbox-config.json) cannot set it.',
+    ),
   memoryMb: z
     .union([z.literal('auto'), z.number().int().min(2048)])
     .describe('Sandbox RAM in MB (>= 2048), or "auto": free RAM minus reserveHostMb, capped at maxMemoryMb.'),

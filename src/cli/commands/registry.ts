@@ -19,6 +19,7 @@ import {
   sync,
   watcher,
 } from './maintenance/index.js';
+import { engine } from './engine.js';
 import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
 import { vpn } from './vpn.js';
@@ -52,6 +53,7 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   setup: setup,
   data: data,
   storage: storage,
+  engine: engine,
   'host-claude': claudeHost,
   host: hostCommand,
   _watch: watcher,

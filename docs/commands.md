@@ -128,6 +128,7 @@ and for `restart`, `show`, `hide` and starting your own, you are told whose it i
 | `sandbox storage` | where your saved data is, how big, the default folder, and any other folder that holds data |
 | `sandbox storage move [folder] [-y] [--keep-old]` | move your data to another folder or drive (shows size, time and a warning first); `--keep-old` copies and leaves the old folder |
 | `sandbox storage use [folder] [-y]` | switch to a folder without moving anything (the new folder is used as it is). Without a folder on a terminal you pick one (or type a path) |
+| `sandbox engine [--json]` | **(Beta)** the engine that runs your sandboxes (`sandbox.engine`), and for each engine what it can do (desktop, GPU, clipboard, audio, video, printers, adding folders while it runs, attached disks, several at once, Hyper-V sockets) and whether it can be used on this PC. The `hcs` engine is not built yet |
 | `sandbox clean [--days n] [-y]` | delete old launch folders, logs and leftovers (shows what and how much first, then asks) |
 | `sandbox sync` | copy history back to this PC now |
 | `sandbox sessions [--wide]` | the sessions; `--wide` adds each one's folder |

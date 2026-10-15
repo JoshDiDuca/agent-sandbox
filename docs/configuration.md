@@ -31,6 +31,7 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
+| `sandbox.engine` | **(Beta)** what runs the sandbox: `"windows-sandbox"` (default, everything described here) or `"hcs"` (a headless Hyper-V container for agents; **not available yet, coming in 1.9**: a launch with it stops with a message). `sandbox engine` shows the engine in use and what each can do. Your setting only: a project's `.sandbox-config.json` cannot set it |
 | `sandbox.pageFileMb` | size of the sandbox's paging file, created at full size at start so it never grows under load (default `16384`; `0` = Windows' own ~1 GB, which parallel builds run out of) |
 | `sandbox.keepAwake` | keep this PC from sleeping while a sandbox runs (default `true`), so agents left overnight keep working. The screen may still turn off; closing a laptop lid still sleeps it |
 | `sharing.otherUsers` | let other Windows users of this PC use a sandbox you start: list its sessions, attach, run commands and stop it (default `false`). They use the agent logins inside it, and history goes to your account. Only your own settings can set it, never a project's `.sandbox-config.json`. A machine file (`%ProgramData%\AgentSandbox\config.json`, all-users installs) is read first; your file wins |
@@ -58,6 +59,7 @@ Commonly changed:
 |---|---|---|
 | `storage.root` | `%ProgramData%\AgentSandbox\users\%USERNAME%` | everything kept on your PC between sandboxes (see [Where your data is kept](#where-your-data-is-kept)). The name `AgentSandbox` is from before the rename and is kept on purpose |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
+| `storage.contained`, `storage.containedMaxGb` | **(Beta)** `"off"` (default) keeps tools, state and logs in loose folders; `"vhdx"` will keep them in one disk image of at most `containedMaxGb` GB (default `64`). **Not available yet, coming in 1.9**: `"vhdx"` stops a launch with a message. Your setting only: a project's `.sandbox-config.json` cannot set them |
 | `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`). Where projects appear with several projects: [projects](projects.md#where-a-project-appears-inside-the-sandbox) |
 | `mappings` | none | more folders from your PC, read-only or read/write: `{ "host": "F:\\SteamLibrary\\steamapps\\common\\Game", "readOnly": true }`; `guest` (where it appears) is optional, `optional: true` skips a folder that is not on this PC |
 

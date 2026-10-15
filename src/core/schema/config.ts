@@ -50,6 +50,17 @@ export const ConfigSchema = z
         .describe(
           'Programs and scripts (.exe, .ps1, .bat, .cmd, .msi, .lnk ...) that appear or change in your project while a sandbox runs get Windows\' "downloaded from the internet" mark, so SmartScreen and PowerShell ask before they run on this PC.',
         ),
+      contained: z
+        .enum(['off', 'vhdx'])
+        .describe(
+          '(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not available yet (coming in 1.9): "vhdx" stops a launch with a message. "off" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it.',
+        ),
+      containedMaxGb: z
+        .number()
+        .int()
+        .min(8)
+        .max(4096)
+        .describe('(beta) Largest size, in GB, the disk image of storage.contained may grow to.'),
       warnDataGb: z
         .number()
         .min(0)
@@ -105,7 +116,7 @@ export const LocalOverridesSchema = z
       'Scripts (.ps1 / .mjs / .cmd, relative to this file) run inside the sandbox before the agent.',
     ),
     // This PC's resources are yours to share: CPU and paging file (this PC's disk) are not a project's to set.
-    sandbox: SandboxSchema.omit({ cpuLimit: true, pageFileMb: true }).partial(),
+    sandbox: SandboxSchema.omit({ cpuLimit: true, pageFileMb: true, engine: true }).partial(),
     // A project may block more (the LAN, hosts); it never opens hosts, ports, DNS or a proxy.
     network: NetworkSchema.pick({ blockPrivateRanges: true, blockHosts: true }).partial(),
     // A project may turn the kill switch on, never off, and never choose a VPN, a server, a file or a login.

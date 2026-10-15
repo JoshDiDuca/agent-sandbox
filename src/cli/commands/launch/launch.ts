@@ -3,6 +3,8 @@
 // restart that adds it is offered (restart.ts).
 import path from 'node:path';
 import _ from 'lodash';
+import { engineFor } from '../../../host/engines/index.js';
+import { providerFor } from '../../../host/storage/index.js';
 import { generateSandbox } from '../../../host/launch/index.js';
 import { findSecretFiles } from '../../../host/profile/index.js';
 import { RepoGuardStore } from '../../../host/guard/index.js';
@@ -11,8 +13,6 @@ import {
   assertCanLaunch,
   isSandboxRunning,
   spawnDetached,
-  startSandbox,
-  confirmSandboxStarted,
   probeHost,
   hideSandboxWindow,
 } from '../../../host/sandbox/index.js';
@@ -160,6 +160,9 @@ class Launcher {
     const { ctx, generateOnly, extras } = this;
     const run = await this.resolve();
     const { config } = run;
+    // An engine or storage kind that is not available yet stops here, before anything is prepared.
+    const engine = engineFor(config);
+    providerFor(config);
     if (!generateOnly) assertCanLaunch(isSandboxRunning() ? runningOwner() : undefined);
     if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
     const prepared = generateOnly ? null : await prepare(ctx, run);
@@ -194,8 +197,7 @@ class Launcher {
     const reopen = extras.extraProjects ? [] : await sessionsToResume(ctx, run);
     this.record(run, generated);
     this.share(generated);
-    startSandbox(generated.wsbPath);
-    await confirmSandboxStarted(generated.wsbPath);
+    await engine.start(generated.enginePlan);
     this.startWatcher();
     if (reopen.length) await this.reopenAfterBoot(generated.launchId, reopen);
     return this.afterStart(run, generated);

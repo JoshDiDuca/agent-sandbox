@@ -15,6 +15,7 @@ import {
   sandboxFolder,
   tidyGuestPath,
 } from '../../shared/paths/index.js';
+import { dataMapping } from '../storage/providers/index.js';
 import { GUEST } from './wsb-file.js';
 import { guestGitDir, planView } from '../workspace-view/index.js';
 
@@ -38,7 +39,7 @@ export function collectMappings(
   const inRoot = !view && shownByRoot(boot.roots, workspaceHost, config.guestWorkspace);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
-    { host: dataPath, guest: GUEST.data, readOnly: false },
+    dataMapping({ dataPath, guest: GUEST.data }),
     ...(inRoot
       ? []
       : [{ host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly }]),

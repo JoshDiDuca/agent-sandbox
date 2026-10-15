@@ -30,6 +30,7 @@ import { sharingSuite } from './sharing.test.js';
 import { dataSuite } from './data.test.js';
 import { detectSuite } from './detect.test.js';
 import { generateSuite } from './generate.test.js';
+import { engineSuite } from './engine.test.js';
 import { gitAccessSuite } from './git-access.test.js';
 import { guestBootSuite } from './guest-boot.test.js';
 import { hostileInputSuite } from './hostile-input.test.js';
@@ -77,6 +78,7 @@ export const SUITES: Suite[] = [
   localConfigSuite,
   // the generated sandbox and the guest that boots it
   generateSuite,
+  engineSuite,
   guestBootSuite,
   mirrorSuite,
   projectsSuite,

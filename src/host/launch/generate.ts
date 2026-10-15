@@ -6,8 +6,10 @@ import crypto from 'node:crypto';
 import type { GenerateOptions, Generated, ProfileResult } from '../../core/types.js';
 import { widenForProjects } from '../../core/local-config/index.js';
 import { dirExists, ensureDir, fail, writeJson } from '../../core/util/index.js';
+import { engineFor, type EnginePlan } from '../engines/index.js';
 import { capturePersonalization, stageClaudeProfile } from '../profile/index.js';
 import { clearSecrets, writeSecrets } from '../secrets/index.js';
+import { folderAttachment, providerFor } from '../storage/providers/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { planBootProjects } from './boot-projects.js';
 import { planDatabases } from './database-plan.js';
@@ -15,7 +17,8 @@ import { collectMappings } from './mappings.js';
 import { guestSession, logonEnv } from './session-file.js';
 import { copyRuntime, stageGitIdentity, stageHooks } from './stage.js';
 import { decideProjectToolchains } from './toolchains.js';
-import { buildWsb, resolveMemoryMb } from './wsb-file.js';
+import { buildLaunchPlan } from './launch-plan.js';
+import { GUEST, resolveMemoryMb } from './wsb-file.js';
 
 const NO_PROFILE: ProfileResult = { hostDir: null, staged: [], skipped: [], credentials: false, secretsRemoved: [] };
 
@@ -28,7 +31,9 @@ function takeStagedCredentials(launchPath: string): string | undefined {
   return text;
 }
 
-export function generateSandbox(given: GenerateOptions): Generated & { personalization: string } {
+export function generateSandbox(
+  given: GenerateOptions,
+): Generated & { personalization: string; enginePlan: EnginePlan } {
   // Several projects at boot: the sandbox also gets what the others want and you allowed (core/local-config).
   const others = given.bootWants?.projects ?? [];
   const boot = planBootProjects({
@@ -47,6 +52,9 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
         fail('Unknown agent: ' + harnessName, 'Configured agents: ' + Object.keys(config.harnesses).join(', ')));
   if (!dirExists(workspaceHost))
     fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
+  // An engine or storage kind that cannot work yet stops the launch here, before anything is written.
+  const engine = engineFor(config);
+  providerFor(config);
   assertTestWritable(storageRoot);
   assertTestWritable(dataPath);
 
@@ -93,10 +101,20 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
   copyRuntime(o.packageRoot, launchPath);
   stageHooks(o.packageRoot, launchPath, o.run.scripts);
 
-  const wsbPath = path.join(launchPath, 'agent.wsb');
-  fs.writeFileSync(wsbPath, buildWsb(config, memoryMb, mappings), 'utf8');
+  const enginePlan = engine.plan(
+    buildLaunchPlan({
+      config,
+      memoryMb,
+      mappings,
+      launchPath,
+      storage: [folderAttachment({ dataPath, guest: GUEST.data })],
+    }),
+  );
+  for (const file of enginePlan.files) fs.writeFileSync(file.path, file.text, 'utf8');
+  const wsbPath = enginePlan.entry;
   return {
     wsbPath,
+    enginePlan,
     launchPath,
     launchId,
     sessionPath,

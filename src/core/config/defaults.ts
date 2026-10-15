@@ -8,6 +8,7 @@ export const DEFAULTS: Config = {
   audit: { enabled: false, days: 14, maxMb: 100, processes: true, files: true },
   mappings: [],
   sandbox: {
+    engine: 'windows-sandbox',
     memoryMb: 'auto',
     maxMemoryMb: 32768,
     maxMemoryPercent: 80,
@@ -30,6 +31,8 @@ export const DEFAULTS: Config = {
     persistAgentState: true,
     dataName: 'default',
     markSandboxFiles: true,
+    contained: 'off',
+    containedMaxGb: 64,
     warnDataGb: 50,
   },
   network: { blockPrivateRanges: true, allowOnly: [], blockHosts: [], forwardPorts: [], dns: [], proxy: '' },

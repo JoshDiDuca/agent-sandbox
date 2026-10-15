@@ -397,6 +397,14 @@ const COMMAND_LIST = [
     json,
   },
   {
+    name: 'engine',
+    summary: '(beta) what runs your sandbox (Windows Sandbox) and what each engine can do on this PC',
+    group: 'Health',
+    args: [],
+    options: [],
+    json,
+  },
+  {
     name: 'clean',
     summary: 'delete old launch folders, logs and leftovers',
     group: 'Data',

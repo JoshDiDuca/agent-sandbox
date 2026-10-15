@@ -120,6 +120,14 @@
     "sandbox": {
       "type": "object",
       "properties": {
+        "engine": {
+          "type": "string",
+          "enum": [
+            "windows-sandbox",
+            "hcs"
+          ],
+          "description": "(beta) What runs the sandbox. \"windows-sandbox\" = Windows Sandbox (the default: desktop, Windows Terminal, GPU, clipboard, audio, printers). \"hcs\" = a headless Hyper-V isolated container for agents; it is not available yet (coming in 1.9) and a launch with it stops with a message. sandbox engine shows what each engine can do. Yours only: a project file (.sandbox-config.json) cannot set it."
+        },
         "memoryMb": {
           "anyOf": [
             {
@@ -241,6 +249,20 @@
         "markSandboxFiles": {
           "type": "boolean",
           "description": "Programs and scripts (.exe, .ps1, .bat, .cmd, .msi, .lnk ...) that appear or change in your project while a sandbox runs get Windows' \"downloaded from the internet\" mark, so SmartScreen and PowerShell ask before they run on this PC."
+        },
+        "contained": {
+          "type": "string",
+          "enum": [
+            "off",
+            "vhdx"
+          ],
+          "description": "(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not available yet (coming in 1.9): \"vhdx\" stops a launch with a message. \"off\" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it."
+        },
+        "containedMaxGb": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 4096,
+          "description": "(beta) Largest size, in GB, the disk image of storage.contained may grow to."
         },
         "warnDataGb": {
           "type": "number",

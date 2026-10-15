@@ -1,9 +1,10 @@
 // The table a launch (or `generate`) prints: what the sandbox gets, from the run, the generated files and prepare.
 import type { Generated, ResolvedRun } from '../../../core/types.js';
+import type { EnginePlan } from '../../../host/engines/index.js';
 import type { Prepared } from './prepare.js';
 
 /** What generateSandbox returned. */
-export type GeneratedSandbox = Generated & { readonly personalization: string };
+export type GeneratedSandbox = Generated & { readonly personalization: string; readonly enginePlan: EnginePlan };
 
 function agentRow(run: ResolvedRun, generated: GeneratedSandbox, prepared: Prepared | null): string {
   const { config } = run;
