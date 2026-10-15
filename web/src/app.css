@@ -1,0 +1,47 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.app-shell {
+  display: flex;
+  height: 100%;
+}
+
+.app-nav {
+  width: 220px;
+  flex: none;
+  background: var(--bs-tertiary-bg);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.app-bare {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.terminal-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-host {
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+  overflow: hidden;
+  background: var(--bs-body-bg);
+}

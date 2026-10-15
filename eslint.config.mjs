@@ -44,6 +44,30 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  {
+    // The browser app: its own tsconfig (DOM types), and it may import only the shared protocol types from src/.
+    files: ['web/**/*.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: { projectService: false, project: './web/tsconfig.json', tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      eqeqeq: 'error',
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)src/(?!shared/web/)',
+              message: 'The app may import only src/shared/web (CLAUDE.md).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   { files: ['src/guest/**/*.ts'], rules: { 'no-restricted-imports': forbid('host', 'cli', 'sync', 'selftest') } },
   {
     files: ['src/shared/**/*.ts', 'src/core/**/*.ts'],

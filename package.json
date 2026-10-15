@@ -1,6 +1,6 @@
 {
   "name": "windows-development-sandbox",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A disposable Windows Sandbox for development, with or without an AI agent (Claude Code, Codex, Gemini, opencode, ...): the folder you run it from is the workspace, toolchains and databases for your project install themselves, and nothing else on your PC is reachable.",
   "type": "module",
   "license": "MIT",
@@ -42,7 +42,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node scripts/schemas.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node scripts/bundle-web.mjs && node scripts/schemas.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "rebuild": "npm run clean && npm run build",
     "test": "npm run build && node dist/bin/agent-sandbox.js self-test",
@@ -54,9 +54,9 @@
     "install:global": "node scripts/install-global.mjs",
     "publish:npm": "node scripts/publish-npm.mjs",
     "doctor": "node dist/bin/agent-sandbox.js doctor",
-    "lint": "eslint src scripts",
-    "format": "prettier --write src scripts",
-    "format:check": "prettier --check src scripts"
+    "lint": "eslint src scripts web",
+    "format": "prettier --write src scripts web",
+    "format:check": "prettier --check src scripts web"
   },
   "publishConfig": {
     "access": "public"
@@ -80,6 +80,7 @@
     "ignore": "^7.0.12",
     "jsonc-parser": "^3.3.1",
     "lodash": "^4.18.1",
+    "ws": "^8.22.0",
     "zod": "^4.6.5"
   },
   "bundleDependencies": [
@@ -88,15 +89,24 @@
     "ignore",
     "jsonc-parser",
     "lodash",
+    "ws",
     "zod"
   ],
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/lodash": "^4.17.26",
     "@types/node": "^22.0.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "bootstrap": "^5.3.8",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "prettier": "^3.9.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.71.2"
   },

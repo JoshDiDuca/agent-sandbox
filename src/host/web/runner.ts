@@ -1,0 +1,55 @@
+// The background process behind `sandbox web start`: starts the server, records pid, port and token in the private
+// state file, and removes it again when the server stops.
+import { fail } from '../../core/util/index.js';
+import type { WebBackend } from './backend.js';
+import { newToken } from './auth.js';
+import { WebServer } from './server.js';
+import { WebStore } from './state.js';
+
+export interface WebRunOptions {
+  readonly storageRoot: string;
+  readonly port: number;
+  readonly backend: WebBackend;
+  readonly staticRoot: string;
+}
+
+export class WebRunner {
+  private readonly store: WebStore;
+
+  constructor(private readonly options: WebRunOptions) {
+    this.store = new WebStore(options.storageRoot);
+  }
+
+  /** Runs until stopped (from the browser, the CLI, or a signal). */
+  async run(): Promise<void> {
+    const token = newToken();
+    let stop: () => void = () => undefined;
+    const stopped = new Promise<void>((resolve) => (stop = resolve));
+    const server = new WebServer({
+      port: this.options.port,
+      token,
+      backend: this.options.backend,
+      staticRoot: this.options.staticRoot,
+      onStop: stop,
+    });
+    try {
+      await server.start();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EADDRINUSE')
+        fail(
+          'Port ' + this.options.port + ' is taken by another program.',
+          'Pick another with the web.port setting, then run sandbox web start again.',
+        );
+      throw e;
+    }
+    this.store.write({ pid: process.pid, port: server.port, token, startedAt: new Date().toISOString() });
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try {
+      await stopped;
+    } finally {
+      this.store.clear();
+      await server.stop();
+    }
+  }
+}
