@@ -27,7 +27,19 @@ export function machineConfigPath(env: NodeJS.ProcessEnv = process.env): string 
  * folders in it must be full paths (after %VARIABLES% expand), never relative to someone's folder.
  */
 function readMachineConfig(file: string): Config | null {
-  if (!fs.existsSync(file)) return null;
+  // existsSync says false on "access denied": a user not yet in the group would silently get the defaults.
+  try {
+    fs.accessSync(file, fs.constants.R_OK);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    if (code === 'EACCES' || code === 'EPERM')
+      fail(
+        'Cannot read the settings for this PC in ' + file + '.',
+        'Sign out of Windows and in again after being added to the Agent Sandbox Users group.',
+      );
+    throw e;
+  }
   const raw = readJsonc<unknown>(file);
   const config = validateConfig(mergeConfig(DEFAULTS, raw), file);
   const folders: [string, string][] = config.mappings.map((m, i) => ['mappings[' + i + '].host', m.host]);

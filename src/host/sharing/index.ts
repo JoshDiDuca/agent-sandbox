@@ -14,4 +14,12 @@ export {
   type SharingDeps,
   type SharingStart,
 } from './lifecycle.js';
-export { sharingAclPlan, applyAcl, runFolderAccess, type AclChange } from './acl.js';
+export {
+  sharingAclPlan,
+  applyAcl,
+  protectPrivateFolder,
+  runFolderAccess,
+  runPrivateFolder,
+  type AclChange,
+} from './acl.js';
+export { machineDoctorRows } from './doctor.js';

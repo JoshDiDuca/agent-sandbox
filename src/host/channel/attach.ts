@@ -37,7 +37,7 @@ export function isSandboxAddress(ip: string, interfaces = os.networkInterfaces()
 }
 
 /** Where this PC may connect for a session: only addresses on its own Hyper-V network (null if there are none). */
-const hostEndpoint = (session: SessionStatus): Endpoint | null => {
+export const hostEndpoint = (session: SessionStatus): Endpoint | null => {
   // Inside the sandbox every session is on loopback; on the PC only addresses on its Hyper-V network are trusted.
   const addresses = insideSandbox()
     ? ['127.0.0.1']

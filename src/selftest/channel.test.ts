@@ -14,12 +14,21 @@ import {
   MOUSE_OFF,
   OutputFilter,
 } from '../shared/pty/index.js';
+import { bootSilent, FIRST_STATUS_MS } from '../host/channel/index.js';
 import type { Suite } from './support/suite.js';
 
 export const channelSuite: Suite = {
   name: 'channel',
   title: 'request/status validation and the terminal protocol (frames, OSC 52, keys)',
   run: async (t) => {
+    t.section('a silent boot');
+    t.check(
+      !bootSilent(FIRST_STATUS_MS - 1, false) &&
+        bootSilent(FIRST_STATUS_MS + 1, false) &&
+        !bootSilent(10 * FIRST_STATUS_MS, true),
+      'a boot is silent only when no status came within the first three minutes',
+    );
+
     t.section('requests and session status');
     const validRequest = (r: unknown): boolean => GuestRequestSchema.safeParse(r).success;
     const validSession = (s: unknown): boolean => SessionStatusSchema.safeParse(s).success;

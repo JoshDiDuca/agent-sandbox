@@ -3,9 +3,13 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { refuseInSelfTest } from '../test-guard.js';
-import { fail, fileExists, isWin } from '../../core/util/index.js';
+import { fail, fileExists, isWin, sleep } from '../../core/util/index.js';
 import { launchBlocked } from '../sharing/rules.js';
 import type { SandboxOwner } from '../sharing/owner.js';
+
+/** The longest a Windows helper program (tasklist, cmd start) may take before it counts as stuck. */
+const HELPER_TIMEOUT_MS = 15000;
+const START_WAIT_MS = 20000;
 
 const SANDBOX_PROCESSES = ['WindowsSandboxClient.exe', 'WindowsSandboxRemoteSession.exe', 'WindowsSandbox.exe'];
 
@@ -26,7 +30,11 @@ export const GUEST_DATA_DIR = 'C:\\AgentData';
 export function isSandboxRunning(): boolean {
   if (!isWin) return false;
   if (insideSandbox()) return true;
-  const result = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true });
+  const result = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: HELPER_TIMEOUT_MS,
+  });
   const out = (result.stdout ?? '').toLowerCase();
   return SANDBOX_PROCESSES.some((image: string) => out.includes('"' + image.toLowerCase() + '"'));
 }
@@ -71,8 +79,24 @@ export function startSandbox(wsbPath: string): void {
   const result = spawnSync(SYSTEM.cmd(), ['/d', '/c', 'start', '""', '"' + wsbPath + '"'], {
     stdio: 'inherit',
     windowsVerbatimArguments: true,
+    timeout: HELPER_TIMEOUT_MS,
   });
   if (result.error) throw result.error;
+}
+
+/** After startSandbox: waits up to 20 seconds for the Windows Sandbox program to show up, or fails naming the .wsb. */
+export async function confirmSandboxStarted(wsbPath: string, waitMs: number = START_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + waitMs;
+  while (!isSandboxRunning()) {
+    if (Date.now() >= deadline)
+      fail(
+        'Windows Sandbox did not start within ' + Math.round(waitMs / 1000) + ' seconds.',
+        'Open ' +
+          wsbPath +
+          ' yourself to see the message Windows gives, or run sandbox doctor to check the Windows Sandbox feature.',
+      );
+    await sleep(1000);
+  }
 }
 
 /** Runs a detached copy of this CLI (used for the background history/claude-mem sync watcher). */

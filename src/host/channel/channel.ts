@@ -12,6 +12,16 @@ import { isSandboxRunning } from '../sandbox/index.js';
 import { assertTestWritable, refuseInSelfTest } from '../test-guard.js';
 
 const BOOT_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * The boot script writes its first status once Windows has booted the sandbox and logged on (a minute or two, longer on
+ * a slow PC or the very first start); none after this long means it never got going.
+ */
+export const FIRST_STATUS_MS = 8 * 60 * 1000;
+
+/** True when a boot is silent: no status of this launch yet, and the sandbox had its time to write one. */
+export function bootSilent(elapsedMs: number, seenStatus: boolean, limitMs: number = FIRST_STATUS_MS): boolean {
+  return !seenStatus && elapsedMs > limitMs;
+}
 
 /** Most sessions the host will ever contact for one listing: a sandbox can write as many session files as it likes. */
 export const MAX_QUERIED_SESSIONS = 32;
@@ -74,11 +84,25 @@ export class SandboxChannel {
     onStatus?: (status: SandboxStatus) => void,
   ): Promise<SandboxStatus> {
     let last = '';
+    let seen = false;
+    const started = Date.now();
     return this.until(
       BOOT_TIMEOUT_MS,
       () => {
         const status = this.run.readSandboxStatus();
-        if (!status || (launchId !== null && status.launchId !== launchId)) return null;
+        if (!status || (launchId !== null && status.launchId !== launchId)) {
+          if (bootSilent(Date.now() - started, seen))
+            fail(
+              'The sandbox has not reported anything for ' + Math.round(FIRST_STATUS_MS / 60000) + ' minutes.',
+              'It may still be starting, or it cannot reach its folders. Look at its window (sbx-show), the run folder ' +
+                this.run.root +
+                ' and the data folder ' +
+                this.dataPath +
+                ', and check that you can write to both. sandbox logs shows what happened.',
+            );
+          return null;
+        }
+        seen = true;
         onStatus?.(status);
         if (status.message !== last) {
           progress(safeText(status.message).slice(0, 300));

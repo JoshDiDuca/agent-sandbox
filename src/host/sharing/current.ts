@@ -7,9 +7,15 @@ import { activeDir } from './machine-paths.js';
 import { ActiveRecords } from './active-record.js';
 import { parseTasklist, whoOwnsSandbox, type SandboxOwner, type TaskRow } from './owner.js';
 
+const HELPER_TIMEOUT_MS = 15000;
+
 /** The rows of `tasklist /NH /FO CSV`: every process of every session (standard users may see these). */
 export function listProcesses(): TaskRow[] {
-  const run = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], { encoding: 'utf8', windowsHide: true });
+  const run = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: HELPER_TIMEOUT_MS,
+  });
   return parseTasklist(run.stdout ?? '');
 }
 
@@ -20,7 +26,11 @@ export function sessionOf(rows: readonly TaskRow[], pid: number = process.pid): 
 
 /** This user's SID, from `whoami /user`: `"DOMAIN\name","S-1-5-21-..."`. */
 export function currentUserSid(): string {
-  const run = spawnSync(SYSTEM.whoami(), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true });
+  const run = spawnSync(SYSTEM.whoami(), ['/user', '/fo', 'csv', '/nh'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: HELPER_TIMEOUT_MS,
+  });
   const sid = /"(S-1-[0-9-]+)"\s*$/.exec((run.stdout ?? '').trim())?.[1];
   if (!sid) throw new Error('Could not find out who you are (whoami /user gave: ' + (run.stdout || run.stderr) + ').');
   return sid;

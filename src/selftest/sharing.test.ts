@@ -11,6 +11,7 @@ import {
   ActiveRecords,
   parseTasklist,
   runFolderAccess,
+  runPrivateFolder,
   sharingAclPlan,
   whoOwnsSandbox,
   type ActiveSandbox,
@@ -249,6 +250,33 @@ function folderScript(t: Harness): void {
     refused = (e as Error).message;
   }
   t.includes(refused, 'link', 'a junction is refused, and nothing is changed through it');
+
+  // Nothing to change: removing an entry that is not there leaves the permissions as they were.
+  const before = icacls();
+  runFolderAccess([{ path: target, sid, rights: 'Read', scope: 'this-folder', add: false }]);
+  t.equal(icacls(), before, 'removing an entry that is not there changes nothing');
+
+  // A private folder: inheritance off, only you, SYSTEM and Administrators; a second run changes nothing.
+  const own = t.dir('acl-private');
+  runPrivateFolder(own);
+  const first = (spawnSync(SYSTEM.icacls(), [own], { encoding: 'utf8', windowsHide: true }).stdout ?? '').toLowerCase();
+  runPrivateFolder(own);
+  const second = (
+    spawnSync(SYSTEM.icacls(), [own], { encoding: 'utf8', windowsHide: true }).stdout ?? ''
+  ).toLowerCase();
+  t.check(
+    first === second &&
+      first.includes('nt authority\\system:(oi)(ci)(f)') &&
+      first.includes('builtin\\administrators:(oi)(ci)(f)') &&
+      !first.includes('builtin\\users'),
+    'a private folder is closed to other users, and making it private again changes nothing',
+  );
+  fs.mkdirSync(path.join(own, 'child'));
+  fs.writeFileSync(path.join(own, 'child', 'a.txt'), 'x');
+  t.check(
+    fs.readFileSync(path.join(own, 'child', 'a.txt'), 'utf8') === 'x',
+    'the owner can still use a private folder',
+  );
 }
 
 export const sharingSuite: Suite = {
