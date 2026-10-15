@@ -10,6 +10,9 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
 ## Unreleased
 
 - The VPN is labelled alpha everywhere it shows (settings, `sandbox vpn`, the launch warnings, docs): it has not been tried on a real PC yet.
+- Terminals no longer show a second copy of the agent's screen at the bottom when another viewer (the web UI, a
+  terminal on the PC) joins or types: with conpty.dll the session is resized only when the size really changes, and a
+  viewer that only looks leaves the size to the one in use until it types.
 - The memory governor no longer writes a broken sample when a process ends while it is being read (it logged "bad
   sample" and skipped that round).
 

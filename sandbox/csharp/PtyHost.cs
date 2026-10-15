@@ -432,7 +432,17 @@ sealed class ClientHub
                 clients.Add(client);
             }
         }
-        TakeOwnership(client);
+        // Passed through, a size change makes the program redraw for everyone (a second copy of the screen in some),
+        // so a viewer that only looks leaves the size to the one in use; it takes over when it types or is resized.
+        bool owned;
+        lock (gate)
+        {
+            owned = sizeOwner != null;
+        }
+        if (!passthrough || !owned)
+        {
+            TakeOwnership(client);
+        }
         return true;
     }
 
@@ -781,9 +791,11 @@ sealed class ClientHub
             return;
         }
         PseudoConsole current;
+        bool same;
         lock (gate)
         {
             current = console;
+            same = cols == width && rows == height;
             cols = width;
             rows = height;
         }
@@ -791,7 +803,18 @@ sealed class ClientHub
         {
             return;
         }
-        // ConPTY repaints everything on a size change; resizing by one row first forces that even for the same size.
+        if (Native.ConsoleKind.StartsWith("conpty"))
+        {
+            // Passed through: nothing repaints, the program redraws itself on every resize. Programs like Claude Code
+            // leave a second copy of their screen behind when they do, so resize only when the size really changes.
+            if (!same)
+            {
+                current.Resize(width, height);
+            }
+            return;
+        }
+        // Windows' own ConPTY repaints everything on a size change; resizing by one row first forces that even for the
+        // same size.
         current.Resize(width, (short)(height - 1));
         current.Resize(width, height);
     }
