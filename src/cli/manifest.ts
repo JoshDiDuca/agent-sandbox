@@ -380,15 +380,28 @@ const COMMAND_LIST = [
   },
   {
     name: 'storage',
-    summary: 'where your saved data lives: show it, move it to another folder, or switch folders',
+    summary:
+      'where your saved data lives: show it, move it to another folder, switch folders, or (beta) keep it in a disk image',
     group: 'Data',
     examples: [
       'sandbox storage                    where the data is',
       'sandbox storage move D:\\sandbox-data   move it (asks first)',
+      'sandbox storage contained status   (beta) the disk image for tools, state and logs',
+      'sandbox storage contained on       (beta) keep them in a disk image (asks first)',
     ],
     args: [
-      { name: 'action', description: 'show, move or use', required: false, choices: ['show', 'move', 'use'] },
-      { name: 'folder', description: 'the folder to move to, or to use', required: false, when: ['move', 'use'] },
+      {
+        name: 'action',
+        description: 'show, move, use or contained',
+        required: false,
+        choices: ['show', 'move', 'use', 'contained'],
+      },
+      {
+        name: 'folder',
+        description: 'the folder to move to, or to use; for contained: on, off or status',
+        required: false,
+        when: ['move', 'use', 'contained'],
+      },
     ],
     options: [
       bool('--yes', 'do not ask before moving or switching', { short: '-y', noMenu: true }),
@@ -398,9 +411,22 @@ const COMMAND_LIST = [
   },
   {
     name: 'engine',
-    summary: '(beta) what runs your sandbox (Windows Sandbox) and what each engine can do on this PC',
+    summary: '(beta) what runs your sandbox (Windows Sandbox or HCS) and what each engine can do on this PC',
     group: 'Health',
-    args: [],
+    examples: [
+      'sandbox engine                  the engine in use and what each can do',
+      'sandbox engine check hcs        what this PC lacks for the HCS engine, and the commands that would fix it',
+    ],
+    args: [
+      { name: 'action', description: 'show or check', required: false, choices: ['show', 'check'] },
+      {
+        name: 'engine',
+        description: 'the engine to check',
+        required: false,
+        choices: ['windows-sandbox', 'hcs'],
+        when: 'check',
+      },
+    ],
     options: [],
     json,
   },

@@ -149,6 +149,8 @@ export interface GenerateOptions {
   bootWants?: { projects: BootWant[]; keepOff: string[] };
   /** The VPN for this launch (vpn.enabled); its profile goes in the launch folder, its login in the one-shot file. */
   vpn?: PreparedVpn;
+  /** The data set's mappings from a storage provider (contained storage); else the data folder is one mapping. */
+  dataMappings?: ResolvedMapping[];
 }
 export interface Generated {
   wsbPath: string;

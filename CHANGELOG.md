@@ -7,6 +7,25 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## 1.9.0
+
+Everything new here is opt-in; with the defaults a sandbox starts exactly as before (a test compares the files
+byte for byte).
+
+- Sandbox engines: Windows Sandbox now runs behind an engine layer, so other engines can plug in. `sandbox engine`
+  shows the engine in use and what each can do; `sandbox engine check hcs` lists what this PC lacks for the HCS engine,
+  with the exact commands, and changes nothing.
+- **Contained storage (beta)**, `storage.contained: vhdx` / `sandbox storage contained on|off|status`: the sandbox's
+  tools, logins, logs, databases and caches live in one disk image per data set instead of loose folders, mounted on a
+  private folder only while a sandbox runs (one Windows permission prompt). Doctor finds and fixes a mount left behind.
+  Not yet tried on a real PC: run `scripts/experiments/Test-ContainedStorage.ps1` first.
+- **HCS engine (alpha)**, `sandbox.engine: hcs`: the base for headless agents in a Hyper-V isolated Server Core
+  container whose storage disk is attached to the VM, never mounted on your PC. Its documents are checked against
+  Microsoft's published HCS schema, and its helper only ever touches compute systems and disks this tool made. Starting
+  it is not enabled yet.
+- Fixes: the HCS helper refused nothing by id before (it now acts only on systems this tool owns), and HCS error codes
+  are reported with Microsoft's own wording.
+
 ## 1.8.0
 
 - The menu is fast while agents work: nothing it draws or a key does waits for Windows any more (the process list is

@@ -3,9 +3,15 @@
 // restart that adds it is offered (restart.ts).
 import path from 'node:path';
 import _ from 'lodash';
-import { engineFor } from '../../../host/engines/index.js';
-import { providerFor } from '../../../host/storage/index.js';
-import { generateSandbox } from '../../../host/launch/index.js';
+import { openEngine, type SandboxEngine } from '../../../host/engines/index.js';
+import {
+  containedMappings,
+  containedPaths,
+  providerFor,
+  setNameOf,
+  type StorageProvider,
+} from '../../../host/storage/index.js';
+import { generateSandbox, GUEST } from '../../../host/launch/index.js';
 import { findSecretFiles } from '../../../host/profile/index.js';
 import { RepoGuardStore } from '../../../host/guard/index.js';
 import { hostPublicIp, prepareVpn, readVpnLine, vpnNotes } from '../../../host/vpn/index.js';
@@ -15,6 +21,7 @@ import {
   spawnDetached,
   probeHost,
   hideSandboxWindow,
+  realContainedDeps,
 } from '../../../host/sandbox/index.js';
 import { KnownProjects, ProjectRegistry } from '../../../host/projects/index.js';
 import { LifeRecord, SessionLedger } from '../../../host/life/index.js';
@@ -24,7 +31,7 @@ import { protectionsOf } from '../../../core/local-config/index.js';
 import { errMsg } from '../../../core/util/index.js';
 import { askYesNo } from '../../../core/prompt.js';
 import { resolveRun } from '../../../core/run/index.js';
-import type { ResolvedRun } from '../../../core/types.js';
+import type { ResolvedMapping, ResolvedRun } from '../../../core/types.js';
 import { c, table } from '../../output/index.js';
 import { syncAgentCommands } from '../agent-commands.js';
 import { requireOnPc, type Context } from '../context.js';
@@ -157,13 +164,49 @@ class Launcher {
 
   /** One sandbox for this folder: resolve, prepare, write the launch files, then (unless generate) start it. */
   private async launchHere(): Promise<number> {
-    const { ctx, generateOnly, extras } = this;
+    const { ctx, generateOnly } = this;
     const run = await this.resolve();
     const { config } = run;
     // An engine or storage kind that is not available yet stops here, before anything is prepared.
-    const engine = engineFor(config);
-    providerFor(config);
+    const engine = await openEngine(config);
+    const provider = providerFor(
+      config,
+      config.storage.contained === 'off'
+        ? {}
+        : { contained: realContainedDeps(ctx.storageRoot, config.storage.containedMaxGb) },
+    );
     if (!generateOnly) assertCanLaunch(isSandboxRunning() ? runningOwner() : undefined);
+    // Contained storage: the image is mounted now (before anything reads or writes the data set), and let go of again
+    // when the launch fails before the sandbox starts. The background watcher holds it from then on.
+    const dataMappings = await this.prepareStorage(provider, run);
+    try {
+      return await this.launchPrepared(run, engine, dataMappings);
+    } catch (e) {
+      await provider.release();
+      throw e;
+    }
+  }
+
+  /** The data set's mappings from a contained-storage provider (mounting it), or undefined for plain folders. */
+  private async prepareStorage(provider: StorageProvider, run: ResolvedRun): Promise<ResolvedMapping[] | undefined> {
+    if (provider.id === 'folder') return undefined;
+    if (this.generateOnly)
+      return containedMappings(
+        run.dataPath,
+        containedPaths(run.storageRoot, setNameOf(run.dataPath)).mount,
+        GUEST.data,
+      );
+    console.log('Mounting the contained storage (Windows asks for permission when it is not mounted yet)...');
+    return [...(await provider.prepare({ dataPath: run.dataPath, guest: GUEST.data })).mappings];
+  }
+
+  private async launchPrepared(
+    run: ResolvedRun,
+    engine: SandboxEngine,
+    dataMappings: ResolvedMapping[] | undefined,
+  ): Promise<number> {
+    const { ctx, generateOnly, extras } = this;
+    const { config } = run;
     if (!generateOnly && !extras.extraProjects) await maybeAddRoot(ctx, run);
     const prepared = generateOnly ? null : await prepare(ctx, run);
     const bootWants = await bootWantsFor(ctx, run, extras.extraProjects);
@@ -176,16 +219,20 @@ class Launcher {
           sandboxRunning: isSandboxRunning(),
           base: run.workspaceHost,
         });
-    const generated: GeneratedSandbox = generateSandbox({
-      packageRoot: ctx.packageRoot,
-      run,
-      harnessArgs: this.options.passthrough,
-      probe: probeHost(config, run.harnessName),
-      extraProjects: extras.extraProjects,
-      autoSession: extras.autoSession,
-      bootWants: bootWants.wants,
-      ...(vpn ? { vpn } : {}),
-    });
+    const generated: GeneratedSandbox = generateSandbox(
+      {
+        packageRoot: ctx.packageRoot,
+        run,
+        harnessArgs: this.options.passthrough,
+        probe: probeHost(config, run.harnessName),
+        extraProjects: extras.extraProjects,
+        autoSession: extras.autoSession,
+        bootWants: bootWants.wants,
+        ...(vpn ? { vpn } : {}),
+        ...(dataMappings ? { dataMappings } : {}),
+      },
+      engine,
+    );
 
     const notes = [...run.notes, ...bootWants.notes, ...generated.projects.notes, ...generated.mappingNotes];
     for (const note of notes) console.log(note);

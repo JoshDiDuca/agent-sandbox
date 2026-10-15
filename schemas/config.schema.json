@@ -126,7 +126,7 @@
             "windows-sandbox",
             "hcs"
           ],
-          "description": "(beta) What runs the sandbox. \"windows-sandbox\" = Windows Sandbox (the default: desktop, Windows Terminal, GPU, clipboard, audio, printers). \"hcs\" = a headless Hyper-V isolated container for agents; it is not available yet (coming in 1.9) and a launch with it stops with a message. sandbox engine shows what each engine can do. Yours only: a project file (.sandbox-config.json) cannot set it."
+          "description": "(alpha) What runs the sandbox. \"windows-sandbox\" = Windows Sandbox (the default: desktop, Windows Terminal, GPU, clipboard, audio, printers). \"hcs\" = a headless Hyper-V isolated Server Core container for agents (no desktop, GPU or clipboard); it needs Windows features and an image on this PC (sandbox engine check hcs lists what is missing), and starting it is not enabled yet in this alpha. sandbox engine shows what each engine can do. Yours only: a project file (.sandbox-config.json) cannot set it."
         },
         "memoryMb": {
           "anyOf": [
@@ -256,7 +256,7 @@
             "off",
             "vhdx"
           ],
-          "description": "(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not available yet (coming in 1.9): \"vhdx\" stops a launch with a message. \"off\" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it."
+          "description": "(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not yet tried on a real PC. Turn it on with sandbox storage contained on (it moves your files and asks first); Windows asks for permission to mount the image when a sandbox starts. \"off\" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it."
         },
         "containedMaxGb": {
           "type": "integer",

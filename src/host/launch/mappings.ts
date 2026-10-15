@@ -39,7 +39,7 @@ export function collectMappings(
   const inRoot = !view && shownByRoot(boot.roots, workspaceHost, config.guestWorkspace);
   const mappings: ResolvedMapping[] = [
     { host: launchPath, guest: GUEST.launch, readOnly: true },
-    dataMapping({ dataPath, guest: GUEST.data }),
+    ...(o.dataMappings ?? [dataMapping({ dataPath, guest: GUEST.data })]),
     ...(inRoot
       ? []
       : [{ host: view ? view.options.view : workspaceHost, guest: config.guestWorkspace, readOnly: config.readOnly }]),

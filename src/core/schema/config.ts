@@ -53,7 +53,7 @@ export const ConfigSchema = z
       contained: z
         .enum(['off', 'vhdx'])
         .describe(
-          '(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not available yet (coming in 1.9): "vhdx" stops a launch with a message. "off" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it.',
+          '(beta) Keep the sandbox tools, state and logs inside one disk image file (vhdx) instead of loose folders, so scanning programs on this PC see one file. Not yet tried on a real PC. Turn it on with sandbox storage contained on (it moves your files and asks first); Windows asks for permission to mount the image when a sandbox starts. "off" = loose folders, as always. Yours only: a project file (.sandbox-config.json) cannot set it.',
         ),
       containedMaxGb: z
         .number()

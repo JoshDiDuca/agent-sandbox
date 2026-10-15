@@ -6,10 +6,10 @@ import crypto from 'node:crypto';
 import type { GenerateOptions, Generated, ProfileResult } from '../../core/types.js';
 import { widenForProjects } from '../../core/local-config/index.js';
 import { dirExists, ensureDir, fail, writeJson } from '../../core/util/index.js';
-import { engineFor, type EnginePlan } from '../engines/index.js';
+import { engineFor, type EnginePlan, type SandboxEngine } from '../engines/index.js';
 import { capturePersonalization, stageClaudeProfile } from '../profile/index.js';
 import { clearSecrets, writeSecrets } from '../secrets/index.js';
-import { folderAttachment, providerFor } from '../storage/providers/index.js';
+import { folderAttachment } from '../storage/providers/index.js';
 import { assertTestWritable } from '../test-guard.js';
 import { planBootProjects } from './boot-projects.js';
 import { planDatabases } from './database-plan.js';
@@ -33,6 +33,8 @@ function takeStagedCredentials(launchPath: string): string | undefined {
 
 export function generateSandbox(
   given: GenerateOptions,
+  /** The engine launch.ts opened (hcs needs a look at this PC first); Windows Sandbox when left out. */
+  opened?: SandboxEngine,
 ): Generated & { personalization: string; enginePlan: EnginePlan } {
   // Several projects at boot: the sandbox also gets what the others want and you allowed (core/local-config).
   const others = given.bootWants?.projects ?? [];
@@ -53,8 +55,12 @@ export function generateSandbox(
   if (!dirExists(workspaceHost))
     fail('The workspace folder does not exist: ' + workspaceHost, 'cd into the project first.');
   // An engine or storage kind that cannot work yet stops the launch here, before anything is written.
-  const engine = engineFor(config);
-  providerFor(config);
+  const engine = opened ?? engineFor(config);
+  if (config.storage.contained !== 'off' && !o.dataMappings)
+    fail(
+      'Contained storage was not prepared for this launch.',
+      'Launch with sandbox launch (it mounts the image first).',
+    );
   assertTestWritable(storageRoot);
   assertTestWritable(dataPath);
 
@@ -107,7 +113,9 @@ export function generateSandbox(
       memoryMb,
       mappings,
       launchPath,
-      storage: [folderAttachment({ dataPath, guest: GUEST.data })],
+      storage: o.dataMappings
+        ? o.dataMappings.map((m) => ({ kind: 'folder' as const, host: m.host, guest: m.guest, readOnly: m.readOnly }))
+        : [folderAttachment({ dataPath, guest: GUEST.data })],
     }),
   );
   for (const file of enginePlan.files) fs.writeFileSync(file.path, file.text, 'utf8');

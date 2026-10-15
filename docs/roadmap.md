@@ -12,16 +12,16 @@ Status: **in progress**, **planned**, **idea** (needs a design decision or a tes
 | NordVPN, your own OpenVPN or WireGuard file, the kill switch (1.7.0, 1.8.0) | [vpn.md](vpn.md#what-is-not-tested-yet): the driver in Windows Sandbox, traffic through the tunnel, nothing leaks with it down, attach still works |
 | Later: NordLynx (NordVPN over WireGuard) | planned once the above works |
 
-## 1.9 — Sandbox engines and contained storage (beta, opt-in)
+## 1.9 — Sandbox engines and contained storage (opt-in: contained storage beta, HCS engine alpha)
 
 Windows Sandbox stays the default and keeps every feature it has; these are extras you switch on, and one setting
 switches them off again. Design: [design/hcs-backend.md](design/hcs-backend.md).
 
 | Item | Status |
 | --- | --- |
-| An engine layer: today's Windows Sandbox launch behind one interface (unchanged behaviour on every Windows Sandbox version), so other engines can plug in | planned |
-| Contained storage for Windows Sandbox (`storage.contained`): tools, logins and logs in one VHDX per data set, mounted on a private folder only while a sandbox runs and mapped in as folders today are; one admin prompt per launch; stale-mount repair in doctor | planned; first run `scripts/experiments/Test-ContainedStorage.ps1` on a PC |
-| An HCS engine (`sandbox.engine: hcs`, beta): headless agents in a Hyper-V isolated Server Core container with the storage VHDX attached to the VM (never mounted on the PC) | idea: go/no-go test first (Docker Desktop, Windows containers, Hyper-V isolation: the terminal bridge, Node and csc inside Server Core); `scripts/experiments/hcs/Test-Hcs.ps1` shows what this PC allows |
+| An engine layer: today's Windows Sandbox launch behind one interface (unchanged behaviour on every Windows Sandbox version), so other engines can plug in | done (`sandbox engine`) |
+| Contained storage for Windows Sandbox (`storage.contained`): tools, logins and logs in one VHDX per data set, mounted on a private folder only while a sandbox runs and mapped in as folders today are; one admin prompt per launch; stale-mount repair in doctor | built (beta, `sandbox storage contained on`), tested only with a fake disk and the scripts' dry-run: first run `scripts/experiments/Test-ContainedStorage.ps1` and then the checklist in [design/engines.md](design/engines.md) on a PC |
+| An HCS engine (`sandbox.engine: hcs`, alpha): headless agents in a Hyper-V isolated Server Core container with the storage VHDX attached to the VM (never mounted on the PC) | built as an alpha (documents checked against Microsoft's schema, the check, HcsHost.exe with its safety guards); starting it stays disabled until the go/no-go test (Docker Desktop, Windows containers, Hyper-V isolation: the terminal bridge, Node and csc inside Server Core); `scripts/experiments/hcs/Test-Hcs.ps1` shows what this PC allows |
 | A small helper installed by the all-users installer, so contained storage needs no admin prompt per launch | idea (after the above) |
 
 ## 2.0 — Web UI

@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AccountStore } from '../../../host/profile/index.js';
 import { SandboxChannel } from '../../../host/channel/index.js';
-import { describePrune, pruneStorage } from '../../../host/storage/index.js';
+import { describePrune, hostDataFolder, pruneStorage } from '../../../host/storage/index.js';
 import { RepoGuardStore, readDataSize, saveMarkedProjects } from '../../../host/guard/index.js';
 import { ensureConpty, ensureTerminal } from '../../../host/tools/index.js';
 import { planView, viewSkipped, saveActiveViews, WorkspaceView } from '../../../host/workspace-view/index.js';
@@ -19,7 +19,7 @@ import { LifeRecord, UPDATE_RESTART_WARNING, updateRestartPending } from '../../
 
 /** Nothing has been installed into this data set yet: the first start downloads every toolchain once. */
 export function firstBoot(dataPath: string): boolean {
-  return !fs.existsSync(path.join(dataPath, 'tools', 'resolved-versions.json'));
+  return !fs.existsSync(path.join(hostDataFolder(dataPath, 'tools'), 'resolved-versions.json'));
 }
 /** The first-start heads-up (also when this project needs tools not downloaded yet), or null. */
 export function firstBootNotice(
@@ -35,7 +35,7 @@ export function firstBootNotice(
   ];
   return firstStartNotice(
     firstBoot(dataPath),
-    pendingDownloads(wanted, (dir) => fs.existsSync(path.join(dataPath, 'tools', dir))),
+    pendingDownloads(wanted, (dir) => fs.existsSync(path.join(hostDataFolder(dataPath, 'tools'), dir))),
   );
 }
 

@@ -55,6 +55,61 @@ can read because the whole folder is mapped.
 - **Settings print `***`** for secret values (`sandbox config show`, the settings screen, `doctor`, every `--json`).
 - `network.proxy` takes no `user:password@`: it would be stored in plain text in a file the sandbox reads.
 
+## The HCS engine (Alpha) compared with Windows Sandbox
+
+`sandbox.engine: "hcs"` is off by default and, in this alpha, cannot start a sandbox yet. When it can, the boundary is
+different, not stronger or weaker in every way:
+
+- Both put the agent in a virtual machine with its own kernel. HCS runs a Hyper-V isolated Server Core container from
+  an image already on your PC; Windows Sandbox runs a dynamic copy of your own Windows. Both share folders with the
+  guest over virtual SMB, so that surface is the same; the HCS engine turns off direct file mapping on every share.
+- It has no desktop, GPU, clipboard, microphone, camera or printers, and no network adapter at all in this beta, which
+  removes those surfaces.
+- It needs more of you: Windows features (Containers, Hyper-V or Virtual Machine Platform) and an account in
+  Administrators or Hyper-V Administrators, because the Host Compute Service refuses anyone else. Windows Sandbox needs
+  no such membership. A member of those groups is already trusted on this PC; this tool never adds you to one and never
+  turns a feature on by itself (the check prints the commands for you to run).
+- The helper (`HcsHost.exe`) is built on your PC from the sources in this package, takes no data from the sandbox, and
+  never mounts a disk image on your PC: the agent disk is attached to the virtual machine only.
+- Not verified yet: how a link made inside a shared code folder behaves, and the exact isolation of the Server Core
+  guest; both are in the go/no-go test in `docs/design/engines.md`.
+
+## Contained storage (Beta)
+
+`storage.contained: "vhdx"` ([configuration](configuration.md#contained-storage-beta)) keeps the sandbox's tools, state,
+logs, databases and caches in one disk image that is mounted only while a sandbox runs. **Beta, not yet tried on a real
+PC.** What it does and does not do:
+
+- **It is a tidiness and exposure measure, not encryption.** While no sandbox runs, those files are one file
+  (`<storage>\images\<name>.vhdx`) instead of hundreds of thousands, so scanners and indexers have one file to look at
+  and other programs do not walk the tree. The image is not encrypted: anyone who can read the file can read what is in
+  it, exactly as with the loose folders (use BitLocker for that). While a sandbox runs it is an ordinary mounted disk
+  and scanners see its files as they would any other.
+- **Where it is, who can reach it.** The image and its mount folder are in your private storage folder (you, SYSTEM and
+  administrators). The mount folder is made private before the mount, and the new disk's root is limited to you and
+  SYSTEM when the image is made. The disk gets **no drive letter**, so it does not show in Explorer. The folder it is
+  mounted in is on your PC's own disk and only a mount point while a sandbox runs.
+- **The sandbox sees only the same folders as before.** It is given `tools`, `state`, `logs`, `databases` and `cache`
+  from inside the image and `run` from the data folder, at the same `C:\AgentData\...` paths, and nothing else from
+  the image. It gets no access to the image file or to the disk itself; it can only create files through the shared
+  folders, as before, so it cannot hand the host a crafted disk. The rules for a hostile guest are unchanged (links in
+  those folders are not followed, what it writes is validated).
+- **Administrator rights, once per mount.** Mounting a disk needs them, so Windows shows one permission prompt when a
+  sandbox starts and one when it ends. It runs a fixed script of this package (`mount-contained.ps1`,
+  `dismount-contained.ps1`) in elevated PowerShell. The request goes in a file in a private temp folder with its
+  checksum, and the script **checks everything again** before it does anything: the image is exactly
+  `<storage>\images\<name>.vhdx` and the mount folder `<storage>\mounts\<name>`; no folder on the way is a link; they
+  are yours; the image is a real VHDX with no parent file and not bigger than your limit; an existing image is only
+  attached (never formatted, never deleted) and a new one is made only where no file exists; the mount folder is empty;
+  every `diskpart` command names that one image. If any check fails it stops with the reason and changes nothing.
+  What it cannot do: the prompt names "Windows PowerShell", not the script, and a program already running as you that
+  can edit the installed scripts could change what is run. That holds for every per-user install of anything; the
+  all-users install keeps its files administrator-only. Do not approve a prompt you did not just cause.
+- **A crash can leave the image mounted** until `sandbox repair` dismounts it (the next command says so). Nothing is lost.
+- **A project cannot turn it on or off**: `storage.contained` and `storage.containedMaxGb` are your settings only.
+- **Not covered yet**: `sandbox data`, `sandbox clean` and some menu screens still look at the plain data folder, so
+  what is in the image is not listed or cleaned by them.
+
 ## Nothing runs on your PC
 
 - Host and sandbox talk through small JSON files. The sandbox can ask for four things (start a session, run a command,

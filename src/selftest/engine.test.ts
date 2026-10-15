@@ -17,6 +17,7 @@ import {
 import { buildLaunchPlan, buildWsb } from '../host/launch/index.js';
 import { folderAttachment, FolderStorageProvider, providerFor } from '../host/storage/index.js';
 import { sandboxFolder } from '../shared/paths/index.js';
+import { NO_HCS_PC } from './support/hcs-probes.js';
 import { ENGINE_CASES } from './support/engine-cases.js';
 import { ENGINE_GOLDEN, LAUNCH_FILES_GOLDEN } from './support/engine-golden.js';
 import type { Suite } from './support/suite.js';
@@ -132,14 +133,14 @@ export const engineSuite: Suite = {
       [[true, true, true, true, false, true]],
       'capabilities follow the device settings and the wsb CLI',
     );
-    const reports = await engineReports(f.baseConfig);
+    const reports = await engineReports(f.baseConfig, NO_HCS_PC);
     t.check(
       reports.length === 2 &&
         reports[0].inUse &&
         !reports[1].inUse &&
         !reports[1].check.available &&
-        reports[1].check.reasons[0].includes('not built yet'),
-      'sandbox engine lists both engines; the HCS check says it is not built yet',
+        reports[1].check.reasons[0].includes('computecore.dll'),
+      'sandbox engine lists both engines; the HCS check says what this PC lacks',
     );
 
     t.section('settings that cannot work yet are refused');
@@ -155,21 +156,24 @@ export const engineSuite: Suite = {
     );
     await t.throws(
       () => engineFor(hcs),
-      'The HCS engine is not available yet (beta, coming in 1.9).',
-      'engine hcs is refused',
+      'The HCS engine has to be opened first',
+      'engine hcs is not handed out without its check',
     );
     await t.throws(
-      () => providerFor(vhdx),
-      'Contained storage is not available yet (beta, coming in 1.9).',
-      'contained vhdx is refused',
+      () =>
+        providerFor(vhdx, {
+          availability: () => ({ available: false, reasons: ['No disks here.'], fixes: ['Use a PC.'] }),
+        }),
+      'Contained storage cannot be used: No disks here.',
+      'contained vhdx is refused where this PC cannot use it',
     );
     const launches = path.join(f.baseConfig.storage.root, 'launches');
     const before = fs.readdirSync(launches).length;
-    await t.throws(() => f.launch({}, { config: hcs }), 'HCS engine is not available yet', 'a launch with hcs stops');
+    await t.throws(() => f.launch({}, { config: hcs }), 'HCS engine has to be opened first', 'a launch with hcs stops');
     await t.throws(
       () => f.launch({}, { config: vhdx }),
-      'Contained storage is not available yet',
-      'a launch with vhdx stops',
+      'Contained storage was not prepared for this launch',
+      'a launch with vhdx that was not mounted first stops',
     );
     t.equal(fs.readdirSync(launches).length, before, 'a refused launch writes no launch folder');
 

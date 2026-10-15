@@ -6,6 +6,7 @@ import { WindowsProbe, type SystemProbe } from '../../../host/health/index.js';
 import { InstallLayout, InstallRecordFile } from '../../../host/install/index.js';
 import { MIGRATIONS } from '../../../host/migrate/index.js';
 import { isSandboxRunning } from '../../../host/sandbox/index.js';
+import { hostDataFolder } from '../../../host/storage/index.js';
 import type { Context } from '../context.js';
 import { gatherFacts, type MachineFacts } from '../setup/facts.js';
 import type { RepairEnv } from './types.js';
@@ -39,7 +40,7 @@ export function buildEnv(
     running: isSandboxRunning(),
     dataPath: ctx.dataPath,
     storageRoot: ctx.storageRoot,
-    toolsDir: path.join(ctx.dataPath, 'tools'),
+    toolsDir: hostDataFolder(ctx.dataPath, 'tools'),
     configError: configProblem(ctx, configError),
     layout,
     record: layout ? new InstallRecordFile(layout.root).read() : null,

@@ -31,7 +31,7 @@ Commonly changed:
 | `toolchains.<lang>.version` | default versions; project version files still win |
 | `databases.<db>.enabled`, `.port` | `true`, `false` or `"auto"`, and the port inside |
 | `sandbox.memoryMb`, `.headless`, `.vGpu`, `.networking` | RAM, no window, GPU, internet |
-| `sandbox.engine` | **(Beta)** what runs the sandbox: `"windows-sandbox"` (default, everything described here) or `"hcs"` (a headless Hyper-V container for agents; **not available yet, coming in 1.9**: a launch with it stops with a message). `sandbox engine` shows the engine in use and what each can do. Your setting only: a project's `.sandbox-config.json` cannot set it |
+| `sandbox.engine` | **(Alpha)** what runs the sandbox: `"windows-sandbox"` (default, everything described here) or `"hcs"`: a headless Hyper-V isolated Windows Server Core container for agents. `hcs` needs Windows features turned on by you (Containers and Hyper-V or Virtual Machine Platform), an Administrators or Hyper-V Administrators account, and a Server Core (ltsc2022) image already on this PC (for example pulled by Docker Desktop, or a folder named in `AGENT_SANDBOX_HCS_IMAGE`); `sandbox engine check hcs` lists what is missing with the exact commands, and changes nothing. It has no desktop window, no GPU, no clipboard, no audio or camera, and no network yet. **Starting it is not enabled yet in this alpha** (a launch with `hcs` passes the check and stops with that message). `sandbox engine` shows the engine in use and what each can do. Your setting only: a project's `.sandbox-config.json` cannot set it |
 | `sandbox.pageFileMb` | size of the sandbox's paging file, created at full size at start so it never grows under load (default `16384`; `0` = Windows' own ~1 GB, which parallel builds run out of) |
 | `sandbox.keepAwake` | keep this PC from sleeping while a sandbox runs (default `true`), so agents left overnight keep working. The screen may still turn off; closing a laptop lid still sleeps it |
 | `sharing.otherUsers` | let other Windows users of this PC use a sandbox you start: list its sessions, attach, run commands and stop it (default `false`). They use the agent logins inside it, and history goes to your account. Only your own settings can set it, never a project's `.sandbox-config.json`. A machine file (`%ProgramData%\AgentSandbox\config.json`, all-users installs) is read first; your file wins |
@@ -59,7 +59,7 @@ Commonly changed:
 |---|---|---|
 | `storage.root` | `%ProgramData%\AgentSandbox\users\%USERNAME%` | everything kept on your PC between sandboxes (see [Where your data is kept](#where-your-data-is-kept)). The name `AgentSandbox` is from before the rename and is kept on purpose |
 | `storage.dataName` | `default` | the persistent data set (`C:\AgentData` inside); a different one per untrusted project keeps its tools separate |
-| `storage.contained`, `storage.containedMaxGb` | **(Beta)** `"off"` (default) keeps tools, state and logs in loose folders; `"vhdx"` will keep them in one disk image of at most `containedMaxGb` GB (default `64`). **Not available yet, coming in 1.9**: `"vhdx"` stops a launch with a message. Your setting only: a project's `.sandbox-config.json` cannot set them |
+| `storage.contained`, `storage.containedMaxGb` | **(Beta, not yet tried on a real PC)** `"off"` (default) keeps tools, state and logs in loose folders; `"vhdx"` keeps them in one disk image (`<storage>\images\<dataName>.vhdx`, a dynamic NTFS disk of at most `containedMaxGb` GB, default `64`) that is mounted on a private folder only while a sandbox runs. Turn it on and off with `sandbox storage contained on` / `off` (they ask first, move your files and show size and time); the setting is written for you. Windows asks for permission to mount it each time a sandbox starts. See [Contained storage](#contained-storage-beta). Your setting only: a project's `.sandbox-config.json` cannot set them |
 | `guestWorkspace` | `C:\Workspace\<folder>` | where the project appears inside; `"mirror"` = the same path as on your PC (e.g. `F:\Projects\game`; falls back for `C:\Users\...`). Where projects appear with several projects: [projects](projects.md#where-a-project-appears-inside-the-sandbox) |
 | `mappings` | none | more folders from your PC, read-only or read/write: `{ "host": "F:\\SteamLibrary\\steamapps\\common\\Game", "readOnly": true }`; `guest` (where it appears) is optional, `optional: true` skips a folder that is not on this PC |
 
@@ -83,6 +83,21 @@ exists in the sandbox is left alone.
 Under `storage.root`: `data\<name>` (tools, databases, logins, logs), `launches\` (one per start; cleaned after 7
 days), `accounts\`, `sync\`, `known-projects.json` (the folders you started projects in) and `run\projects.json` (the
 running sandbox's projects). The last two are host-only: the sandbox cannot read or change them.
+
+### Contained storage (Beta)
+
+**Beta, and not yet tried on a real PC** (the code is tested with a fake disk and the scripts in a dry-run mode; mounting a disk image needs a PC, not a sandbox).
+
+Normally the sandbox's tools, state, logs, databases and caches are loose folders in `<storage>\data\<name>`: many files that scanning programs inspect one by one. With `storage.contained: "vhdx"` they live in one disk image file instead:
+
+- The image is `<storage>\images\<name>.vhdx`, a dynamic NTFS disk (it grows as it fills, up to `storage.containedMaxGb`). It is mounted at `<storage>\mounts\<name>` (a folder, **no drive letter**) when a sandbox starts and dismounted when it ends.
+- `run\` (how this tool and the sandbox talk) stays a normal folder on your PC, because this tool reads it. `tools`, `state`, `logs`, `databases` and `cache` come from inside the mounted image and appear in the sandbox at the same places as before (`C:\AgentData\tools` ...). Anything else in the data folder stays a plain folder on your PC and is not shared.
+- **One Windows permission prompt** appears when a sandbox starts (to mount) and one when it ends (to dismount); declining the second leaves the image mounted, and `sandbox repair` dismounts it.
+- `sandbox storage contained status` shows the setting, the image and whether it is mounted. `sandbox storage contained on` makes the image (asking first, showing the size limit), offers to move your current tools, state and logs into it (with size and time) and writes the setting. `sandbox storage contained off` moves everything back to plain folders (with size and time), dismounts, and only then asks whether to delete the image file (default: keep it). Nothing is ever deleted without that question.
+- While an image is mounted, `sandbox storage move` / `use` wait (a move would reach into the image). Contained storage needs Windows with `diskpart`, and does not work inside a Windows Sandbox.
+- Some host views (`sandbox data`, `sandbox clean`, the menu's data screens) still look at the plain data folder, so they show nothing for what is in the image; the Claude login sync, the terminal and ConPTY downloads, `sandbox logs` and the crash report do follow the image while it is mounted.
+
+What it does and does not protect is in [security](security.md#contained-storage-beta); problems (a stale mount, "the image is in use") are in [troubleshooting](troubleshooting.md#contained-storage-beta).
 
 ### Where your data is kept
 

@@ -1,7 +1,9 @@
 // Every check, grouped as the output shows them (the engine sorts by group; inside a group this order is kept).
 import type { Check } from '../types.js';
 import { AGENT_CHECKS } from './agents.js';
+import { CONTAINED_CHECKS } from './contained.js';
 import { DATA_CHECKS } from './data.js';
+import { HCS_CHECKS } from './hcs.js';
 import { INSTALL_CHECKS } from './install.js';
 import { MACHINE_CHECKS } from './machine.js';
 import { NETWORK_CHECKS } from './network.js';
@@ -15,8 +17,10 @@ export const ALL_CHECKS: readonly Check[] = [
   ...INSTALL_CHECKS,
   ...MACHINE_CHECKS,
   ...DATA_CHECKS,
+  ...CONTAINED_CHECKS,
   ...SETTINGS_CHECKS,
   ...SANDBOX_CHECKS,
+  ...HCS_CHECKS,
   ...AGENT_CHECKS,
   ...NETWORK_CHECKS,
   ...VPN_CHECKS,
