@@ -18,6 +18,14 @@ export function fileExists(p: string): boolean {
     return false;
   }
 }
+/** fileExists without blocking the program (the menu looks for programs while it stays responsive). */
+export async function fileExistsAsync(p: string): Promise<boolean> {
+  try {
+    return (await fs.promises.stat(p)).isFile();
+  } catch {
+    return false;
+  }
+}
 export function readJson<T>(p: string): T {
   return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '')) as T;
 }

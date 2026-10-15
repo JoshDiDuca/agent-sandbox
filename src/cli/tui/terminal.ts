@@ -1,6 +1,7 @@
 // The terminal while the menu owns it: the alternate screen (your scrollback stays as it was), raw keys, a cursor that
-// is hidden, and redraws that only rewrite the rows that changed (no flicker). suspend() hands the terminal back for
-// a command's own output; resume() takes it again.
+// is hidden, and redraws that only rewrite the rows that changed, in one write (inside a synchronized update where the
+// terminal has one), so nothing flickers. stop() hands the terminal back for a command's own output; start() takes it
+// again.
 import readline from 'node:readline';
 import { Text } from './text.js';
 
@@ -21,12 +22,25 @@ export class ExitRequested extends Error {
   }
 }
 
+/** DEC 2026: the terminal shows a frame only when it is complete. Others ignore it, so only these are asked. */
+const SYNC_BEGIN = '\x1b[?2026h';
+const SYNC_END = '\x1b[?2026l';
+
+/** Whether this terminal is known to take synchronized updates (AGENT_SANDBOX_SYNC_UPDATE=1 or 0 overrides). */
+export function supportsSyncUpdate(env: NodeJS.ProcessEnv = process.env): boolean {
+  const forced = env.AGENT_SANDBOX_SYNC_UPDATE;
+  if (forced === '1' || forced === '0') return forced === '1';
+  const program = env.TERM_PROGRAM ?? '';
+  return Boolean(env.WT_SESSION) || ['vscode', 'WezTerm', 'iTerm.app', 'ghostty', 'contour'].includes(program);
+}
+
 export class Terminal {
   private active = false;
   private frame: string[] = [];
   private queue: Key[] = [];
   private waiting: { resolve: (key: Key) => void; reject: (e: Error) => void } | null = null;
   private resizeHandler: (() => void) | null = null;
+  private readonly sync = supportsSyncUpdate();
   private readonly onKeypress = (str: string | undefined, key: readline.Key | undefined): void => this.push(str, key);
   private readonly onResize = (): void => {
     this.frame = [];
@@ -43,6 +57,10 @@ export class Terminal {
   }
   get height(): number {
     return Math.max(12, this.stdout.rows ?? 30);
+  }
+  /** Keys can be read from a real terminal here (the menu refuses to open without one). */
+  get interactive(): boolean {
+    return Boolean(this.stdin.isTTY);
   }
 
   /** Called after the window was resized (the screen draws itself again). */
@@ -78,19 +96,25 @@ export class Terminal {
     return this.active;
   }
 
+  /** Key presses are waiting to be read (the screen may skip a draw and show the result of the last one). */
+  get hasKeys(): boolean {
+    return this.queue.length > 0;
+  }
+
   /** Draws a whole screen: `lines` are cut to the width and padded to the height; unchanged rows are not rewritten. */
   render(lines: string[]): void {
     const { width, height } = this;
     // One column is left free: writing the last column can scroll older consoles.
     const rows = Array.from({ length: height }, (_, i) => Text.fit(lines[i] ?? '', width - 1));
-    let out = '';
-    rows.forEach((row, i) => {
-      if (this.frame[i] !== row) out += '\x1b[' + (i + 1) + ';1H' + row + '\x1b[0m';
-    });
-    if (this.frame.length !== rows.length)
-      out = '\x1b[H\x1b[2J' + rows.map((r, i) => '\x1b[' + (i + 1) + ';1H' + r + '\x1b[0m').join('');
+    // A different height (or nothing drawn yet: after a resize or a start) repaints everything.
+    const repaint = this.frame.length !== rows.length;
+    const out =
+      (repaint ? '\x1b[H\x1b[2J' : '') +
+      rows
+        .map((row, i) => (repaint || this.frame[i] !== row ? '\x1b[' + (i + 1) + ';1H' + row + '\x1b[0m' : ''))
+        .join('');
     this.frame = rows;
-    if (out) this.stdout.write(out);
+    if (out) this.stdout.write(this.sync ? SYNC_BEGIN + out + SYNC_END : out);
   }
 
   /** The next key press. Ctrl+C rejects with ExitRequested. */

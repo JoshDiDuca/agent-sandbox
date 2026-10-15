@@ -6,6 +6,7 @@ import type { Config } from '../../core/types.js';
 import { fail } from '../../core/util/index.js';
 import {
   agentCommands,
+  agentCommandsAsync,
   commandsDir,
   reconcileAgentCommands,
   type Reconciled,
@@ -43,6 +44,16 @@ export class AgentCommandsService {
       enabled: config.agentCommands.enabled,
       dir: commandsDir(this.ctx.storageRoot),
       found: agentCommands(config, this.ctx.storageRoot),
+    };
+  }
+
+  /** status() that does not block the program (the menu asks while it stays responsive). */
+  async statusAsync(): Promise<AgentCommandsStatus> {
+    const { config } = this.ctx.loaded;
+    return {
+      enabled: config.agentCommands.enabled,
+      dir: commandsDir(this.ctx.storageRoot),
+      found: await agentCommandsAsync(config, this.ctx.storageRoot),
     };
   }
 

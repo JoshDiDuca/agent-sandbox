@@ -30,6 +30,7 @@ import { closest } from '../../validate.js';
 import { c, nextStep, table } from '../../output/index.js';
 import { ConfigFile, type SchemaNode } from '../../menu/settings/index.js';
 import { type Context } from '../context.js';
+import { exportCommand, importCommand } from './config-share.js';
 
 /** The settings file exists already: open it, start over, or leave it (no terminal: say how). */
 async function existingFile(file: string): Promise<'open' | 'overwrite' | 'cancel'> {
@@ -264,6 +265,10 @@ export function config(ctx: Context): number | Promise<number> {
       return getSettingCommand(ctx, key);
     case 'set':
       return setSettingCommand(ctx, key, value);
+    case 'export':
+      return exportCommand(ctx, key);
+    case 'import':
+      return importCommand(ctx, key);
     case 'schema':
       return printSchemaSettings();
     case 'check':
@@ -271,7 +276,7 @@ export function config(ctx: Context): number | Promise<number> {
     default:
       fail(
         'Unknown config action "' + action + '".',
-        'Use one of: sandbox config show | get | set | path | init | schema | check',
+        'Use one of: sandbox config show | get | set | path | init | schema | check | export | import',
       );
   }
 }

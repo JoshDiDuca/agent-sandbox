@@ -3,6 +3,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
 import { insideSandbox } from '../sandbox/platform.js';
+import { readTasklist } from '../sandbox/tasklist.js';
 import { activeDir } from './machine-paths.js';
 import { ActiveRecords } from './active-record.js';
 import { parseTasklist, whoOwnsSandbox, type SandboxOwner, type TaskRow } from './owner.js';
@@ -11,12 +12,7 @@ const HELPER_TIMEOUT_MS = 15000;
 
 /** The rows of `tasklist /NH /FO CSV`: every process of every session (standard users may see these). */
 export function listProcesses(): TaskRow[] {
-  const run = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: HELPER_TIMEOUT_MS,
-  });
-  return parseTasklist(run.stdout ?? '');
+  return parseTasklist(readTasklist());
 }
 
 /** The Windows session this process runs in (0 = services, 1 = the first signed-in user ...), or null when unknown. */

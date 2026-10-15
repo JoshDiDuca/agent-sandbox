@@ -11,6 +11,12 @@ export const VPN_LOGIN = '@vpn-login';
 export function vpnLoginRow(ctx: Context): { label: string; hint: string; description: string } {
   const service = new VpnService(ctx);
   const nord = service.provider === 'nordvpn';
+  if (service.provider === 'wireguard-file')
+    return {
+      label: 'VPN login',
+      hint: 'not needed',
+      description: 'A WireGuard file carries its own keys (vpn.configFile): there is no login to set.',
+    };
   const state = service.loginState();
   return {
     label: nord ? 'Set NordVPN login…' : 'Set VPN login…',
@@ -31,6 +37,7 @@ export class VpnLoginFlow {
   async run(): Promise<string | undefined> {
     const service = new VpnService(this.ctx);
     const nord = service.provider === 'nordvpn';
+    if (service.provider === 'wireguard-file') return 'A WireGuard file carries its own keys: no login is needed.';
     const path = ['Settings', 'Network', 'VPN login'];
     await this.app.message({
       path,

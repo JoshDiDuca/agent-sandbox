@@ -163,7 +163,8 @@ text cleaned). The "By" label shown for a request is a label, not proof of who s
 - The VPN profile is untrusted data: it is fetched on your PC (a bounded download), checked, and only profiles made of a
   short list of harmless settings are used; anything that could run a program (`script-security`, `up`, `down`,
   `plugin`, `route-up`, `tls-verify` ...) is refused, here and again in the sandbox.
-- OpenVPN is installed from the publisher's MSI, checked against a SHA-256 stored in this program (`downloads.requireChecksum`
+- A WireGuard config (`wireguard-file`) holds your private key. It is read on your PC when a sandbox starts (at most 16 KB) and checked as untrusted data: only `PrivateKey`, `Address`, `DNS`, `MTU`, `ListenPort` and, per peer, `PublicKey`, `PresharedKey`, `AllowedIPs`, `Endpoint`, `PersistentKeepalive` are accepted; `PreUp`, `PostUp`, `PreDown`, `PostDown`, `Table`, `SaveConfig` and anything unknown are refused (a refusal never prints a key). It is written again from the checked values and handed over only in the one-shot secrets file: never in `session.json`, the launch folder or `run\`. In the sandbox it is checked again and written to a file that is deleted once the tunnel service has it. The agent can read the key while the sandbox runs (it is the administrator there): use a key you can revoke on the VPN server.
+- OpenVPN and WireGuard are installed from the publisher's MSI, checked against a SHA-256 stored in this program (`downloads.requireChecksum`
   does not refuse it). Tool downloads before the tunnel is up (the first minutes of a boot) go through your normal connection.
 - What the sandbox says about its tunnel (`run\vpn.json`) is its own word: `sandbox vpn status` compares the address it
   reports with your PC's, but a compromised agent can lie.

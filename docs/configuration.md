@@ -12,6 +12,16 @@ its JSON Schema (`sandbox config schema` prints the setting that turns it on). `
 settings with the defaults filled in. Comments and trailing commas are allowed in the file. Use another file with
 `--config <file>` or `AGENT_SANDBOX_CONFIG`.
 
+Share your settings with a team: `sandbox config export team.json` writes only what differs from the defaults, and
+`sandbox config import team.json` shows what it would change (`sandbox.memoryMb: 8192 -> 4096`), asks once and applies
+it, keeping your file's comments. Secrets (an agent's API keys), the data folder and folders or files of this PC are
+left out of an export (`--with-paths` keeps the folders and files) and are never taken from an import, even if the file
+has them; both say what they skipped. The menu has the same under Settings > General.
+
+The menu opens on the section, category and search you left it on, also after you close it (kept in
+`~/.agent-sandbox/menu-state.json`; delete the file to start on Agents). In Apps, **Request an app…** (key `r`) opens a
+prefilled request form on this project's GitHub issues page.
+
 Commonly changed:
 
 | Setting | |
@@ -146,13 +156,13 @@ sandbox: your PC's own connection is untouched. Plain steps for NordVPN: [vpn.md
 | Setting | |
 | --- | --- |
 | `enabled` | the VPN is on for new sandboxes (off by default). Needs a saved login: `sandbox vpn login` |
-| `provider` | `nordvpn` (a recommended server is picked at every launch) or `openvpn-file` (your own `.ovpn`, see `configFile`) |
-| `protocol` | `udp` (faster) or `tcp` (gets through networks that block udp) |
+| `provider` | `nordvpn` (a recommended server is picked at every launch), `openvpn-file` (your own `.ovpn`) or `wireguard-file` (your own WireGuard `.conf`); both files are `configFile` |
+| `protocol` | `udp` (faster) or `tcp` (gets through networks that block udp); WireGuard is always udp |
 | `country` | NordVPN only: e.g. `uk`, `us`, `Germany`; empty = the best server anywhere |
-| `configFile` | `openvpn-file` only: the `.ovpn` on this PC, certificates inside it. Profiles that run programs (`script-security`, `up`, `down`, `plugin` ...) are refused |
+| `configFile` | `openvpn-file`: the `.ovpn` on this PC, certificates inside it. `wireguard-file`: the `.conf` on this PC (at most 16 KB; its private key is read only when a sandbox starts). Files that run programs (`script-security`, `up`, `down`, `plugin`, `PostUp`, `PreUp` ...) are refused |
 | `killSwitch` | block everything that does not go through the tunnel; when the tunnel cannot start the sandbox stays offline (on by default) |
 
-The login is not a setting: it is typed hidden by `sandbox vpn login` (or Settings > Network > Set NordVPN login),
+A WireGuard config needs no saved login (the keys are in the file). The login is not a setting: it is typed hidden by `sandbox vpn login` (or Settings > Network > Set NordVPN login),
 kept encrypted for your Windows user and handed to the sandbox only while it starts. A project's
 `.sandbox-config.json` can turn `killSwitch` on, never off, and can never choose a VPN, a server, a profile or a login.
 

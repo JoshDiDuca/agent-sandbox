@@ -7,6 +7,23 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
+## 1.8.0
+
+- The menu is fast while agents work: nothing it draws or a key does waits for Windows any more (the process list is
+  read in the background; a key used to take one to two seconds on a busy PC), only changed lines are redrawn, slow
+  screens show "Loading…" and keep your place. Maintenance > Health runs its checks when you ask (Enter).
+- `sandbox config export` / `import` (and Settings > General): share your settings as a file. Only what differs from
+  the defaults; never secrets, the data folder or paths of this PC; an import shows what changes and asks first.
+- The menu remembers the last section, category and search between runs.
+- Apps > Request an app… (key `r`) opens a prefilled request on GitHub.
+- VPN: your own WireGuard file (`vpn.provider: wireguard-file`), checked like the OpenVPN one (no scripts), its keys
+  handed to the sandbox only through the one-shot file. Not yet tried on a real PC.
+- Antivirus false positives: the installer no longer makes a Start menu shortcut (Malwarebytes reported it as
+  "Trojan.Loader"; `-StartMenuShortcut` makes one anyway) and removes the old one. HostTools.exe has a plain name and
+  full file details (publisher, product, description, version).
+- `scripts/experiments/`: two read-only or self-cleaning probes to run on a PC before contained storage and an HCS
+  engine are built (see docs/roadmap.md).
+
 ## 1.7.1
 
 - Codex could not run any command ("CryptUnprotectData", "please restore the workspace runner"): its own command

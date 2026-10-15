@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { SYSTEM } from '../../shared/system.js';
+import { readTasklist } from './tasklist.js';
 import { refuseInSelfTest } from '../test-guard.js';
 import { fail, fileExists, isWin, sleep } from '../../core/util/index.js';
 import { launchBlocked } from '../sharing/rules.js';
@@ -27,16 +28,16 @@ export function insideSandbox(): boolean {
 }
 export const GUEST_DATA_DIR = 'C:\\AgentData';
 
+/** Whether a Windows Sandbox program is in this process list (tasklist /NH /FO CSV output). */
+export function sandboxInTasklist(tasklist: string): boolean {
+  const out = tasklist.toLowerCase();
+  return SANDBOX_PROCESSES.some((image: string) => out.includes('"' + image.toLowerCase() + '"'));
+}
+
 export function isSandboxRunning(): boolean {
   if (!isWin) return false;
   if (insideSandbox()) return true;
-  const result = spawnSync(SYSTEM.tasklist(), ['/NH', '/FO', 'CSV'], {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: HELPER_TIMEOUT_MS,
-  });
-  const out = (result.stdout ?? '').toLowerCase();
-  return SANDBOX_PROCESSES.some((image: string) => out.includes('"' + image.toLowerCase() + '"'));
+  return sandboxInTasklist(readTasklist());
 }
 
 export function sandboxFeatureInstalled(): boolean {

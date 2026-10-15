@@ -14,10 +14,16 @@ export type ShellExit =
   /** Show the end of a log file on the normal screen. */
   | { kind: 'view'; file: string };
 
-/** Which section and category the menu shows. */
+/** Where one section was left: its open category and its search. */
+export interface ScreenView {
+  readonly category?: string;
+  readonly search?: string;
+}
+
+/** Which section the menu shows, and where each section was left (by section name). */
 export interface MenuView {
   readonly section: number;
-  readonly category: string | undefined;
+  readonly screens: Readonly<Record<string, ScreenView>>;
 }
 
 /** One section of the menu. */
@@ -31,6 +37,12 @@ export interface Page {
   categories(): readonly Category[];
   /** The id of the open category. */
   readonly category: string | undefined;
+  /** The data is still loading: its categories are not known yet (a category asked for opens when they are). */
+  readonly loading?: boolean;
+  /** The search typed in the list ('' or missing: none). */
+  readonly search?: string;
+  /** Types a search into the list (the menu opens on the one it was left on). */
+  restoreSearch?(text: string): void;
   /** Opens a category (the navigation moved onto it). */
   selectCategory(id: string): Promise<void>;
   /** Whether the list has the keyboard (its highlight is softer while the navigation has it). */
@@ -57,6 +69,9 @@ export class Shell implements Screen<ShellExit> {
   private active = 0;
   private focus: 'nav' | 'list' = 'list';
   private notice: string | undefined;
+  /** Where each section was left, by name; a section takes its entry the first time it opens in this shell. */
+  private readonly screens = new Map<string, ScreenView>();
+  private readonly restored = new Set<number>();
 
   constructor(
     private readonly app: App,
@@ -91,23 +106,40 @@ export class Shell implements Screen<ShellExit> {
     };
   }
 
-  /** The section and category that are open (the menu opens on them again later in the same run). */
+  /** Notes where the open section is (its category and search). */
+  private remember(): void {
+    // A section that was never opened here keeps what the last run knew about it.
+    if (!this.restored.has(this.active)) return;
+    const { category, search } = this.page;
+    if (category || search) this.screens.set(this.page.label, { category, search: search || undefined });
+    else this.screens.delete(this.page.label);
+  }
+
+  /** The section that is open and where every section was left (the menu opens there again, also in a later run). */
   view(): MenuView {
-    return { section: this.active, category: this.page.category };
+    this.remember();
+    return { section: this.active, screens: Object.fromEntries(this.screens) };
   }
 
-  /** Opens the section and category a view names (a category that is gone is ignored). */
+  /** Opens the section a view names and puts each section back where it was (what is gone is ignored). */
   async restore(view: MenuView): Promise<void> {
+    this.restored.clear();
+    for (const [label, screen] of Object.entries(view.screens)) this.screens.set(label, screen);
     await this.openTab(view.section);
-    if (view.category && this.page.categories().some((c) => c.id === view.category))
-      await this.page.selectCategory(view.category);
   }
 
-  /** Opens a section by index (loads its data). */
+  /** Opens a section by index (loads its data); the first time, it goes back to the category and search it had. */
   async openTab(index: number): Promise<void> {
+    this.remember();
     this.active = Math.max(0, Math.min(this.pages.length - 1, index));
     this.page.setFocus(this.focus === 'list');
     await this.page.open();
+    if (this.restored.has(this.active)) return;
+    this.restored.add(this.active);
+    const wanted = this.screens.get(this.page.label);
+    if (wanted?.category && (this.page.loading || this.page.categories().some((c) => c.id === wanted.category)))
+      await this.page.selectCategory(wanted.category);
+    if (wanted?.search) this.page.restoreSearch?.(wanted.search);
   }
 
   /** Puts the keyboard in the navigation or in the list. */

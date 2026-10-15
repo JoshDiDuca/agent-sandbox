@@ -13,20 +13,39 @@ import { Terminal } from './terminal.js';
 import { Theme } from './theme.js';
 import type { Screen } from './screen.js';
 
+/** Changes that arrive together (a resize, fresh facts) are drawn once, this long after the first. */
+const REDRAW_DELAY_MS = 16;
+/** While keys are waiting, the screen is still drawn at least this often. */
+const MAX_STALE_MS = 100;
+
 export class App {
-  /** The status line for screens that do not set their own (refreshed on every draw). */
+  /** The status line for screens that do not set their own (read on every draw: it must not wait for anything). */
   status: () => string = () => '';
+  /** Awaited after an action changed something, before the screen loads what it shows again. */
+  afterAction: () => Promise<void> = () => Promise.resolve();
   /** The navigation on the left of every screen (none: no navigation column). */
   nav: () => NavState | undefined = () => undefined;
   /** The screens being shown, innermost last: a dialog is drawn over the one below it. */
   private readonly shown: Screen<unknown>[] = [];
   private redrawNow: (() => void) | null = null;
+  private redrawTimer: NodeJS.Timeout | undefined;
 
-  constructor(readonly terminal: Terminal = new Terminal()) {}
+  constructor(readonly terminal: Terminal = new Terminal()) {
+    terminal.onResized(() => this.requestRedraw());
+  }
 
   /** Draws the screen on top again now (before a slow piece of work, so its notice is visible). */
   redraw(): void {
     this.redrawNow?.();
+  }
+
+  /** Draws it again soon: what happens between two keys (a resize, fresh facts) is drawn once, not once each. */
+  requestRedraw(): void {
+    if (this.redrawTimer) return;
+    this.redrawTimer = setTimeout(() => {
+      this.redrawTimer = undefined;
+      if (this.terminal.running) this.redrawNow?.();
+    }, REDRAW_DELAY_MS);
   }
 
   /** Shows `screen` until its handler says it is done, and returns what it returned. */
@@ -49,17 +68,21 @@ export class App {
       );
     };
     this.redrawNow = draw;
-    this.terminal.onResized(draw);
+    let drawnAt = 0;
     try {
       for (;;) {
-        draw();
+        // Keys that are already waiting (a held arrow, a paste) are handled first: the screen shows the result of the
+        // last one, but never stays stale for longer than MAX_STALE_MS.
+        if (!this.terminal.hasKeys || Date.now() - drawnAt >= MAX_STALE_MS) {
+          draw();
+          drawnAt = Date.now();
+        }
         const step = await screen.handle(await this.terminal.key());
         if (step) return step.done;
       }
     } finally {
       this.shown.pop();
       this.redrawNow = outer;
-      this.terminal.onResized(outer);
     }
   }
 

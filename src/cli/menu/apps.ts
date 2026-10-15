@@ -52,6 +52,33 @@ export function groupOf(category: AppCategory): string {
 }
 const INSTALL = ['apps', 'install'];
 
+/** The row in Apps that opens the "request an app" issue form (its id is not an app). */
+export const REQUEST_APP = '@request-app';
+
+/** This project's new-issue page on GitHub. */
+export const ISSUES_URL = 'https://github.com/JoshDiDuca/windows-development-sandbox/issues/new';
+
+/** The new-issue address with a title and a body to fill in (the page needs no login to show it). */
+export function requestAppUrl(): string {
+  const body = [
+    '**App name:**',
+    '',
+    '**Where to get it** (GitHub releases page or a direct download link):',
+    '',
+    '**What it is for:**',
+    '',
+    '**Command-line tool or desktop app?**',
+    '',
+    '**Does it need a GPU, a license or an account?**',
+  ].join('\n');
+  const query = [
+    ['title', 'App request: '],
+    ['body', body],
+    ['labels', 'app-request'],
+  ];
+  return ISSUES_URL + '?' + query.map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+}
+
 export class AppsModel {
   constructor(
     private readonly file: ConfigFile,
@@ -155,6 +182,19 @@ export class AppsModel {
   items(draft: Draft): ListItem<string>[] {
     return [
       ...this.entries().map((a) => this.item(a, draft)),
+      ...(this.file.isProject
+        ? []
+        : [
+            {
+              value: REQUEST_APP,
+              label: 'Request an app…',
+              category: 'custom',
+              description:
+                'Not in the list? Press r: your browser opens a prefilled request on GitHub (' + ISSUES_URL + ').',
+              hint: Theme.muted('press r'),
+              disabled: 'Press r to open the request form on GitHub.',
+            },
+          ]),
       ...Object.entries(this.custom(draft)).map(([id, a]) => ({
         value: CUSTOM + id,
         label: a.name,

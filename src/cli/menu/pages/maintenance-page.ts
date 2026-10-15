@@ -32,10 +32,8 @@ import {
   type ListOptions,
   type ListResult,
 } from '../../tui/index.js';
-import type { Step } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
 import { DataFolderFlow, dataFolderRow } from '../data-folder.js';
-import type { ShellExit } from '../shell.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface MaintenanceModel {
@@ -214,6 +212,20 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
     hint: humanBytes(f.bytes) + '  ' + ago(f.modified),
     description: 'Enter shows the end of this log in the terminal.',
   }));
+  // The checks take seconds (programs are run), so they are not made while you move through the categories.
+  const check: ListItem<string>[] =
+    m.doctor === null && m.setup === null
+      ? [
+          {
+            value: 'health:check',
+            label: 'Check this PC',
+            category: 'health',
+            section: 'Doctor',
+            description:
+              'Looks at this PC: Windows features, the install, the folders and the sandbox. It takes a few seconds, so it only runs when you ask.',
+          },
+        ]
+      : [];
   const doctor: ListItem<string>[] = (m.doctor ?? []).map(([name, detail], i) => ({
     value: 'doctor:' + i,
     label: name,
@@ -295,7 +307,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...updates, ...settings, ...dataItems(m), ...doctor, ...repair, ...setup, ...logs, ...more],
+    items: [...updates, ...settings, ...dataItems(m), ...check, ...doctor, ...repair, ...setup, ...logs, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
     enterLabel: (_category, id) => enterLabel(id ?? '', m),
@@ -308,6 +320,7 @@ function enterLabel(id: string, m: MaintenanceModel): string {
   if (id === 'data:measure') return 'measure';
   if (id === 'data:clean') return 'choose what';
   if (id === 'repair:run') return 'check and fix';
+  if (id === 'health:check') return 'check';
   if (id === 'updates:latest') return m.latest ? 'install' : 'look';
   if (id === 'updates:auto') return 'switch';
   if (id === 'updates:previous') return 'go back';
@@ -333,7 +346,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
         return [
           { key: 'f', label: 'check and fix' },
-          { key: 'l', label: 'check again' },
+          { key: 'l', label: m.doctor ? 'check again' : 'check' },
           ...(canEnable ? [{ key: 'e', label: 'turn on Windows Sandbox' }] : []),
         ];
       }
@@ -375,7 +388,6 @@ export class MaintenancePage extends ListPage<string> {
   private doctorRows: string[][] | null = null;
   private repairRows: RepairResult[] | null = null;
   private setupReport: MaintenanceModel['setup'] = null;
-  private seen: string | undefined;
   private settings: MaintenanceModel['settings'] = { pending: [] };
   private readonly migrate: MigrateService;
   private readonly health: HealthService;
@@ -428,18 +440,6 @@ export class MaintenancePage extends ListPage<string> {
 
   protected options(): ListOptions<string> {
     return maintenanceOptions(this.model());
-  }
-
-  /** Opening a category loads what it shows (the cheap ones; data is measured on request). */
-  protected override async afterKey(): Promise<Step<ShellExit>> {
-    const category = this.category;
-    if (category === this.seen) return;
-    this.seen = category;
-    if (category !== 'health' || (this.doctorRows && this.setupReport)) return;
-    if (!this.doctorRows) await this.loadDoctor();
-    if (!this.setupReport) await this.loadSetup();
-    this.rebuild(undefined);
-    return;
   }
 
   private readSettings(): void {
@@ -560,7 +560,7 @@ export class MaintenancePage extends ListPage<string> {
       if (this.category === 'updates') return await this.updates(key ?? this.updateKey(id));
       if (this.category === 'health') {
         if (key === 'f' || id === 'repair:run') return this.repair();
-        if (key === 'l') {
+        if (key === 'l' || id === 'health:check') {
           await this.loadDoctor();
           await this.loadSetup();
           return {};

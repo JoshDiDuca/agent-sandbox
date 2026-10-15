@@ -2,7 +2,8 @@
 // scopes like Settings: apps for every project, or for this project only.
 import { errMsg } from '../../../core/util/index.js';
 import { Theme, type App, type ListOptions, type ListResult } from '../../tui/index.js';
-import { AppsModel } from '../apps.js';
+import { openIssuePage } from '../../../host/web/index.js';
+import { AppsModel, requestAppUrl } from '../apps.js';
 import type { ConfigFile } from '../settings/config-file.js';
 import type { Draft } from '../settings/draft.js';
 import { ValueEditor } from '../settings/value-editor.js';
@@ -22,7 +23,10 @@ export function appsOptions(model: AppsModel, file: ConfigFile, draft: Draft, sc
     enterTicks: true,
     categories: model.categories(),
     items: model.items(draft),
-    actions: file.isProject ? [] : [{ key: 'c', label: 'your own programs' }],
+    actions: [
+      ...(file.isProject ? [] : [{ key: 'c', label: 'your own programs' }]),
+      { key: 'r', label: 'request an app' },
+    ],
   };
 }
 
@@ -61,12 +65,24 @@ export class AppsPage extends ListPage<string> {
     return;
   }
 
+  /** Opens the GitHub request form in the browser and says where it is. */
+  private request(): string {
+    const url = requestAppUrl();
+    try {
+      openIssuePage(url);
+      return Theme.ok(Theme.glyph.ok + ' Opened the request form in your browser: ') + Theme.muted(url);
+    } catch (e) {
+      return Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) + Theme.muted('  Open it yourself: ' + url);
+    }
+  }
+
   protected async act(result: ListResult<string>): Promise<Outcome<string>> {
     this.model.stageTicks(this.draft, this.ticked());
     if (result.kind === 'tab') {
       this.scope = SCOPES[result.index].scope;
       return {};
     }
+    if (result.kind === 'action' && result.key === 'r') return { notice: this.request() };
     if (result.kind !== 'action' || result.key !== 'c') return {};
     const node = this.file.schema.child('apps')?.child('custom');
     if (!node) return {};

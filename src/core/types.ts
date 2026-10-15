@@ -120,9 +120,12 @@ export interface DatabasePlan {
 /** The VPN decided at launch (host/vpn/prepare.ts): its checked profile, and the login for the one-shot file. */
 export interface PreparedVpn {
   session: GuestVpn;
-  /** The profile text, already checked. */
-  profile: string;
-  credentials: { username: string; password: string };
+  /** openvpn: the profile text, already checked (goes in the launch folder). */
+  profile?: string;
+  /** openvpn: the login (one-shot file). */
+  credentials?: { username: string; password: string };
+  /** wireguard-file: the checked config; holds the private key (one-shot file only). */
+  wireguardConfig?: string;
 }
 
 /** databases / pcLanguages: use these instead of scanning (tests). */
@@ -182,8 +185,8 @@ export interface GuestVpn {
   killSwitch: boolean;
   /** The server's name, for messages. */
   server: string;
-  /** The checked profile, relative to the launch folder. */
-  profile: string;
+  /** openvpn: the checked profile, relative to the launch folder (none for wireguard-file: its config is a secret). */
+  profile?: string;
 }
 
 /** Written by the host to C:\AgentLaunch\session.json (read-only for the guest): everything the guest needs to know. */

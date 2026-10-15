@@ -16,6 +16,7 @@ import {
   type ListResult,
 } from '../../tui/index.js';
 import { dataFolderRow, DataFolderFlow } from '../data-folder.js';
+import { EXPORT_SETTINGS, IMPORT_SETTINGS, ShareSettingsFlow, shareSettingsRows } from '../share-settings.js';
 import { VpnLoginFlow, vpnLoginRow, VPN_LOGIN } from '../vpn-login.js';
 import { CATEGORIES, categoryOf, nameOf } from '../settings/categories.js';
 import type { ConfigFile } from '../settings/config-file.js';
@@ -174,7 +175,12 @@ export function settingsOptions(
       { key: 'r', label: file.isProject ? 'remove' : 'reset to default', applies: (id) => set.has(id) },
       { key: 'z', label: 'undo', applies: (id) => unsaved.has(id) },
     ],
-    enterLabel: (_category, id) => (id === DATA_FOLDER || id === VPN_LOGIN ? 'change' : 'edit'),
+    enterLabel: (_category, id) =>
+      id === DATA_FOLDER || id === VPN_LOGIN
+        ? 'change'
+        : id === EXPORT_SETTINGS || id === IMPORT_SETTINGS
+          ? 'open'
+          : 'edit',
   };
 }
 
@@ -212,6 +218,7 @@ export class SettingsPage extends ListPage<string> {
     return settingsOptions(this.files, this.scope, this.draft, [
       { value: DATA_FOLDER, category: 'general', ...row },
       { value: VPN_LOGIN, category: 'network', ...vpnLoginRow(this.ctx) },
+      ...shareSettingsRows().map((r) => ({ ...r, category: 'general' })),
     ]);
   }
 
@@ -239,6 +246,12 @@ export class SettingsPage extends ListPage<string> {
       if (result.kind !== 'pick') return {};
       const exit = await new DataFolderFlow(this.app, this.ctx).run();
       return exit ? { exit } : { reload: true };
+    }
+    if (result.value === EXPORT_SETTINGS || result.value === IMPORT_SETTINGS) {
+      if (result.kind !== 'pick') return {};
+      const flow = new ShareSettingsFlow(this.app, this.ctx);
+      const notice = await (result.value === EXPORT_SETTINGS ? flow.export() : flow.import());
+      return { reload: true, notice };
     }
     if (result.value === VPN_LOGIN) {
       if (result.kind !== 'pick') return {};

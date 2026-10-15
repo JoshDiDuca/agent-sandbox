@@ -9,7 +9,7 @@ export {
   cookieHeader,
 } from './auth.js';
 export type { WebBackend } from './backend.js';
-export { openBrowser } from './browser.js';
+export { openBrowser, openIssuePage } from './browser.js';
 export { TerminalBridge } from './bridge.js';
 export { WebControl, type WebStatus } from './control.js';
 export { WebRunner } from './runner.js';

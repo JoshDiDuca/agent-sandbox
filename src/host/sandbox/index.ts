@@ -1,5 +1,6 @@
 export * from './platform.js';
 export * from './probe.js';
+export * from './tasklist.js';
 export * from './host-claude.js';
 export * from './doctor.js';
 export * from './window.js';

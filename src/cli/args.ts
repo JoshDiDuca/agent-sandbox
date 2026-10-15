@@ -41,6 +41,8 @@ export interface CliOptions {
   wide: boolean;
   /** storage move: keep the old folder (copy instead of rename). */
   keepOld: boolean;
+  /** config export: keep folders and files of this PC in the file. */
+  withPaths: boolean;
   timeout: number;
   days: number;
   /** restart: every session, not only this folder's project's. */
@@ -299,6 +301,7 @@ export function parseCli(argv: string[], wrapper = false): CliOptions {
     yes: Boolean(o.yes),
     wide: Boolean(o.wide),
     keepOld: Boolean(o.keepOld),
+    withPaths: Boolean(o.withPaths),
     all: Boolean(o.all),
     sessions: ((o.session as string[] | undefined) ?? []).map((s) => parseSessionWant(s)),
     timeout: (o.timeout as number | undefined) ?? 600,
@@ -350,6 +353,7 @@ function defaults(): CliOptions {
     yes: false,
     wide: false,
     keepOld: false,
+    withPaths: false,
     all: false,
     sessions: [],
     timeout: 600,

@@ -8,7 +8,7 @@ import type { Config } from '../../../core/types.js';
 import { errMsg } from '../../../core/util/index.js';
 import type { Context } from '../../commands/context.js';
 import { commandLine, readHistory } from '../../history.js';
-import { AgentCommandsService } from '../../services/index.js';
+import { AgentCommandsService, type AgentCommandsStatus } from '../../services/index.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
 import {
   Text,
@@ -233,6 +233,8 @@ export class AgentsPage extends ListPage<string> {
   private window: WindowChoice = 'config';
   private folder = process.cwd();
   private model: AgentsModel | undefined;
+  /** What load() looked up (programs on PATH, the history file): not asked again for every list that is built. */
+  private facts: { readonly commands: AgentCommandsStatus; readonly last: string[] | undefined } | undefined;
 
   constructor(
     app: App,
@@ -267,12 +269,13 @@ export class AgentsPage extends ListPage<string> {
 
   private current(): AgentsModel {
     const harnesses = this.harnesses();
-    const commands = new AgentCommandsService(this.ctx).status();
+    if (!this.facts) throw new Error('The agents tab was not loaded');
+    const { commands, last } = this.facts;
     return {
       folder: this.folder,
       defaultAgent: this.file.userConfig().defaultHarness,
       agents: Object.keys(harnesses).map((name) => ({ name, ready: this.installed(name, harnesses) })),
-      last: readHistory()[0]?.argv,
+      last,
       attach: this.attach,
       window: this.window,
       hostAgents: hostAgentsToShow(commands.enabled, commands.found),
@@ -285,9 +288,12 @@ export class AgentsPage extends ListPage<string> {
     return 'agent:' + this.file.userConfig().defaultHarness;
   }
 
-  protected load(): Promise<void> {
+  protected async load(): Promise<void> {
+    this.facts = {
+      commands: await new AgentCommandsService(this.ctx).statusAsync(),
+      last: readHistory()[0]?.argv,
+    };
     this.model = this.current();
-    return Promise.resolve();
   }
 
   protected options(): ListOptions<string> {

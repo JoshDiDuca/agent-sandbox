@@ -64,6 +64,8 @@ export interface ListOptions<T> {
   /** Start on this entry (and its category). */
   startAt?: T;
   startCategory?: string;
+  /** Start with this search typed (it shows every match in all categories; Esc clears it). */
+  startQuery?: string;
   /** Extra keys; a function picks them by the open category. */
   actions?: ListAction<T>[] | ((category: string | undefined) => ListAction<T>[]);
   notice?: string;

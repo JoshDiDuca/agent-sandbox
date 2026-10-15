@@ -324,9 +324,10 @@
           "type": "string",
           "enum": [
             "nordvpn",
-            "openvpn-file"
+            "openvpn-file",
+            "wireguard-file"
           ],
-          "description": "nordvpn: a recommended NordVPN server is picked at every launch. openvpn-file: your own .ovpn file (configFile)."
+          "description": "nordvpn: a recommended NordVPN server is picked at every launch. openvpn-file: your own .ovpn file (configFile). wireguard-file: your own WireGuard .conf (configFile), e.g. from your company."
         },
         "protocol": {
           "type": "string",
@@ -343,7 +344,7 @@
         },
         "configFile": {
           "type": "string",
-          "description": "openvpn-file: the .ovpn file on this PC (its certificates inside it). Files that run programs (script-security, up, down, plugin ...) are refused. A project's file can never set this."
+          "description": "openvpn-file / wireguard-file: the .ovpn or .conf file on this PC (an .ovpn has its certificates inside it). Files that run programs (script-security, up, down, plugin, PostUp ...) are refused. A WireGuard file holds your private key: it is read when a sandbox starts and handed over in a one-shot file. A project's file can never set this."
         },
         "killSwitch": {
           "type": "boolean",

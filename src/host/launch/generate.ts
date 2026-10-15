@@ -76,7 +76,7 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
   const databases = o.databases ?? planDatabases(config.databases, workspaceHost);
   const toolchains = decideProjectToolchains(o);
 
-  if (o.vpn) {
+  if (o.vpn?.profile) {
     ensureDir(path.join(launchPath, 'vpn'));
     fs.writeFileSync(path.join(launchPath, 'vpn', 'server.ovpn'), o.vpn.profile, 'utf8');
   }
@@ -86,7 +86,8 @@ export function generateSandbox(given: GenerateOptions): Generated & { personali
   writeSecrets(dataPath, launchId, {
     ...(harness && Object.keys(harness.environment).length ? { harnessEnvironment: harness.environment } : {}),
     ...(claudeCredentials ? { claudeCredentials } : {}),
-    ...(o.vpn ? { vpn: o.vpn.credentials } : {}),
+    ...(o.vpn?.credentials ? { vpn: o.vpn.credentials } : {}),
+    ...(o.vpn?.wireguardConfig ? { wireguardConfig: o.vpn.wireguardConfig } : {}),
   });
   fs.writeFileSync(path.join(launchPath, 'env.cmd'), logonEnv(session.workspace), 'utf8');
   copyRuntime(o.packageRoot, launchPath);

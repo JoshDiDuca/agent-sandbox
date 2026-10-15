@@ -25,9 +25,14 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
   private searching = false;
   private notice: string | undefined;
   private readonly checked: Set<number>;
+  /** The entries shown for the last query and category (the items never change, so only those two matter). */
+  private shown: { readonly key: string; readonly indexes: number[] } | undefined;
+  /** What a search looks in, per entry, lowercased once. */
+  private haystacks: string[] | undefined;
 
   constructor(private readonly o: ListOptions<T>) {
     this.notice = o.notice;
+    this.query = o.startQuery ?? '';
     this.checked = new Set(o.items.flatMap((item, i) => (item.checked ? [i] : [])));
     const start = o.startAt === undefined ? -1 : o.items.findIndex((item) => item.value === o.startAt);
     const startCategory = start >= 0 ? o.items[start].category : o.startCategory;
@@ -41,20 +46,28 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
 
   /** Indexes of the entries shown now: all matches of the search, else the current category's, else all. */
   private visible(): number[] {
+    const key = this.query + '\0' + this.category;
+    if (this.shown?.key !== key) this.shown = { key, indexes: this.matching() };
+    return this.shown.indexes;
+  }
+
+  private matching(): number[] {
     const all = this.o.items.map((_, i) => i);
     if (this.query.trim()) {
       const words = this.query.toLowerCase().split(/\s+/).filter(Boolean);
-      const label = (id?: string): string => this.o.categories?.find((c) => c.id === id)?.label ?? '';
-      return all.filter((i) => {
-        const it = this.o.items[i];
-        const hay = [it.label, Text.strip(it.hint ?? ''), it.description, it.keywords, it.section, label(it.category)]
+      const hays = (this.haystacks ??= this.o.items.map((it) =>
+        [it.label, Text.strip(it.hint ?? ''), it.description, it.keywords, it.section, this.categoryLabel(it.category)]
           .join(' ')
-          .toLowerCase();
-        return words.every((w) => hay.includes(w));
-      });
+          .toLowerCase(),
+      ));
+      return all.filter((i) => words.every((w) => hays[i].includes(w)));
     }
     const cat = this.o.categories?.[this.category];
     return cat ? all.filter((i) => this.o.items[i].category === cat.id) : all;
+  }
+
+  private categoryLabel(id?: string): string {
+    return this.o.categories?.find((c) => c.id === id)?.label ?? '';
   }
 
   private rows(visible: number[]): Row[] {
@@ -64,7 +77,7 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     for (const index of visible) {
       const it = this.o.items[index];
       const heading = searchAll
-        ? [this.o.categories?.find((c) => c.id === it.category)?.label, it.section].filter(Boolean).join(' › ')
+        ? [this.categoryLabel(it.category), it.section].filter(Boolean).join(' › ')
         : it.section;
       if (heading && heading !== section) rows.push({ kind: 'section', text: heading });
       section = heading;
@@ -85,6 +98,39 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const detailsWidth = detailsRight ? Math.min(52, Math.floor(rest * 0.38)) : rest;
     const listWidth = detailsRight ? rest - detailsWidth - 3 : rest;
 
+    const top = this.topLines(size.width, visible.length);
+    const details = this.detailsLines(visible[this.cursor], detailsWidth);
+    const bottomDetails = !detailsRight && size.height - top.length >= 14 ? details.slice(0, 6) : [];
+    const rows = this.rows(visible);
+    const room = size.height - top.length - (bottomDetails.length ? bottomDetails.length + 1 : 0);
+    // A list longer than the room keeps one row for "▲ / ▼ more".
+    const listHeight = rows.length > room ? room - 1 : room;
+    const listLines = this.listLines(visible, rows, listHeight, listWidth);
+
+    const sideLines = sideWidth ? this.sideLines(sideWidth) : [];
+    const body: string[] = [...top];
+    const height = Math.max(listLines.length, detailsRight ? details.length : 0, sideLines.length);
+    for (let i = 0; i < Math.min(height, size.height - top.length); i++) {
+      const side = sideWidth ? Text.fit(sideLines[i] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline) + ' ' : '';
+      const main = Text.fit(listLines[i] ?? '', listWidth);
+      const right = detailsRight ? ' ' + Theme.dim(Theme.glyph.vline) + ' ' + (details[i] ?? '') : '';
+      body.push(side + main + right);
+    }
+    if (bottomDetails.length) {
+      // The details sit at the bottom, whatever the length of the list.
+      while (body.length < size.height - bottomDetails.length - 1)
+        body.push(
+          sideWidth
+            ? Text.fit(sideLines[body.length - top.length] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline)
+            : '',
+        );
+      body.push(Theme.dim(' ' + Theme.glyph.line.repeat(size.width - 3)), ...bottomDetails.map((l) => ' ' + l));
+    }
+    return { path: this.o.path, status: this.o.status, body, keys: this.keys(), notice: this.notice };
+  }
+
+  /** The rows above the list: the tabs, the intro, the search box (with a blank row after them). */
+  private topLines(width: number, matches: number): string[] {
     const top: string[] = [];
     if (this.o.tabs) {
       const row =
@@ -97,10 +143,10 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
           )
           .join(' ') +
         Theme.muted('   tab switches');
-      top.push(Text.truncate(row, size.width - 1), '');
+      top.push(Text.truncate(row, width - 1), '');
     }
     const intro = typeof this.o.intro === 'string' ? [this.o.intro] : (this.o.intro ?? []);
-    for (const line of intro) top.push(...Text.wrap(line, size.width - 3).map((l) => ' ' + Theme.muted(l)));
+    for (const line of intro) top.push(...Text.wrap(line, width - 3).map((l) => ' ' + Theme.muted(l)));
     if (this.searching || this.query)
       top.push(
         ' ' +
@@ -108,16 +154,14 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
           ' ' +
           this.query +
           (this.searching ? Theme.accent('▏') : '') +
-          Theme.muted('   ' + visible.length + ' match' + (visible.length === 1 ? '' : 'es')),
+          Theme.muted('   ' + matches + ' match' + (matches === 1 ? '' : 'es')),
       );
     if (top.length) top.push('');
+    return top;
+  }
 
-    const details = this.detailsLines(visible[this.cursor], detailsWidth);
-    const bottomDetails = !detailsRight && size.height - top.length >= 14 ? details.slice(0, 6) : [];
-    const rows = this.rows(visible);
-    const room = size.height - top.length - (bottomDetails.length ? bottomDetails.length + 1 : 0);
-    // A list longer than the room keeps one row for "▲ / ▼ more".
-    const listHeight = rows.length > room ? room - 1 : room;
+  /** The rows of the list that fit: scrolled to keep the cursor in view, with "▲ above / ▼ more" under them. */
+  private listLines(visible: number[], rows: Row[], listHeight: number, listWidth: number): string[] {
     const cursorRow = rows.findIndex((r) => r.kind === 'item' && r.index === visible[this.cursor]);
     if (cursorRow >= 0) {
       // Keep the heading above the first entry in view, and the cursor inside the window.
@@ -148,27 +192,7 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
         ),
       );
     }
-
-    const sideLines = sideWidth ? this.sideLines(sideWidth) : [];
-    const body: string[] = [...top];
-    const height = Math.max(listLines.length, detailsRight ? details.length : 0, sideLines.length);
-    for (let i = 0; i < Math.min(height, size.height - top.length); i++) {
-      const side = sideWidth ? Text.fit(sideLines[i] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline) + ' ' : '';
-      const main = Text.fit(listLines[i] ?? '', listWidth);
-      const right = detailsRight ? ' ' + Theme.dim(Theme.glyph.vline) + ' ' + (details[i] ?? '') : '';
-      body.push(side + main + right);
-    }
-    if (bottomDetails.length) {
-      // The details sit at the bottom, whatever the length of the list.
-      while (body.length < size.height - bottomDetails.length - 1)
-        body.push(
-          sideWidth
-            ? Text.fit(sideLines[body.length - top.length] ?? '', sideWidth) + ' ' + Theme.dim(Theme.glyph.vline)
-            : '',
-        );
-      body.push(Theme.dim(' ' + Theme.glyph.line.repeat(size.width - 3)), ...bottomDetails.map((l) => ' ' + l));
-    }
-    return { path: this.o.path, status: this.o.status, body, keys: this.keys(), notice: this.notice };
+    return listLines;
   }
 
   private rowLine(row: Row, visible: number[], width: number): string {
@@ -320,6 +344,16 @@ export class ListScreen<T> implements Screen<ListResult<T>> {
     const actions = this.o.actions;
     const all = typeof actions === 'function' ? actions(this.currentCategory) : (actions ?? []);
     return all.filter((a) => !a.applies || (value !== undefined && a.applies(value)));
+  }
+
+  /** The value under the cursor (undefined: the list is empty). */
+  get current(): T | undefined {
+    return this.valueAt(this.visible()[this.cursor]);
+  }
+
+  /** The text of the search (empty: none). */
+  get searchText(): string {
+    return this.query;
   }
 
   /** Keys are going into the search box (digits and letters are text, not shortcuts). */

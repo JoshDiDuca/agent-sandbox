@@ -13,7 +13,9 @@ import {
   newAgent,
   removeAgent,
 } from '../cli/menu/add-agent.js';
-import { APP_GROUPS, AppsModel } from '../cli/menu/apps.js';
+import { APP_GROUPS, AppsModel, REQUEST_APP, requestAppUrl } from '../cli/menu/apps.js';
+import { readMenuView, saveMenuView } from '../cli/menu/memory.js';
+import path from 'node:path';
 import { argPathKind, optionLabel, optionPathKind, plainDescription } from '../cli/menu/command-fields.js';
 import { CommandForm } from '../cli/menu/command-form.js';
 import { COMMANDS, commandSpec } from '../cli/manifest.js';
@@ -153,6 +155,7 @@ export const menuSuite: Suite = {
       readonly stages = false;
       capturing = false;
       category: string | undefined;
+      search = '';
       focusList = true;
       constructor(
         readonly label: string,
@@ -166,6 +169,9 @@ export const menuSuite: Suite = {
       selectCategory(id: string): Promise<void> {
         this.category = id;
         return Promise.resolve();
+      }
+      restoreSearch(text: string): void {
+        this.search = text;
       }
       setFocus(list: boolean): void {
         this.focusList = list;
@@ -212,11 +218,49 @@ export const menuSuite: Suite = {
     );
     const leave = await shell.handle(press('escape'));
     t.check(leave !== undefined && leave.done.kind === 'quit', 'Esc in the navigation quits');
-    await shell.restore({ section: 2, category: 'd' });
+    await shell.restore({ section: 2, screens: { Three: { category: 'd', search: 'abc' }, One: { category: 'b' } } });
     t.equal(
-      [shell.page.label, pages[2].category, shell.view()],
-      ['Three', 'd', { section: 2, category: 'd' }],
-      'the menu can be put back on the section and category it was left on',
+      [shell.page.label, pages[2].category, pages[2].search, shell.view()],
+      [
+        'Three',
+        'd',
+        'abc',
+        { section: 2, screens: { Three: { category: 'd', search: 'abc' }, One: { category: 'b' } } },
+      ],
+      'the menu can be put back on the section, category and search it was left on (other sections keep theirs)',
+    );
+    await shell.openTab(0);
+    t.equal([pages[0].category, pages[0].search], ['b', ''], 'a section opened later goes back to its own category');
+
+    t.section('menu memory file');
+    const labels = ['Agents', 'Sessions', 'Sandbox'];
+    const memDir = t.dir('menu-memory');
+    const view = { section: 2, screens: { Sessions: { category: 'x', search: 'foo' }, Gone: { category: 'y' } } };
+    saveMenuView(view, labels, memDir);
+    t.equal(
+      readMenuView(labels, memDir),
+      { section: 2, screens: { Sessions: { category: 'x', search: 'foo' } } },
+      'the last section, category and search are saved and read back (a section that is gone is dropped)',
+    );
+    t.equal(
+      readMenuView(['Agents', 'Sessions'], memDir)?.section,
+      0,
+      'a remembered section that no longer exists falls back to the first (Agents)',
+    );
+    fs.writeFileSync(path.join(memDir, 'menu-state.json'), '{"section": 5, "screens": "no"}');
+    t.equal(readMenuView(labels, memDir), undefined, 'an invalid state file is ignored');
+    fs.writeFileSync(path.join(memDir, 'menu-state.json'), 'not json');
+    t.equal(readMenuView(labels, memDir), undefined, 'a file that is not JSON is ignored');
+
+    t.section('request an app');
+    const issue = new URL(requestAppUrl());
+    t.check(
+      issue.origin === 'https://github.com' &&
+        issue.pathname.endsWith('/issues/new') &&
+        (issue.searchParams.get('title') ?? '').startsWith('App request') &&
+        (issue.searchParams.get('body') ?? '').includes('App name'),
+      'the request-an-app address is a GitHub new-issue page with a title and a body template',
+      requestAppUrl(),
     );
 
     t.section('list categories driven from outside');
@@ -796,7 +840,7 @@ export const menuSuite: Suite = {
     t.section('apps in a few groups');
     const appsUser = new AppsModel(user2, t.dir('apps-groups'));
     const groupIds = appsUser.categories().map((c) => c.id);
-    const appItems = appsUser.items(new Draft());
+    const appItems = appsUser.items(new Draft()).filter((i) => i.value !== REQUEST_APP);
     t.check(
       groupIds.length <= 6 &&
         new AppsModel(ConfigFile.project(t.dir('apps-groups', 'project')), t.dir('apps-groups')).categories().length <=
