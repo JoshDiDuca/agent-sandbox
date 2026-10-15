@@ -256,6 +256,54 @@ function folderScript(t: Harness): void {
   runFolderAccess([{ path: target, sid, rights: 'Read', scope: 'this-folder', add: false }]);
   t.equal(icacls(), before, 'removing an entry that is not there changes nothing');
 
+  // A this-folder entry is written to that folder only: it stays auto-inherited (D:AI) and a child is not touched; an
+  // entry that changes nothing writes nothing (the change time of the folder does not move).
+  const sddls = (folder: string, also?: string): string[] =>
+    (
+      spawnSync(
+        SYSTEM.powershell(),
+        nativeScript('read-folder-sddl.ps1', ['-Path', folder, ...(also ? ['-Also', also] : [])]),
+        {
+          encoding: 'utf8',
+          windowsHide: true,
+        },
+      ).stdout ?? ''
+    )
+      .split(/\r?\n/)
+      .filter(Boolean);
+  const inherits = t.dir('acl-inherits');
+  // Set-Acl marks the folder auto-inherited, whatever its parent says: start from that state.
+  runFolderAccess([{ path: inherits, sid, rights: 'Modify', scope: 'inherit', add: true }]);
+  const child = path.join(inherits, 'child');
+  fs.mkdirSync(child);
+  fs.writeFileSync(path.join(child, 'a.txt'), 'x');
+  const [folderBefore, childBefore] = sddls(inherits, child);
+  if (!folderBefore?.includes('D:AI')) {
+    t.skip('the temp folder does not inherit its permissions here, so D:AI cannot be checked');
+  } else {
+    const childChange = fs.statSync(child).ctimeMs;
+    runFolderAccess([{ path: inherits, sid, rights: 'Read', scope: 'this-folder', add: true }]);
+    const [folderAfter, childAfter] = sddls(inherits, child);
+    t.check(
+      folderAfter !== folderBefore && folderAfter.includes('D:AI'),
+      'a this-folder entry changes the folder and keeps it auto-inherited (D:AI)',
+    );
+    t.check(
+      childAfter === childBefore && fs.statSync(child).ctimeMs === childChange,
+      'a this-folder entry leaves a child’s permissions byte for byte the same',
+    );
+    runFolderAccess([{ path: inherits, sid, rights: 'Read', scope: 'this-folder', add: true }]);
+    const changed = fs.statSync(inherits).ctimeMs;
+    runFolderAccess([{ path: inherits, sid, rights: 'Read', scope: 'this-folder', add: true }]);
+    runFolderAccess([{ path: inherits, sid, rights: 'Modify', scope: 'this-folder', add: false }]);
+    t.check(
+      fs.statSync(inherits).ctimeMs === changed && sddls(inherits)[0] === folderAfter,
+      'an entry that changes nothing writes nothing',
+    );
+    runFolderAccess([{ path: inherits, sid, rights: 'Read', scope: 'this-folder', add: false }]);
+    t.equal(sddls(inherits)[0], folderBefore, 'removing the entry restores the folder exactly');
+  }
+
   // A private folder: inheritance off, only you, SYSTEM and Administrators; a second run changes nothing.
   const own = t.dir('acl-private');
   runPrivateFolder(own);

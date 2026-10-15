@@ -3,6 +3,9 @@
 // not.
 import path from 'node:path';
 
+/** The Windows group of the users who may use a shared sandbox. */
+export const SHARING_GROUP = 'Agent Sandbox Users';
+
 export interface AclEntry {
   readonly principal: string;
   /** The flags in order, e.g. "(OI)(CI)(F)". */

@@ -281,6 +281,17 @@ export const APPS: AppEntry[] = [
     exe: 'lazygit.exe',
     cli: true,
   },
+  {
+    id: 'jj',
+    name: 'Jujutsu (jj)',
+    category: 'git',
+    about: 'Git-compatible version control; conflicts do not block a rebase. Pilot, untested with worktrees.',
+    size: '10 MB',
+    source: gh('jj-vcs/jj', '^jj-v[\\d.]+-x86_64-pc-windows-msvc\\.zip$'),
+    exe: 'jj.exe',
+    cli: true,
+    fullGitOnly: true,
+  },
   // ---- utilities
   {
     id: '7zip',
@@ -809,6 +820,27 @@ export const APPS: AppEntry[] = [
     size: '8 MB',
     source: gh('gitleaks/gitleaks', '^gitleaks_[\\d.]+_windows_x64\\.zip$'),
     exe: 'gitleaks.exe',
+    cli: true,
+  },
+  {
+    id: 'ast-grep',
+    name: 'ast-grep',
+    category: 'cli',
+    about: 'Search and rewrite code by its syntax tree (ast-grep, sg); prints only the matches.',
+    size: '15 MB',
+    source: gh('ast-grep/ast-grep', '^app-x86_64-pc-windows-msvc\\.zip$'),
+    exe: 'ast-grep.exe',
+    cli: true,
+  },
+  {
+    id: 'rust-analyzer',
+    name: 'rust-analyzer',
+    category: 'cli',
+    about:
+      'Rust language server: type errors and go-to-definition without cargo (for editors and the Claude LSP plugin).',
+    size: '18 MB',
+    source: gh('rust-lang/rust-analyzer', '^rust-analyzer-x86_64-pc-windows-msvc\\.zip$'),
+    exe: 'rust-analyzer.exe',
     cli: true,
   },
 ];

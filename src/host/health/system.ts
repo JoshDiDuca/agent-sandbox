@@ -4,13 +4,14 @@ import { spawnSync } from 'node:child_process';
 import { SYSTEM, system32 } from '../../shared/system.js';
 import { refuseInSelfTest } from '../test-guard.js';
 import { listProcesses, type TaskRow } from '../sharing/index.js';
+import { SHARING_GROUP } from './acl-read.js';
 
 const HELPER_TIMEOUT_MS = 15000;
 const USER_ENVIRONMENT = 'HKCU\\Environment';
 const MACHINE_ENVIRONMENT = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
 /** The mandatory-level SID of an elevated (admin) token. */
 export const HIGH_INTEGRITY_SID = 'S-1-16-12288';
-export const SHARING_GROUP = 'Agent Sandbox Users';
+export { SHARING_GROUP } from './acl-read.js';
 
 export interface SystemProbe {
   processes(): TaskRow[];

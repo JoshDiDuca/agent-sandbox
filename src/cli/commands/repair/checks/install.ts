@@ -8,10 +8,16 @@ import { editUserPath } from '../../../../host/agent-commands/index.js';
 import {
   HIGH_INTEGRITY_SID,
   binsOfPackage,
+  currentPathext,
+  fileOnDisk,
+  findCommandCopies,
   inspectPointers,
+  ownBinDir,
   pathHas,
   repairPointers,
+  sameFolder,
   shimProblems,
+  type CommandCopy,
 } from '../../../../host/health/index.js';
 import { UpdateTask, writeShims } from '../../../../host/install/index.js';
 import { assertTestWritable, refuseInSelfTest } from '../../../../host/test-guard.js';
@@ -21,6 +27,34 @@ import { ok, plural } from './common.js';
 
 const UNINSTALL =
   '& ([scriptblock]::Create((irm https://github.com/JoshDiDuca/windows-development-sandbox/releases/latest/download/install.ps1))) -Uninstall -Scope ';
+
+/** The exact way to get rid of one copy (nothing here runs it: doctor only prints it). */
+export function removalCommand(copy: CommandCopy): string {
+  switch (copy.kind) {
+    case 'managed-machine':
+      return 'in an admin PowerShell: ' + UNINSTALL + 'AllUsers';
+    case 'managed-user':
+      return 'in PowerShell: ' + UNINSTALL + 'CurrentUser';
+    case 'npm': {
+      const current = fileOnDisk(path.join(copy.dir, 'node_modules', 'windows-development-sandbox', 'package.json'));
+      return 'npm uninstall -g ' + (current ? 'windows-development-sandbox' : 'agent-sandbox');
+    }
+    case 'old-scripts': {
+      const root = path.basename(copy.dir).toLowerCase() === 'bin' ? path.dirname(copy.dir) : copy.dir;
+      return 'Remove-Item -Recurse -Force "' + root + '" (and take ' + copy.dir + ' off your PATH)';
+    }
+    default:
+      return 'delete ' + copy.files.join(', ') + ' in ' + copy.dir + ', or take that folder off the PATH';
+  }
+}
+
+const KIND_NAMES: Record<CommandCopy['kind'], string> = {
+  'managed-machine': 'the install for everyone',
+  'managed-user': 'the install for just you',
+  npm: 'an npm copy',
+  'old-scripts': 'an old Scripts\\agent-sandbox copy',
+  other: 'a copy of unknown origin',
+};
 
 const managed = (env: RepairEnv): boolean => env.layout !== null;
 const machine = (env: RepairEnv): boolean => env.layout?.scope === 'machine';
@@ -160,6 +194,43 @@ export const INSTALL_CHECKS: Check[] = [
       if (!env.layout) throw new Error('not a managed install');
       editUserPath(env.layout.binDir, true, env.storageRoot);
       return { done: 'added ' + env.layout.binDir + ' to your PATH (open a new terminal to use it)' };
+    },
+  },
+  {
+    id: 'install-copies',
+    group: 'Install',
+    name: 'Copies on the PATH',
+    timeoutMs: 40_000,
+    run: (env: RepairEnv): Finding => {
+      const machinePath = env.system.registryPath('machine');
+      const userPath = env.system.registryPath('user');
+      const copies = findCommandCopies({
+        machinePath: machinePath ?? (userPath === null ? (process.env.Path ?? null) : null),
+        userPath,
+        pathext: currentPathext(),
+        programFiles: process.env.ProgramFiles ?? null,
+        localAppData: process.env.LOCALAPPDATA ?? null,
+        exists: fileOnDisk,
+      });
+      if (!copies.length) return ok('no sandbox command is on the PATH of a new terminal');
+      const runs = copies.find((c) => c.files.some((f) => f.startsWith('sandbox.'))) ?? copies[0];
+      const own = ownBinDir(env.ctx.packageRoot, env.layout?.binDir ?? null);
+      const keep = copies.find((c) => c.kind === 'managed-machine' || c.kind === 'managed-user') ?? runs;
+      if (copies.length === 1 && (!own || sameFolder(own, runs.dir)))
+        return ok('one copy: ' + runs.dir + ' (' + KIND_NAMES[runs.kind] + ')');
+      const hidden = copies.filter((c) => c !== keep);
+      const wrong = keep !== runs;
+      return {
+        status: wrong || (own !== null && !sameFolder(own, runs.dir)) ? 'needs-you' : 'warn',
+        detail: wrong
+          ? 'typing sandbox runs ' + runs.dir + ' (' + KIND_NAMES[runs.kind] + '), not ' + keep.dir
+          : copies.length + ' copies are on the PATH; ' + runs.dir + ' runs (' + KIND_NAMES[runs.kind] + ')',
+        means: wrong
+          ? 'The install you update is hidden, so its fixes never reach you, and sharing with other users may not work from this copy.'
+          : 'The others are never used, and they may be the ones an old shortcut or script starts.',
+        fix: 'Remove the copies you do not want (repair never deletes them; run "Get-Command sandbox -All" to list them):',
+        lines: hidden.map((c) => c.dir + ': ' + removalCommand(c)),
+      };
     },
   },
   {

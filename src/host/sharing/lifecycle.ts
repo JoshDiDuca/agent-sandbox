@@ -7,10 +7,11 @@ import { z } from 'zod';
 import { RunDir } from '../../shared/channel/index.js';
 import { isWithin } from '../../shared/paths/index.js';
 import { JsonFile } from '../../shared/io/index.js';
-import { InstallLayout, InstallRecordFile } from '../install/index.js';
+import { InstallLayout, InstallRecordFile, machineInstall } from '../install/index.js';
 import { storageOf } from '../storage/index.js';
 import { sharingAclPlan, applyAcl, type AclChange } from './acl.js';
 import { ActiveRecords, type ActiveSandbox } from './active-record.js';
+import { groupHasAccess } from './group-access.js';
 import { activeDir, usersDir } from './machine-paths.js';
 
 export interface SharingDeps {
@@ -21,23 +22,31 @@ export interface SharingDeps {
   readonly groupSid: string | null;
   /** The shared tree (machine\users): permissions change only for data folders inside it. */
   readonly usersDir: string;
+  /**
+   * Does the group have an entry on any of these folders (true also when that cannot be read)? When it says no, a
+   * launch that shares nothing has no entries to remove and skips the permission script. Left out: always apply.
+   */
+  readonly groupHasAccess?: (dirs: readonly string[]) => boolean;
 }
 
 /** What the launch knows about the sandbox it is about to start. */
 export type SharingStart = Omit<ActiveSandbox, 'startedAt'> & { readonly startedAt?: string };
 
 /**
- * The machinery of an all-users install, or null for every other install (nothing is shared there: one user, one
- * storage folder).
+ * The machinery of the all-users install on this PC, or null when there is none (nothing is shared then: one user, one
+ * storage folder). It is found from any copy of the program: an npm copy or a checkout that starts a sandbox shares it
+ * the same way the installed one does, with the group and the settings the install recorded.
  */
 export function sharingDeps(packageRoot: string): SharingDeps | null {
-  const layout = InstallLayout.detect(packageRoot);
-  if (layout?.scope !== 'machine') return null;
+  const detected = InstallLayout.detect(packageRoot);
+  const layout = detected?.scope === 'machine' ? detected : machineInstall();
+  if (!layout) return null;
   return {
     records: new ActiveRecords(activeDir()),
     apply: applyAcl,
     groupSid: new InstallRecordFile(layout.root).read()?.groupSid ?? null,
     usersDir: usersDir(),
+    groupHasAccess,
   };
 }
 
@@ -55,14 +64,16 @@ export function beginSharing(deps: SharingDeps, start: SharingStart, now: Date =
   const run = new RunDir(start.dataPath);
   for (const dir of [run.root, run.requestsDir, run.responsesDir, run.sessionsDir, run.projectsDir, run.auditDir])
     fs.mkdirSync(dir, { recursive: true });
-  deps.apply(
-    sharingAclPlan({
-      storageUserDir: storageOf(start.dataPath),
-      dataPath: start.dataPath,
-      groupSid: deps.groupSid,
-      on: start.shared,
-    }),
-  );
+  const plan = sharingAclPlan({
+    storageUserDir: storageOf(start.dataPath),
+    dataPath: start.dataPath,
+    groupSid: deps.groupSid,
+    on: start.shared,
+  });
+  // Not shared and nothing of the group left to take away: nothing to write, so a slow folder cannot block the launch.
+  // When the entries cannot be read, or one is there, the removal runs and a failure of it refuses the launch.
+  if (!start.shared && deps.groupHasAccess && !deps.groupHasAccess(plan.map((c) => c.path))) return;
+  deps.apply(plan);
 }
 
 /** The sandbox of this data folder ended: its record goes and the group loses access again. Never throws. */

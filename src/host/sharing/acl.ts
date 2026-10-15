@@ -51,9 +51,11 @@ export function sharingAclPlan(o: {
 }
 
 const ACL_TIMEOUT_MS = 30000;
+/** Making a folder that holds files private walks all of it: a few hundred thousand files take minutes. */
+const WALK_TIMEOUT_MS = 30 * 60000;
 
 /** One run of native\scripts\set-folder-access.ps1 over `entries` (the JSON's "changes"); throws a UserError. */
-function runScript(entries: readonly object[]): void {
+function runScript(entries: readonly object[], timeoutMs: number = ACL_TIMEOUT_MS): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-sandbox-acl-'));
   const file = path.join(dir, 'changes.json');
   try {
@@ -61,12 +63,12 @@ function runScript(entries: readonly object[]): void {
     const run = spawnSync(SYSTEM.powershell(), nativeScript('set-folder-access.ps1', ['-Json', file]), {
       encoding: 'utf8',
       windowsHide: true,
-      timeout: ACL_TIMEOUT_MS,
+      timeout: timeoutMs,
     });
     const timedOut = (run.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT';
     if (timedOut)
       fail(
-        'Changing the folder permissions took longer than ' + ACL_TIMEOUT_MS / 1000 + ' seconds and was stopped.',
+        'Changing the folder permissions took longer than ' + timeoutMs / 1000 + ' seconds and was stopped.',
         'Close programs that scan or lock the folders (virus scanners, file explorers) and try again.',
       );
     if (run.status !== 0 || run.error) {
@@ -99,16 +101,22 @@ export function applyAcl(changes: readonly AclChange[]): void {
 }
 
 /** Makes an existing folder private (see protectPrivateFolder) without the self-test guard: for temp folders only. */
-export function runPrivateFolder(dir: string): void {
-  runScript([{ op: 'private', path: dir }]);
+export function runPrivateFolder(dir: string, options: PrivateOptions = {}): void {
+  runScript([{ op: 'private', path: dir }], options.walkAll ? WALK_TIMEOUT_MS : ACL_TIMEOUT_MS);
+}
+
+export interface PrivateOptions {
+  /** The folder holds files and every one of them has to be walked: wait up to 30 minutes instead of 30 seconds. */
+  readonly walkAll?: boolean;
 }
 
 /**
  * Makes an existing folder (not a link) private: inheritance off, full control for you, SYSTEM and Administrators
  * only, inherited by what is created in it. Nothing is written when it already is; an empty folder is changed without
- * walking inside it.
+ * walking inside it. A folder with files is walked (minutes for a large one), so it stops after 30 seconds unless the
+ * caller asks for `walkAll` (only an explicit repair does, after saying so). Launch paths never do.
  */
-export function protectPrivateFolder(dir: string): void {
+export function protectPrivateFolder(dir: string, options: PrivateOptions = {}): void {
   refuseInSelfTest('change folder permissions');
-  runPrivateFolder(dir);
+  runPrivateFolder(dir, options);
 }

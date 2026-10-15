@@ -282,7 +282,7 @@ export class Updater {
   /** The version starts with the private Node and prints its own version number. */
   private checkEntry(version: string, node: string): void {
     const entry = path.join(this.layout.packageDir(version), ENTRY);
-    const run = spawnSync(this.layout.nodeExe(node), [entry, '--version'], {
+    const run = spawnSync(this.layout.nodeExe(node), [entry, '--version', '--short'], {
       encoding: 'utf8',
       windowsHide: true,
       timeout: CHECK_MS,
@@ -302,7 +302,7 @@ export class Updater {
   private checkShim(version: string): void {
     const shim = path.join(this.layout.binDir, 'sandbox.cmd');
     // /s takes off the outer quotes, so the quoted path (Program Files has a space) needs a pair around the whole line.
-    const run = spawnSync(SYSTEM.cmd(), ['/d', '/s', '/c', '""' + shim + '" --version"'], {
+    const run = spawnSync(SYSTEM.cmd(), ['/d', '/s', '/c', '""' + shim + '" --version --short"'], {
       encoding: 'utf8',
       windowsHide: true,
       windowsVerbatimArguments: true,

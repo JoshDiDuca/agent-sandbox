@@ -128,14 +128,14 @@ sizes and what is installed already) or in `apps.install`:
 | Editors | Notepad++, Sublime Text, Neovim (VS Code: see [VS Code](#vs-code) above) |
 | Database clients | DBeaver, pgAdmin 4, HeidiSQL, DB Browser for SQLite, MongoDB Compass, Redis Insight, DbGate, Beekeeper Studio, dynamodb-admin |
 | API clients | Bruno, Insomnia |
-| Git | SourceGit, GitHub Desktop (needs git access `full`), lazygit |
+| Git | SourceGit, GitHub Desktop and Jujutsu `jj` (both need git access `full`: they push without the sandbox's git guard), lazygit |
 | Utilities | 7-Zip, WinMerge, Everything, Sysinternals Suite, ImHex (Windows Terminal is on by default) |
 | Browsers | Chrome for Testing, Firefox |
 | Game development | Godot, Blender, LÖVE, Defold, Pixelorama, Tiled (Mesa is added for OpenGL without a GPU) |
 | Cloud and Kubernetes | kubectl, Helm, k9s, Terraform, Azure CLI, Google Cloud CLI, AWS CLI |
 | Diagrams and docs | draw.io, Pandoc |
 | Network and HTTP | mitmproxy, xh, grpcurl, k6 |
-| Command-line tools | jq, yq, ripgrep, fd, bat, fzf, delta, just, hyperfine, watchexec, protoc, Ninja, FFmpeg, SQLite tools, ShellCheck, Gitleaks |
+| Command-line tools | jq, yq, ripgrep, fd, bat, fzf, delta, just, hyperfine, watchexec, protoc, Ninja, FFmpeg, SQLite tools, ShellCheck, Gitleaks, ast-grep (structural code search), rust-analyzer (Rust language server; add the `rust-src` component for the standard library) |
 
 Each is downloaded once into `C:\AgentData\tools\apps` and kept. Nothing is installed with an installer: archives are
 unpacked, installers opened with 7-Zip and MSIs extracted, so it all survives the sandbox closing. Programs get a

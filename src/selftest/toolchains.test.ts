@@ -302,6 +302,34 @@ export const toolchainsSuite: Suite = {
         !appsNeedMesa({ install: ['jq'], custom: {} }),
       'apps: 7-Zip first when an installer needs it; an app with its own git is skipped unless git access is "full"; engines bring Mesa',
     );
+    // The release files the entries were written against (GitHub, 2026-10): the x64 build matches, the others do not.
+    const pick = (id: string, files: string[]): string[] => {
+      const source = APPS.find((x) => x.id === id)?.source;
+      const re = new RegExp(source && 'github' in source ? source.asset : '$^');
+      return files.filter((f) => re.test(f));
+    };
+    t.equal(
+      [
+        pick('ast-grep', [
+          'app-aarch64-pc-windows-msvc.zip',
+          'app-i686-pc-windows-msvc.zip',
+          'app-x86_64-pc-windows-msvc.zip',
+        ]),
+        pick('jj', ['jj-v0.46.0-aarch64-pc-windows-msvc.zip', 'jj-v0.46.0-x86_64-pc-windows-msvc.zip']),
+        pick('rust-analyzer', ['rust-analyzer-i686-pc-windows-msvc.zip', 'rust-analyzer-x86_64-pc-windows-msvc.zip']),
+      ],
+      [
+        ['app-x86_64-pc-windows-msvc.zip'],
+        ['jj-v0.46.0-x86_64-pc-windows-msvc.zip'],
+        ['rust-analyzer-x86_64-pc-windows-msvc.zip'],
+      ],
+      'apps: ast-grep, Jujutsu and rust-analyzer pick the x64 Windows release file',
+    );
+    t.check(
+      appsToInstall({ install: ['jj', 'ast-grep', 'rust-analyzer'], custom: {} }, 'readonly').skipped.length === 1 &&
+        appsToInstall({ install: ['jj'], custom: {} }, 'full').entries.some((e) => e.id === 'jj'),
+      'apps: Jujutsu brings its own git, so it needs git access "full"; the other two do not',
+    );
     const custom = (app: object): boolean => ConfigSchema.shape.apps.shape.custom.safeParse({ x: app }).success;
     t.check(
       custom({ name: 'A', github: 'o/r', asset: 'win.*\\.zip$', exe: 'a.exe' }) &&

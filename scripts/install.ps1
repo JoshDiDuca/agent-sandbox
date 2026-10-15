@@ -253,6 +253,17 @@ param(
     return
   }
 
+  # An install for just you cannot work next to one for everyone: the PC's PATH comes before yours, so every sandbox
+  # command would still start the install for everyone (and an install that never runs says "OK" for nothing).
+  if (-not $machine -and -not $Uninstall -and -not $env:WDS_INSTALL_ROOT -and $env:ProgramFiles -and (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'WindowsDevelopmentSandbox\active-version'))) {
+    Problem 'There is already an install for everyone on this PC; an install for just you would never run (the PC''s PATH comes first).'
+    Write-Host '   To use the install for everyone, nothing is needed: update it with sandbox update (admin) or install again with -Scope AllUsers.'
+    Write-Host '   To switch to an install for just you, remove the one for everyone first, in an admin PowerShell:'
+    Write-Host "     & ([scriptblock]::Create((irm https://github.com/$repo/releases/latest/download/install.ps1))) -Uninstall -Scope AllUsers"
+    Write-Host '   then run this installer again with -Scope CurrentUser. Your saved data is kept.'
+    return
+  }
+
   # Uninstall ------------------------------------------------------------------------------------------------------
   if ($Uninstall) {
     Step "Removing windows-development-sandbox ($scopeName) from $toolFolder"
@@ -584,7 +595,7 @@ param(
     } finally { Remove-Inside (Join-Path $toolFolder 'staging') $toolFolder }
     $packageDir = Join-Path $versionDir 'package'
     $entry = Join-Path $packageDir 'dist\bin\sandbox.js'
-    $started = (& $nodeExe $entry --version 2>&1 | Out-String).Trim()
+    $started = (& $nodeExe $entry --version --short 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $started -ne $newVersion) { throw "version $newVersion did not start: $started" }
     Ok "version $newVersion starts"
 
@@ -602,7 +613,7 @@ param(
     $activated = $true
     Write-Pointer (Join-Path $toolFolder 'active-node') $nodeVersion '^v\d+\.\d+\.\d+$'
     Write-Pointer (Join-Path $toolFolder 'active-version') $newVersion '^\d+\.\d+\.\d+$'
-    $through = (& (Join-Path $binFolder 'sandbox.cmd') --version 2>&1 | Out-String).Trim()
+    $through = (& (Join-Path $binFolder 'sandbox.cmd') --version --short 2>&1 | Out-String).Trim()
     if ($through -ne $newVersion) { throw "the sandbox command did not run version $newVersion ($through)" }
     Ok "the sandbox command runs version $newVersion"
   } catch {
@@ -740,8 +751,37 @@ param(
       Get-ChildItem -LiteralPath $legacyNode -Force | Where-Object { $_.Name -notmatch '^v\d+\.\d+\.\d+$' } | ForEach-Object { Remove-Inside $_.FullName $legacyNode }
     }
   }
-  if ($machine -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox\bin'))) {
-    Warn "An install for just you is still in $(Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'). Remove it with: install.ps1 -Uninstall -Scope CurrentUser"
+  # Older installs next to this one: the per-user install (never runs next to an all-users one) and the pre-rename
+  # C:\Scripts\agent-sandbox layout. Each is offered for removal (default no); without a terminal only the command is shown.
+  function Remove-OlderInstall($root, $label, $removeFolder) {
+    Remove-PathEntry (Join-Path $root 'bin') $false
+    if ($removeFolder) {
+      if ((Get-Item -LiteralPath $root -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { Warn "$root is a link; left alone."; return }
+      Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+      foreach ($name in 'bin', 'node', 'versions', 'staging', 'active-version', 'active-node', 'install.json', 'update-state.json', 'update.lock') {
+        Remove-Inside (Join-Path $root $name) $root
+      }
+      if ((Test-Path -LiteralPath $root) -and -not (Get-ChildItem -LiteralPath $root -Force)) { Remove-Item -LiteralPath $root -Force -ErrorAction SilentlyContinue }
+      $oldShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Windows Development Sandbox.lnk'
+      if (Test-Path -LiteralPath $oldShortcut) { Remove-Item -LiteralPath $oldShortcut -Force -ErrorAction SilentlyContinue }
+    }
+    if (Test-Path -LiteralPath $root) { Warn "$root still has files in it (something may be using them); delete it when nothing runs." }
+    else { Ok "removed $label ($root); your saved data was not touched" }
+  }
+  $userInstall = Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'
+  if ($machine -and (Test-Path -LiteralPath (Join-Path $userInstall 'bin'))) {
+    Warn "An install for just you is in $userInstall. It never runs: the install for everyone comes first on the PATH."
+    if (-not (Ask 'Remove the install for just you now? Your saved data is kept.')) {
+      Write-Host "   Remove it later with: install.ps1 -Uninstall -Scope CurrentUser" -ForegroundColor Yellow
+    } else { Remove-OlderInstall $userInstall 'the install for just you' $false }
+  }
+  $scriptsInstall = 'C:\Scripts\agent-sandbox'
+  if (Test-Path -LiteralPath (Join-Path $scriptsInstall 'bin')) {
+    Warn "An older layout of this tool is in $scriptsInstall (its bin folder is on your PATH); it is not used any more."
+    if (-not (Ask "Delete $scriptsInstall and take it off the PATH?")) {
+      Write-Host "   Remove it later with: Remove-Item -Recurse -Force '$scriptsInstall' (and take $scriptsInstall\bin off your PATH)" -ForegroundColor Yellow
+    } else { Remove-OlderInstall $scriptsInstall 'the older layout' $true }
   }
   if ($machine -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'AgentSandbox'))) {
     # Measured, not moved: this window is an administrator, so files moved from here would end up owned by Administrators.

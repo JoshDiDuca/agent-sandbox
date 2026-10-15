@@ -2,3 +2,11 @@ export { type InstallScope, InstallLayout, compareVersions, VERSION_PATTERN, NOD
 export { shimText, readBins, writeShims } from './shims.js';
 export { InstallRecordFile, InstallRecordSchema, type InstallRecord } from './install-record.js';
 export { UpdateTask } from './scheduled-task.js';
+export {
+  machineInstall,
+  userInstall,
+  managedInstalls,
+  describeCopy,
+  hiddenInstallLine,
+  takeHiddenInstallNotice,
+} from './copies.js';

@@ -123,6 +123,15 @@ Run the one-liner again. Whichever way the old version was installed, the instal
   `sandbox config init` wrote into your config is removed when the shared folder has the data or the old one is empty;
   one you set yourself stays (and that sandbox cannot be shared).
 
+## Install for everyone and for just you do not mix
+
+The PC's PATH comes before yours, so an install for just you never runs next to one for everyone. The installer therefore
+refuses `-Scope CurrentUser` while an install for everyone exists and prints the command that removes it first (an admin
+PowerShell, `-Uninstall -Scope AllUsers`; your data is kept). With `-Scope AllUsers` it offers to remove an install for
+just you and an older `C:\Scripts\agent-sandbox` layout (default no; without a terminal it only prints the commands).
+`sandbox doctor` lists every copy of the commands on the PATH. See
+[the wrong version runs](troubleshooting.md).
+
 ## Uninstall
 
 ```powershell

@@ -13,6 +13,8 @@ import { runHealth } from '../cli/commands/repair/run.js';
 import type { Check, CheckResult, Finding, RepairEnv } from '../cli/commands/repair/types.js';
 import {
   configBackups,
+  findCommandCopies,
+  fileOnDisk,
   groupEntries,
   inspectPointers,
   lineDiff,
@@ -402,6 +404,74 @@ async function shims(t: Harness, layout: InstallLayout, env: RepairEnv): Promise
   t.check(fs.existsSync(path.join(layout.binDir, 'extra.cmd')), 'a file that is not one of ours is left alone');
 }
 
+async function copiesOnPath(t: Harness): Promise<void> {
+  t.section('install: copies of the commands on the PATH');
+  const pf = t.dir('copies', 'Program Files');
+  const managedBin = path.join(pf, 'WindowsDevelopmentSandbox', 'bin');
+  const npmBin = t.dir('copies', 'nodejs');
+  const oldBin = path.join(t.dir('copies', 'Scripts'), 'agent-sandbox', 'bin');
+  t.write(path.join(npmBin, 'sandbox.cmd'), '@echo off');
+  t.write(path.join(npmBin, 'sandbox'), '#!/bin/sh');
+  t.write(path.join(npmBin, 'node_modules', 'windows-development-sandbox', 'package.json'), '{}');
+  t.write(path.join(managedBin, 'sandbox.cmd'), '@echo off');
+  t.write(path.join(managedBin, 'claude-sbx.cmd'), '@echo off');
+  t.write(path.join(managedBin, 'claude-sbx.exe'), '');
+  t.write(path.join(oldBin, 'claude-sbx.cmd'), '@echo off');
+  const machinePath = [npmBin, managedBin].join(';');
+  const userPath = [oldBin, npmBin, t.dir('copies', 'empty')].join(';');
+  const pathext = '.COM;.EXE;.BAT;.CMD';
+  const found = findCommandCopies({
+    machinePath,
+    userPath,
+    pathext,
+    programFiles: pf,
+    localAppData: null,
+    exists: fileOnDisk,
+  });
+  t.equal(
+    found.map((c) => [c.kind, c.files.join(',')]),
+    [
+      ['npm', 'sandbox.cmd'],
+      ['managed-machine', 'sandbox.cmd,claude-sbx.exe'],
+      ['old-scripts', 'claude-sbx.cmd'],
+    ],
+    'copies come in PATH order (machine first, a folder once), each command as its PATHEXT match, extensionless files ignored',
+  );
+  const asked: string[] = [];
+  const saved = process.env.ProgramFiles;
+  process.env.ProgramFiles = pf;
+  try {
+    const system = fakeSystem({
+      registryPath: (scope) => {
+        asked.push(scope);
+        return scope === 'machine' ? machinePath : userPath;
+      },
+    });
+    const wrongOne = fakeEnv(t, 'copies-wrong', { system, ctx: { packageRoot: managedBin } as Context });
+    const { result } = await lookAt(wrongOne, 'install-copies');
+    t.check(
+      result.status === 'needs-you' &&
+        !result.fixable &&
+        result.detail.includes(npmBin) &&
+        (result.lines ?? []).some((l) => l.includes('npm uninstall -g windows-development-sandbox')) &&
+        (result.lines ?? []).some((l) => l.includes('Remove-Item -Recurse -Force') && l.includes('agent-sandbox')),
+      'an npm copy in front of the install is named as the one that runs, with the exact removal of each other copy',
+    );
+    t.check(
+      !(result.lines ?? []).some((l) => l.startsWith(managedBin)),
+      'the managed install is the one to keep: it is never offered for removal',
+    );
+    const alone = fakeEnv(t, 'copies-alone', {
+      system: fakeSystem({ registryPath: (scope) => (scope === 'machine' ? managedBin : '') }),
+      ctx: { packageRoot: managedBin } as Context,
+    });
+    t.equal((await lookAt(alone, 'install-copies')).result.status, 'ok', 'a single copy is fine');
+  } finally {
+    if (saved === undefined) delete process.env.ProgramFiles;
+    else process.env.ProgramFiles = saved;
+  }
+}
+
 async function staleState(t: Harness): Promise<void> {
   t.section('stale records, run state, launch folders, watchers');
   const record = (sid: string, session: number): Parameters<ActiveRecords['write']>[0] => ({
@@ -637,6 +707,7 @@ export const healthSuite: Suite = {
     await engine(t);
     await installChecks(t, 'pointers');
     await installChecks(t, 'shims');
+    await copiesOnPath(t);
     await staleState(t);
     parsing(t);
     backups(t);

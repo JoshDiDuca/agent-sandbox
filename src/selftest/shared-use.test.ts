@@ -12,11 +12,13 @@ import {
   ownerLine,
   ownerRule,
   sharedDataPath,
+  sharingDeps,
   takeSharingNotice,
   type ActiveSandbox,
   type AclChange,
   type SandboxOwner,
 } from '../host/sharing/index.js';
+import { takeHiddenInstallNotice } from '../host/install/index.js';
 import type { Harness } from './support/harness.js';
 import type { Suite } from './support/suite.js';
 
@@ -123,11 +125,85 @@ function lifecycle(t: Harness): void {
     calls[2].every((c) => !c.add) && records.readAll().length === 0,
     'sharing off applies the removal, never a grant; without a group only the record goes',
   );
+  // Sharing off and no group entry anywhere: nothing to remove, so the permission script is not run at all.
+  const before = calls.length;
+  const asked: string[][] = [];
+  const quiet = {
+    ...deps,
+    groupHasAccess: (dirs: readonly string[]) => {
+      asked.push([...dirs]);
+      return false;
+    },
+  };
+  beginSharing(quiet, { ...start, shared: false });
+  t.check(
+    calls.length === before && asked.length === 1 && asked[0].length === 4,
+    'sharing off with no group entry on the four folders skips the permission change',
+  );
+  beginSharing({ ...quiet, groupHasAccess: () => true }, { ...start, shared: false });
+  beginSharing({ ...quiet, groupHasAccess: () => false }, start);
+  t.check(
+    calls.length === before + 2 && !calls[before].some((c) => c.add) && calls[before + 1].every((c) => c.add),
+    'a group entry (or one that cannot be read) is removed as before, and sharing on always writes its entries',
+  );
+  const failing = {
+    ...deps,
+    groupHasAccess: () => true,
+    apply: () => {
+      throw new Error('denied');
+    },
+  };
+  let refused = false;
+  try {
+    beginSharing(failing, { ...start, shared: false });
+  } catch {
+    refused = true;
+  }
+  t.check(refused, 'a removal that fails refuses the launch');
+  endSharing(deps, dataPath);
+
+  // The all-users install is found from any copy of the program (an npm copy, a checkout), never skipped silently.
+  const savedPf = process.env.ProgramFiles;
+  const pf = t.dir('shared', 'Program Files');
+  const copy = path.join(t.dir('shared', 'npm'), 'node_modules', 'windows-development-sandbox');
+  try {
+    process.env.ProgramFiles = pf;
+    t.check(sharingDeps(copy) === null, 'with no all-users install on the PC an npm copy shares nothing');
+    t.writeJson(path.join(pf, 'WindowsDevelopmentSandbox', 'install.json'), {
+      scope: 'machine',
+      groupSid: GROUP,
+      autoUpdate: false,
+      installedAt: '2026-10-01T00:00:00Z',
+    });
+    t.equal(
+      sharingDeps(copy)?.groupSid,
+      GROUP,
+      'with one, an npm copy uses its group and shares like the installed copy',
+    );
+  } finally {
+    if (savedPf === undefined) delete process.env.ProgramFiles;
+    else process.env.ProgramFiles = savedPf;
+  }
+  const env = { ProgramFiles: pf } as NodeJS.ProcessEnv;
+  const managedPackage = path.join(pf, 'WindowsDevelopmentSandbox', 'versions', '1.5.0', 'package');
+  const line = takeHiddenInstallNotice(storage, copy, '1.5.0', env);
+  t.check(
+    (line ?? '').includes(copy) && (line ?? '').includes(path.join(pf, 'WindowsDevelopmentSandbox')),
+    'a copy that is not the managed install says where it runs and which install it hides',
+  );
+  t.check(
+    takeHiddenInstallNotice(storage, copy, '1.5.0', env) === null &&
+      takeHiddenInstallNotice(storage, copy, '1.5.1', env) !== null &&
+      takeHiddenInstallNotice(storage, managedPackage, '1.5.2', env) === null &&
+      takeHiddenInstallNotice(storage, copy, '1.5.3', {} as NodeJS.ProcessEnv) === null,
+    'the line comes once per version, never from the managed install itself, and never without an install to hide',
+  );
+  const callsBefore = calls.length;
   const own = path.join(t.dir('shared', 'profile', 'AgentSandbox'), 'data', 'default');
   beginSharing(deps, { ...start, dataPath: own });
   endSharing(deps, own);
   t.check(
-    calls.length === 3 && !fs.existsSync(path.join(own, 'run')),
+    calls.length === callsBefore && !fs.existsSync(path.join(own, 'run')),
     'a data folder outside machine\\users is never opened to the group, even with sharing on',
   );
 

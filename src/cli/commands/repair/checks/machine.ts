@@ -19,7 +19,7 @@ import {
   sharingAclPlan,
   currentUserName,
 } from '../../../../host/sharing/index.js';
-import { storageOf } from '../../../../host/storage/index.js';
+import { holdsData, storageOf } from '../../../../host/storage/index.js';
 import type { Check, Finding, FixOutcome, RepairEnv } from '../types.js';
 import { ok, plural, sameUser } from './common.js';
 
@@ -140,7 +140,10 @@ export const MACHINE_CHECKS: Check[] = [
     },
     fix: (_env: RepairEnv, finding: Finding): FixOutcome => {
       const dir = String(finding.data);
-      protectPrivateFolder(dir);
+      // A folder with files is walked file by file (a few hundred thousand take minutes), and this waits for it: the
+      // only other way is a hand-made icacls command, which is easier to get wrong than this script.
+      if (holdsData(dir)) console.log('Changing the permissions of everything in ' + dir + '. This can take minutes.');
+      protectPrivateFolder(dir, { walkAll: true });
       return { done: 'made ' + dir + ' private' };
     },
   },

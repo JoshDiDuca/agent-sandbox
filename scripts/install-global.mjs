@@ -5,6 +5,22 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// A managed install (the installer's, in Program Files or your profile) is what updates itself. An npm copy goes first
+// on the PATH and hides it, so it needs --force.
+const managedFolders = [process.env.ProgramFiles, process.env.LOCALAPPDATA]
+  .filter(Boolean)
+  .map((base) => path.join(base, 'WindowsDevelopmentSandbox'))
+  .filter((root) => fs.existsSync(path.join(root, 'active-version')) || fs.existsSync(path.join(root, 'install.json')));
+const force = process.argv.includes('--force');
+if (managedFolders.length && !force) {
+  console.error('Not installing: this PC has a managed install in ' + managedFolders.join(' and ') + '.');
+  console.error(
+    'A global npm copy would run instead of it (its folder comes first on the PATH), the installed one would',
+  );
+  console.error('stop getting updates, and fixes made there would not be the ones you run.');
+  console.error('To test this checkout anyway: npm run install:global -- --force');
+  process.exit(1);
+}
 const out = path.resolve('.pack');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out);
@@ -38,4 +54,9 @@ try {
 }
 execSync('npm install -g "' + path.join(out, tarball) + '" --no-fund --no-audit', { stdio: 'inherit' });
 fs.rmSync(out, { recursive: true, force: true });
+if (managedFolders.length) {
+  console.log('\nThe copy now hides the installed one (' + managedFolders.join(', ') + ').');
+  console.log('Undo it with: npm uninstall -g windows-development-sandbox');
+  console.log('sandbox doctor lists every copy on the PATH and says which one runs.');
+}
 console.log('\nInstalled ' + tarball + ' globally as a copy. Review what changed before you run this again.');

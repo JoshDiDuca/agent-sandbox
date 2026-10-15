@@ -7,10 +7,13 @@ import { closest, validateOptions } from './validate.js';
 import { loadConfig } from '../core/config/index.js';
 import * as commands from './commands/index.js';
 import { fail } from '../core/util/index.js';
-import { PACKAGE_ROOT } from '../core/package-info.js';
+import { PACKAGE_ROOT, packageVersion } from '../core/package-info.js';
+import { takeHiddenInstallNotice } from '../host/install/index.js';
+import { c } from './output/index.js';
 import { dropInheritedModulePath } from '../shared/system.js';
 import { withConfig, hoistConfig, withoutConfig } from './argv.js';
 import { report } from './report.js';
+import { versionText } from './version.js';
 import { HANDLERS } from './commands/index.js';
 
 const entry = path.join(PACKAGE_ROOT, 'dist', 'bin', 'agent-sandbox.js');
@@ -29,6 +32,16 @@ function failOnTypo(word: string, agents: readonly string[]): void {
       'Unknown command "' + word + '". Did you mean: sandbox ' + hint + '?',
       'Run sandbox --help for the list of commands, or sandbox for the menu.',
     );
+}
+
+/** One yellow line, once per version, when this is not the managed install but one exists (it is hidden). */
+function hiddenInstallNotice(storageRoot: string): void {
+  try {
+    const line = takeHiddenInstallNotice(storageRoot, PACKAGE_ROOT, packageVersion());
+    if (line) console.log(c.yellow(line));
+  } catch {
+    // A note that cannot be saved is not worth stopping a start for.
+  }
 }
 
 /** Runs an argv from the menu exactly as if it had been typed, reporting errors instead of throwing. */
@@ -53,6 +66,11 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     }
   };
   if (!preset.command && !preset.harness) {
+    const version = versionText(withoutConfig(argv), PACKAGE_ROOT);
+    if (version !== null) {
+      console.log(version);
+      return 0;
+    }
     if (argv.length === 0)
       return process.stdin.isTTY ? main(['menu']) : (buildProgram(() => undefined).outputHelp(), 0);
     if (isAgent(argv[0])) return main(argv.slice(1), { harness: argv[0] });
@@ -77,6 +95,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
       : argv;
   if (options.command === 'menu') {
     const menuCtx = commands.createContext(PACKAGE_ROOT, entry, options);
+    hiddenInstallNotice(menuCtx.storageRoot);
     await commands.migrateBeforeCommand(menuCtx, options.command);
     commands.updatesBeforeCommand(entry, options.command);
     await commands.storageBeforeCommand(menuCtx, options.command);
@@ -100,6 +119,7 @@ export async function main(rawArgv: string[], preset: Preset = {}): Promise<numb
     );
   const ctx = commands.createContext(PACKAGE_ROOT, entry, options);
   validateOptions(ctx);
+  if (options.command === 'launch') hiddenInstallNotice(ctx.storageRoot);
   await commands.migrateBeforeCommand(ctx, options.command);
   commands.updatesBeforeCommand(entry, options.command);
   await commands.storageBeforeCommand(ctx, options.command);

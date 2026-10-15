@@ -53,6 +53,12 @@ To work on this tool with an agent in its own sandbox, install it as a copy (`np
 `npm install -g .`. A linked install would let the sandboxed agent edit the code your PC runs. With a copy, the
 agent's changes only reach your PC when you review them and install again.
 
+`npm run install:global` refuses when this PC has a managed install (`%ProgramFiles%\WindowsDevelopmentSandbox` or
+`%LOCALAPPDATA%\WindowsDevelopmentSandbox`). The copy would go first on the PATH and hide it, the installed one would stop
+getting updates, and a fix patched into the installed one would not be the one you run. To test a checkout anyway, run
+`npm run install:global -- --force`; it prints how to undo it (`npm uninstall -g windows-development-sandbox`).
+`sandbox doctor` lists every copy on the PATH, and `sandbox --version` says where the running one is.
+
 ## Inside the sandbox
 
 Project scripts can check `AGENT_SANDBOX=1` to know they run in the sandbox, and `AGENT_SANDBOX_WORKSPACE` for the
