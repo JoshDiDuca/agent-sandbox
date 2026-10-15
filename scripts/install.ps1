@@ -11,6 +11,10 @@
 #                                 once when neither is given.
 #   -Uninstall [-RemoveData]      Remove the program (and, with -RemoveData, the saved data, after you type DELETE; or
 #                                 pass -Confirm:$false). Env WDS_UNINSTALL=1, WDS_REMOVEDATA=1.
+#   -Version x.y.z                Install this release instead of the latest, also an older one than the installed one
+#                                 (env WDS_VERSION). Your saved data is never touched.
+# If an upgrade fails after it started changing the install, the previous version is put back (pointers and commands),
+# automatic updates are switched off (and the scheduled task removed for AllUsers) and the message says so.
 # Other environment variables: WDS_PACKAGE (install this tgz or URL instead of the latest release), WDS_SHA256 (its
 # checksum), WDS_ALLOW_UNVERIFIED=1 (install a release GitHub lists no checksum for), WDS_INSTALL_ROOT (CurrentUser: the
 # install folder, default %LOCALAPPDATA%\WindowsDevelopmentSandbox).
@@ -27,6 +31,8 @@ param(
   [switch]$NoShare,
   [switch]$Uninstall,
   [switch]$RemoveData,
+  # An exact release to install (also an older one than the installed version); empty: the latest.
+  [ValidatePattern('^(\d+\.\d+\.\d+)?$')][string]$Version = $env:WDS_VERSION,
   # Test aid: prints the text of one shim as kind:name:target (cmd:sandbox:dist/bin/sandbox.js) and stops.
   [string]$PrintShim
 )
@@ -268,7 +274,10 @@ param(
     if (Test-Path -LiteralPath $toolFolder) { Warn "$toolFolder still has files in it (something may be using them); delete it when nothing runs." }
     elseif ($wasInstalled) { Ok 'program removed' }
     else { Write-Host '   Nothing was installed there.' }
-    $dataFolder = if ($machine) { $machineData } else { Join-Path $env:LOCALAPPDATA 'AgentSandbox' }
+    # Just you: the shared per-user folder is the default now; data an older version left in your profile still counts.
+    $userData = Join-Path $env:LOCALAPPDATA 'AgentSandbox'
+    if (-not $machine -and -not (Test-Path -LiteralPath $userData)) { $userData = Join-Path $machineData "users\$env:USERNAME" }
+    $dataFolder = if ($machine) { $machineData } else { $userData }
     if (-not $RemoveData) {
       Write-Host "   Your saved data is kept in $dataFolder. To delete it too: install.ps1 -Uninstall -Scope $scopeName -RemoveData"
     } elseif (Test-Path -LiteralPath $dataFolder) {
@@ -351,12 +360,67 @@ param(
     }
   }
 
+  function Disable-AutoUpdate($reason) {
+    # A failed install must not retry by itself: switch updates off in install.json and, for everyone, remove the scheduled
+    # task (this window is an administrator then). Never throws: a task that stays still reads install.json and does nothing.
+    try {
+      $file = Join-Path $toolFolder 'install.json'
+      if (Test-Path -LiteralPath $file) {
+        $settings = Get-Content -LiteralPath $file -Raw -ErrorAction Stop | ConvertFrom-Json
+        $settings | Add-Member -NotePropertyName autoUpdate -NotePropertyValue $false -Force
+        Write-JsonAtomic $file $settings
+      }
+    } catch { Warn "Could not switch off automatic updates in install.json: $_" }
+    if ($machine) {
+      try {
+        $current = Read-Pointer (Join-Path $toolFolder 'active-version') '^\d+\.\d+\.\d+$'
+        $taskScript = if ($current) { Join-Path $toolFolder "versions\$current\package\native\scripts\set-update-task.ps1" } else { $null }
+        if ($taskScript -and (Test-Path -LiteralPath $taskScript)) { & $powershellExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $taskScript -Remove | Out-Null }
+      } catch { }
+    }
+    Write-Host "   Automatic updates are off ($reason). Turn them back on with: sandbox update --auto on" -ForegroundColor Yellow
+  }
+
   # 4. What is installed now -------------------------------------------------------------------------------------
   Step 'Looking for an earlier install'
   $oldVersion = Read-Pointer (Join-Path $toolFolder 'active-version') '^\d+\.\d+\.\d+$'
   $oldNode = Read-Pointer (Join-Path $toolFolder 'active-node') '^v\d+\.\d+\.\d+$'
   $record = $null
   try { $record = Get-Content -LiteralPath (Join-Path $toolFolder 'install.json') -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
+  # The commands of the version being replaced: its shims are put back if the new version fails.
+  $oldBins = @{}
+  if ($oldVersion) {
+    try {
+      $oldMeta = Get-Content -LiteralPath (Join-Path $toolFolder "versions\$oldVersion\package\package.json") -Raw -ErrorAction Stop | ConvertFrom-Json
+      if ($oldMeta.bin) { foreach ($property in $oldMeta.bin.PSObject.Properties) { $oldBins[$property.Name] = [string]$property.Value } }
+    } catch { }
+    if (-not $oldBins.Count) { $oldBins['sandbox'] = 'dist/bin/sandbox.js' }
+  }
+  $packageFetched = $false
+  $restoreFailed = $false
+  function Restore-Previous($newBins, $shimsTouched, $pointersTouched) {
+    # Puts the replaced version back: its pointers (when it is a different folder from the new one) and its shims, and
+    # drops the commands only the new version had. Returns $true when the old version runs again.
+    $ok = $true
+    if (-not $oldVersion -or -not $oldNode) { return $false }
+    if (($oldVersion -eq $newVersion -and -not $asideRestored) -or -not (Test-Path -LiteralPath (Join-Path $toolFolder "versions\$oldVersion\package\package.json"))) { return $false }
+    try {
+      if ($pointersTouched) {
+        Write-Pointer (Join-Path $toolFolder 'active-node') $oldNode '^v\d+\.\d+\.\d+$'
+        Write-Pointer (Join-Path $toolFolder 'active-version') $oldVersion '^\d+\.\d+\.\d+$'
+      }
+      if ($shimsTouched) {
+        foreach ($command in $oldBins.Keys) {
+          Write-AsciiAtomic (Join-Path $binFolder "$command.cmd") (Get-ShimText 'cmd' $command $oldBins[$command])
+          Write-AsciiAtomic (Join-Path $binFolder $command) (Get-ShimText 'sh' $command $oldBins[$command])
+        }
+        foreach ($command in @($newBins.Keys)) {
+          if (-not $oldBins.ContainsKey($command)) { Remove-Item -LiteralPath (Join-Path $binFolder "$command.cmd"), (Join-Path $binFolder $command) -Force -ErrorAction SilentlyContinue }
+        }
+      }
+    } catch { Warn "Could not go back to version ${oldVersion}: $_"; $ok = $false }
+    return $ok
+  }
   # npm globals (the package under either name) and the 1.x private Node that ran them.
   $legacyNode = Join-Path $toolFolder 'node'
   $legacyNpms = New-Object System.Collections.Generic.List[string]
@@ -440,6 +504,7 @@ param(
       if ($env:WDS_PACKAGE -match '^https?://') {
         $tgz = Join-Path $download 'package.tgz'
         Download-File $env:WDS_PACKAGE $tgz
+        $packageFetched = $true
       } elseif (Test-Path -LiteralPath $env:WDS_PACKAGE -PathType Leaf) { $tgz = (Resolve-Path -LiteralPath $env:WDS_PACKAGE).ProviderPath }
       else { throw "WDS_PACKAGE ($env:WDS_PACKAGE) is not a file or an https address" }
       if ($env:WDS_SHA256) {
@@ -447,7 +512,8 @@ param(
         Ok 'package found and its SHA-256 matches WDS_SHA256'
       } else { Warn 'Installing the package named in WDS_PACKAGE as given (no WDS_SHA256 to check it against).' }
     } else {
-      $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing -Headers @{ 'User-Agent' = 'windows-development-sandbox-installer' }
+      $releaseUrl = if ($Version) { "https://api.github.com/repos/$repo/releases/tags/v$Version" } else { "https://api.github.com/repos/$repo/releases/latest" }
+      $release = Invoke-RestMethod $releaseUrl -UseBasicParsing -Headers @{ 'User-Agent' = 'windows-development-sandbox-installer' }
       $asset = @($release.assets | Where-Object { $_.name -match '^windows-development-sandbox-\d+\.\d+\.\d+\.tgz$' })[0]
       if (-not $asset) { throw 'the release has no windows-development-sandbox-x.y.z.tgz' }
       $expected = if ("$($asset.digest)" -match '^sha256:([0-9a-fA-F]{64})$') { $Matches[1] } else { $null }
@@ -462,6 +528,7 @@ param(
       }
       $tgz = Join-Path $download $asset.name
       Download-File $asset.browser_download_url $tgz
+      $packageFetched = $true
       if ($expected) {
         if (-not (Test-Sha256 $tgz $expected)) { throw 'the download does not match the SHA-256 GitHub lists for it' }
         Ok 'package downloaded and its SHA-256 matches'
@@ -471,6 +538,12 @@ param(
   } catch {
     Problem "Could not get the package: $_"
     Remove-Inside $download $toolFolder
+    # Nothing was changed yet, so the earlier version still runs. A package that arrived but was refused (checksum) is a
+    # failed install: automatic updates go off. No download at all (the network) is not: the next try may work.
+    if ($oldVersion -and $packageFetched) {
+      Write-Host "   Nothing was changed: you are still on version $oldVersion."
+      Disable-AutoUpdate 'the package did not pass its checks'
+    }
     return
   }
 
@@ -478,7 +551,11 @@ param(
   Step "Installing into $toolFolder"
   $newVersion = $null
   $createdVersion = $false
+  $asideDir = $null
+  $asideRestored = $false
   $activated = $false
+  $shimsTouched = $false
+  $bins = @{}
   try {
     Stop-Watchers
     $stage = Join-Path $toolFolder ('staging\' + [guid]::NewGuid().ToString('N'))
@@ -492,10 +569,14 @@ param(
       if ($meta.name -ne $packageName) { throw "the package is $($meta.name), not $packageName" }
       if ("$($meta.version)" -notmatch '^\d+\.\d+\.\d+$') { throw "the package has no x.y.z version ($($meta.version))" }
       $newVersion = "$($meta.version)"
+      if ($oldVersion -and ([version]$newVersion) -lt ([version]$oldVersion)) { Write-Host "   Installing an older version: $newVersion over $oldVersion. Your saved data is not touched." -ForegroundColor Yellow }
       $versionDir = Join-Path $toolFolder "versions\$newVersion"
       if (Test-Path -LiteralPath $versionDir) {
-        Remove-Inside $versionDir (Join-Path $toolFolder 'versions')
-        if (Test-Path -LiteralPath $versionDir) { throw "version $newVersion is installed and in use; close the sandbox and every terminal running it, then try again" }
+        # A reinstall of the same version: the installed copy waits aside until the new one works, so a failure can put
+        # it back. The name is not x.y.z, so nothing takes it for an installed version.
+        $asideDir = Join-Path $toolFolder ("versions\$newVersion.previous-" + [guid]::NewGuid().ToString('N'))
+        try { Move-Item -LiteralPath $versionDir -Destination $asideDir -ErrorAction Stop }
+        catch { $asideDir = $null; throw "version $newVersion is installed and in use; close the sandbox and every terminal running it, then try again" }
       }
       New-Item -ItemType Directory -Force (Join-Path $toolFolder 'versions') | Out-Null
       Move-Item -LiteralPath $stage -Destination $versionDir
@@ -512,23 +593,34 @@ param(
     if ($meta.bin) { foreach ($property in $meta.bin.PSObject.Properties) { $bins[$property.Name] = [string]$property.Value } }
     if (-not $bins.ContainsKey('sandbox')) { throw 'the package has no sandbox command' }
     New-Item -ItemType Directory -Force $binFolder | Out-Null
+    $shimsTouched = $true
     foreach ($command in $bins.Keys) {
       Write-AsciiAtomic (Join-Path $binFolder "$command.cmd") (Get-ShimText 'cmd' $command $bins[$command])
       Write-AsciiAtomic (Join-Path $binFolder $command) (Get-ShimText 'sh' $command $bins[$command])
     }
     foreach ($wrapper in $legacyWrappers) { if (-not $bins.ContainsKey([IO.Path]::GetFileNameWithoutExtension($wrapper.Name))) { Remove-Item -LiteralPath $wrapper.FullName -Force -ErrorAction SilentlyContinue } }
+    $activated = $true
     Write-Pointer (Join-Path $toolFolder 'active-node') $nodeVersion '^v\d+\.\d+\.\d+$'
     Write-Pointer (Join-Path $toolFolder 'active-version') $newVersion '^\d+\.\d+\.\d+$'
-    $activated = $true
     $through = (& (Join-Path $binFolder 'sandbox.cmd') --version 2>&1 | Out-String).Trim()
     if ($through -ne $newVersion) { throw "the sandbox command did not run version $newVersion ($through)" }
     Ok "the sandbox command runs version $newVersion"
   } catch {
     Problem "Could not install: $_"
-    if ($activated) {
-      if ($oldVersion -and $oldNode) {
-        try { Write-Pointer (Join-Path $toolFolder 'active-node') $oldNode '^v\d+\.\d+\.\d+$'; Write-Pointer (Join-Path $toolFolder 'active-version') $oldVersion '^\d+\.\d+\.\d+$'; Write-Host "   Went back to version $oldVersion." } catch { Warn "Could not go back to version ${oldVersion}: $_" }
+    if ($asideDir -and (Test-Path -LiteralPath $asideDir)) {
+      # The same version was being reinstalled: the copy that worked goes back in place.
+      if ($createdVersion) { Remove-Inside $versionDir (Join-Path $toolFolder 'versions') }
+      if (-not (Test-Path -LiteralPath $versionDir)) {
+        try { Move-Item -LiteralPath $asideDir -Destination $versionDir -ErrorAction Stop; $asideRestored = $true } catch { Warn "Could not put the installed copy back from ${asideDir}: $_" }
       }
+      $createdVersion = $false
+    }
+    if ($oldVersion) {
+      # An upgrade or reinstall: put the earlier version back (pointers and commands) before anything else.
+      $wentBack = Restore-Previous $bins $shimsTouched $activated
+      if ($wentBack) { Write-Host "   The install was undone: you are on version $oldVersion again." -ForegroundColor Yellow }
+      else { Warn "Could not put version $oldVersion back by itself. Run this installer again to repair the install." }
+      Disable-AutoUpdate 'the install failed'
     }
     if ($createdVersion -and -not ($oldVersion -and $oldVersion -eq $newVersion)) { Remove-Inside (Join-Path $toolFolder "versions\$newVersion") (Join-Path $toolFolder 'versions') }
     Remove-Inside $download $toolFolder
@@ -572,9 +664,12 @@ param(
         $item = Get-Item -LiteralPath $path -Force
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "refusing a link: $path" }
         $acl = Get-Acl -LiteralPath $path
+        $before = $acl.GetSecurityDescriptorSddlForm('Access')
         $acl.SetAccessRuleProtection($true, $false)
         foreach ($existing in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($existing) }
         foreach ($rule in $rules) { $acl.AddAccessRule($rule) }
+        # Set-Acl re-walks everything below (every user's storage: minutes), so only a folder that differs is written.
+        if ($acl.GetSecurityDescriptorSddlForm('Access') -eq $before) { return }
         Set-Acl -LiteralPath $path -AclObject $acl
       }
       $both = 'ContainerInherit, ObjectInherit'
@@ -649,7 +744,11 @@ param(
     Warn "An install for just you is still in $(Join-Path $env:LOCALAPPDATA 'WindowsDevelopmentSandbox'). Remove it with: install.ps1 -Uninstall -Scope CurrentUser"
   }
   if ($machine -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'AgentSandbox'))) {
-    Warn "Your earlier saved data in $(Join-Path $env:LOCALAPPDATA 'AgentSandbox') is not used by the all-users install (it keeps data in $machineData\users\<name>); copy what you want to keep."
+    # Measured, not moved: this window is an administrator, so files moved from here would end up owned by Administrators.
+    $oldData = Join-Path $env:LOCALAPPDATA 'AgentSandbox'
+    $dataBytes = [long]((Get-ChildItem -LiteralPath $oldData -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum)
+    $dataSize = if ($dataBytes -ge 1GB) { '{0:N1} GB' -f ($dataBytes / 1GB) } elseif ($dataBytes -ge 1MB) { '{0:N0} MB' -f ($dataBytes / 1MB) } else { '{0:N0} KB' -f [math]::Ceiling($dataBytes / 1KB) }
+    Write-Host "   Your earlier saved data is in $oldData ($dataSize). The first time you run sandbox (in a normal terminal) it offers to move it to $machineData\users\<your name> - nothing is moved without asking." -ForegroundColor Cyan
   }
 
   # 11. Settings and check ---------------------------------------------------------------------------------------------
@@ -660,9 +759,22 @@ param(
   } else {
     Step 'Bringing your saved settings up to date'
     & $cli migrate
+    if ($LASTEXITCODE -ne 0 -and $oldVersion -and $oldVersion -ne $newVersion) {
+      # The new version cannot read your settings: undo the upgrade (your saved data is untouched).
+      Problem "Version $newVersion could not bring your saved settings up to date (exit code $LASTEXITCODE)."
+      if (Restore-Previous $bins $true $true) {
+        Write-Host "   The install was undone: you are on version $oldVersion again." -ForegroundColor Yellow
+        Remove-Inside (Join-Path $toolFolder "versions\$newVersion") (Join-Path $toolFolder 'versions')
+      } else { Warn "Could not put version $oldVersion back by itself. Run this installer again to repair the install." }
+      Disable-AutoUpdate 'the install failed'
+      return
+    }
     Step 'Checking everything with sandbox doctor'
     & $cli doctor
   }
+
+  # The new copy of a reinstalled version works: the old one kept aside can go.
+  if ($asideDir -and (Test-Path -LiteralPath $asideDir)) { Remove-Inside $asideDir (Join-Path $toolFolder 'versions') }
 
   # Summary ------------------------------------------------------------------------------------------------------
   Write-Host ''

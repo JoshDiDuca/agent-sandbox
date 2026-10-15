@@ -1,4 +1,5 @@
 import { userDir } from '../../../core/config/index.js';
+import { askRequired } from '../../../core/prompt.js';
 import { errMsg } from '../../../core/util/index.js';
 import { PACKAGE_ROOT } from '../../../core/package-info.js';
 import { insideSandbox, spawnDetached } from '../../../host/sandbox/index.js';
@@ -12,6 +13,8 @@ export interface UpdateRequest {
   readonly rollback: boolean;
   readonly auto?: 'on' | 'off';
   readonly unattended: boolean;
+  /** Do not ask before going back. */
+  readonly yes?: boolean;
 }
 
 /** One sentence for what an update run did, and whether it counts as done. */
@@ -34,8 +37,14 @@ export function describeResult(result: UpdateResult | null, unattended: boolean)
         result.version +
         ' failed: ' +
         result.reason.replace(/\.?\s*$/, '.') +
-        ' Still on the version you had.' +
-        (result.blocked ? ' It is not tried again; the next release is.' : ' It is tried again later.'),
+        (result.rolledBack
+          ? ' The change was undone: you are on the version you had.'
+          : ' Going back to your previous version did not fully work: run sandbox update --rollback or the installer.') +
+        (result.autoUpdateOff
+          ? ' Automatic updates are off; turn them back on in Maintenance > Updates or with sandbox update --auto on.'
+          : result.blocked
+            ? ' It is not tried again; the next release is.'
+            : ' It is tried again later.'),
       code: 1,
     };
   switch (result.reason) {
@@ -68,12 +77,26 @@ export async function runUpdate(
     print('This copy was installed with npm. Update it with: ' + NPM_UPDATE_COMMAND);
     return 0;
   }
+  // The scheduled task (it may outlive a removal that needed admin) and background starts only run when updates are on.
+  if (request.unattended && !request.auto && !service.status().autoUpdate) return 0;
   if (request.auto) {
     service.setAuto(request.auto === 'on');
     print('Automatic updates are ' + request.auto + '.');
     return 0;
   }
   if (request.rollback) {
+    const { version, state } = service.status();
+    const target = state.previous ? 'version ' + state.previous : 'the version before the last update';
+    if (
+      !request.yes &&
+      !(await askRequired(
+        'Go back from version ' + version + ' to ' + target + '?',
+        'Add --yes to go back without asking.',
+      ))
+    ) {
+      print('Nothing was changed.');
+      return 1;
+    }
     print('Went back to version ' + service.rollback() + '.');
     return 0;
   }
@@ -95,13 +118,19 @@ export function update(options: CliOptions): Promise<number> {
   const service = UpdateService.forPackage(PACKAGE_ROOT, options.feed, { userDir: userDir() });
   return runUpdate(
     service,
-    { check: options.check, rollback: options.rollback, auto: options.autoUpdate, unattended: options.unattended },
+    {
+      check: options.check,
+      rollback: options.rollback,
+      auto: options.autoUpdate,
+      unattended: options.unattended,
+      yes: options.yes,
+    },
     (line) => console.log(line),
   );
 }
 
 /** Commands that never look for updates first: they are how updates run, or they must stay quiet. */
-const NO_STARTUP_UPDATE: readonly string[] = ['self-test', 'update', '_watch'];
+const NO_STARTUP_UPDATE: readonly string[] = ['self-test', 'update', '_watch', '_web'];
 
 /**
  * At the start of a command: tells this user once about an update that ran without them, and (current-user installs

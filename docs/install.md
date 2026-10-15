@@ -30,7 +30,7 @@ install themselves, and runs `sandbox doctor`.
 |---|---|---|
 | Program | `%LOCALAPPDATA%\WindowsDevelopmentSandbox` | `%ProgramFiles%\WindowsDevelopmentSandbox` (only administrators change it) |
 | PATH and Start menu | yours | the whole PC's |
-| Saved data (accounts, history, storage) | `%LOCALAPPDATA%\AgentSandbox` | `%ProgramData%\AgentSandbox\users\<name>`, one private folder per user |
+| Saved data (accounts, history, storage) | `%ProgramData%\AgentSandbox\users\<name>` (private to you); an earlier `%LOCALAPPDATA%\AgentSandbox` stays in use until you move it | `%ProgramData%\AgentSandbox\users\<name>`, one private folder per user |
 | Admin rights | only to turn on Windows Sandbox | once, to install |
 | Automatic updates | checked when you start a command | a scheduled task at 03:00 |
 
@@ -58,6 +58,7 @@ The one-liner takes no options. To pass them, run the script as a script block:
 | `-Share` / `-NoShare` | `WDS_SHARE=1` / `0` | everyone: answer the sharing question (also changes it on a later run) |
 | `-Uninstall` | `WDS_UNINSTALL=1` | remove the program, PATH entry, shortcut and scheduled task; your data stays |
 | `-RemoveData` | `WDS_REMOVEDATA=1` | with `-Uninstall`: also delete saved data, after you type `DELETE` (`-Confirm:$false` skips that) |
+| `-Version x.y.z` | `WDS_VERSION` | install this release instead of the latest (also an older one) |
 | | `WDS_PACKAGE`, `WDS_SHA256` | install this package (a file or https address) instead of the latest release, checked against that checksum |
 | | `WDS_ALLOW_UNVERIFIED=1` | install a release GitHub lists no SHA-256 for |
 
@@ -89,7 +90,24 @@ again until a newer one exists.
 `sandbox update --auto on` makes this happen by itself. For one user it is checked when you start a command, at most
 once a day. For everyone it is the scheduled task `\WindowsDevelopmentSandbox\Update` (daily 03:00, up to an hour of
 random delay, as SYSTEM); switching that needs an admin terminal. After an automatic update you are told once on your
-next command ("Updated to 1.6.0", or "Update to 1.6.0 failed; still on 1.5.2").
+next command ("Updated to 1.6.0", or that the update failed and was undone).
+
+### When an install fails
+
+An update or an installer run that fails after it started changing the install (bad checksum, unpackable or broken
+package, a version that does not start, the commands or pointers cannot be switched, `sandbox migrate` fails) puts the
+previous version back: the active-version and active-node pointers and the commands in `bin\`. The half-installed
+version is deleted and **automatic updates are switched off** (`autoUpdate: false` in `install.json`; for everyone the
+scheduled task is removed too, and a task that stays does nothing because it reads `install.json`). You are told once:
+"The update to X failed and was undone (you are on Y). Automatic updates are off; turn them back on in Maintenance >
+Updates or with `sandbox update --auto on`." A plain network error before anything arrived changes nothing and leaves
+automatic updates on. Your saved data is never touched.
+
+### Rolling back and installing an older version
+
+`sandbox update --rollback` returns to the version the last update replaced (pointers and commands). To go further back,
+run the installer with `-Version x.y.z` (`WDS_VERSION`), for example `-Version 1.4.0`; it says "Installing an older
+version: 1.4.0 over 1.5.0". The data folder is pinned in your settings when it moves, so an older version still finds it.
 
 ## Upgrading from an older version
 
@@ -99,10 +117,11 @@ Run the one-liner again. Whichever way the old version was installed, the instal
   wrappers are replaced by the new commands at the same place (so your PATH entry stays);
 - your saved settings are brought up to date by `sandbox migrate` (a backup is kept first; `--dry-run` lists what it
   would change, `--restore <backup>` puts a backup back);
-- moving from just you to everyone: your data stays in `%LOCALAPPDATA%\AgentSandbox` and the installer says so. The
-  all-users install keeps it in `%ProgramData%\AgentSandbox\users\<you>`, so copy what you want to keep (saved accounts:
-  `accounts`). A storage folder that an old `sandbox config init` wrote into your config is removed, so the shared one
-  is used; one you set yourself stays (and that sandbox cannot be shared).
+- moving from just you to everyone: your data stays where it is until you move it. The next `sandbox` command (or the
+  menu) offers to move it to `%ProgramData%\AgentSandbox\users\<you>` with its size and time; `sandbox storage move`
+  does it any time ([where your data is kept](configuration.md#where-your-data-is-kept)). A storage folder that an old
+  `sandbox config init` wrote into your config is removed when the shared folder has the data or the old one is empty;
+  one you set yourself stays (and that sandbox cannot be shared).
 
 ## Uninstall
 

@@ -8,6 +8,8 @@ const StateSchema = z.object({
   lastCheck: z.string().optional(),
   previous: z.string().optional(),
   failed: z.object({ version: z.string(), at: z.string(), reason: z.string() }).optional(),
+  /** Why automatic updates were switched off: `version` failed to install and `current` was put back. */
+  autoOff: z.object({ version: z.string(), current: z.string(), reason: z.string(), at: z.string() }).optional(),
   lastResult: z.object({ version: z.string(), ok: z.boolean(), at: z.string() }).optional(),
 });
 

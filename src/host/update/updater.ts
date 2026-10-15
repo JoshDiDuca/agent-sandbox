@@ -1,7 +1,7 @@
 // Installs a newer release next to the active one, checks that it starts (directly and through the shim), and only then
-// moves the pointers to it. Any failure leaves the active version as it was and deletes what was made. A fault of the
-// release itself (BadRelease) records the version as failed: it is not tried again until a newer one exists. Anything
-// else (the network, a locked file) is retried by the next check. A rollback moves the pointers back.
+// moves the pointers to it. Any failure puts the previous version back (pointers and shims) and deletes what was made.
+// A fault of the release itself (BadRelease) records the version as failed: it is not tried again until a newer one
+// exists. A failed install also turns automatic updates off (`turnAutoUpdateOff`). A rollback moves the pointers back.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,6 +15,7 @@ import { safeRemove } from '../../shared/io/index.js';
 import { testWriteRefusal } from '../../shared/test-guard.js';
 import { refuseInSelfTest } from '../test-guard.js';
 import type { InstallLayout } from '../install/layout.js';
+import { InstallRecordFile } from '../install/install-record.js';
 import { readBins, writeShims } from '../install/shims.js';
 import { decideUpdate, type SkipReason } from './decision.js';
 import { GithubReleases, type ReleaseInfo, type ReleaseSource } from './release-source.js';
@@ -34,6 +35,8 @@ export interface UpdaterOptions {
   /** How long to wait between two looks at GitHub (not for `force`). */
   minHoursBetweenChecks?: number;
   downloader?: Downloader;
+  /** The scheduled task of an all-users install: removed when a failed install turns automatic updates off. */
+  task?: { remove(): void } | null;
 }
 
 export interface RunOptions {
@@ -47,7 +50,16 @@ export type UpdateResult =
   | { kind: 'skipped'; reason: SkipReason; current: string }
   | { kind: 'installed'; version: string; previous: string | null }
   /** blocked: the version is recorded as failed and not tried again until a newer one exists. */
-  | { kind: 'failed'; version: string; reason: string; blocked: boolean };
+  | {
+      kind: 'failed';
+      version: string;
+      reason: string;
+      blocked: boolean;
+      /** The previous version is active again (pointers and shims), or was never left. */
+      rolledBack: boolean;
+      /** This failure switched automatic updates off (they were on). */
+      autoUpdateOff: boolean;
+    };
 
 /** The release itself is broken: wrong bytes, an unreadable archive, the wrong package, or it does not start. */
 class BadRelease extends Error {}
@@ -63,6 +75,7 @@ export class Updater {
   private readonly now: () => Date;
   private readonly minHours: number;
   private readonly downloader: Downloader;
+  private readonly task: { remove(): void } | null;
 
   constructor(
     private readonly layout: InstallLayout,
@@ -73,6 +86,7 @@ export class Updater {
     this.now = options.now ?? (() => new Date());
     this.minHours = options.minHoursBetweenChecks ?? 24;
     this.downloader = options.downloader ?? new Downloader();
+    this.task = options.task ?? null;
   }
 
   /** Looks for a newer release (unless the time gate says not yet) and installs it if it is verified. */
@@ -106,6 +120,9 @@ export class Updater {
       fail('There is no earlier version to go back to.', 'Only a version an update replaced can be restored.');
     if (!this.layout.installedVersions().includes(target))
       fail(target + ' is no longer installed.', 'Install it again with the installer.');
+    // The shims of the target first (it may have other commands), then the pointers.
+    const bins = this.binsOf(target);
+    if (bins) writeShims(this.layout, bins);
     this.layout.setActive(target, node);
     // The version we leave is now the one a second rollback returns to.
     this.state.update((s) => ({ ...s, previous: current }));
@@ -116,28 +133,39 @@ export class Updater {
     const version = release.version;
     const archive = path.join(this.layout.root, 'staging', version + '.tgz');
     const work = this.layout.versionDir(version) + '.staging';
-    let activated = false;
+    const previousBins = this.binsOf(current);
+    let downloaded = false;
+    let shimsWritten = false;
+    let pointersMoved = false;
+    let newBins: Record<string, string> = {};
     try {
       await this.download(release, archive);
+      downloaded = true;
       safeRemove(work, this.layout.versionsDir);
       await extractArchive(archive, work).catch((e: unknown) => {
         throw new BadRelease('The release archive could not be unpacked: ' + errMsg(e));
       });
-      const bins = this.checkPackage(work, version);
+      newBins = this.checkPackage(work, version);
       moveIntoPlace(work, this.layout.versionDir(version));
-      writeShims(this.layout, bins);
+      shimsWritten = true;
+      writeShims(this.layout, newBins);
       this.checkEntry(version, node);
+      pointersMoved = true;
       this.layout.setActive(version, node);
-      activated = true;
       this.checkShim(version);
     } catch (e) {
       const reason = errMsg(e);
-      if (activated) this.layout.setActive(current, node);
+      const changed = pointersMoved || shimsWritten;
+      const rolledBack = changed ? this.restore(current, node, previousBins, newBins, pointersMoved) : true;
       this.discard(work, version);
       const blocked = e instanceof BadRelease;
       if (blocked) this.recordFailure(version, reason);
       else this.recordAttempt(version, false);
-      return { kind: 'failed', version, reason, blocked };
+      // A plain network error before anything arrived changed nothing and says nothing about this release: the next
+      // check tries again. Every other failure is a failure of the install itself, so the machine must stop trying
+      // by itself until the user turns updates back on.
+      const autoUpdateOff = blocked || downloaded ? this.turnAutoUpdateOff(version, current, reason) : false;
+      return { kind: 'failed', version, reason, blocked, rolledBack, autoUpdateOff };
     } finally {
       try {
         safeRemove(archive, path.join(this.layout.root, 'staging'));
@@ -147,6 +175,67 @@ export class Updater {
     }
     this.finish(version, current);
     return { kind: 'installed', version, previous: current };
+  }
+
+  /** The commands a version's package.json declares, or null when it cannot be read. */
+  private binsOf(version: string): Record<string, string> | null {
+    try {
+      return readBins(JSON.parse(fs.readFileSync(path.join(this.layout.packageDir(version), 'package.json'), 'utf8')));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Puts the previous version's pointers and shims back and drops shims only the new one had. False: it failed. */
+  private restore(
+    current: string,
+    node: string,
+    previousBins: Record<string, string> | null,
+    newBins: Record<string, string>,
+    pointersMoved: boolean,
+  ): boolean {
+    let ok = true;
+    try {
+      if (pointersMoved) this.layout.setActive(current, node);
+    } catch {
+      ok = false;
+    }
+    try {
+      if (previousBins) {
+        writeShims(this.layout, previousBins);
+        for (const name of Object.keys(newBins))
+          if (!(name in previousBins))
+            for (const file of [name + '.cmd', name]) fs.rmSync(path.join(this.layout.binDir, file), { force: true });
+      }
+    } catch {
+      ok = false;
+    }
+    return ok;
+  }
+
+  /**
+   * Switches automatic updates off in install.json (the scheduled task of an all-users install does nothing without
+   * it) and removes that task when this process may; a failure to remove it is not an error. Remembers why, for the
+   * notice. True when automatic updates were on.
+   */
+  private turnAutoUpdateOff(version: string, current: string, reason: string): boolean {
+    const record = new InstallRecordFile(this.layout.root);
+    const wasOn = record.read()?.autoUpdate === true;
+    try {
+      record.setAutoUpdate(false);
+    } catch {
+      // The record is unwritable: a blocked version is still not retried, so the failure does not repeat.
+    }
+    try {
+      this.task?.remove();
+    } catch {
+      // Needs admin: the task runs, sees autoUpdate false in install.json and does nothing.
+    }
+    if (wasOn) {
+      const at = this.now().toISOString();
+      this.state.update((s) => ({ ...s, autoOff: { version, current, reason, at } }));
+    }
+    return wasOn;
   }
 
   /** A release tarball: a local feed file is copied, GitHub is downloaded; either way the sha256 must match. */

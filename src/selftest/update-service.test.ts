@@ -7,11 +7,11 @@ import { spawnSync } from 'node:child_process';
 import { parseCli } from '../cli/args.js';
 import { describeResult, runUpdate } from '../cli/commands/maintenance/update.js';
 import { UpdateService, runsAsSystem, type UpdateTaskPort } from '../cli/services/index.js';
-import { InstallLayout, InstallRecordFile, UpdateTask } from '../host/install/index.js';
+import { InstallLayout, InstallRecordFile, UpdateTask, shimText } from '../host/install/index.js';
 import { nativeScript } from '../host/native.js';
 import { FolderFeed, UpdateLock, updateNotice } from '../host/update/index.js';
 import { SYSTEM } from '../shared/system.js';
-import { installFirst, publish, runShim } from './support/releases.js';
+import { NODE, installFirst, publish, runShim } from './support/releases.js';
 import type { Harness } from './support/harness.js';
 import type { Suite } from './support/suite.js';
 
@@ -130,6 +130,114 @@ async function service(t: Harness): Promise<void> {
   sandbox = false;
 }
 
+/** A failed install puts the old version back (pointers, shims), turns automatic updates off and says so once. */
+async function failedInstall(t: Harness): Promise<void> {
+  t.section('update service: a failed install is undone');
+  const root = t.dir('fail', 'install');
+  const feed = t.at('fail', 'feed');
+  const layout = await installFirst(t, root, 'machine', true);
+  const task = new FakeTask();
+  const clock = { at: new Date('2026-10-14T12:00:00Z') };
+  const svc = new UpdateService(layout, {
+    source: new FolderFeed(feed),
+    sandboxRunning: () => false,
+    task,
+    version: '1.0.0',
+    userDir: t.dir('fail', 'user'),
+    now: () => clock.at,
+  });
+  const record = new InstallRecordFile(root);
+
+  publish(t, feed, '1.0.1', 'good');
+  fs.rmSync(path.join(feed, 'windows-development-sandbox-1.0.1.tgz'));
+  const offline = await svc.run();
+  t.check(
+    offline?.kind === 'failed' &&
+      !offline.blocked &&
+      !offline.autoUpdateOff &&
+      offline.rolledBack &&
+      record.read()?.autoUpdate === true &&
+      task.calls.length === 0 &&
+      svc.status().autoOffText === null &&
+      svc.notice() === null,
+    'a download that never arrived (the network) changes nothing and leaves automatic updates on',
+  );
+
+  const goodShim = fs.readFileSync(path.join(layout.binDir, 'sandbox.cmd'), 'utf8');
+  t.check(goodShim === shimText('sandbox', 'cmd'), 'the shim text is the standard one before the failed update');
+  fs.writeFileSync(path.join(layout.binDir, 'sandbox.cmd'), '@echo off\r\nrem marker\r\n');
+  publish(t, feed, '1.0.2', 'broken');
+  clock.at = new Date(clock.at.getTime() + 3600_000);
+  const bad = await svc.run();
+  t.check(
+    bad?.kind === 'failed' &&
+      bad.blocked &&
+      bad.rolledBack &&
+      bad.autoUpdateOff &&
+      layout.activeVersion() === '1.0.0' &&
+      layout.activeNode() === NODE &&
+      fs.readFileSync(path.join(layout.binDir, 'sandbox.cmd'), 'utf8') === goodShim &&
+      runShim(layout) === '1.0.0' &&
+      !layout.installedVersions().includes('1.0.2'),
+    'a release that does not start is undone: pointers, shims and the version folder are as before',
+  );
+  t.check(
+    record.read()?.autoUpdate === false &&
+      task.calls.join() === 'remove' &&
+      svc.status().autoUpdate === false &&
+      svc.status().state.autoOff?.version === '1.0.2',
+    'automatic updates are off in install.json, the scheduled task is removed, the reason is recorded',
+  );
+  const told = svc.notice();
+  if (told) svc.markNoticeSeen(told);
+  t.check(
+    told?.text ===
+      'The update to 1.0.2 failed and was undone (you are on 1.0.0). Automatic updates are off; turn them back on in Maintenance > Updates or with sandbox update --auto on.' &&
+      svc.notice() === null &&
+      svc.status().autoOffText === told.text,
+    'the user is told once, in plain words; the status carries the same sentence for the menu',
+    told?.text,
+  );
+  svc.setAuto(true);
+  t.check(
+    svc.status().autoOffText === null && record.read()?.autoUpdate === true,
+    'turning updates back on clears the remark',
+  );
+
+  // The same failure when the task cannot be removed (no admin): not an error; install.json is what the task reads.
+  const root2 = t.dir('fail2', 'install');
+  const feed2 = t.at('fail2', 'feed');
+  const layout2 = await installFirst(t, root2, 'machine', true);
+  const task2 = new FakeTask();
+  task2.fail = true;
+  publish(t, feed2, '1.0.1', 'broken');
+  const svc2 = new UpdateService(layout2, {
+    source: new FolderFeed(feed2),
+    sandboxRunning: () => false,
+    task: task2,
+    version: '1.0.0',
+  });
+  const bad2 = await svc2.run();
+  t.check(
+    bad2?.kind === 'failed' &&
+      bad2.autoUpdateOff &&
+      new InstallRecordFile(root2).read()?.autoUpdate === false &&
+      (await runUpdate(svc2, { check: false, rollback: false, unattended: true }, () => undefined)) === 0 &&
+      layout2.activeVersion() === '1.0.0',
+    'a task that cannot be removed does not stop the rollback; an unattended run with updates off does nothing',
+  );
+  publish(t, feed2, '1.0.2', 'good');
+  const ok2 = await svc2.run();
+  fs.writeFileSync(path.join(layout2.binDir, 'sandbox.cmd'), '@echo off\r\nrem marker\r\n');
+  const back = ok2?.kind === 'installed' ? svc2.rollback() : null;
+  t.check(
+    back === '1.0.0' &&
+      fs.readFileSync(path.join(layout2.binDir, 'sandbox.cmd'), 'utf8') === goodShim &&
+      runShim(layout2) === '1.0.0',
+    'sandbox update --rollback writes the shims of the version it returns to',
+  );
+}
+
 function pure(t: Harness): void {
   t.section('update notice and options');
   const state = { lastResult: { version: '1.5.0', ok: true, at: '2026-10-14T03:00:00Z' } };
@@ -217,7 +325,10 @@ async function command(t: Harness): Promise<void> {
       describeResult({ kind: 'installed', version: '1.0.1', previous: '1.0.0' }, false).line.includes(
         'from 1.0.0 to 1.0.1',
       ) &&
-      describeResult({ kind: 'failed', version: '1.0.1', reason: 'x', blocked: true }, false).code === 1,
+      describeResult(
+        { kind: 'failed', version: '1.0.1', reason: 'x', blocked: true, rolledBack: true, autoUpdateOff: true },
+        false,
+      ).code === 1,
     'exit codes: a running sandbox fails by hand but just waits unattended; a failed update exits 1',
   );
 }
@@ -253,6 +364,7 @@ export const updateServiceSuite: Suite = {
   title: 'sandbox update, automatic updates, the update notice',
   run: async (t) => {
     await service(t);
+    await failedInstall(t);
     pure(t);
     await command(t);
     script(t);

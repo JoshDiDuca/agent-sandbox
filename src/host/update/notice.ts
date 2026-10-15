@@ -9,6 +9,17 @@ export interface UpdateNotice {
   key: string;
 }
 
+/** What a user is told when a failed install was undone and automatic updates were switched off. */
+export function autoOffText(failedVersion: string, current: string): string {
+  return (
+    'The update to ' +
+    failedVersion +
+    ' failed and was undone (you are on ' +
+    current +
+    '). Automatic updates are off; turn them back on in Maintenance > Updates or with sandbox update --auto on.'
+  );
+}
+
 /**
  * `current` is the version that runs now. A success is announced while it is still the current version; a blocked
  * failure while the current version is older than the one that failed. When both exist, the newer outcome wins.
@@ -18,8 +29,12 @@ export function updateNotice(state: UpdateState, current: string, seenKey: strin
   const done = state.lastResult;
   if (done?.ok && done.version === current)
     candidates.push({ at: done.at, notice: { key: 'ok@' + done.at, text: 'Updated to ' + done.version + '.' } });
+  const off = state.autoOff;
+  if (off && compareVersions(off.version, current) > 0)
+    candidates.push({ at: off.at, notice: { key: 'auto-off@' + off.at, text: autoOffText(off.version, current) } });
   const failed = state.failed;
-  if (failed && compareVersions(failed.version, current) > 0)
+  // The automatic-updates-off notice already tells about this failure.
+  if (failed && compareVersions(failed.version, current) > 0 && off?.version !== failed.version)
     candidates.push({
       at: failed.at,
       notice: {

@@ -15,6 +15,7 @@ import {
   UpdateLock,
   Updater,
   UpdateStateFile,
+  autoOffText,
   decideUpdate,
   isTooSoon,
   updateNotice,
@@ -38,6 +39,8 @@ export interface UpdateStatus {
   readonly scope: 'user' | 'machine' | null;
   readonly autoUpdate: boolean;
   readonly state: UpdateState;
+  /** Set when a failed update was undone and switched automatic updates off: the sentence to show (menu, CLI). */
+  readonly autoOffText?: string | null;
 }
 
 export interface CheckResult {
@@ -107,13 +110,18 @@ export class UpdateService {
 
   status(): UpdateStatus {
     const layout = this.layout;
-    if (!layout) return { managed: false, version: this.version, scope: null, autoUpdate: false, state: {} };
+    if (!layout)
+      return { managed: false, version: this.version, scope: null, autoUpdate: false, state: {}, autoOffText: null };
+    const version = layout.activeVersion() ?? this.version;
+    const autoUpdate = new InstallRecordFile(layout.root).read()?.autoUpdate ?? false;
+    const state = new UpdateStateFile(layout.root).read();
     return {
       managed: true,
-      version: layout.activeVersion() ?? this.version,
+      version,
       scope: layout.scope,
-      autoUpdate: new InstallRecordFile(layout.root).read()?.autoUpdate ?? false,
-      state: new UpdateStateFile(layout.root).read(),
+      autoUpdate,
+      state,
+      autoOffText: !autoUpdate && state.autoOff ? autoOffText(state.autoOff.version, version) : null,
     };
   }
 
@@ -147,7 +155,7 @@ export class UpdateService {
     const release = new UpdateLock(layout.root, this.now).acquire();
     if (!release) return null;
     try {
-      const updater = new Updater(layout, this.source, { now: this.now });
+      const updater = new Updater(layout, this.source, { now: this.now, task: this.task });
       return await updater.run({ sandboxRunning: this.sandboxRunning(), force: true });
     } finally {
       release();
@@ -181,6 +189,8 @@ export class UpdateService {
     const record = new InstallRecordFile(layout.root);
     if (!record.setAutoUpdate(on))
       fail('This install has no install.json.', 'Run the installer again: it writes the file.');
+    // Turned back on by the user: the "turned off by a failed update" remark is history.
+    if (on) new UpdateStateFile(layout.root).update(({ autoOff: _gone, ...rest }) => rest);
   }
 
   /**
