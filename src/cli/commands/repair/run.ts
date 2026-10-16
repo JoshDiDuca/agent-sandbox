@@ -13,60 +13,17 @@ import { HealthService } from '../../services/index.js';
 import { createContext, requireOnPc, type Context } from '../context.js';
 import { ALL_CHECKS } from './checks/index.js';
 import { buildEnv } from './env.js';
-import { HealthRun, summarize } from './engine.js';
+import { runHealth } from './health-run.js';
 import { logText, writeRepairLog } from './log.js';
 import { HealthPrinter } from './printer.js';
-import type { Check, CheckResult, RepairEnv, Summary } from './types.js';
+
+export { runHealth } from './health-run.js';
 
 const interactive = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
 const stdout = { write: (text: string): void => void process.stdout.write(text) };
 
-/** What both commands find, and what they do about it. */
-export interface HealthReport {
-  readonly found: CheckResult[];
-  readonly final: CheckResult[];
-  readonly summary: Summary;
-  /** Fixes were applied. */
-  readonly changed: boolean;
-}
-
-interface Plan {
-  /** Fix without asking. */
-  readonly yes: boolean;
-  /** May ask (a terminal, and not --json). */
-  readonly ask: boolean;
-  /** The question asked after the list of what will change. */
-  readonly question: (n: number) => string;
-}
-
-/** Runs the checks, then (when allowed) the fixes. `printer` is null for --json. */
-export async function runHealth(
-  env: RepairEnv,
-  printer: HealthPrinter | null,
-  plan: Plan,
-  checks: readonly Check[] = ALL_CHECKS,
-  confirmFix: (question: string) => Promise<boolean> = (q) => confirm({ message: q, default: true }),
-): Promise<HealthReport> {
-  const run = new HealthRun(checks, env, printer?.hooks());
-  const found = await run.look();
-  const fixable = found.filter((r) => r.fixable);
-  let final = found;
-  let changed = false;
-  if (fixable.length) {
-    let go = plan.yes;
-    if (!go && plan.ask) {
-      printer?.plan(fixable);
-      go = await confirmFix(plan.question(fixable.length));
-    }
-    if (go) {
-      if (plan.yes) printer?.plan(fixable);
-      final = await run.fix(found);
-      changed = true;
-    } else printer?.line('\nNothing was changed.');
-  }
-  return { found, final, summary: summarize(final), changed };
-}
+const askFix = (question: string): Promise<boolean> => confirm({ message: question, default: true });
 
 function quote(n: number, what: string): string {
   return n + ' ' + what + (n === 1 ? '' : 's');
@@ -83,11 +40,17 @@ export async function runDoctor(ctx: Context): Promise<number> {
   const printer = json ? null : new HealthPrinter(stdout);
   printer?.title('Checking this PC, the install, your settings and the sandbox...');
   const env = buildEnv(ctx);
-  const report = await runHealth(env, printer, {
-    yes: ctx.options.fix,
-    ask: !json && interactive(),
-    question: (n) => quote(n, 'problem') + ' can be fixed. Fix ' + (n === 1 ? 'it' : 'them') + ' now?',
-  });
+  const report = await runHealth(
+    env,
+    printer,
+    {
+      yes: ctx.options.fix,
+      ask: !json && interactive(),
+      question: (n) => quote(n, 'problem') + ' can be fixed. Fix ' + (n === 1 ? 'it' : 'them') + ' now?',
+    },
+    ALL_CHECKS,
+    askFix,
+  );
   const details = health.doctor();
   if (printJson(ctx, { checks: report.final, summary: report.summary, details })) return 0;
   printer?.summary(report.final, report.summary);
@@ -108,11 +71,17 @@ export async function runRepair(ctx: Context, configError: UserError | null = nu
   const env = buildEnv(ctx, configError);
   const yes = ctx.options.yes;
   const ask = !json && interactive();
-  const report = await runHealth(env, printer, {
-    yes,
-    ask,
-    question: (n) => 'Fix ' + (n === 1 ? 'this problem' : 'these ' + n + ' problems') + '?',
-  });
+  const report = await runHealth(
+    env,
+    printer,
+    {
+      yes,
+      ask,
+      question: (n) => 'Fix ' + (n === 1 ? 'this problem' : 'these ' + n + ' problems') + '?',
+    },
+    ALL_CHECKS,
+    askFix,
+  );
   const when = new Date();
   const log = writeRepairLog(
     ctx.storageRoot,
