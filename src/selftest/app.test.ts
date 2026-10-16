@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { DEFINITIONS, NAV, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
+import { APP_GROUPS, appsPage, listApps, type AppsList } from '../app/features/apps/index.js';
 import { settingsPage } from '../app/features/settings/index.js';
 import type { AppContext } from '../app/context.js';
 import {
@@ -508,6 +509,73 @@ export const appSuite: Suite = {
         page.sections.some((s) => s.items?.some((i) => i.id === '@data-folder')),
       'the settings page: a section per category, each setting edited through its Field',
     );
+    t.section('apps, run against a config file');
+    const appsConfig = t.writeJson(t.at('app-apps', 'config.json'), {
+      storage: { root: t.dir('app-apps', 'storage') },
+    });
+    const appsCtx = {
+      loaded: { configPath: appsConfig },
+      options: { workspace: t.dir('app-apps', 'project') },
+      storageRoot: t.at('app-apps', 'storage'),
+      dataPath: t.dir('app-apps', 'data'),
+    } as unknown as AppContext;
+    await runDefinition('apps.toggle', appsCtx, { id: 'lazygit', on: true }, quiet);
+    const onText = fs.readFileSync(appsConfig, 'utf8');
+    await runDefinition('apps.toggle', appsCtx, { id: 'lazygit', on: false }, quiet);
+    const offText = fs.readFileSync(appsConfig, 'utf8');
+    t.check(
+      onText.includes('"lazygit"') && !offText.includes('"lazygit"'),
+      'apps: turning an app on writes apps.install, off removes it',
+    );
+    await t.throws(
+      () => runDefinition('apps.toggle', appsCtx, { scope: 'project', id: 'vscode', on: false }, quiet),
+      'is not an app this scope can change',
+      'apps: a project cannot change VS Code',
+    );
+    const dataDir = t.dir('app-apps', 'data');
+    fs.mkdirSync(path.join(dataDir, 'tools', 'apps', 'lazygit'), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'tools', 'apps', 'lazygit', '.agent-sandbox-app'), 'lazygit');
+    const appsList = (await readQuery(listApps, appsCtx, { scope: 'user' })) as AppsList;
+    const lazygit = appsList.apps.find((a) => a.id === 'lazygit');
+    t.check(
+      lazygit?.installed === true && appsList.apps.every((a) => APP_GROUPS.some((g) => g.id === a.group)),
+      'apps: the list marks downloaded apps installed, and every row sits in a group',
+    );
+    const hand: AppsList = {
+      scope: 'user',
+      file: 'config.json',
+      exists: true,
+      apps: [
+        {
+          id: 'lazygit',
+          name: 'lazygit',
+          about: 'Git in a terminal',
+          group: 'tools',
+          size: '5 MB',
+          cli: true,
+          mesa: false,
+          fullGitOnly: false,
+          installed: true,
+          on: true,
+        },
+      ],
+      custom: [],
+      customValue: {},
+      customField: { name: 'custom', key: ['apps', 'custom'], kind: 'map', label: 'Your own programs', optional: true },
+    };
+    const userPage = appsPage(hand);
+    const projectPage = appsPage({ ...hand, scope: 'project' });
+    const actionsOf = (page: Parameters<typeof pageActions>[0]): string[] =>
+      pageActions(page).flatMap((a) => (a.kind === 'operation' ? [a.op] : []));
+    t.check(
+      userPage.sections.some((s) => s.id === 'tools') &&
+        actionsOf(userPage).includes('apps.setCustom') &&
+        actionsOf(userPage).includes('apps.request') &&
+        !actionsOf(projectPage).includes('apps.setCustom') &&
+        !actionsOf(projectPage).includes('apps.request'),
+      'apps: the page has a category per group; your own programs and the request only in your own scope',
+    );
+
     t.equal(ago(NOW - 90 * 60000, NOW), '2 h ago', 'times read the same on every surface');
   },
 };

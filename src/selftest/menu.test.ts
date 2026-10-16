@@ -13,7 +13,8 @@ import {
   newAgent,
   removeAgent,
 } from '../cli/menu/add-agent.js';
-import { APP_GROUPS, AppsModel, REQUEST_APP, requestAppUrl } from '../cli/menu/apps.js';
+import { APP_GROUPS, appRows, REQUEST_APP, requestAppUrl } from '../app/features/apps/index.js';
+import { appsCategories, appsItems } from '../cli/menu/pages/apps-page.js';
 import { readMenuView, saveMenuView } from '../cli/menu/memory.js';
 import path from 'node:path';
 import { argPathKind, optionLabel, optionPathKind, plainDescription } from '../cli/menu/command-fields.js';
@@ -836,16 +837,14 @@ export const menuSuite: Suite = {
     );
 
     t.section('apps in a few groups');
-    const appsUser = new AppsModel(user2, t.dir('apps-groups'));
-    const groupIds = appsUser.categories().map((c) => c.id);
-    const appItems = appsUser.items(new Draft()).filter((i) => i.value !== REQUEST_APP);
+    const groupIds = appsCategories(user2).map((c) => c.id);
+    const appItems = appsItems(user2, t.dir('apps-groups'), new Draft()).filter((i) => i.value !== REQUEST_APP);
     t.check(
       groupIds.length <= 6 &&
-        new AppsModel(ConfigFile.project(t.dir('apps-groups', 'project')), t.dir('apps-groups')).categories().length <=
-          5 &&
+        appsCategories(ConfigFile.project(t.dir('apps-groups', 'project'))).length <= 5 &&
         APP_GROUPS.every((g) => appItems.some((i) => i.category === g.id)) &&
         appItems.every((i) => groupIds.includes(i.category ?? '')) &&
-        appItems.length === appsUser.entries().length &&
+        appItems.length === appRows(user2, t.dir('apps-groups')).length &&
         APP_CATEGORIES.every((c) => APP_GROUPS.some((g) => (g.members as readonly string[]).includes(c.id))),
       'the apps are in at most 6 groups; every catalogue category belongs to one and every app is listed',
       groupIds.join(),

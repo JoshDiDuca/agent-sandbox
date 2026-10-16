@@ -183,6 +183,11 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         return { message: 'Done (preview: nothing was changed).' };
       case 'sessions.restart':
         return { message: 'Restarted (preview: nothing was changed).', restarted: 0 };
+      case 'apps.request':
+        // The real operation opens a browser on this PC; the preview only shows the address it would open.
+        return {
+          url: 'https://github.com/JoshDiDuca/windows-development-sandbox/issues/new (preview: nothing opened)',
+        };
       default:
         return undefined;
     }
@@ -198,12 +203,16 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'settings.set': 'operation',
     'settings.reset': 'operation',
     'files.browse': 'query',
+    'apps.list': 'query',
+    'apps.toggle': 'operation',
+    'apps.setCustom': 'operation',
+    'apps.request': 'operation',
   };
   return {
     kind: (id) => kinds[id],
     liveMs: (id) => (id === 'sandbox.status' || id === 'sessions.list' ? 2500 : undefined),
     run: async (id, input, io) =>
-      id.startsWith('settings.') || id === 'files.browse'
+      id !== 'apps.request' && (id.startsWith('settings.') || id.startsWith('apps.') || id === 'files.browse')
         ? runDefinition(id, ctx, input, io)
         : ((await sample(id, io)) ?? {}),
   };
@@ -220,11 +229,26 @@ async function main(): Promise<void> {
   const project = path.join(temp, 'project');
   fs.mkdirSync(project);
   const configPath = path.join(temp, 'config.json');
-  fs.writeFileSync(configPath, JSON.stringify({ sandbox: { memoryMb: 16384, vGpu: true }, web: { enabled: true } }));
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({
+      sandbox: { memoryMb: 16384, vGpu: true },
+      web: { enabled: true },
+      apps: { install: ['lazygit', 'bruno', 'chrome'] },
+    }),
+  );
+  // Apps: three of the catalogue are downloaded already (the marker a finished download leaves in the data folder).
+  const dataPath = path.join(temp, 'data');
+  for (const id of ['lazygit', 'bruno', 'sysinternals']) {
+    const marker = path.join(dataPath, 'tools', 'apps', id);
+    fs.mkdirSync(marker, { recursive: true });
+    fs.writeFileSync(path.join(marker, '.agent-sandbox-app'), id);
+  }
   const ctx = {
     loaded: { configPath },
     options: { workspace: project },
     storageRoot: path.join(temp, 'storage'),
+    dataPath,
   } as unknown as AppContext;
   const state = { running: true };
   const ptyPort = await startFakePty();
