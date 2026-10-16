@@ -39,18 +39,25 @@ const DATA_FOLDER_ROW = [
 ];
 
 const ACCOUNTS: AccountsModel = {
+  agent: 'claude',
   agents: [
-    { name: 'claude', kept: true, canSavePc: true },
-    { name: 'codex', kept: true, canSavePc: true },
-    { name: 'opencode', kept: false, canSavePc: false },
+    {
+      name: 'claude',
+      kept: true,
+      canSavePc: true,
+      accounts: [
+        { name: 'work', email: 'me@work.example', isDefault: true, isActive: true, savedAt: '2026-10-13T09:30:00Z' },
+        { name: 'home', email: null, isDefault: false, isActive: false, savedAt: '2026-10-01T18:00:00Z' },
+      ],
+    },
+    {
+      name: 'codex',
+      kept: true,
+      canSavePc: true,
+      accounts: [{ name: 'main', email: null, isDefault: true, isActive: false, savedAt: '2026-10-12T08:00:00Z' }],
+    },
+    { name: 'opencode', kept: false, canSavePc: false, accounts: [] },
   ],
-  rows: {
-    claude: [
-      { name: 'work', email: 'me@work.example', isDefault: true, isActive: true, savedAt: '2026-10-13T09:30:00Z' },
-      { name: 'home', email: null, isDefault: false, isActive: false, savedAt: '2026-10-01T18:00:00Z' },
-    ],
-    codex: [{ name: 'main', email: null, isDefault: true, isActive: false, savedAt: '2026-10-12T08:00:00Z' }],
-  },
 };
 
 const SESSIONS = [

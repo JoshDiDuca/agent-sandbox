@@ -810,7 +810,10 @@ export const menuSuite: Suite = {
         !stoppedItems.some((i) => i.value === 'act:stop'),
       'with no sandbox running, Sandbox offers to start one (Status and Databases) instead of dead rows',
     );
-    const noLogins = accountsOptions({ agents: [{ name: 'claude', kept: true, canSavePc: true }], rows: {} });
+    const noLogins = accountsOptions({
+      agent: 'claude',
+      agents: [{ name: 'claude', kept: true, canSavePc: true, accounts: [] }],
+    });
     t.equal(
       noLogins.items.map((i) => i.value),
       ['@save-sandbox', '@save-pc'],

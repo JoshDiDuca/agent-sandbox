@@ -18,6 +18,17 @@ function attribute(flag: string): string {
   return flag.replace(/^--/, '').replace(/-([a-z])/g, (_m, ch: string) => ch.toUpperCase());
 }
 
+/**
+ * What a flag gave: --no-<flag> is stored by commander as <flag>: false, and the input field it sets is true then.
+ */
+function flagValue(raw: Readonly<Record<string, unknown>>, flag: string): unknown {
+  if (flag.startsWith('--no-')) {
+    const positive = attribute('--' + flag.slice('--no-'.length));
+    return raw[positive] === false ? true : undefined;
+  }
+  return raw[attribute(flag)];
+}
+
 /** The input a command line gives a definition (fields not on the line are left to the schema's defaults). */
 export function cliInput(def: AnyDefinition, options: CliOptions): Record<string, unknown> {
   const hint = def.cli;
@@ -37,7 +48,7 @@ export function cliInput(def: AnyDefinition, options: CliOptions): Record<string
   for (const [name, flag] of Object.entries(hint.flags ?? {})) {
     if (!flag) continue;
     const value =
-      (flag.shownAs ? options.raw[attribute(flag.shownAs)] : undefined) ?? options.raw[attribute(flag.flag)];
+      (flag.shownAs ? flagValue(options.raw, flag.shownAs) : undefined) ?? flagValue(options.raw, flag.flag);
     if (value !== undefined) input[name] = value;
   }
   return input;

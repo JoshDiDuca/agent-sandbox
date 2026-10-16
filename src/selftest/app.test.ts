@@ -7,6 +7,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { agentsPage, agentsView } from '../app/features/agents/index.js';
 import { DEFINITIONS, NAV, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
+import { accountsPage, agentPage, listAccounts, type AgentAccounts } from '../app/features/accounts/index.js';
+import { DEFAULTS } from '../core/config/index.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
 import { settingsPage } from '../app/features/settings/index.js';
@@ -557,5 +559,65 @@ export const appSuite: Suite = {
       'the settings page: a section per category, each setting edited through its Field',
     );
     t.equal(ago(NOW - 90 * 60000, NOW), '2 h ago', 'times read the same on every surface');
+
+    t.section('accounts, run against a temp folder');
+    const accCtx = {
+      loaded: { config: structuredClone(DEFAULTS), configPath: null, base: t.temp },
+      options: { workspace: t.dir('app-acc', 'project') },
+      storageRoot: t.dir('app-acc', 'storage'),
+      dataPath: t.dir('app-acc', 'data'),
+    } as unknown as AppContext;
+    t.write(t.at('app-acc', 'data', 'state', 'codex', 'auth.json'), '{"token":"A"}');
+    const saving = fakeIO(['bad name', 'main']);
+    const saved = (await runDefinition('accounts.save', accCtx, { agent: 'codex' }, saving.io)) as { message: string };
+    t.check(
+      saving.seen.questions[0]?.kind === 'text' &&
+        saving.seen.questions.length === 2 &&
+        saved.message === 'Saved account "main".',
+      'accounts: save asks a name when none is given, and refuses a bad one',
+      saved.message,
+    );
+    const listed2 = (await readQuery(listAccounts, accCtx, { agent: 'codex' })) as {
+      agents: { name: string; accounts: { name: string }[] }[];
+    };
+    t.check(
+      listed2.agents[0].name === 'claude' &&
+        listed2.agents.find((a) => a.name === 'codex')?.accounts[0]?.name === 'main' &&
+        JSON.stringify(listAccounts.cli?.shapeJson?.(listed2)) ===
+          JSON.stringify(listed2.agents.find((a) => a.name === 'codex')?.accounts),
+      'accounts: list shows Claude first and the saved codex login; --json keeps the rows of the one agent',
+    );
+    await t.throws(
+      () => runDefinition('accounts.remove', accCtx, { agent: 'codex', name: 'main' }, fakeIO([false]).io),
+      'Nothing removed.',
+      'accounts: remove asks first; no is Nothing removed.',
+    );
+    const removed = (await runDefinition(
+      'accounts.remove',
+      accCtx,
+      { agent: 'codex', name: 'main' },
+      fakeIO([true]).io,
+    )) as { message: string };
+    t.equal(removed.message, 'Removed account main.', 'accounts: yes removes the login');
+    const codex: AgentAccounts = {
+      name: 'codex',
+      kept: true,
+      canSavePc: true,
+      accounts: [{ name: 'main', email: null, isDefault: false, isActive: false, savedAt: '2026-10-12T08:00:00Z' }],
+    };
+    const codexMenu = menuView(agentPage(codex), { category: 'codex', refresh: false });
+    t.check(
+      codexMenu.enterLabel('codex', 'codex:main') === 'use' &&
+        ['s', 'p', 'd', 'r', 'x'].every((k) => codexMenu.actions.some((a) => a.key === k)) &&
+        accountsPage({ agent: 'codex', agents: [codex] }).sections[0].cards === true,
+      'accounts: the page offers use on Enter and d/r/x on a login; the codex agent is a card',
+    );
+    const useDef = definitionFor('account', ['use'])!;
+    t.check(
+      JSON.stringify(cliInput(useDef, parseCli(['account', 'use', 'work', '--no-restart']))) ===
+        JSON.stringify({ name: 'work', noRestart: true }) &&
+        !('noRestart' in cliInput(useDef, parseCli(['account', 'use', 'work']))),
+      'a --no- flag reaches the input (and is absent without it)',
+    );
   },
 };

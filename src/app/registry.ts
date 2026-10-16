@@ -19,6 +19,14 @@ import {
   removeAgentRun,
   startAgentRun,
 } from './features/agents/index.js';
+import {
+  defaultAccountRun,
+  listAccountsRun,
+  removeAccountRun,
+  renameAccountRun,
+  saveAccountRun,
+  useAccountRun,
+} from './features/accounts/index.js';
 import { browseFolderRun } from './features/files/index.js';
 import { hideWindowRun, sandboxStatusRun, showWindowRun, stopSandboxRun } from './features/sandbox/index.js';
 import { listSessionsRun, restartSessionsRun } from './features/sessions/index.js';
@@ -41,6 +49,12 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   setSettingRun,
   resetSettingRun,
   browseFolderRun,
+  listAccountsRun,
+  saveAccountRun,
+  useAccountRun,
+  defaultAccountRun,
+  renameAccountRun,
+  removeAccountRun,
 ];
 
 export function implementationOf(id: string): Implementation<AnyDefinition, AppContext> | undefined {

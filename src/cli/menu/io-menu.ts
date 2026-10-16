@@ -145,7 +145,8 @@ export class MenuOperations {
     });
     try {
       const output = await runDefinition(def.id, this.ctx, input, io);
-      const text = def.text?.(output);
+      // The notice is one line: an operation that says several lines (accounts use) runs them together.
+      const text = def.text?.(output)?.replace(/\n+/g, ' ');
       return text ? Theme.ok(Theme.glyph.ok + ' ' + text) : undefined;
     } catch (e) {
       if (e instanceof Cancelled) return undefined;
