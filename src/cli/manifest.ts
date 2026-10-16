@@ -406,22 +406,6 @@ const COMMAND_LIST = [
     options: [],
     json,
   },
-  {
-    name: 'clean',
-    summary: 'delete old launch folders, logs and leftovers',
-    group: 'Data',
-    args: [],
-    options: [
-      {
-        flag: '--days',
-        type: 'number',
-        value: 'n',
-        description: 'launch folders older than this many days',
-        default: 7,
-      },
-      bool('--yes', 'do not ask before deleting', { short: '-y', noMenu: true }),
-    ],
-  },
   { name: 'sync', summary: 'copy conversation history back to this PC now', group: 'Data', args: [], options: [] },
   {
     name: 'audit',

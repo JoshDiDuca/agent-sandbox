@@ -11,6 +11,7 @@ import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
 import { lastHealth } from '../../app/features/health/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
+import { showData } from '../../app/features/data/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
 import { runDefinition } from '../../app/registry.js';
@@ -196,6 +197,59 @@ function sampleSessions(running: boolean): unknown {
           canOpen: s.phase === 'running',
         }))
       : [],
+  });
+}
+
+/** What is stored: a toolchain, the agent's login folder, databases and logs, and what this PC keeps (sample sizes). */
+function sampleData(): unknown {
+  const GB = (n: number): string => (n / 1e9).toFixed(1) + ' GB';
+  const entry = (area: string, name: string, bytes: number, target: string | null) => ({
+    area,
+    name,
+    path: 'F:\\AgentData\\' + (area === 'host' ? name : area + '\\' + name),
+    bytes,
+    size: bytes < 1e6 ? (bytes / 1e3).toFixed(1) + ' KB' : GB(bytes),
+    target,
+  });
+  return showData.output.parse({
+    dataPath: 'F:\\AgentData',
+    storageRoot: 'F:\\',
+    totalBytes: 9.6e9,
+    total: '9.6 GB',
+    storageShare: '<- sandbox storage (9.6 GB of it)',
+    areaTotals: { tools: '6.4 GB', databases: '1.2 GB', state: '1.9 GB', logs: '48 KB', host: '4.1 KB' },
+    entries: [
+      entry('tools', 'rust', 4.6e9, 'tools/rust'),
+      entry('tools', 'node', 1.8e9, 'tools/node'),
+      entry('databases', 'postgres-18', 1.2e9, 'databases/postgres-18'),
+      entry('state', 'claude', 1.9e9, 'state/claude'),
+      entry('logs', 'logs', 48_000, 'logs'),
+      entry('host', 'accounts', 4096, null),
+    ],
+    disks: [
+      {
+        drive: 'C:\\',
+        totalBytes: 512e9,
+        freeBytes: 210e9,
+        usedBytes: 302e9,
+        holdsStorage: false,
+        used: '302 GB',
+        usedPercent: 59,
+        free: '210 GB',
+        total: '512 GB',
+      },
+      {
+        drive: 'F:\\',
+        totalBytes: 1000e9,
+        freeBytes: 620e9,
+        usedBytes: 380e9,
+        holdsStorage: true,
+        used: '380 GB',
+        usedPercent: 38,
+        free: '620 GB',
+        total: '1.0 TB',
+      },
+    ],
   });
 }
 
@@ -429,6 +483,13 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         if (picked === undefined) cancelled();
         return { message: picked.length + ' project(s) mapped at every start (preview: nothing was changed).' };
       }
+      case 'data.show':
+        return sampleData();
+      case 'data.clean':
+      case 'data.prune':
+        if (!(await io.confirm({ title: 'Delete the chosen data?', yes: 'Delete', danger: true, implied: true })))
+          cancelled();
+        return { message: 'Removed (preview: nothing was deleted).', freedBytes: 0, removed: true };
       case 'apps.request':
         // The real operation opens a browser on this PC; the preview only shows the address it would open.
         return {
@@ -476,6 +537,9 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'health.check': 'operation',
     'health.repair': 'operation',
     'health.enableSandbox': 'operation',
+    'data.show': 'query',
+    'data.clean': 'operation',
+    'data.prune': 'operation',
   };
   return {
     kind: (id) => kinds[id],

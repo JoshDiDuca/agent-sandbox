@@ -72,6 +72,8 @@ interface Definition<Id extends string, I extends z.ZodType, O extends z.ZodType
   readonly cli?: CliHint;
   /** The output in one text: what an operation did, or a value a query read (CLI output, menu notice, web note). */
   text?(output: z.output<O>): string;
+  /** The next step to suggest after the text, CLI only (a dimmed "Next:" line); menu and web ignore it. */
+  next?(output: z.output<O>): string | undefined;
 }
 
 /** What a definition is written as: its CLI hint typed against its own schemas. */

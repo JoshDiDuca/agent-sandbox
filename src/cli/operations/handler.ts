@@ -5,7 +5,7 @@ import { VIEWS } from '../../app/features/defs.js';
 import { runDefinition } from '../../app/registry.js';
 import { Cancelled, type AnyDefinition, type AnyView } from '../../app/kernel/index.js';
 import type { Handler } from '../commands/registry.js';
-import { printJson, printPage } from '../output/index.js';
+import { nextStep, printJson, printPage } from '../output/index.js';
 import { cliInput, definitionFor } from './input.js';
 import { cliIO } from './io-cli.js';
 
@@ -23,6 +23,8 @@ function printOutput(def: AnyDefinition, output: unknown, input: Record<string, 
   if (def.text) {
     const text = def.text(output);
     if (text) console.log(text);
+    const next = def.next?.(output);
+    if (next) nextStep(next);
     return;
   }
   const shown = viewOf(def);

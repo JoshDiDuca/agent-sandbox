@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
-import { sizeOf } from '../../../core/disk.js';
-import { dirExists, isLink } from '../../../core/util/index.js';
+import { sizeOf } from '../../core/disk.js';
+import { dirExists, isLink } from '../../core/util/index.js';
 
 export type DataArea = 'tools' | 'databases' | 'state' | 'logs' | 'data' | 'host';
 export interface DataEntry {

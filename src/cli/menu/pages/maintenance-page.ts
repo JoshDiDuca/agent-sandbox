@@ -1,19 +1,17 @@
 // Section 7: keeping things in shape. Updates (the program and your saved settings), Data & storage (the data folder,
 // what is stored, clean-up), Health (doctor, repair and this PC's setup together), the logs, and the less common
 // commands. Each is a category on the left and loads when you open it.
-import _ from 'lodash';
-import type { DiskUsage } from '../../../core/disk.js';
+import { dataPage, showData, type DataShow } from '../../../app/features/data/index.js';
+import type { Action } from '../../../app/kernel/index.js';
+import { readQuery } from '../../../app/registry.js';
 import { humanBytes } from '../../../core/disk.js';
 import { userDir } from '../../../core/config/index.js';
-import { errMsg, fail } from '../../../core/util/index.js';
+import { errMsg } from '../../../core/util/index.js';
 import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
-import { readQuery } from '../../../app/registry.js';
 import type { Context } from '../../commands/context.js';
-import { cleanTargetOf, type DataEntry } from '../../commands/data/collect.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
 import { ago } from '../../output/index.js';
 import {
-  DataService,
   LogsService,
   MigrateService,
   NPM_UPDATE_COMMAND,
@@ -41,7 +39,7 @@ export interface MaintenanceModel {
   /** The data folder row (where the sandbox keeps its data). */
   readonly dataFolder: { label: string; hint: string; description: string };
   /** Null until measured (measuring a big data folder takes a while). */
-  readonly data: { entries: DataEntry[]; disks: DiskUsage[]; total: number } | null;
+  readonly data: DataShow | null;
   readonly logs: readonly LogFile[];
   /** The Health category: the last check or repair saved (null: none yet). */
   readonly health: { readonly last: HealthLast | null };
@@ -87,24 +85,13 @@ const MORE_LABELS: Readonly<Record<string, string>> = {
   'agent-commands': 'Agent commands (Beta)',
 };
 
-const AREA_LABEL: Record<DataEntry['area'], string> = {
-  tools: 'Toolchains',
-  databases: 'Databases',
-  state: 'Agent state',
-  logs: 'Logs',
-  data: 'Other',
-  host: 'On this PC',
-};
+/** The Data & storage category's rows and keys once measured: the data view (src/app/features/data) as menu rows. */
+function dataMenuView(data: DataShow | null): MenuView | undefined {
+  return data ? menuView(dataPage(data), { category: 'data', prefix: 'data:', refresh: false }) : undefined;
+}
 
 function dataItems(m: MaintenanceModel): ListItem<string>[] {
   const folder: ListItem<string> = { value: 'data:folder', category: 'data', section: 'Data folder', ...m.dataFolder };
-  const clean: ListItem<string> = {
-    value: 'data:clean',
-    label: 'Clean up…',
-    category: 'data',
-    section: 'Clean up',
-    description: 'Delete caches, old sandboxes and other leftovers (the clean command, with its options).',
-  };
   if (!m.data)
     return [
       folder,
@@ -115,29 +102,8 @@ function dataItems(m: MaintenanceModel): ListItem<string>[] {
         section: 'Stored data',
         description: 'Adds up the size of every folder. A big data folder takes a minute or more.',
       },
-      clean,
     ];
-  return [
-    folder,
-    ...m.data.disks.map((d) => ({
-      value: 'disk:' + d.drive,
-      label: d.drive,
-      category: 'data',
-      section: 'Disks',
-      hint: humanBytes(d.usedBytes) + ' used · ' + humanBytes(d.freeBytes) + ' free of ' + humanBytes(d.totalBytes),
-      description: d.holdsStorage ? 'The sandbox keeps its files on this drive.' : undefined,
-    })),
-    ...m.data.entries.map((e, i) => ({
-      value: 'entry:' + i,
-      label: e.name,
-      category: 'data',
-      section: AREA_LABEL[e.area],
-      hint: humanBytes(e.bytes),
-      description: cleanTargetOf(e) ? 'x deletes it.' : 'Kept on this PC on purpose; it is not deleted here.',
-      details: [Theme.muted('Folder  ') + e.path],
-    })),
-    clean,
-  ];
+  return [folder, ...(dataMenuView(m.data)?.items ?? [])];
 }
 
 function updateItems(m: MaintenanceModel): ListItem<string>[] {
@@ -242,7 +208,10 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
     items: [...updates, ...settings, ...dataItems(m), ...health.items, ...logs, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
-    enterLabel: (category, id) => (category === 'health' ? health.enterLabel(category, id) : enterLabel(id ?? '', m)),
+    enterLabel: (category, id) =>
+      category === 'health'
+        ? health.enterLabel(category, id)
+        : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) || enterLabel(id ?? '', m),
   };
 }
 
@@ -255,7 +224,6 @@ function healthMenu(m: MaintenanceModel): MenuView {
 function enterLabel(id: string, m: MaintenanceModel): string {
   if (id === 'data:folder') return 'change';
   if (id === 'data:measure') return 'measure';
-  if (id === 'data:clean') return 'choose what';
   if (id === 'updates:latest') return m.latest ? 'install' : 'look';
   if (id === 'updates:auto') return 'switch';
   if (id === 'updates:previous') return 'go back';
@@ -268,13 +236,8 @@ function enterLabel(id: string, m: MaintenanceModel): string {
 function maintenanceActions(m: MaintenanceModel): (category: string | undefined) => ListAction<string>[] {
   return (category) => {
     switch (category) {
-      case 'data': {
-        const deletable = new Set((m.data?.entries ?? []).flatMap((e, i) => (cleanTargetOf(e) ? ['entry:' + i] : [])));
-        return [
-          { key: 'm', label: 'measure again' },
-          { key: 'x', label: 'delete', applies: (id) => deletable.has(id) },
-        ];
-      }
+      case 'data':
+        return [{ key: 'm', label: 'measure again' }, ...(dataMenuView(m.data)?.actions ?? [])];
       case 'logs':
         return [{ key: 'f', label: 'follow in the terminal' }];
       case 'health':
@@ -312,12 +275,11 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
 
 export class MaintenancePage extends ListPage<string> {
   readonly label = 'Maintenance';
-  private data: MaintenanceModel['data'] = null;
+  private data: DataShow | null = null;
   private logs: LogFile[] = [];
   private last: HealthLast | null = null;
   private settings: MaintenanceModel['settings'] = { pending: [] };
   private readonly migrate: MigrateService;
-  private readonly dataService: DataService;
   private readonly updateService: UpdateService;
   private readonly operations: MenuOperations;
   private latest: string | null = null;
@@ -334,7 +296,6 @@ export class MaintenancePage extends ListPage<string> {
       userDir: userDir(),
       configPath: ctx.loaded.configPath,
     });
-    this.dataService = new DataService(ctx);
   }
 
   private model(): MaintenanceModel {
@@ -445,16 +406,16 @@ export class MaintenancePage extends ListPage<string> {
     const id = result.kind === 'pick' || result.kind === 'action' ? result.value : undefined;
     const key = result.kind === 'action' ? result.key : undefined;
     try {
-      if (key === 'm' || id === 'data:measure') return this.measure();
+      // The open category's rows and keys only (a key of one category must not fire in another).
+      if (this.category === 'data') {
+        const chosen = dataMenuView(this.data)?.resolve(result);
+        if (chosen?.kind === 'action') return await this.dataAction(chosen.action);
+      }
+      if (key === 'm' || id === 'data:measure') return await this.measure();
       if (id === 'data:folder' && result.kind === 'pick') {
         const exit = await new DataFolderFlow(this.app, this.ctx).run();
         return exit ? { exit } : { reload: true };
       }
-      if (id === 'data:clean' && result.kind === 'pick') {
-        const argv = await new CommandForm(this.app, this.ctx, commandSpec('clean') as CommandSpec).run();
-        return argv ? { exit: { kind: 'run', argv } } : {};
-      }
-      if (key === 'x') return await this.remove(id);
       if (key === 'f' && this.category === 'logs') return { exit: { kind: 'run', argv: ['logs', '--follow'] } };
       if (id?.startsWith('log:') && result.kind === 'pick') {
         const file = this.logs.find((l) => l.name === id.slice(4));
@@ -489,36 +450,19 @@ export class MaintenancePage extends ListPage<string> {
     return undefined;
   }
 
-  private measure(): Outcome<string> {
+  private async measure(): Promise<Outcome<string>> {
     this.busy('Measuring what is stored… this can take a minute or more');
-    const report = this.dataService.report();
-    this.data = { entries: report.entries, disks: report.disks, total: report.totalBytes };
-    return { notice: Theme.ok(Theme.glyph.ok + ' Total stored: ' + humanBytes(report.totalBytes) + '.') };
+    this.data = await readQuery(showData, this.ctx);
+    return { notice: Theme.ok(Theme.glyph.ok + ' Total stored: ' + this.data.total + '.') };
   }
 
-  private async remove(id: string | undefined): Promise<Outcome<string>> {
-    const entry = id?.startsWith('entry:') ? this.data?.entries[Number(id.slice(6))] : undefined;
-    if (!entry || !this.data) return {};
-    const target =
-      cleanTargetOf(entry) ?? fail('"' + entry.name + '" is kept on this PC on purpose.', 'It is not deleted here.');
-    const plan = this.dataService.plan([target]);
-    if (!plan.present.length) return { notice: Theme.muted(target + ' does not exist.') };
-    const ok = await this.app.ask(
-      'Delete ' + target + '?',
-      [
-        humanBytes(plan.totalBytes) + ' in ' + entry.path + '.',
-        ...plan.present.flatMap((t) => (t.warning ? [t.target + ' ' + t.warning + '.'] : [])),
-        'This cannot be undone.',
-      ],
-      'Delete',
-      true,
-    );
-    if (!ok) return {};
-    const outcome = this.dataService.clean(plan);
-    if (outcome.failed.length)
-      return { notice: Theme.error(Theme.glyph.cross + ' Could not remove everything: ' + outcome.failed.join('; ')) };
-    const gone = this.data.entries.filter((e) => e !== entry);
-    this.data = { ...this.data, entries: gone, total: _.sumBy(gone, 'bytes') };
-    return { notice: Theme.ok(Theme.glyph.ok + ' Freed ' + humanBytes(outcome.freedBytes) + '.') };
+  /**
+   * Delete one stored folder, or clean up: the operation asks and reports as on the command line. After it ran, the
+   * sizes shown are out of date, so the list goes back to "Measure what is stored" (a declined question keeps it).
+   */
+  private async dataAction(action: Action): Promise<Outcome<string>> {
+    const outcome = await this.operations.perform(action, [this.label], (text) => this.busy(text));
+    if (outcome.reload) this.data = null;
+    return outcome;
   }
 }

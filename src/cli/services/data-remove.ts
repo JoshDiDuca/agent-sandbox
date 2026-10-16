@@ -1,8 +1,8 @@
 // Deleting inside the data folder. The sandbox can write there, so links are removed themselves and never followed.
 import fs from 'node:fs';
 import path from 'node:path';
-import { dirExists, isLink, removeLink } from '../../../core/util/index.js';
-import { removeRefusal, safeRemove } from '../../../shared/io/index.js';
+import { dirExists, isLink, removeLink } from '../../core/util/index.js';
+import { removeRefusal, safeRemove } from '../../shared/io/index.js';
 
 /** Deletes p (strictly inside root): links inside are removed first and never followed; see shared/safe-remove.ts. */
 export function removeTree(p: string, root: string): void {

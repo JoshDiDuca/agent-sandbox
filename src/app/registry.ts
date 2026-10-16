@@ -29,6 +29,7 @@ import {
 } from './features/accounts/index.js';
 import { listAppsRun, requestAppRun, setCustomAppsRun, toggleAppRun } from './features/apps/index.js';
 import { browseFolderRun } from './features/files/index.js';
+import { cleanDataRun, pruneStorageRun, showDataRun } from './features/data/index.js';
 import {
   addProjectRun,
   allProjectsRun,
@@ -83,6 +84,9 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   checkHealthRun,
   repairHealthRun,
   enableSandboxRun,
+  showDataRun,
+  cleanDataRun,
+  pruneStorageRun,
 ];
 
 export function implementationOf(id: string): Implementation<AnyDefinition, AppContext> | undefined {
