@@ -11,6 +11,7 @@ import { accountsPage, agentPage, listAccounts, type AgentAccounts } from '../ap
 import { addProject, projectRoots, projectsPage } from '../app/features/projects/index.js';
 import { cleanData, dataPage, showData } from '../app/features/data/index.js';
 import { isSandboxRunning } from '../host/sandbox/index.js';
+import { CRASH, listLogs, logsPage, tailLog } from '../app/features/logs/index.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
@@ -19,6 +20,7 @@ import { settingsPage } from '../app/features/settings/index.js';
 import type { AppContext } from '../app/context.js';
 import {
   ago,
+  bytesText,
   Cancelled,
   ClientMessageSchema,
   defineOperation,
@@ -33,6 +35,7 @@ import {
   implementer,
   invoke,
   pageActions,
+  pageHasContent,
   ServerMessageSchema,
   SURFACE_NAMES,
   toWireError,
@@ -990,5 +993,104 @@ export const appSuite: Suite = {
         'Which data should be cleaned?',
         'a question without a terminal fails with its own words',
       );
+    t.section("the kernel's text blocks, view parameters and sizes");
+    const textPage: Page = { title: 'Text', sections: [{ id: 'log', text: ['a', 'b'] }] };
+    t.equal(pageLines(textPage), ['a', 'b'], 'a text block is shown as its lines, in order, on the command line');
+    t.check(pageHasContent(textPage), 'a page whose only section is a text block has content');
+    t.check(
+      bytesText(1536) === '1.5 KB' && bytesText(0) === '0 B' && bytesText(5 * 1024 ** 3) === '5.0 GB',
+      'bytesText says sizes the way humanBytes does',
+      [bytesText(1536), bytesText(0), bytesText(5 * 1024 ** 3)].join(' | '),
+    );
+
+    t.section('logs, run against temp folders');
+    const logsCfg = t.write(t.at('app-logs', 'config.json'), '{}\n');
+    const logsCtx = {
+      loaded: { config: structuredClone(DEFAULTS), configPath: logsCfg, base: t.temp },
+      options: { workspace: t.dir('app-logs', 'here') },
+      storageRoot: t.dir('app-logs', 'storage'),
+      packageRoot: t.dir('app-logs', 'package'),
+      dataPath: t.dir('app-logs', 'data'),
+    } as unknown as AppContext;
+    const logsDir = t.dir('app-logs', 'data', 'logs');
+    const guestLog = t.write(
+      path.join(logsDir, 'guest-a.log'),
+      Array.from({ length: 300 }, (_, i) => 'line ' + (i + 1)).join('\n') + '\n',
+    );
+    const daemonLog = t.write(path.join(logsDir, 'daemon-b.log'), 'd\n');
+    t.write(path.join(logsDir, 'notes.txt'), 'not a log\n');
+    t.touch(guestLog, -60);
+    t.touch(daemonLog);
+    const logList = await readQuery(listLogs, logsCtx);
+    t.check(
+      logList.files.map((f) => f.name).join() === 'daemon-b.log,guest-a.log' &&
+        logList.folder === logsDir &&
+        !logList.crash,
+      'logs.list lists only the log files, newest first, and says there is no crash report yet',
+      logList.files.map((f) => f.name).join(),
+    );
+    const endOfLog = await readQuery(tailLog, logsCtx, { name: 'guest-a.log' });
+    t.check(
+      endOfLog.name === 'guest-a.log' &&
+        endOfLog.file === guestLog &&
+        endOfLog.text.startsWith('line 182\n') &&
+        endOfLog.text.endsWith('line 300\n') &&
+        endOfLog.text.split('\n').length === 120,
+      'logs.tail shows the end of the log as the command always printed it (the last 120 pieces: 119 lines and the newline)',
+      endOfLog.text.slice(0, 40),
+    );
+    fs.appendFileSync(guestLog, 'appended\n');
+    const more = await readQuery(tailLog, logsCtx, { name: 'guest-a.log', from: endOfLog.next });
+    t.equal(more.text, 'appended\n', 'logs.tail read on from next gives only the new text');
+    await t.throws(
+      () => readQuery(tailLog, logsCtx, { name: '..\\config.json' }),
+      'There is no log called',
+      'a log name from outside cannot become a path of its own (..\\config.json)',
+    );
+    await t.throws(
+      () => readQuery(tailLog, logsCtx, { name: 'C:\\Windows\\win.ini' }),
+      'There is no log called',
+      'a log name from outside cannot become a path of its own (a drive path)',
+    );
+    await t.throws(
+      () => readQuery(tailLog, logsCtx, { name: CRASH }),
+      'No crash report yet',
+      'the reserved crash name with no report fails with the words the command line always printed',
+    );
+    const noLogsCtx = { ...logsCtx, dataPath: t.dir('app-logs', 'empty') } as unknown as AppContext;
+    const nothing = await readQuery(tailLog, noLogsCtx, {});
+    t.check(
+      nothing.file === '' && nothing.text === '' && (await readQuery(listLogs, noLogsCtx)).files.length === 0,
+      'with no logs yet the tail is empty (the page says so; the command line fails with its words)',
+    );
+    const crashFile = t.write(
+      path.join(logsCtx.storageRoot, 'logs', 'crashes', 'crash-20261014-101500.txt'),
+      'Crash.\n',
+    );
+    const withCrash = await readQuery(listLogs, logsCtx);
+    const crashTail = await readQuery(tailLog, logsCtx, { name: CRASH });
+    t.check(
+      withCrash.crash && crashTail.file === crashFile && crashTail.text === 'Crash.\n' && crashTail.next === 0,
+      'logs.tail with the reserved name reads the last crash report, whole',
+      crashTail.file,
+    );
+    const logsPageNow = logsPage(withCrash, endOfLog);
+    const itemIds = logsPageNow.sections[0].items?.map((i) => i.id) ?? [];
+    t.check(
+      itemIds.join() === 'log:daemon-b.log,log:guest-a.log,log:' + CRASH &&
+        logsPageNow.sections[0].items?.find((i) => i.id === 'log:guest-a.log')?.badges?.[0]?.text === 'showing' &&
+        logsPageNow.sections[0].items?.find((i) => i.id === 'log:daemon-b.log')?.badges === undefined &&
+        logsPageNow.sections[1]?.text?.length === 119,
+      'the logs page: one row per log, the shown one badged, the crash report last, the end of the log as text',
+      itemIds.join(),
+    );
+    const logsMenuNow = menuView(logsPage(withCrash), { category: 'logs', refresh: false });
+    t.check(
+      logsMenuNow.actions.map((a) => a.key).join() === 'f' &&
+        logsMenuNow.enterLabel('logs', 'log:guest-a.log') === 'show' &&
+        logsMenuNow.resolve({ kind: 'action', key: 'f', value: undefined })?.kind === 'action',
+      'the logs menu: the key f (follow in the terminal) and Enter shows',
+      logsMenuNow.actions.map((a) => a.key).join(),
+    );
   },
 };

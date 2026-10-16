@@ -22,7 +22,7 @@ export type Target =
   /** A command line of an area that is not a feature yet: the menu runs it, the web does not offer it. */
   | { readonly kind: 'command'; readonly argv: readonly string[] }
   /** Another view. */
-  | { readonly kind: 'view'; readonly view: string };
+  | { readonly kind: 'view'; readonly view: string; readonly params?: Readonly<Record<string, string>> };
 
 interface ActionBase {
   /** The words on a button or a row ("Stop the sandbox…"). */
@@ -129,6 +129,8 @@ export interface Section {
   readonly cards?: boolean;
   readonly actions?: readonly Action[];
   readonly notes?: readonly Note[];
+  /** Preformatted lines (a log): monospace, shown as they are. */
+  readonly text?: readonly string[];
 }
 
 /** What a page shows when it has nothing: the text and the next step (the CLI prints `cliText`, naming a command). */
@@ -182,7 +184,9 @@ export function link(
 
 /** Does the page show anything besides its empty state? */
 export function pageHasContent(page: Page): boolean {
-  return page.sections.some((s) => (s.facts?.length ?? 0) > 0 || (s.items?.length ?? 0) > 0);
+  return page.sections.some(
+    (s) => (s.facts?.length ?? 0) > 0 || (s.items?.length ?? 0) > 0 || (s.text?.length ?? 0) > 0,
+  );
 }
 
 /** Every action a page offers, wherever it sits (for parity checks and key bars). */

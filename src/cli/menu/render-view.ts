@@ -66,6 +66,7 @@ export function menuView(page: Page, o: MenuViewOptions = {}): MenuView {
     });
     if (e.action) enter.set(prefix + EMPTY_ROW, e.action);
   }
+  // Section.text (a log's lines) is not a row: the menu shows a log on the normal screen (menu.ts view), not here.
   for (const section of page.sections) {
     const heading = section.title ?? page.title;
     for (const f of section.facts ?? [])

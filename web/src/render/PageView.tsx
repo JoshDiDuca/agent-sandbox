@@ -7,9 +7,11 @@ import {
   Box,
   Button,
   Card,
+  Code,
   Collapse,
   Group,
   Progress,
+  ScrollArea,
   SimpleGrid,
   Stack,
   Table,
@@ -19,7 +21,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { IconChevronDown, IconChevronRight, IconInfoCircle, IconSearch } from '@tabler/icons-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   pageHasContent,
   type Action,
@@ -418,11 +420,29 @@ function SectionNotes({ notes }: { readonly notes: readonly Note[] }) {
   );
 }
 
+/** Preformatted lines (a log): a monospace box of its own height that keeps its end in view as the lines grow. */
+function TextBlock({ lines }: { readonly lines: readonly string[] }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const joined = lines.join('\n');
+  useEffect(() => {
+    const el = viewport.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [joined]);
+  return (
+    <Card>
+      <ScrollArea h={400} viewportRef={viewport} type="auto">
+        <Code block>{joined}</Code>
+      </ScrollArea>
+    </Card>
+  );
+}
+
 export function SectionBlock({ section }: { readonly section: Section }) {
   const items = section.items ?? [];
   const facts = section.facts ?? [];
   const actions = (section.actions ?? []).filter(offered);
-  if (!facts.length && !items.length && !actions.length && !section.summary) return null;
+  const text = section.text ?? [];
+  if (!facts.length && !items.length && !actions.length && !section.summary && !text.length) return null;
   const table = section.columns && section.columnsOn !== 'cli';
   return (
     <Stack gap="sm">
@@ -437,6 +457,7 @@ export function SectionBlock({ section }: { readonly section: Section }) {
           <Facts facts={facts} />
         </Card>
       )}
+      {text.length > 0 && <TextBlock lines={text} />}
       {items.length > 0 &&
         (section.cards ? (
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
@@ -462,7 +483,7 @@ export function filtered(page: Page, text: string): Page {
     ...page,
     sections: page.sections
       .map((s) => ({ ...s, facts: [], actions: [], items: (s.items ?? []).filter(hit) }))
-      .filter((s) => s.items.length > 0),
+      .filter((s) => s.items.length > 0 || (s.text?.length ?? 0) > 0),
   };
 }
 

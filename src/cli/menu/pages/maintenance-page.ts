@@ -4,21 +4,13 @@
 import { dataPage, showData, type DataShow } from '../../../app/features/data/index.js';
 import type { Action } from '../../../app/kernel/index.js';
 import { readQuery } from '../../../app/registry.js';
-import { humanBytes } from '../../../core/disk.js';
 import { userDir } from '../../../core/config/index.js';
 import { errMsg } from '../../../core/util/index.js';
 import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
+import { CRASH, listLogs, logsPage, type LogFiles } from '../../../app/features/logs/index.js';
 import type { Context } from '../../commands/context.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
-import { ago } from '../../output/index.js';
-import {
-  LogsService,
-  MigrateService,
-  NPM_UPDATE_COMMAND,
-  UpdateService,
-  type LogFile,
-  type UpdateStatus,
-} from '../../services/index.js';
+import { MigrateService, NPM_UPDATE_COMMAND, UpdateService, type UpdateStatus } from '../../services/index.js';
 import { describeResult } from '../../commands/maintenance/update.js';
 import {
   Text,
@@ -40,7 +32,8 @@ export interface MaintenanceModel {
   readonly dataFolder: { label: string; hint: string; description: string };
   /** Null until measured (measuring a big data folder takes a while). */
   readonly data: DataShow | null;
-  readonly logs: readonly LogFile[];
+  /** The sandbox's logs (the logs view's query): the category's rows and its key. */
+  readonly logs: LogFiles;
   /** The Health category: the last check or repair saved (null: none yet). */
   readonly health: { readonly last: HealthLast | null };
   /** The changes still to make to your saved settings (or why they cannot be read). */
@@ -74,6 +67,8 @@ const CATEGORIES = [
 ];
 
 const MORE_COMMANDS = ['sync', 'audit', 'config', 'generate', 'exec', 'agent-commands'];
+
+const NO_LOGS: LogFiles = { folder: '', files: [], crash: false };
 
 /** Plain names for the commands under More commands. */
 const MORE_LABELS: Readonly<Record<string, string>> = {
@@ -161,15 +156,18 @@ function updateItems(m: MaintenanceModel): ListItem<string>[] {
   return rows;
 }
 
+/**
+ * The logs view's rows and keys for the Logs category (its own empty row is left out: the category shows the page's
+ * "Nothing here yet.").
+ */
+function logsMenu(files: LogFiles): MenuView {
+  return menuView({ ...logsPage(files), empty: undefined }, { category: 'logs', refresh: false });
+}
+
 /** The list for the maintenance tab. Pure. */
 export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
-  const logs: ListItem<string>[] = m.logs.map((f) => ({
-    value: 'log:' + f.name,
-    label: f.name,
-    category: 'logs',
-    hint: humanBytes(f.bytes) + '  ' + ago(f.modified),
-    description: 'Enter shows the end of this log in the terminal.',
-  }));
+  // The logs rows have no section heading of their own: the category is their heading.
+  const logs: ListItem<string>[] = logsMenu(m.logs).items.map(({ section: _section, ...row }) => row);
   // The checks take seconds (programs are run), so they only run when you ask: the page shows the saved results.
   const health = healthMenu(m);
   const settings: ListItem<string>[] =
@@ -239,7 +237,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
       case 'data':
         return [{ key: 'm', label: 'measure again' }, ...(dataMenuView(m.data)?.actions ?? [])];
       case 'logs':
-        return [{ key: 'f', label: 'follow in the terminal' }];
+        return logsMenu(m.logs).actions;
       case 'health':
         return healthMenu(m).actions;
       case 'updates': {
@@ -276,7 +274,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
 export class MaintenancePage extends ListPage<string> {
   readonly label = 'Maintenance';
   private data: DataShow | null = null;
-  private logs: LogFile[] = [];
+  private logs: LogFiles = NO_LOGS;
   private last: HealthLast | null = null;
   private settings: MaintenanceModel['settings'] = { pending: [] };
   private readonly migrate: MigrateService;
@@ -316,9 +314,9 @@ export class MaintenancePage extends ListPage<string> {
 
   protected async load(): Promise<void> {
     try {
-      this.logs = new LogsService(this.ctx).files();
+      this.logs = await readQuery(listLogs, this.ctx);
     } catch {
-      this.logs = [];
+      this.logs = NO_LOGS;
     }
     this.readSettings();
     this.last = (await readQuery(lastHealth, this.ctx)).last;
@@ -416,10 +414,10 @@ export class MaintenancePage extends ListPage<string> {
         const exit = await new DataFolderFlow(this.app, this.ctx).run();
         return exit ? { exit } : { reload: true };
       }
-      if (key === 'f' && this.category === 'logs') return { exit: { kind: 'run', argv: ['logs', '--follow'] } };
-      if (id?.startsWith('log:') && result.kind === 'pick') {
-        const file = this.logs.find((l) => l.name === id.slice(4));
-        return file ? { exit: { kind: 'view', file: file.path } } : {};
+      // Only the open category's rows and keys: `f` and Enter mean something else in Health.
+      if (this.category === 'logs') {
+        const chosen = logsMenu(this.logs).resolve(result);
+        if (chosen?.kind === 'action') return this.showLog(chosen.action);
       }
       if ((result.kind === 'pick' && id?.startsWith('settings:')) || (key === 's' && this.category === 'updates'))
         return await this.updateSettings();
@@ -440,6 +438,21 @@ export class MaintenancePage extends ListPage<string> {
       return { notice: Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) };
     }
     return {};
+  }
+
+  /**
+   * A Logs row or key: the crash report or the end of a log, on the normal screen (the menu's own view shows a log
+   * there). Only names from the listing are looked up, never a path of their own.
+   */
+  private showLog(action: Action): Outcome<string> {
+    if (action.kind !== 'link') return {};
+    const target = action.target;
+    if (target.kind === 'command') return { exit: { kind: 'run', argv: [...target.argv] } };
+    if (target.kind !== 'view') return {};
+    const name = target.params?.name;
+    if (name === CRASH) return { exit: { kind: 'run', argv: ['logs', '--crash'] } };
+    const file = this.logs.files.find((f) => f.name === name);
+    return file ? { exit: { kind: 'view', file: file.path } } : {};
   }
 
   /** The key an Enter on an Updates row stands for. */
