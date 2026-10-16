@@ -48,6 +48,19 @@ export function tidy(text: string): string {
   return text.replace(/ +-> +/g, ' → ').replace(/\s{2,}/g, ' · ');
 }
 
+/**
+ * Does the item's hint add anything? The menu shows states as a hint ("in the sandbox · default"); the web shows them
+ * as badges, so a hint made only of the badges' words is left out.
+ */
+export function hintShown(item: Item): boolean {
+  if (!item.hint) return false;
+  const badges = new Set((item.badges ?? []).map((b) => b.text.toLowerCase()));
+  if (!badges.size) return true;
+  return !tidy(item.hint)
+    .split(' · ')
+    .every((part) => badges.has(part.trim().toLowerCase()));
+}
+
 /** The action a page leads with: starting something, else none. */
 function isLead(action: Action): boolean {
   return action.kind === 'link' && action.target.kind === 'start-agent';
@@ -246,9 +259,9 @@ function ItemRow({ item }: { readonly item: Item }) {
               )}
               <Badges item={item} />
             </Group>
-            {item.hint && (
+            {hintShown(item) && (
               <Text size="sm" c="dimmed" style={{ wordBreak: 'break-word' }}>
-                {tidy(item.hint)}
+                {tidy(item.hint ?? '')}
               </Text>
             )}
             {item.description && (
@@ -292,9 +305,9 @@ function ItemCard({ item }: { readonly item: Item }) {
               <Text fw={650} size="sm" truncate>
                 {tidy(item.label)}
               </Text>
-              {item.hint && (
+              {hintShown(item) && (
                 <Text size="xs" c="dimmed" truncate>
-                  {tidy(item.hint)}
+                  {tidy(item.hint ?? '')}
                 </Text>
               )}
             </Box>
