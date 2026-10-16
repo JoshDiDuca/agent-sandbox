@@ -6,7 +6,6 @@ export { storage, storageBeforeCommand } from './storage/index.js';
 export { repairCommand } from './repair/index.js';
 export { attach, db, exec } from './sessions/index.js';
 export { resume } from './resume.js';
-export { projects } from './projects/index.js';
 export {
   audit,
   claudeHost,

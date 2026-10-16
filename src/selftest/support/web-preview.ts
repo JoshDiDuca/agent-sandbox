@@ -9,6 +9,7 @@ import type { AppContext } from '../../app/context.js';
 import { listAgents } from '../../app/features/agents/index.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
+import { listProjects } from '../../app/features/projects/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
 import { runDefinition } from '../../app/registry.js';
@@ -211,6 +212,54 @@ function sampleAgents(): unknown {
   });
 }
 
+/** Sample projects: this folder's project and a root's (mapped), one not mapped, and one excluded. */
+function sampleProjects(running: boolean): unknown {
+  const inSandbox = (name: string, how: string): string | null => (running ? name + ' (' + how + ')' : null);
+  return listProjects.output.parse({
+    all: false,
+    roots: ['F:\\AgentProjects'],
+    exclude: ['F:\\AgentProjects\\old-demo'],
+    projects: [
+      {
+        folder: 'F:\\AgentProjects\\windows-sandbox',
+        here: true,
+        known: true,
+        root: 'F:\\AgentProjects',
+        excluded: false,
+        mappedAtStart: true,
+        running: inSandbox('windows-sandbox', 'launch'),
+      },
+      {
+        folder: 'F:\\AgentProjects\\mw2-agent',
+        here: false,
+        known: true,
+        root: 'F:\\AgentProjects',
+        excluded: false,
+        mappedAtStart: true,
+        running: inSandbox('mw2-agent', 'root'),
+      },
+      {
+        folder: 'F:\\Code\\scratch',
+        here: false,
+        known: true,
+        root: null,
+        excluded: false,
+        mappedAtStart: false,
+        running: null,
+      },
+      {
+        folder: 'F:\\AgentProjects\\old-demo',
+        here: false,
+        known: true,
+        root: null,
+        excluded: true,
+        mappedAtStart: false,
+        running: null,
+      },
+    ],
+  });
+}
+
 /** The real features where they only touch the temp folder, sample data for the rest. */
 function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
   const sample = async (id: string, io: OperationIO): Promise<unknown> => {
@@ -252,6 +301,37 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         return { message: 'Done (preview: nothing was changed).' };
       case 'sessions.restart':
         return { message: 'Restarted (preview: nothing was changed).', restarted: 0 };
+      case 'projects.list':
+        return sampleProjects(state.running);
+      case 'projects.add':
+        return { message: 'Added F:\\Code\\scratch to your projects. (preview: nothing was saved)' };
+      case 'projects.remove':
+        if (!(await io.confirm({ title: 'Forget scratch?', yes: 'Forget', danger: true, implied: true }))) cancelled();
+        return { message: 'Removed F:\\Code\\scratch from your projects (preview: nothing was changed).' };
+      case 'projects.include':
+      case 'projects.exclude':
+        return { message: 'Excluded F:\\AgentProjects\\old-demo. (preview: nothing was changed)' };
+      case 'projects.all':
+        return { message: 'Mapping all projects at every start is on. (preview: nothing was changed)' };
+      case 'projects.roots':
+        if (
+          !(await io.confirm({ title: 'Remove the root AgentProjects?', yes: 'Remove', danger: true, implied: true }))
+        )
+          cancelled();
+        return { message: 'Removed the project root F:\\AgentProjects. (preview: nothing was changed)' };
+      case 'projects.choose': {
+        const picked = await io.checklist({
+          title: 'Projects mapped at every start, so they open without a restart:',
+          choices: [
+            { value: 'windows-sandbox', label: 'F:\\AgentProjects\\windows-sandbox  (this folder)' },
+            { value: 'mw2-agent', label: 'F:\\AgentProjects\\mw2-agent' },
+            { value: 'scratch', label: 'F:\\Code\\scratch' },
+          ],
+          checked: ['windows-sandbox', 'mw2-agent'],
+        });
+        if (picked === undefined) cancelled();
+        return { message: picked.length + ' project(s) mapped at every start (preview: nothing was changed).' };
+      }
       case 'apps.request':
         // The real operation opens a browser on this PC; the preview only shows the address it would open.
         return {
@@ -287,6 +367,14 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'apps.toggle': 'operation',
     'apps.setCustom': 'operation',
     'apps.request': 'operation',
+    'projects.list': 'query',
+    'projects.add': 'operation',
+    'projects.remove': 'operation',
+    'projects.include': 'operation',
+    'projects.exclude': 'operation',
+    'projects.all': 'operation',
+    'projects.roots': 'operation',
+    'projects.choose': 'operation',
   };
   return {
     kind: (id) => kinds[id],

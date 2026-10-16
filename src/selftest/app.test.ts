@@ -6,8 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { agentsPage, agentsView } from '../app/features/agents/index.js';
-import { DEFINITIONS, NAV, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
+import { DEFINITIONS, NAV, navSections, navViews, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
 import { accountsPage, agentPage, listAccounts, type AgentAccounts } from '../app/features/accounts/index.js';
+import { addProject, projectRoots, projectsPage } from '../app/features/projects/index.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
@@ -262,7 +263,7 @@ export const appSuite: Suite = {
       'every definition has exactly one implementation and every implementation is registered',
       ids.filter((id) => !implemented.includes(id)).join(', '),
     );
-    const webViews = NAV.flatMap((n) => (n.view ? [viewById(n.view)!] : []));
+    const webViews = navViews(NAV).map((id) => viewById(id)!);
     const reach: Record<SurfaceName, Set<string>> = {
       cli: new Set(),
       menu: reached(MENU_VIEWS.map((m) => m.view)),
@@ -274,7 +275,7 @@ export const appSuite: Suite = {
     t.equal(gaps, [], 'the parity list shows no gaps');
     t.check(
       VIEWS.every((v) => webViews.includes(v) || MENU_VIEWS.some((m) => m.view === v)) &&
-        NAV.every((n) => n.view !== undefined || Boolean(n.elsewhere)),
+        navSections(NAV).every((n) => n.view !== undefined || (n.children?.length ?? 0) > 0 || Boolean(n.elsewhere)),
       'every view is shown somewhere, and a web section without a view says where the area is',
     );
     const hinted = DEFINITIONS.filter((d) => d.cli);
@@ -686,6 +687,153 @@ export const appSuite: Suite = {
         JSON.stringify({ name: 'work', noRestart: true }) &&
         !('noRestart' in cliInput(useDef, parseCli(['account', 'use', 'work']))),
       'a --no- flag reaches the input (and is absent without it)',
+    );
+
+    t.section('projects, run against a temp folder');
+    const projCfg = t.at('app-projects', 'config.json');
+    t.write(projCfg, '{}\n');
+    const projCtx = {
+      loaded: { config: structuredClone(DEFAULTS), configPath: projCfg, base: t.temp },
+      options: { workspace: t.dir('app-projects', 'here') },
+      storageRoot: t.dir('app-projects', 'storage'),
+      packageRoot: t.dir('app-projects', 'package'),
+      dataPath: t.dir('app-projects', 'data'),
+    } as unknown as AppContext;
+    const projQuiet = fakeIO().io;
+    const rootDir = t.dir('app-projects', 'roots', 'code');
+    const addedRoot = (await runDefinition(
+      'projects.roots',
+      projCtx,
+      { change: 'add', rootFolder: rootDir },
+      projQuiet,
+    )) as { message: string };
+    t.check(
+      addedRoot.message.startsWith('Added the project root ' + rootDir + ':'),
+      'projects roots add: the folder becomes a root and the message says so',
+      addedRoot.message,
+    );
+    const rootAgain = (await runDefinition(
+      'projects.roots',
+      projCtx,
+      { change: 'add', rootFolder: rootDir },
+      projQuiet,
+    )) as { message: string };
+    t.equal(rootAgain.message, rootDir + ' is a root already.', 'projects roots add: a root twice is said, not added');
+    await t.throws(
+      () => runDefinition('projects.roots', projCtx, { change: 'remove', rootFolder: rootDir }, fakeIO([false]).io),
+      'Nothing changed.',
+      'projects roots remove asks first; a no changes nothing',
+    );
+    t.check(fs.readFileSync(projCfg, 'utf8').includes('roots'), 'the root is still in the settings file after a no');
+    const removedRoot = (await runDefinition(
+      'projects.roots',
+      projCtx,
+      { change: 'remove', rootFolder: rootDir },
+      fakeIO([true]).io,
+    )) as { message: string };
+    t.check(
+      removedRoot.message.startsWith('Removed the project root ' + rootDir),
+      'projects roots remove: yes removes it',
+      removedRoot.message,
+    );
+    await t.throws(
+      () => runDefinition('projects.roots', projCtx, { change: 'add', rootFolder: 'C:\\' }, projQuiet),
+      'A whole drive cannot be a project root',
+      'a whole drive cannot be a project root',
+    );
+    const projectDir = t.dir('app-projects', 'api');
+    const addedProject = (await runDefinition('projects.add', projCtx, { projectFolder: projectDir }, projQuiet)) as {
+      message: string;
+      next?: string;
+    };
+    t.check(
+      addedProject.message === 'Added ' + projectDir + ' to your projects.' &&
+        addedProject.next === 'Next: sandbox projects all on   (map every project at every start)' &&
+        (addProject.text?.(addedProject as never) ?? '').endsWith(addedProject.next ?? '~'),
+      'projects add: says it was added, and what to do next while all projects is off (on the command line too)',
+      addedProject.message,
+    );
+    await t.throws(
+      () => runDefinition('projects.remove', projCtx, { projectFolder: projectDir }, fakeIO([false]).io),
+      'Nothing changed.',
+      'projects remove: a no is Nothing changed and keeps the project',
+    );
+    const allOn = (await runDefinition('projects.all', projCtx, { state: 'on' }, projQuiet)) as { message: string };
+    t.check(
+      allOn.message.startsWith('Mapping all projects at every start is on. This changes what is mapped'),
+      'projects all on: the setting is written and the next start is said',
+      allOn.message,
+    );
+    await t.throws(
+      () => runDefinition('projects.choose', projCtx, {}, fakeIO([undefined]).io),
+      'Nothing changed.',
+      'projects choose: backing out changes nothing',
+    );
+    const projectsSample = projectsPage({
+      all: false,
+      roots: ['C:\\Projects'],
+      exclude: [],
+      projects: [
+        {
+          folder: 'C:\\Projects\\api',
+          here: true,
+          known: true,
+          root: 'C:\\Projects',
+          excluded: false,
+          mappedAtStart: true,
+          running: 'api (root)',
+        },
+        {
+          folder: 'F:\\Code\\scratch',
+          here: false,
+          known: true,
+          root: null,
+          excluded: true,
+          mappedAtStart: false,
+          running: null,
+        },
+      ],
+    });
+    const projMenu = menuView(projectsSample, { category: 'projects', refresh: false });
+    t.check(
+      ['@add-root', 'root:C:\\Projects', 'project:C:\\Projects\\api', 'project:F:\\Code\\scratch'].every((v) =>
+        projMenu.items.some((i) => i.value === v),
+      ) &&
+        projMenu.actions.map((a) => a.key).join() === 'a,f,f' &&
+        projMenu.actions
+          .filter((a) => a.key === 'f')
+          .map((a) => a.label)
+          .join() === 'remove root,forget project' &&
+        projMenu.enterLabel(undefined, '@add-root') === 'choose folder' &&
+        projMenu.resolve({ kind: 'action', key: 'a', value: undefined })?.kind === 'action',
+      'projects in the menu: the row values (@add-root, root:, project:) and the keys a, f (root), f (project)',
+      projMenu.actions.map((a) => a.key + ':' + a.label).join(' '),
+    );
+    const projLines = pageLines(projectsSample);
+    t.check(
+      projLines.some((l) => /^All projects\s+off$/.test(l)) &&
+        projLines.some((l) => /FOLDER\s+AT START\s+RUNNING SANDBOX/.test(l)) &&
+        projLines.includes('* = this folder.  Choose with: sandbox projects choose'),
+      'projects list on the command line: the facts, the table and its note',
+      projLines.join('\n'),
+    );
+    const rootFieldDef = fieldsOf(projectRoots.input).find((f) => f.name === 'rootFolder');
+    const folderFieldDef = fieldsOf(addProject.input).find((f) => f.name === 'projectFolder');
+    t.check(
+      rootFieldDef?.kind === 'path' &&
+        rootFieldDef.pathKind === 'dir' &&
+        folderFieldDef?.kind === 'path' &&
+        folderFieldDef.pathKind === 'dir',
+      'the folder fields of projects are folder pickers',
+    );
+    const commandChoices = commandSpec('projects')?.args[0]?.choices ?? [];
+    t.check(
+      ['list', 'choose', 'add', 'remove', 'include', 'exclude', 'all', 'roots'].every((a) =>
+        commandChoices.includes(a),
+      ) &&
+        definitionFor('projects', ['roots'])?.id === 'projects.roots' &&
+        definitionFor('projects', []) === undefined,
+      'the commands keep their names: projects takes the eight actions; roots is its own definition',
     );
   },
 };

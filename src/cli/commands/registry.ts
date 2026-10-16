@@ -6,8 +6,8 @@ import { data } from './data/index.js';
 import { storage } from './storage/index.js';
 import { attach, db, exec } from './sessions/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
+import { listProjects } from '../../app/features/projects/index.js';
 import { definitionHandler } from '../operations/index.js';
-import { projects } from './projects/index.js';
 import {
   audit,
   claudeHost,
@@ -38,7 +38,8 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   resume: resume,
   // The bare command lists; its actions (save, use ...) are the operations' hints.
   account: definitionHandler(listAccounts),
-  projects: projects,
+  // The bare command lists; its actions (add, remove, roots ...) are the operations' hints.
+  projects: definitionHandler(listProjects),
   sync: sync,
   logs: logs,
   audit: audit,
