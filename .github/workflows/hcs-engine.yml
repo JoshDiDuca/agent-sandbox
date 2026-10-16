@@ -32,9 +32,10 @@ jobs:
       matrix:
         os: [windows-2022, windows-2025]
     env:
-      LOGS: ${{ runner.temp }}\hcs-logs
-      DOCS: ${{ runner.temp }}\hcs-docs
-      HCSHOST: ${{ runner.temp }}\hcs-bin\HcsHost.exe
+      # The runner context is not available at job level; the workspace (github context) is.
+      LOGS: ${{ github.workspace }}\.hcs\logs
+      DOCS: ${{ github.workspace }}\.hcs\docs
+      HCSHOST: ${{ github.workspace }}\.hcs\bin\HcsHost.exe
       IMAGE: mcr.microsoft.com/windows/servercore:ltsc2022
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +61,7 @@ jobs:
           $lines | Tee-Object -FilePath "$env:LOGS\facts.txt"
           exit 0
 
-      - run: npm ci   # also builds (prepare)
+      - run: npm ci # also builds (prepare)
       - name: Build
         id: build
         run: npm run build
@@ -218,5 +219,5 @@ jobs:
         if: always()
         with:
           name: hcs-logs-${{ matrix.os }}
-          path: ${{ runner.temp }}\hcs-logs
+          path: ${{ env.LOGS }}
           if-no-files-found: warn
