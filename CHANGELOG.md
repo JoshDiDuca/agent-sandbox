@@ -7,7 +7,7 @@ Some older names stay on purpose so that existing installs keep working: the `~/
 environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDBOX=1` and `AGENT_SANDBOX_WORKSPACE`, the
 `agent-sandbox-quarantine` folder, and the Visual Studio instance ID that `vswhere` uses.
 
-## Unreleased
+## 1.11.0
 
 - **Web UI (beta), rebuilt.** A new look in dark and light; a sidebar with the sandbox's live state; a search over
   pages, sessions and every setting (Ctrl+K). Settings show one category at a time with a search, and each setting's
@@ -16,6 +16,11 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   has find, text size, full screen, clickable links and, on phones, a row of the keys a phone keyboard lacks. Areas
   that are not in the web UI yet are no longer dead links. Everything still runs through the same shared code as the
   CLI and the menu.
+- **More of the tool in the web UI**, each written once for the command line, the menu and the browser: Agents (start
+  one, which then opens its terminal, add one, make one the default, remove one), Accounts (save, use, rename and remove
+  logins), Apps (switch catalogue apps on and off per scope, your own programs, request an app) and Sandbox > Projects
+  (project roots, projects, all or chosen), with nested navigation. Starting an agent from the web now runs the same
+  operation as the menu (the old `POST /api/sessions` is gone). Maintenance follows.
 - The menu's Sessions page has a New session key (n).
 - **Builds no longer fail with "the paging file is too small" (os error 1455) or out-of-memory errors in a healthy
   sandbox.** Every new session re-applied its own memory limit to the job shared by all agents, so a session that
@@ -39,7 +44,7 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
 - **Agents see what the sandbox can really give them.** With a CPU cap, the sandbox's programs run on that share of the
   processors, so cargo, .NET, ninja and `nproc` count right, and `NUMBER_OF_PROCESSORS` says the same. Each session
   gets cargo and CMake job counts from a build budget (one job per 3 GB after 6 GB, up to 8 per session), and
-  `runudget.json` (`SANDBOX_BUDGET_FILE`) states the real numbers for agents to plan with.
+  `run\budget.json` (`SANDBOX_BUDGET_FILE`) states the real numbers for agents to plan with.
 - More links at once: `toolchains.rust.linkSlots: "auto"` allows one per 3 GB after 6 GB, 2 to 8 (was 2 to 4), now that
   the governor slows links down when memory runs short.
 - Web UI: connections no longer pile up. The server pings every page and drops those gone without closing, a new page
@@ -47,7 +52,9 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   live data and lets go of its connections, a closed one closes them at once, and a server of another version (left
   running across an update) is replaced instead of reused. The server ends by itself after 30 minutes unused while no
   sandbox runs.
-
+- An HCS engine workflow for GitHub Actions, run by hand (Actions > HCS engine (alpha)): it builds, checks the HCS
+  documents and tries a Hyper-V utility VM on hosted Windows runners, and says which isolation really worked
+  (docs/development.md).
 - The VPN is labelled alpha everywhere it shows (settings, `sandbox vpn`, the launch warnings, docs): it has not been tried on a real PC yet.
 - Terminals no longer show a second copy of the agent's screen at the bottom when another viewer (the web UI, a
   terminal on the PC) joins or types: with conpty.dll the session is resized only when the size really changes, and a

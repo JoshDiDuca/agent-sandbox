@@ -84,7 +84,7 @@ export function memoryEnv(env: NodeJS.ProcessEnv, sessions: number): NodeJS.Proc
 }
 
 /**
- * runudget.json (SANDBOX_BUDGET_FILE): the numbers an agent should plan with, because a program in a sandbox sees
+ * run\budget.json (SANDBOX_BUDGET_FILE): the numbers an agent should plan with, because a program in a sandbox sees
  * the sandbox's maximum (all processors, the whole RAM) rather than what it may use. Never stops a session.
  */
 function writeBudget(cpus: number, memoryGb: number, jobs: number, env: NodeJS.ProcessEnv): void {
