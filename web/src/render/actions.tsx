@@ -4,6 +4,10 @@
 // icon from the action's verb.
 import { ActionIcon, Button, Menu, Tooltip, type ButtonProps } from '@mantine/core';
 import {
+  IconCheck,
+  IconCircleMinus,
+  IconCirclePlus,
+  IconDeviceFloppy,
   IconDots,
   IconEye,
   IconEyeOff,
@@ -13,9 +17,11 @@ import {
   IconPlus,
   IconRefresh,
   IconRestore,
+  IconListCheck,
   IconStar,
   IconTerminal2,
   IconTrash,
+  IconX,
   type Icon,
 } from '@tabler/icons-react';
 import { useCallback } from 'react';
@@ -42,6 +48,13 @@ const VERB_ICONS: Readonly<Record<string, Icon>> = {
   hide: IconEyeOff,
   add: IconPlus,
   new: IconPlus,
+  forget: IconX,
+  include: IconCirclePlus,
+  exclude: IconCircleMinus,
+  rename: IconPencil,
+  use: IconCheck,
+  save: IconDeviceFloppy,
+  choose: IconListCheck,
 };
 
 /** The session a started agent runs in, from what agents.start returned. */
@@ -125,7 +138,22 @@ export function ActionButton({ action, primary = false, ...props }: ActionButton
 export function ActionIconButton({ action }: { readonly action: Action }) {
   const act = useAct();
   if (!offered(action)) return null;
-  const Picture = actionIcon(action) ?? IconDots;
+  const Picture = actionIcon(action);
+  // Without a picture of its own, a few words say it better than a generic icon.
+  if (!Picture)
+    return (
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        color={isDanger(action) ? 'red' : 'gray'}
+        onClick={(e) => {
+          e.stopPropagation();
+          void act(action);
+        }}
+      >
+        {action.label}
+      </Button>
+    );
   return (
     <Tooltip label={action.label}>
       <ActionIcon
