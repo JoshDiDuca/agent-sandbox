@@ -9,6 +9,7 @@ import type { AppContext } from '../../app/context.js';
 import { listAgents } from '../../app/features/agents/index.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
+import { lastHealth } from '../../app/features/health/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
@@ -260,12 +261,108 @@ function sampleProjects(running: boolean): unknown {
   });
 }
 
+/** The last check: a few results of each kind, the doctor rows, the setup and a log (nothing here is run). */
+function sampleHealth(): unknown {
+  const at = new Date(Date.now() - 3 * MINUTE).toISOString();
+  return lastHealth.output.parse({
+    last: {
+      at,
+      mode: 'repair',
+      checks: [
+        {
+          id: 'pc-edition',
+          group: 'This PC',
+          name: 'Windows edition',
+          status: 'ok',
+          detail: 'Windows 11 Pro',
+          fixable: false,
+        },
+        {
+          id: 'install-pointers',
+          group: 'Install',
+          name: 'Install pointers',
+          status: 'fixed',
+          detail: 'the command points at the new version',
+          applied: { done: 'pointed the command at 1.11.0', before: 'points at 1.9.2', after: 'points at 1.11.0' },
+          fixable: false,
+        },
+        {
+          id: 'stale-run',
+          group: 'Data folder',
+          name: 'Stale run folders',
+          status: 'needs-you',
+          detail: 'two folders from a sandbox that did not close',
+          means: 'they take space and can confuse the next start',
+          fix: 'stop the sandbox, then run sandbox repair again',
+          lines: ['run-20261012-0931', 'run-20261013-1744'],
+          fixable: false,
+        },
+        {
+          id: 'proxy',
+          group: 'Network',
+          name: 'GitHub',
+          status: 'warn',
+          detail: 'no answer within 20 seconds',
+          means: 'downloads of tools may fail',
+          fix: 'check your VPN or proxy',
+          fixable: false,
+        },
+      ],
+      summary: { total: 4, ok: 1, fixed: 1, warn: 1, needsYou: 1, skipped: 0, fixable: 0 },
+      details: [
+        ['Windows Sandbox', 'available'],
+        ['Config file', 'F:\\AgentProjects\\config.json'],
+        ['Projects running', 'windows-sandbox (launch)'],
+      ],
+      setup: {
+        checks: [
+          { name: 'Windows edition', status: 'ok', detail: 'Pro' },
+          { name: 'Windows Sandbox feature', status: 'action', detail: 'turned off' },
+          { name: 'Virtualization', status: 'ok', detail: 'on' },
+        ],
+        canEnable: true,
+        error: null,
+      },
+      log: 'C:\\AgentData\\logs\\repair-20261016-093012.log',
+    },
+  });
+}
+
 /** The real features where they only touch the temp folder, sample data for the rest. */
 function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
   const sample = async (id: string, io: OperationIO): Promise<unknown> => {
     switch (id) {
       case 'sandbox.status':
         return sampleStatus(state.running);
+      case 'health.last':
+        return sampleHealth();
+      case 'health.check':
+        io.progress('Checking this PC');
+        return {
+          summary: { total: 4, ok: 1, fixed: 0, warn: 1, needsYou: 1, skipped: 0, fixable: 1 },
+          changed: false,
+          log: null,
+        };
+      case 'health.repair':
+        io.log('Repair will change:', 'accent');
+        io.log('  1. Install pointers: point the command at the new version');
+        if (!(await io.confirm({ title: 'Fix this problem?', yes: 'Fix', danger: true }))) cancelled();
+        return {
+          summary: { total: 4, ok: 2, fixed: 1, warn: 1, needsYou: 0, skipped: 0, fixable: 0 },
+          changed: false,
+          log: null,
+        };
+      case 'health.enableSandbox':
+        if (
+          !(await io.confirm({
+            title: 'Turn on Windows Sandbox?',
+            lines: ['Windows asks for admin permission, then you restart Windows to finish.'],
+            yes: 'Turn on',
+            danger: true,
+          }))
+        )
+          cancelled();
+        return { message: 'Done. Restart Windows to finish. (preview: nothing was changed)' };
       case 'sessions.list':
         return sampleSessions(state.running);
       case 'agents.list':
@@ -375,6 +472,10 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'projects.all': 'operation',
     'projects.roots': 'operation',
     'projects.choose': 'operation',
+    'health.last': 'query',
+    'health.check': 'operation',
+    'health.repair': 'operation',
+    'health.enableSandbox': 'operation',
   };
   return {
     kind: (id) => kinds[id],

@@ -39,6 +39,7 @@ import {
   projectRootsRun,
   removeProjectRun,
 } from './features/projects/index.js';
+import { checkHealthRun, enableSandboxRun, lastHealthRun, repairHealthRun } from './features/health/index.js';
 import { hideWindowRun, sandboxStatusRun, showWindowRun, stopSandboxRun } from './features/sandbox/index.js';
 import { listSessionsRun, restartSessionsRun } from './features/sessions/index.js';
 import { getSettingRun, listSettingsRun, resetSettingRun, setSettingRun } from './features/settings/index.js';
@@ -78,6 +79,10 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   excludeProjectRun,
   allProjectsRun,
   projectRootsRun,
+  lastHealthRun,
+  checkHealthRun,
+  repairHealthRun,
+  enableSandboxRun,
 ];
 
 export function implementationOf(id: string): Implementation<AnyDefinition, AppContext> | undefined {
