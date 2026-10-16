@@ -4,9 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Draft } from '../cli/menu/settings/draft.js';
 import { ConfigFile } from '../app/features/settings/index.js';
-import { AppsModel } from '../cli/menu/apps.js';
 import { accountsOptions, type AccountsModel } from '../cli/menu/pages/accounts-page.js';
-import { appsOptions } from '../cli/menu/pages/apps-page.js';
+import { appsOptions, stageTicks } from '../cli/menu/pages/apps-page.js';
 import { maintenanceOptions, type MaintenanceModel } from '../cli/menu/pages/maintenance-page.js';
 import { sandboxOptions, type SandboxModel } from '../cli/menu/pages/sandbox-page.js';
 import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
@@ -258,9 +257,9 @@ export function renderScreens(dir: string): string {
   const flag = settings.find((s) => s.node.editor === 'boolean');
   if (harness) draft.stage(user, harness.key, 'codex');
   if (flag) draft.stage(user, flag.key, !(user.userConfig() as unknown as Record<string, unknown>)[flag.key[0]]);
-  const apps = new AppsModel(user, path.join(dir, 'data'));
+  const appsData = path.join(dir, 'data');
   const appsDraft = new Draft();
-  apps.stageTicks(appsDraft, ['git-gui']);
+  stageTicks(user, appsDraft, ['git-gui']);
 
   const out: string[] = [];
   for (const size of SIZES) {
@@ -324,7 +323,7 @@ export function renderScreens(dir: string): string {
     out.push(
       block(
         '4 Apps (1 unsaved)',
-        draw(3, appsOptions(apps, user, appsDraft, 'user'), size, status, appsDraft.count()),
+        draw(3, appsOptions(user, appsData, appsDraft, 'user'), size, status, appsDraft.count()),
         size,
       ),
     );
