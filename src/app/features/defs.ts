@@ -15,6 +15,17 @@ import {
 import { appsView, listApps, requestApp, setCustomApps, toggleApp } from './apps/apps.def.js';
 import { browseFolder } from './files/files.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
+import {
+  addProject,
+  allProjects,
+  chooseProjects,
+  excludeProject,
+  includeProject,
+  listProjects,
+  projectRoots,
+  projectsView,
+  removeProject,
+} from './projects/projects.def.js';
 import { listSessions, restartSessions, sessionsView } from './sessions/sessions.def.js';
 import { getSetting, listSettings, resetSetting, setSetting, settingsView } from './settings/settings.def.js';
 
@@ -22,6 +33,7 @@ export type { AgentRow, AgentsList } from './agents/agents.def.js';
 export type { AccountRow, AccountsList, AgentAccounts } from './accounts/accounts.def.js';
 export type { AppRow, AppsList, CustomAppRow } from './apps/apps.def.js';
 export type { FolderEntry, FolderListing } from './files/files.def.js';
+export type { ProjectRow, ProjectsList } from './projects/projects.def.js';
 export type { SandboxStatus } from './sandbox/sandbox.def.js';
 export type { SessionRow, SessionsList } from './sessions/sessions.def.js';
 export type { SettingRow, SettingsList } from './settings/settings.def.js';
@@ -45,6 +57,13 @@ export const OPERATIONS = [
   toggleApp,
   setCustomApps,
   requestApp,
+  chooseProjects,
+  addProject,
+  removeProject,
+  includeProject,
+  excludeProject,
+  allProjects,
+  projectRoots,
 ] as const;
 export const QUERIES = [
   sandboxStatus,
@@ -55,8 +74,17 @@ export const QUERIES = [
   browseFolder,
   listAccounts,
   listApps,
+  listProjects,
 ] as const;
-export const VIEWS = [sandboxView, sessionsView, agentsView, settingsView, accountsView, appsView] as const;
+export const VIEWS = [
+  sandboxView,
+  sessionsView,
+  agentsView,
+  settingsView,
+  accountsView,
+  appsView,
+  projectsView,
+] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
 export type Query = (typeof QUERIES)[number];
@@ -89,15 +117,34 @@ export function viewById(id: string): AnyView | undefined {
 /** One section of the web UI's navigation: the menu's sections in its order; `view` once the area is a feature. */
 export interface NavSection {
   readonly label: string;
+  /** The view this entry opens (an entry has a view, or children, or says where the area is). */
   readonly view?: ViewId;
   /** Where the area is today when it has no view yet. */
   readonly elsewhere?: string;
+  /** Entries under this one (Sandbox: Status, Projects). */
+  readonly children?: readonly NavSection[];
+}
+
+/** Every entry of the navigation, children included, in order. */
+export function navSections(nav: readonly NavSection[]): NavSection[] {
+  return nav.flatMap((n) => [n, ...navSections(n.children ?? [])]);
+}
+
+/** Every view the web's navigation opens. */
+export function navViews(nav: readonly NavSection[]): ViewId[] {
+  return navSections(nav).flatMap((n) => (n.view ? [n.view] : []));
 }
 
 export const NAV: readonly NavSection[] = [
   { label: 'Agents', view: 'agents' },
   { label: 'Sessions', view: 'sessions' },
-  { label: 'Sandbox', view: 'sandbox' },
+  {
+    label: 'Sandbox',
+    children: [
+      { label: 'Status', view: 'sandbox' },
+      { label: 'Projects', view: 'projects' },
+    ],
+  },
   { label: 'Apps', view: 'apps' },
   { label: 'Settings', view: 'settings' },
   { label: 'Accounts', view: 'accounts' },

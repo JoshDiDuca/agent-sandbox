@@ -29,6 +29,16 @@ import {
 } from './features/accounts/index.js';
 import { listAppsRun, requestAppRun, setCustomAppsRun, toggleAppRun } from './features/apps/index.js';
 import { browseFolderRun } from './features/files/index.js';
+import {
+  addProjectRun,
+  allProjectsRun,
+  chooseProjectsRun,
+  excludeProjectRun,
+  includeProjectRun,
+  listProjectsRun,
+  projectRootsRun,
+  removeProjectRun,
+} from './features/projects/index.js';
 import { hideWindowRun, sandboxStatusRun, showWindowRun, stopSandboxRun } from './features/sandbox/index.js';
 import { listSessionsRun, restartSessionsRun } from './features/sessions/index.js';
 import { getSettingRun, listSettingsRun, resetSettingRun, setSettingRun } from './features/settings/index.js';
@@ -60,6 +70,14 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   toggleAppRun,
   setCustomAppsRun,
   requestAppRun,
+  listProjectsRun,
+  chooseProjectsRun,
+  addProjectRun,
+  removeProjectRun,
+  includeProjectRun,
+  excludeProjectRun,
+  allProjectsRun,
+  projectRootsRun,
 ];
 
 export function implementationOf(id: string): Implementation<AnyDefinition, AppContext> | undefined {
