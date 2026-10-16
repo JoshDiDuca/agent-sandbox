@@ -118,7 +118,7 @@ export function usableCpus(cpus: number, percent: number | null): number {
   return Math.max(2, Math.min(cpus, Math.floor((cpus * percent) / 100)));
 }
 
-/** Cargo jobs for one more agent session: what fits the memory and the CPUs, shared with the sessions already building. */
+/** Cargo jobs for one more agent session: what fits the memory and CPUs, shared with the sessions already building. */
 export function cargoJobs(cpus: number, memoryGb: number, sessions: number): number {
   const byCpu = Math.max(2, Math.min(8, Math.floor(cpus / 4)));
   const byMemory = Math.max(1, Math.floor(memoryGb / 4));
