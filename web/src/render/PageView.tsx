@@ -32,6 +32,7 @@ import {
 import { ActionButton, ActionIconButton, ActionMenu, offered, useAct } from './actions';
 import { CategoryPage } from './CategoryPage';
 import { ItemIcon } from './icons';
+import { InlineField } from './InlineField';
 import { EmptyState } from './states';
 import { toneColor } from './tones';
 
@@ -183,6 +184,25 @@ function primaryOf(item: Item): Action | undefined {
   return offered(item.primary) && !item.disabled ? item.primary : undefined;
 }
 
+/** An item's main action: its control in place when it changes one value (a switch, a choice), else a button. */
+function PrimaryControl({
+  action,
+  hint,
+  light,
+}: {
+  readonly action: Action;
+  readonly hint?: string;
+  readonly light?: boolean;
+}) {
+  if (action.kind === 'operation' && action.inline)
+    return (
+      <Box miw={160} maw={300} onClick={(e) => e.stopPropagation()}>
+        <InlineField action={action} summary={hint} />
+      </Box>
+    );
+  return <ActionButton action={action} size="xs" variant={light ? 'light' : 'default'} />;
+}
+
 /** Secondary actions: one or two as icon buttons, more behind "…". */
 export function SecondaryActions({ actions }: { readonly actions: readonly Action[] }) {
   const shown = actions.filter(offered);
@@ -244,7 +264,7 @@ function ItemRow({ item }: { readonly item: Item }) {
         </Group>
         <Group gap={6} wrap="nowrap" className="row-actions" style={{ flex: 'none' }}>
           <SecondaryActions actions={item.actions ?? []} />
-          {primary && <ActionButton action={primary} size="xs" variant={clickable ? 'light' : 'default'} />}
+          {primary && <PrimaryControl action={primary} hint={item.hint} light={clickable} />}
         </Group>
       </Group>
     </div>
@@ -295,7 +315,7 @@ function ItemCard({ item }: { readonly item: Item }) {
         {(primary || item.actions?.length) && (
           <Group justify="flex-end" gap={6} mt="auto">
             <SecondaryActions actions={item.actions ?? []} />
-            {primary && <ActionButton action={primary} size="xs" variant="light" />}
+            {primary && <PrimaryControl action={primary} hint={item.hint} light />}
           </Group>
         )}
       </Stack>

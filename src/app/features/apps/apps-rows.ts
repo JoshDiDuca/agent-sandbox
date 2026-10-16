@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import _ from 'lodash';
 import { APPS, type AppEntry } from '../../../shared/apps/index.js';
+import { fieldOf } from '../../kernel/index.js';
+import { labelOf } from '../settings/categories.def.js';
 import type { ConfigFile } from '../settings/settings-file.js';
+import { findSetting } from '../settings/settings-rows.js';
 import { groupOf, type AppRow, type CustomAppRow } from './apps.def.js';
 
 export const INSTALL = ['apps', 'install'];
@@ -56,6 +59,17 @@ export function appIsOn(entry: AppEntry, file: ConfigFile, source: AppsSource): 
   return (source.install(file) ?? []).includes(entry.id);
 }
 
+/** A setting-backed entry's own Field and value (VS Code: on, off or "auto"). */
+function settingParts(entry: AppEntry, file: ConfigFile, source: AppsSource): Partial<AppRow> {
+  if (!entry.setting) return {};
+  const found = findSetting(file, entry.setting);
+  return {
+    setting: entry.setting,
+    settingField: fieldOf(found.node, found.key, labelOf(found.key)),
+    settingValue: source.setting(file, found.key),
+  };
+}
+
 /** Every app this scope can change, as a row. */
 export function appRows(file: ConfigFile, dataPath: string, source: AppsSource = SAVED): AppRow[] {
   return entriesOf(file).map((entry) => ({
@@ -67,7 +81,7 @@ export function appRows(file: ConfigFile, dataPath: string, source: AppsSource =
     cli: Boolean(entry.cli),
     mesa: entry.needs?.includes('mesa') ?? false,
     fullGitOnly: Boolean(entry.fullGitOnly),
-    ...(entry.setting ? { setting: entry.setting } : {}),
+    ...settingParts(entry, file, source),
     installed: installed(entry, dataPath),
     on: appIsOn(entry, file, source),
   }));

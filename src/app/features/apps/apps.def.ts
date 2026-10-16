@@ -14,6 +14,7 @@ import {
   type Page,
   type Section,
 } from '../../kernel/index.js';
+import { setSetting } from '../settings/settings.def.js';
 
 export const AppsScopeSchema = z
   .enum(['user', 'project'])
@@ -106,6 +107,9 @@ export const AppRowSchema = z.object({
   mesa: z.boolean().describe('Needs OpenGL on the CPU (Mesa)'),
   fullGitOnly: z.boolean().describe('Only with full git access'),
   setting: z.string().optional().describe('The setting it stands for (VS Code, Windows Terminal)'),
+  /** That setting's own Field and value (on, off or auto), so it is changed with its own control. */
+  settingField: FieldSchema.optional(),
+  settingValue: z.unknown().optional(),
   installed: z.boolean().describe('Downloaded already into the data folder'),
   on: z.boolean().describe('Installed in every sandbox of this scope'),
 });
@@ -201,6 +205,31 @@ function switchField(row: AppRow): Field {
 }
 
 function appItem(row: AppRow, scope: AppsScope): Item {
+  // An app that is a setting of its own (VS Code: on, off or "auto" = when this PC has it) gets that setting's control.
+  const primary =
+    row.setting && row.settingField
+      ? action(
+          setSetting,
+          { scope: 'user', key: row.setting },
+          {
+            label: 'Change',
+            verb: 'change',
+            inline: true,
+            fields: [{ ...row.settingField, name: 'value', label: row.name }],
+            initial: { value: row.settingValue },
+          },
+        )
+      : action(
+          toggleApp,
+          { scope, id: row.id },
+          {
+            label: row.on ? 'Turn off' : 'Turn on',
+            verb: 'tick',
+            inline: true,
+            fields: [switchField(row)],
+            initial: { on: row.on },
+          },
+        );
   return {
     id: row.id,
     label: row.name,
@@ -209,17 +238,7 @@ function appItem(row: AppRow, scope: AppsScope): Item {
     keywords: row.id,
     details: details(row),
     ...(row.on ? { tone: 'ok' as const } : {}),
-    primary: action(
-      toggleApp,
-      { scope, id: row.id },
-      {
-        label: row.on ? 'Turn off' : 'Turn on',
-        verb: 'tick',
-        inline: true,
-        fields: [switchField(row)],
-        initial: { on: row.on },
-      },
-    ),
+    primary,
   };
 }
 
@@ -288,7 +307,7 @@ export const appsView = defineView({
   title: 'Apps',
   summary: 'Tick the apps every sandbox should have. Each downloads once and is kept.',
   queries: { apps: listApps },
-  operations: [toggleApp, setCustomApps, requestApp],
+  operations: [toggleApp, setCustomApps, requestApp, setSetting],
   tabs: {
     param: 'scope',
     choices: [
