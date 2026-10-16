@@ -565,6 +565,64 @@ export const appSuite: Suite = {
         page.sections.some((s) => s.items?.some((i) => i.id === '@data-folder')),
       'the settings page: a section per category, each setting edited through its Field',
     );
+
+    t.section('settings export and import, run against a config file');
+    const exportFile = t.at('app-settings', 'out.json');
+    const exported = (await runDefinition('settings.export', ctx, { settingsFile: exportFile }, fakeIO().io)) as {
+      leftOut: string[];
+    };
+    const written = fs.readFileSync(exportFile, 'utf8');
+    t.check(
+      !('storage' in (JSON.parse(written) as object)) &&
+        !written.includes('sk-planted-secret') &&
+        exported.leftOut.some((l) => l.startsWith('harnesses.planted') && l.includes('a secret, never shared')),
+      'settings.export writes only what differs and says what it left out',
+      exported.leftOut.join('; '),
+    );
+    await t.throws(
+      () => runDefinition('settings.export', ctx, { settingsFile: exportFile }, fakeIO([false]).io),
+      'Nothing changed.',
+      'settings.export asks before replacing a file that is there',
+    );
+    await runDefinition('settings.export', ctx, { settingsFile: exportFile }, fakeIO([true]).io);
+    t.check(fs.existsSync(exportFile), 'settings.export replaces the file when asked to');
+
+    const shared = t.writeJson(t.at('app-settings', 'shared.json'), { sandbox: { memoryMb: 2048 } });
+    const imported = fakeIO([true]);
+    const done = (await runDefinition('settings.import', ctx, { settingsFile: shared }, imported.io)) as {
+      message: string;
+    };
+    const got2048 = (await runDefinition('settings.get', ctx, { key: 'sandbox.memoryMb' }, quiet)) as {
+      value: unknown;
+    };
+    t.check(
+      done.message.startsWith('Imported 1 setting') &&
+        imported.seen.logs.some((l) => l.text.startsWith('  sandbox.memoryMb: ') && l.text.endsWith('-> 2048')) &&
+        imported.seen.questions[0]?.title === 'Change your settings like this?' &&
+        got2048.value === 2048,
+      'settings.import logs the diff, asks once, and applies',
+      done.message,
+    );
+    const shared1024 = t.writeJson(t.at('app-settings', 'shared1024.json'), { sandbox: { memoryMb: 1024 } });
+    const before1024 = fs.readFileSync(configFile, 'utf8');
+    await t.throws(
+      () => runDefinition('settings.import', ctx, { settingsFile: shared1024 }, fakeIO([false]).io),
+      'Nothing was changed.',
+      'settings.import with a no changes nothing',
+    );
+    t.check(fs.readFileSync(configFile, 'utf8') === before1024, 'a declined import leaves the file as it was');
+
+    const own = settingsPage(listed as Parameters<typeof settingsPage>[0]);
+    const theirs = settingsPage({ ...(listed as Parameters<typeof settingsPage>[0]), scope: 'project' });
+    const pageOps = (p: Page): string[] => (p.actions ?? []).flatMap((a) => (a.kind === 'operation' ? [a.op] : []));
+    t.check(
+      pageOps(own).join() === 'settings.export,settings.import' &&
+        (own.actions ?? []).every(
+          (a) => a.kind === 'operation' && a.fields?.length === 1 && a.fields[0]?.kind === 'path',
+        ) &&
+        pageOps(theirs).length === 0,
+      'the settings page offers export and import only for your own settings, each asking one file path',
+    );
     t.section('apps, run against a config file');
     const appsConfig = t.writeJson(t.at('app-apps', 'config.json'), {
       storage: { root: t.dir('app-apps', 'storage') },
