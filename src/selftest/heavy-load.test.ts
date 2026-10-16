@@ -13,7 +13,10 @@ import {
   DIAL_CALM_SAMPLES,
   DIAL_STEPS,
   HOST_THRESHOLDS,
+  buildJobs,
   cargoJobs,
+  linkSlotsFor,
+  usableCpus,
   effectiveCpuLimit,
   gentleCpuLimit,
   maxCompilers,
@@ -147,6 +150,19 @@ export const heavyLoadSuite: Suite = {
     t.check(cargoJobs(16, 32, 1) === 4, '16 CPUs, 32 GB: 4 jobs');
     t.check(cargoJobs(16, 8, 1) === 2 && cargoJobs(16, 3, 1) === 1, 'about 4 GB per job');
     t.check(cargoJobs(16, 32, 3) === 2 && cargoJobs(16, 32, 8) === 1, 'fewer when several sessions build');
+    t.check(cargoJobs(32, 32, 1) === 8, '32 processors, 32 GB: 8 jobs for one session');
+    t.check(
+      buildJobs(32, 32) === 8 && buildJobs(32, 64) === 19 && buildJobs(4, 64) === 4 && buildJobs(16, 4) === 2,
+      'the build budget: 3 GB per job after 6 GB, never more than the processors, at least 2',
+    );
+    t.check(
+      linkSlotsFor(32) === 8 && linkSlotsFor(16) === 3 && linkSlotsFor(8) === 2 && linkSlotsFor(128) === 8,
+      'links at once ("auto"): one per 3 GB after 6 GB, 2 to 8',
+    );
+    t.check(
+      usableCpus(32, 80) === 25 && usableCpus(32, null) === 32 && usableCpus(4, 10) === 2 && usableCpus(8, 100) === 8,
+      'the processors programs see follow the CPU cap (at least 2)',
+    );
 
     t.section('the governor: which programs');
     t.check(

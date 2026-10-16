@@ -29,6 +29,12 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   always resumed, who waits changing every 20 seconds) and the waiting ones are trimmed to the paging file. It also acts
   when commit would run out within seconds at the rate it grows. Builds get slower; nothing fails. It never touches the
   agents, also when they run as node.exe (Codex, Gemini ...).
+- **Agents see what the sandbox can really give them.** With a CPU cap, the sandbox's programs run on that share of the
+  processors, so cargo, .NET, ninja and `nproc` count right, and `NUMBER_OF_PROCESSORS` says the same. Each session
+  gets cargo and CMake job counts from a build budget (one job per 3 GB after 6 GB, up to 8 per session), and
+  `runudget.json` (`SANDBOX_BUDGET_FILE`) states the real numbers for agents to plan with.
+- More links at once: `toolchains.rust.linkSlots: "auto"` allows one per 3 GB after 6 GB, 2 to 8 (was 2 to 4), now that
+  the governor slows links down when memory runs short.
 - Web UI: connections no longer pile up. The server pings every page and drops those gone without closing, a new page
   always connects (the oldest connection makes room instead of the new one being refused), a hidden tab stops reading
   live data and lets go of its connections, a closed one closes them at once, and a server of another version (left

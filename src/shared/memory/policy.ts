@@ -98,13 +98,32 @@ export function effectiveCpuLimit(cpuLimit: 'none' | number, profile: LoadProfil
   return cpuLimit === 'none' ? null : cpuLimit;
 }
 
-/** Cargo jobs that fit the memory (about 4 GB per rustc) and the CPUs, fewer when several agent sessions build. */
+/**
+ * The build budget of the whole sandbox: how many compile jobs fit together (about 3 GB each after 6 GB for Windows,
+ * the agents and their tools), never more than the processors the sandbox may use. The governor slows them down when
+ * memory runs short anyway; this keeps builds from starting far more than fits.
+ */
+export function buildJobs(cpus: number, memoryGb: number): number {
+  return Math.max(2, Math.min(cpus, Math.floor((memoryGb - 6) / 3)));
+}
+
+/** Links that may run at once in the whole sandbox ("auto"): one per 3 GB after 6 GB, 2 to 8. */
+export function linkSlotsFor(memoryGb: number): number {
+  return Math.max(2, Math.min(8, Math.floor((memoryGb - 6) / 3)));
+}
+
+/** The processors the sandbox's programs may use with a CPU cap of `percent` (affinity): at least 2. */
+export function usableCpus(cpus: number, percent: number | null): number {
+  if (percent === null || percent >= 100) return cpus;
+  return Math.max(2, Math.min(cpus, Math.floor((cpus * percent) / 100)));
+}
+
+/** Cargo jobs for one more agent session: what fits the memory and the CPUs, shared with the sessions already building. */
 export function cargoJobs(cpus: number, memoryGb: number, sessions: number): number {
-  const byCpu = Math.max(2, Math.min(4, Math.floor(cpus / 4)));
+  const byCpu = Math.max(2, Math.min(8, Math.floor(cpus / 4)));
   const byMemory = Math.max(1, Math.floor(memoryGb / 4));
   const jobs = Math.min(byCpu, byMemory);
-  // All the agents' builds share the sandbox: about 8 jobs in total however many sessions there are.
-  return Math.max(1, Math.min(jobs, Math.floor(8 / Math.max(1, sessions))));
+  return Math.max(1, Math.min(jobs, Math.floor(buildJobs(cpus, memoryGb) / Math.max(1, sessions))));
 }
 
 /** The most heavy compilers (rustc, clippy-driver, link ...) that run at once in the agents' job: only with vGPU on. */

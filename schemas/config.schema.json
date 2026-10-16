@@ -625,7 +625,7 @@
                   "maximum": 32
                 }
               ],
-              "description": "GNU host: how many programs may link at the same time in the whole sandbox (other links wait). \"auto\" = one per 8 GB of sandbox memory, 2 to 4. Several agents linking big programs at once can take Windows down."
+              "description": "GNU host: how many programs may link at the same time in the whole sandbox (other links wait). \"auto\" = one per 3 GB of sandbox memory after 6 GB, 2 to 8 (the memory governor slows links down too when memory runs short)."
             }
           },
           "additionalProperties": false
