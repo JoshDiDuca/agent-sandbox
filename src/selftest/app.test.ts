@@ -9,6 +9,8 @@ import { agentsPage, agentsView } from '../app/features/agents/index.js';
 import { DEFINITIONS, NAV, navSections, navViews, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
 import { accountsPage, agentPage, listAccounts, type AgentAccounts } from '../app/features/accounts/index.js';
 import { addProject, projectRoots, projectsPage } from '../app/features/projects/index.js';
+import { cleanData, dataPage, showData } from '../app/features/data/index.js';
+import { isSandboxRunning } from '../host/sandbox/index.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
@@ -45,7 +47,7 @@ import { parseCli } from '../cli/args.js';
 import { COMMANDS, commandSpec } from '../cli/manifest.js';
 import { menuView } from '../cli/menu/render-view.js';
 import { MENU_VIEWS } from '../cli/menu/views.js';
-import { cliInput, commandSpecOf, definitionFor } from '../cli/operations/index.js';
+import { cliIO, cliInput, commandSpecOf, definitionFor } from '../cli/operations/index.js';
 import { pageLines } from '../cli/output/index.js';
 import { secret } from '../core/schema/index.js';
 import { UserError } from '../core/util/index.js';
@@ -835,5 +837,158 @@ export const appSuite: Suite = {
         definitionFor('projects', []) === undefined,
       'the commands keep their names: projects takes the eight actions; roots is its own definition',
     );
+
+    t.section('data, run against temp folders');
+    const stored = showData.output.parse({
+      dataPath: 'C:\\AgentData',
+      storageRoot: 'C:\\ProgramData\\AgentSandbox',
+      totalBytes: 6.5e9,
+      total: '6.5 GB',
+      storageShare: '<- sandbox storage (6.5 GB of it)',
+      areaTotals: { tools: '4.6 GB', state: '1.8 GB', host: '4.0 KB' },
+      entries: [
+        {
+          area: 'tools',
+          name: 'rust',
+          path: 'C:\\AgentData\\tools\\rust',
+          bytes: 4.6e9,
+          size: '4.6 GB',
+          target: 'tools/rust',
+        },
+        {
+          area: 'state',
+          name: 'state/claude',
+          path: 'C:\\AgentData\\state\\claude',
+          bytes: 1.8e9,
+          size: '1.8 GB',
+          target: 'state/claude',
+        },
+        {
+          area: 'host',
+          name: 'accounts',
+          path: 'C:\\Users\\me\\AppData\\Local\\AgentSandbox\\accounts',
+          bytes: 4096,
+          size: '4.0 KB',
+          target: null,
+        },
+      ],
+      disks: [
+        {
+          drive: 'C:\\',
+          totalBytes: 40e9,
+          freeBytes: 22e9,
+          usedBytes: 18e9,
+          holdsStorage: true,
+          used: '18 GB',
+          usedPercent: 45,
+          free: '22 GB',
+          total: '40 GB',
+        },
+      ],
+    });
+    const dataSample = dataPage(stored);
+    const dataSectionIds = dataSample.sections.map((s) => s.id);
+    const dataOps = pageActions(dataSample);
+    const accountsItem = dataSample.sections.find((s) => s.id === 'area:host')?.items?.[0];
+    t.check(
+      dataSectionIds.includes('area:tools') &&
+        dataSectionIds.includes('area:state') &&
+        dataOps.some(
+          (a) =>
+            a.kind === 'operation' && a.op === 'data.clean' && JSON.stringify(a.input) === '{"targets":["tools/rust"]}',
+        ) &&
+        (accountsItem?.actions ?? []).length === 0 &&
+        dataOps.some((a) => a.kind === 'operation' && a.op === 'data.prune'),
+      'data: disks, one section per area, x deletes only what may be deleted',
+      dataSectionIds.join(),
+    );
+    const shaped = showData.cli!.shapeJson!(stored) as Record<string, unknown>;
+    const shapedEntries = shaped.entries as Record<string, unknown>[];
+    const shapedDisks = shaped.disks as Record<string, unknown>[];
+    t.check(
+      Object.keys(shaped).join() === 'dataPath,storageRoot,totalBytes,entries,disks' &&
+        Object.keys(shapedEntries[0]).join() === 'area,name,path,bytes' &&
+        Object.keys(shapedDisks[0]).join() === 'drive,totalBytes,freeBytes,usedBytes,holdsStorage',
+      'data show --json keeps its old shape',
+    );
+    const dataLines = pageLines(dataSample);
+    t.check(
+      dataLines.some((l) => l.startsWith('Disks')) &&
+        dataLines.some((l) => /^DRIVE\s+USED\s+FREE\s+SIZE/.test(l)) &&
+        dataLines.some((l) => l.startsWith('Persistent data for the sandbox: ')) &&
+        dataLines.some((l) => l.startsWith('Free space with:')),
+      'data on the command line: the disks table, the data folder line and the free space line',
+      dataLines.join('\n'),
+    );
+    t.check(
+      definitionFor('data', ['clean'])?.id === 'data.clean' &&
+        definitionFor('data', ['show'])?.id === 'data.show' &&
+        JSON.stringify(cliInput(definitionFor('data', ['clean'])!, parseCli(['data', 'clean', 'tools/go', 'logs']))) ===
+          '{"targets":["tools/go","logs"]}' &&
+        JSON.stringify(cliInput(cleanData, parseCli(['data', 'remove', 'logs']))) === '{"targets":["logs"]}' &&
+        JSON.stringify(commandSpec('data')?.args[0].choices) === '["show","clean"]',
+      'data clean and remove are actions; the targets are the rest of the line',
+    );
+    t.equal(
+      cleanData.next?.({ message: 'x', freedBytes: 5 }),
+      'sandbox data   (see what is left)',
+      'data clean suggests what is left once something was freed',
+    );
+    const cleanOptions = commandSpec('clean')?.options ?? [];
+    t.check(
+      cleanOptions.map((o) => [o.flag, o.short ?? '', o.type, o.description]).join('|') ===
+        '--days,,number,launch folders older than this many days|--yes,-y,boolean,do not ask before deleting' &&
+        (cleanOptions.find((o) => o.flag === '--days') as { default?: unknown } | undefined)?.default === 7,
+      'clean keeps --days <n> (7) and --yes',
+    );
+
+    const dataRoot = t.dir('app-data', 'data');
+    const storageRoot = t.dir('app-data', 'storage');
+    const logsFolder = t.dir('app-data', 'data', 'logs');
+    t.write(path.join(logsFolder, 'old.log'), 'x'.repeat(100));
+    const dataCtx = { dataPath: dataRoot, storageRoot } as unknown as AppContext;
+    if (isSandboxRunning())
+      await t.throws(
+        () => runDefinition('data.clean', dataCtx, { targets: ['logs'] }, fakeIO([]).io),
+        'A Windows Sandbox is running',
+        'data clean refuses while a sandbox runs',
+      );
+    else {
+      await t.throws(
+        () => runDefinition('data.clean', dataCtx, { targets: ['logs'] }, fakeIO([false]).io),
+        'Nothing removed.',
+        'data clean: a no changes nothing',
+      );
+      t.check(fs.existsSync(path.join(logsFolder, 'old.log')), 'the logs are still there after a no');
+      const gone = (await runDefinition('data.clean', dataCtx, { targets: ['logs'] }, fakeIO([true]).io)) as {
+        message: string;
+      };
+      t.check(
+        gone.message.startsWith('Removed logs and freed') && !fs.existsSync(logsFolder),
+        'data clean: yes removes the logs',
+        gone.message,
+      );
+    }
+    const emptyCtx = {
+      storageRoot: t.dir('app-data', 'empty-storage'),
+      dataPath: t.dir('app-data', 'empty-data'),
+    } as unknown as AppContext;
+    t.equal(
+      await runDefinition('data.prune', emptyCtx, {}, fakeIO([]).io),
+      { message: 'Nothing to clean.', removed: false },
+      'clean on an empty storage folder says so',
+    );
+    if (process.stdin.isTTY) t.skip('a question without a terminal (this run has a terminal)');
+    else
+      await t.throws(
+        () =>
+          cliIO(parseCli(['data'])).io.checklist({
+            title: 'x',
+            choices: [],
+            noTerminal: { message: 'Which data should be cleaned?', fix: 'f' },
+          }),
+        'Which data should be cleaned?',
+        'a question without a terminal fails with its own words',
+      );
   },
 };

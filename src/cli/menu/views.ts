@@ -2,6 +2,7 @@
 // query is reachable in the menu when a view here offers it). Settings is drawn by its own page over the same rows,
 // because the menu stages changes until Ctrl+S.
 import { agentsView } from '../../app/features/agents/index.js';
+import { dataView } from '../../app/features/data/index.js';
 import { accountsView } from '../../app/features/accounts/index.js';
 import { appsView } from '../../app/features/apps/index.js';
 import { projectsView } from '../../app/features/projects/index.js';
@@ -24,4 +25,5 @@ export const MENU_VIEWS: readonly MenuViewPlace[] = [
   { view: accountsView, section: 'Accounts' },
   { view: appsView, section: 'Apps' },
   { view: projectsView, section: 'Sandbox' },
+  { view: dataView, section: 'Maintenance' },
 ];

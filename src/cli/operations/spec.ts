@@ -65,6 +65,7 @@ function argSpec(def: AnyDefinition, name: string): ArgSpec {
     description: field.help ?? '',
     required: !field.optional,
     ...(choices ? { choices } : {}),
+    ...(field.kind === 'list' ? { variadic: true } : {}),
   };
 }
 

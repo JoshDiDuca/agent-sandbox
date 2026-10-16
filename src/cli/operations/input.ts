@@ -43,7 +43,11 @@ export function cliInput(def: AnyDefinition, options: CliOptions): Record<string
     );
   const input: Record<string, unknown> = {};
   names.forEach((name, i) => {
-    if (positionals[i] !== undefined) input[name] = positionals[i];
+    // A list takes the rest of the line (`data clean tools/go logs`); only the last positional may be one.
+    if (inputField(def, name).kind === 'list') {
+      if (i !== names.length - 1) throw new Error(def.id + ': only the last positional may be a list');
+      input[name] = positionals.slice(i);
+    } else if (positionals[i] !== undefined) input[name] = positionals[i];
   });
   for (const [name, flag] of Object.entries(hint.flags ?? {})) {
     if (!flag) continue;

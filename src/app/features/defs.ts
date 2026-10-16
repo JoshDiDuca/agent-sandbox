@@ -14,6 +14,7 @@ import {
 } from './accounts/accounts.def.js';
 import { appsView, listApps, requestApp, setCustomApps, toggleApp } from './apps/apps.def.js';
 import { browseFolder } from './files/files.def.js';
+import { cleanData, dataView, pruneStorage, showData } from './data/data.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
 import {
   addProject,
@@ -64,6 +65,8 @@ export const OPERATIONS = [
   excludeProject,
   allProjects,
   projectRoots,
+  cleanData,
+  pruneStorage,
 ] as const;
 export const QUERIES = [
   sandboxStatus,
@@ -75,6 +78,7 @@ export const QUERIES = [
   listAccounts,
   listApps,
   listProjects,
+  showData,
 ] as const;
 export const VIEWS = [
   sandboxView,
@@ -84,6 +88,7 @@ export const VIEWS = [
   accountsView,
   appsView,
   projectsView,
+  dataView,
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -148,5 +153,14 @@ export const NAV: readonly NavSection[] = [
   { label: 'Apps', view: 'apps' },
   { label: 'Settings', view: 'settings' },
   { label: 'Accounts', view: 'accounts' },
-  { label: 'Maintenance', elsewhere: 'Doctor, repair, data and updates are in the menu (sandbox > Maintenance).' },
+  {
+    label: 'Maintenance',
+    children: [
+      { label: 'Data', view: 'data' },
+      {
+        label: 'More',
+        elsewhere: 'Storage, doctor, repair, updates and logs are in the menu (sandbox > Maintenance).',
+      },
+    ],
+  },
 ];

@@ -2,24 +2,13 @@ import type { CommandName } from '../manifest.js';
 import type { Context } from './context.js';
 import { launch } from './launch/index.js';
 import { setup } from './setup/index.js';
-import { data } from './data/index.js';
+import { cleanData, showData } from '../../app/features/data/index.js';
 import { storage } from './storage/index.js';
 import { attach, db, exec } from './sessions/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { definitionHandler } from '../operations/index.js';
-import {
-  audit,
-  claudeHost,
-  clean,
-  config,
-  doctor,
-  hostCommand,
-  logs,
-  migrate,
-  sync,
-  watcher,
-} from './maintenance/index.js';
+import { audit, claudeHost, config, doctor, hostCommand, logs, migrate, sync, watcher } from './maintenance/index.js';
 import { engine } from './engine.js';
 import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
@@ -43,12 +32,13 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   sync: sync,
   logs: logs,
   audit: audit,
-  clean: clean,
   config: config,
   doctor: doctor,
   migrate: migrate,
   setup: setup,
-  data: data,
+  // `data`, `data info` and `data list` show; `data remove` is `data clean` (its actions are the operations' hints).
+  data: (ctx) =>
+    ctx.options.positionals[0] === 'remove' ? definitionHandler(cleanData)(ctx) : definitionHandler(showData)(ctx),
   storage: storage,
   engine: engine,
   'host-claude': claudeHost,
