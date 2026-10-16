@@ -9,6 +9,7 @@ import type { AppContext } from '../../app/context.js';
 import { listAgents } from '../../app/features/agents/index.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
+import { engineStatus } from '../../app/features/engine/index.js';
 import { lastHealth } from '../../app/features/health/index.js';
 import { CRASH, listLogs, tailLog } from '../../app/features/logs/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
@@ -405,6 +406,57 @@ function sampleHealth(): unknown {
 
 const LOG_DIR = 'C:\\AgentData\\logs';
 
+/** The engines and their checks (what engine.status returns): HCS is missing its features on this sample PC. */
+function sampleEngines(): unknown {
+  const capabilities = {
+    desktop: true,
+    gpu: true,
+    clipboard: true,
+    audio: true,
+    video: true,
+    printers: true,
+    liveFolderAdd: true,
+    attachedDisks: false,
+    multipleInstances: true,
+    hvsocket: false,
+  };
+  return engineStatus.output.parse({
+    engine: 'windows-sandbox',
+    engines: [
+      {
+        id: 'windows-sandbox',
+        inUse: true,
+        capabilities,
+        check: { available: true, reasons: [], fixes: [] },
+      },
+      {
+        id: 'hcs',
+        inUse: false,
+        capabilities: {
+          ...capabilities,
+          desktop: false,
+          gpu: false,
+          clipboard: false,
+          audio: false,
+          video: false,
+          printers: false,
+          liveFolderAdd: false,
+          multipleInstances: true,
+          hvsocket: true,
+        },
+        check: {
+          available: false,
+          reasons: ['The Containers feature is not turned on.', 'No Server Core image is on this PC.'],
+          fixes: [
+            'Enable-WindowsOptionalFeature -Online -FeatureName Containers -All',
+            'Pull the Server Core image with Docker Desktop, or set AGENT_SANDBOX_HCS_IMAGE to a folder with one.',
+          ],
+        },
+      },
+    ],
+  });
+}
+
 /** The sandbox's log files, newest first, and a crash report (what logs.list returns). */
 function sampleLogs(): unknown {
   return listLogs.output.parse({
@@ -491,6 +543,8 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         )
           cancelled();
         return { message: 'Done. Restart Windows to finish. (preview: nothing was changed)' };
+      case 'engine.status':
+        return sampleEngines();
       case 'logs.list':
         return sampleLogs();
       case 'logs.tail':
@@ -650,6 +704,7 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'data.prune': 'operation',
     'logs.list': 'query',
     'logs.tail': 'query',
+    'engine.status': 'query',
   };
   return {
     kind: (id) => kinds[id],

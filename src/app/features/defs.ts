@@ -14,6 +14,7 @@ import {
 } from './accounts/accounts.def.js';
 import { appsView, listApps, requestApp, setCustomApps, toggleApp } from './apps/apps.def.js';
 import { browseFolder } from './files/files.def.js';
+import { checkEngine, engineStatus, engineView } from './engine/engine.def.js';
 import { checkHealth, enableSandbox, healthView, lastHealth, repairHealth } from './health/health.def.js';
 import { cleanData, dataView, pruneStorage, showData } from './data/data.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
@@ -102,6 +103,8 @@ export const QUERIES = [
   listLogs,
   tailLog,
   updatesStatus,
+  engineStatus,
+  checkEngine,
 ] as const;
 export const VIEWS = [
   sandboxView,
@@ -115,6 +118,7 @@ export const VIEWS = [
   dataView,
   logsView,
   updatesView,
+  engineView,
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -186,6 +190,7 @@ export const NAV: readonly NavSection[] = [
       { label: 'Data', view: 'data' },
       { label: 'Health', view: 'health' },
       { label: 'Logs', view: 'logs' },
+      { label: 'Engine', view: 'engine' },
       {
         label: 'More',
         elsewhere: 'Storage and the less common commands are in the menu (sandbox > Maintenance).',

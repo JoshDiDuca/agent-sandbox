@@ -17,6 +17,7 @@ import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.j
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
 import { APP_GROUPS, appsPage, listApps, type AppsList } from '../app/features/apps/index.js';
 import { settingsPage } from '../app/features/settings/index.js';
+import { checkEngine, checkText, enginePage } from '../app/features/engine/index.js';
 import { runUpdate, updatesPage, type UpdatesStatus } from '../app/features/updates/index.js';
 import { MenuOperations } from '../cli/menu/io-menu.js';
 import type { AppContext } from '../app/context.js';
@@ -1253,6 +1254,68 @@ export const appSuite: Suite = {
         logsMenuNow.resolve({ kind: 'action', key: 'f', value: undefined })?.kind === 'action',
       'the logs menu: the key f (follow in the terminal) and Enter shows',
       logsMenuNow.actions.map((a) => a.key).join(),
+    );
+
+    t.section('engine: the page, the check text, the exit code');
+    // Hand-made reports: this suite never runs the real checks (sc, whoami) that a Windows sandbox could not pass.
+    const caps = {
+      desktop: true,
+      gpu: true,
+      clipboard: true,
+      audio: true,
+      video: true,
+      printers: true,
+      liveFolderAdd: true,
+      attachedDisks: false,
+      multipleInstances: true,
+      hvsocket: false,
+    };
+    const missingHcs = {
+      id: 'hcs' as const,
+      inUse: false,
+      capabilities: caps,
+      check: {
+        available: false,
+        reasons: ['computecore.dll is missing'],
+        fixes: ['Enable-WindowsOptionalFeature -Online -FeatureName Containers -All'],
+      },
+    };
+    const readyHcs = { ...missingHcs, check: { available: true, reasons: [], fixes: [] } };
+    const enginesNow = {
+      engine: 'windows-sandbox' as const,
+      engines: [{ ...missingHcs, id: 'windows-sandbox' as const, inUse: true, check: readyHcs.check }, missingHcs],
+    };
+    const enginePageNow = enginePage(enginesNow);
+    const engineLines = pageLines(enginePageNow);
+    t.check(
+      engineLines[0] === 'Engine in use: windows-sandbox  (setting: sandbox.engine)' &&
+        engineLines.includes('  Fix: Enable-WindowsOptionalFeature -Online -FeatureName Containers -All') &&
+        pageActions(enginePageNow).length === 0,
+      'engine page: the engine in use first, a card per engine, reasons and fixes, nothing to run',
+      engineLines.slice(0, 4).join(' | '),
+    );
+    const unavailable = checkText({ ...missingHcs });
+    t.check(
+      unavailable.includes('hcs cannot be used on this PC yet:') &&
+        unavailable.includes('  1. computecore.dll is missing') &&
+        unavailable.includes('     To fix: Enable-WindowsOptionalFeature') &&
+        unavailable.includes('Nothing was changed.'),
+      'engine check text: the old words, numbered, with the fixes',
+      unavailable,
+    );
+    t.check(
+      checkText(readyHcs).includes('hcs can be used on this PC.') && checkText(readyHcs).includes('HCS is in alpha'),
+      'engine check text: an available hcs says it is in alpha',
+    );
+    t.check(
+      checkEngine.cli?.exitCode?.(missingHcs) === 1 && checkEngine.cli?.exitCode?.(readyHcs) === 0,
+      'a CLI hint sets the exit code: engine check exits 1 when the engine cannot be used, 0 when it can',
+    );
+    t.check(
+      definitionFor('engine', ['check'])?.id === 'engine.check' &&
+        definitionFor('engine', []) === undefined &&
+        JSON.stringify(commandSpec('engine')?.args[0]?.choices) === '["show","check"]',
+      'engine and check are the actions of the engine command; a bare engine is not an action',
     );
   },
 };

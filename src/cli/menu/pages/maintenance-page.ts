@@ -5,6 +5,7 @@ import { dataPage, showData, type DataShow } from '../../../app/features/data/in
 import type { Action } from '../../../app/kernel/index.js';
 import { readQuery } from '../../../app/registry.js';
 import { errMsg } from '../../../core/util/index.js';
+import { enginePage, engineStatus, type Engines } from '../../../app/features/engine/index.js';
 import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
 import { CRASH, listLogs, logsPage, type LogFiles } from '../../../app/features/logs/index.js';
 import { updatesPage, updatesStatus, type UpdatesStatus } from '../../../app/features/updates/updates.def.js';
@@ -36,6 +37,8 @@ export interface MaintenanceModel {
   readonly health: { readonly last: HealthLast | null };
   /** The program's updates and saved settings (the status), and a newer version a check found (latest). */
   readonly updates: { readonly status: UpdatesStatus; readonly latest: string | null };
+  /** The Engine category: each engine and its check (null until read: the checks run programs, so not on open). */
+  readonly engine: Engines | null;
   /** The commands listed under "More commands". */
   readonly more: readonly { name: string; summary: string }[];
 }
@@ -57,6 +60,11 @@ const CATEGORIES = [
     description: 'Checks this PC and your settings, repairs problems, and sets up Windows Sandbox.',
   },
   { id: 'logs', label: 'Logs', description: "The sandbox's own logs." },
+  {
+    id: 'engine',
+    label: 'Engine',
+    description: 'What runs your sandbox, and what each engine can do on this PC.',
+  },
   { id: 'more', label: 'More commands', description: 'Less common commands.' },
 ];
 
@@ -129,6 +137,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   // The checks take seconds (programs are run), so they only run when you ask: the page shows the saved results.
   const health = healthMenu(m);
   const updates = updatesMenu(m);
+  const engine = engineMenu(m);
   const more: ListItem<string>[] = m.more.map((c) => ({
     value: 'more:' + c.name,
     label: MORE_LABELS[c.name] ?? Text.humanize(c.name),
@@ -138,7 +147,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...updates.items, ...dataItems(m), ...health.items, ...logs, ...more],
+    items: [...updates.items, ...dataItems(m), ...health.items, ...logs, ...engine.items, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
     enterLabel: (category, id) =>
@@ -146,8 +155,30 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
         ? health.enterLabel(category, id)
         : category === 'updates'
           ? updates.enterLabel(category, id)
-          : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) || enterLabel(id ?? ''),
+          : category === 'engine'
+            ? engine.enterLabel(category, id)
+            : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) ||
+              enterLabel(id ?? ''),
   };
+}
+
+/**
+ * The Engine category: before the first read, one row that reads the engines on Enter (the checks run programs, so
+ * they are not made just by opening the category); after it, the engine view's rows.
+ */
+function engineMenu(m: MaintenanceModel): MenuView {
+  if (!m.engine) {
+    const load: ListItem<string> = {
+      value: 'engine:load',
+      label: 'Look at the engines',
+      category: 'engine',
+      section: 'Engines',
+      description:
+        'Checks what each engine needs on this PC. It runs a few Windows programs, so it only runs when asked.',
+    };
+    return { items: [load], actions: [], enterLabel: () => 'check', resolve: () => undefined };
+  }
+  return menuView(enginePage(m.engine), { category: 'engine', prefix: 'engine:', refresh: false });
 }
 
 /** The Health category: the health view's rows and keys, drawn only while that category is open. */
@@ -159,6 +190,7 @@ function healthMenu(m: MaintenanceModel): MenuView {
 function enterLabel(id: string): string {
   if (id === 'data:folder') return 'change';
   if (id === 'data:measure') return 'measure';
+  if (id === 'engine:load') return 'check';
   if (id.startsWith('log:')) return 'show';
   if (id.startsWith('more:')) return 'open';
   return '';
@@ -175,6 +207,8 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         return healthMenu(m).actions;
       case 'updates':
         return updatesMenu(m).actions;
+      case 'engine':
+        return [{ key: 'l', label: m.engine ? 'check again' : 'check' }];
       default:
         return [];
     }
@@ -187,6 +221,7 @@ export class MaintenancePage extends ListPage<string> {
   private logs: LogFiles = NO_LOGS;
   private last: HealthLast | null = null;
   private updates: UpdatesStatus = NO_UPDATES;
+  private engine: Engines | null = null;
   private readonly operations: MenuOperations;
   /** The newer version the last check found (null: none, or not looked yet). */
   private latest: string | null = null;
@@ -206,6 +241,7 @@ export class MaintenancePage extends ListPage<string> {
       logs: this.logs,
       health: { last: this.last },
       updates: { status: this.updates, latest: this.latest },
+      engine: this.engine,
       more: MORE_COMMANDS.flatMap((name) => {
         const spec = commandSpec(name);
         return spec ? [{ name, summary: spec.summary }] : [];
@@ -235,6 +271,12 @@ export class MaintenancePage extends ListPage<string> {
       if (this.category === 'data') {
         const chosen = dataMenuView(this.data)?.resolve(result);
         if (chosen?.kind === 'action') return await this.dataAction(chosen.action);
+      }
+      // The Engine category reads the engines on Enter on its row, or on l (check again) once they were read.
+      if (this.category === 'engine' && ((result.kind === 'pick' && id === 'engine:load') || key === 'l')) {
+        this.busy('Checking the engines…');
+        this.engine = await readQuery(engineStatus, this.ctx);
+        return {};
       }
       if (key === 'm' || id === 'data:measure') return await this.measure();
       if (id === 'data:folder' && result.kind === 'pick') {
