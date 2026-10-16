@@ -35,3 +35,4 @@ export {
   type StopPlan,
 } from './sandbox-service.js';
 export { SessionsService, projectOf, viewerText, type ListedSession, type RestartScope } from './sessions-service.js';
+export { StorageService, storageBusy } from './storage-service.js';

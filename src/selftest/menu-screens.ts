@@ -26,7 +26,7 @@ export const SIZES = [
 const NOW = Date.now();
 const API_FOLDER = 'C:\\Projects\\api';
 
-/** The Data folder row of General (in the menu it comes from data-folder.ts). */
+/** The Data folder row of General (in the menu it comes from settings-page.ts). */
 const DATA_FOLDER_ROW = [
   {
     value: '@data-folder',
@@ -309,10 +309,31 @@ export function renderScreens(dir: string): string {
         log: null,
       },
     },
-    dataFolder: {
-      label: 'Data folder',
-      hint: 'C:\\ProgramData\\AgentSandbox\\users\\me',
-      description: 'Where the sandbox keeps its tools, databases and agent state. Enter changes it.',
+    storage: {
+      show: {
+        root: 'C:\\ProgramData\\AgentSandbox\\users\\me',
+        exists: true,
+        holdsData: true,
+        measured: null,
+        size: 'not measured yet',
+        defaultRoot: 'C:\\ProgramData\\AgentSandbox\\users\\me',
+        defaultInUse: true,
+        otherFoldersWithData: [],
+      },
+      contained: {
+        setting: 'off',
+        maxGb: 60,
+        available: true,
+        reasons: [],
+        fixes: [],
+        image: 'C:\\ProgramData\\AgentSandbox\\users\\me\\contained\\agent.vhdx',
+        imageExists: false,
+        imageBytes: null,
+        mountFolder: 'C:\\ProgramData\\AgentSandbox\\users\\me\\mount',
+        recordedMounted: false,
+        holders: 0,
+        mountedNow: null,
+      },
     },
     updates: {
       status: {

@@ -1,7 +1,7 @@
 export { createContext, type Context } from './context.js';
 export { launch } from './launch/index.js';
 export { setup } from './setup/index.js';
-export { storage, storageBeforeCommand } from './storage/index.js';
+export { storageBeforeCommand } from './storage/index.js';
 export { repairCommand } from './repair/index.js';
 export { contextOrDefaults } from './context.js';
 export { attach, db, exec } from './sessions/index.js';

@@ -6,10 +6,20 @@ import { fail } from '../../core/util/index.js';
 import type { CliOptions } from '../args.js';
 import { inputField } from './spec.js';
 
-/** The definition a command runs: its own command, or an action of a hand-written one (`config get`). */
+/** The words of an action: `contained on` is two words, each one a positional argument. */
+function actionWords(action: string): string[] {
+  return action.split(' ');
+}
+
+/** Whether the positionals start with every word of the action (`contained`, `on`). */
+function startsWithAction(action: string, positionals: readonly string[]): boolean {
+  return actionWords(action).every((word, i) => positionals[i] === word);
+}
+
+/** The definition a command runs: its own command, or an action of a hand-written one (`config get`, `storage use`). */
 export function definitionFor(command: string, positionals: readonly string[]): AnyDefinition | undefined {
   return DEFINITIONS.find(
-    (d) => d.cli?.name === command && (d.cli.action === undefined || d.cli.action === positionals[0]),
+    (d) => d.cli?.name === command && (d.cli.action === undefined || startsWithAction(d.cli.action, positionals)),
   );
 }
 
@@ -33,7 +43,7 @@ function flagValue(raw: Readonly<Record<string, unknown>>, flag: string): unknow
 export function cliInput(def: AnyDefinition, options: CliOptions): Record<string, unknown> {
   const hint = def.cli;
   if (!hint) return {};
-  const positionals = hint.action ? options.positionals.slice(1) : options.positionals;
+  const positionals = hint.action ? options.positionals.slice(actionWords(hint.action).length) : options.positionals;
   const names = hint.positional ?? [];
   const missing = names.slice(positionals.length).filter((name) => !inputField(def, name).optional);
   if (missing.length)

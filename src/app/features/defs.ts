@@ -16,6 +16,16 @@ import { appsView, listApps, requestApp, setCustomApps, toggleApp } from './apps
 import { browseFolder } from './files/files.def.js';
 import { checkHealth, enableSandbox, healthView, lastHealth, repairHealth } from './health/health.def.js';
 import { cleanData, dataView, pruneStorage, showData } from './data/data.def.js';
+import {
+  changeDataFolder,
+  containedOff,
+  containedOn,
+  containedStatus,
+  moveStorage,
+  showStorage,
+  storageView,
+  useStorage,
+} from './storage/storage.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
 import {
   addProject,
@@ -86,6 +96,11 @@ export const OPERATIONS = [
   pruneStorage,
   runUpdate,
   migrateSettings,
+  moveStorage,
+  useStorage,
+  changeDataFolder,
+  containedOn,
+  containedOff,
 ] as const;
 export const QUERIES = [
   sandboxStatus,
@@ -99,6 +114,8 @@ export const QUERIES = [
   listProjects,
   lastHealth,
   showData,
+  showStorage,
+  containedStatus,
   listLogs,
   tailLog,
   updatesStatus,
@@ -113,6 +130,7 @@ export const VIEWS = [
   projectsView,
   healthView,
   dataView,
+  storageView,
   logsView,
   updatesView,
 ] as const;
@@ -184,11 +202,12 @@ export const NAV: readonly NavSection[] = [
     children: [
       { label: 'Updates', view: 'updates' },
       { label: 'Data', view: 'data' },
+      { label: 'Storage', view: 'storage' },
       { label: 'Health', view: 'health' },
       { label: 'Logs', view: 'logs' },
       {
         label: 'More',
-        elsewhere: 'Storage and the less common commands are in the menu (sandbox > Maintenance).',
+        elsewhere: 'The less common commands are in the menu (sandbox > Maintenance).',
       },
     ],
   },

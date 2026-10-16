@@ -36,6 +36,7 @@ async function ask(q: Question, options: CliOptions): Promise<Answer> {
     fail(q.noTerminal.message, q.noTerminal.fix);
   switch (q.kind) {
     case 'confirm': {
+      if (q.skipWithYes && options.yes) return false;
       if (q.implied || options.yes) return true;
       if (!interactive())
         fail(
@@ -74,11 +75,13 @@ export function cliIO(options: CliOptions): { io: OperationIO; close: () => void
     progress.stop();
     return (await ask(q, options)) as never;
   };
+  // With --json the lines go to stderr, so stdout is the JSON alone.
+  const write = options.json ? console.error : console.log;
   const io = ioFromAsker(asker, {
     progress: (text) => progress.show(text),
     log: (text, tone) => {
       progress.stop();
-      console.log(tone ? PAINT[tone](text) : text);
+      write(tone ? PAINT[tone](text) : text);
     },
   });
   return { io, close: () => progress.stop() };

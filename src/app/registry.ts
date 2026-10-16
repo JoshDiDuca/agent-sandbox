@@ -31,6 +31,15 @@ import { listAppsRun, requestAppRun, setCustomAppsRun, toggleAppRun } from './fe
 import { browseFolderRun } from './features/files/index.js';
 import { cleanDataRun, pruneStorageRun, showDataRun } from './features/data/index.js';
 import {
+  changeDataFolderRun,
+  containedOffRun,
+  containedOnRun,
+  containedStatusRun,
+  moveStorageRun,
+  showStorageRun,
+  useStorageRun,
+} from './features/storage/index.js';
+import {
   addProjectRun,
   allProjectsRun,
   chooseProjectsRun,
@@ -98,6 +107,13 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   showDataRun,
   cleanDataRun,
   pruneStorageRun,
+  showStorageRun,
+  moveStorageRun,
+  useStorageRun,
+  changeDataFolderRun,
+  containedStatusRun,
+  containedOnRun,
+  containedOffRun,
   listLogsRun,
   tailLogRun,
   runUpdateRun,

@@ -16,7 +16,8 @@ import {
   type SettingRow,
   type SettingsSource,
 } from '../../../app/features/settings/index.js';
-import { valueText } from '../../../app/kernel/index.js';
+import { changeDataFolder } from '../../../app/features/storage/index.js';
+import { action, valueText } from '../../../app/kernel/index.js';
 import { readQuery } from '../../../app/registry.js';
 import type { Config } from '../../../core/types.js';
 import type { Context } from '../../commands/context.js';
@@ -31,7 +32,6 @@ import {
   type ListResult,
 } from '../../tui/index.js';
 import { MenuOperations } from '../io-menu.js';
-import { dataFolderRow, DataFolderFlow } from '../data-folder.js';
 import { VpnLoginFlow, vpnLoginRow, VPN_LOGIN } from '../vpn-login.js';
 import type { Draft } from '../settings/draft.js';
 import { ValueEditor } from '../settings/value-editor.js';
@@ -125,8 +125,18 @@ function current(file: ConfigFile, draft: Draft, key: string[], config: Config):
   return file.isProject ? (source.written(file, key) ?? _.get(config, key)) : source.effective(file, key, config);
 }
 
-/** The row in General that opens the data folder flow (your own settings only). */
+/** The row in General that changes the data folder (your own settings only): the storage area's operation runs it. */
 export const DATA_FOLDER = '@data-folder';
+
+/** The row's words: where the saved data is, and what Enter does. */
+function dataFolderRow(ctx: Context): { label: string; hint: string; description: string } {
+  return {
+    label: 'Data folder',
+    hint: ctx.storageRoot,
+    description:
+      'Where your tools, logins, history and logs are kept between sandboxes. Press Enter to move them to another folder or drive, or to use a different folder.',
+  };
+}
 
 /** The list for the settings section. Pure (reads the files it is given). `extra` are rows that are not settings. */
 export function settingsOptions(
@@ -229,8 +239,9 @@ export class SettingsPage extends ListPage<string> {
     if (result.value === undefined) return {};
     if (result.value === DATA_FOLDER) {
       if (result.kind !== 'pick') return {};
-      const exit = await new DataFolderFlow(this.app, this.ctx).run();
-      return exit ? { exit } : { reload: true };
+      return this.operations.perform(action(changeDataFolder, {}), [this.label, 'Data folder'], (text) =>
+        this.busy(text),
+      );
     }
     if (result.value === EXPORT_SETTINGS || result.value === IMPORT_SETTINGS) {
       if (result.kind !== 'pick') return {};

@@ -10,7 +10,14 @@ import { DEFINITIONS, NAV, navSections, navViews, QUERIES, VIEWS, viewById } fro
 import { accountsPage, agentPage, listAccounts, type AgentAccounts } from '../app/features/accounts/index.js';
 import { addProject, projectRoots, projectsPage } from '../app/features/projects/index.js';
 import { cleanData, dataPage, showData } from '../app/features/data/index.js';
-import { isSandboxRunning } from '../host/sandbox/index.js';
+import {
+  showStorage,
+  storagePage,
+  storageView,
+  type ContainedStatus,
+  type StorageShow,
+} from '../app/features/storage/index.js';
+import { insideSandbox, isSandboxRunning } from '../host/sandbox/index.js';
 import { CRASH, listLogs, logsPage, tailLog } from '../app/features/logs/index.js';
 import { DEFAULTS } from '../core/config/index.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
@@ -1253,6 +1260,98 @@ export const appSuite: Suite = {
         logsMenuNow.resolve({ kind: 'action', key: 'f', value: undefined })?.kind === 'action',
       'the logs menu: the key f (follow in the terminal) and Enter shows',
       logsMenuNow.actions.map((a) => a.key).join(),
+    );
+
+    t.section('storage');
+    t.check(
+      definitionFor('storage', ['contained', 'on'])?.id === 'storage.containedOn' &&
+        definitionFor('storage', ['contained', 'status'])?.id === 'storage.containedStatus' &&
+        definitionFor('storage', ['move'])?.id === 'storage.move',
+      'storage contained on and off are two-word actions, storage move is one word',
+    );
+    const movedInput = cliInput(
+      definitionFor('storage', ['move'])!,
+      parseCli(['storage', 'move', 'D:\\x', '--keep-old']),
+    );
+    t.check(
+      JSON.stringify(movedInput) === JSON.stringify({ folder: 'D:\\x', keepOld: true }),
+      'storage move reads its folder and --keep-old as its input',
+      JSON.stringify(movedInput),
+    );
+    const storageActions = commandSpec('storage')?.args[0]?.choices;
+    t.check(
+      Array.isArray(storageActions) && storageActions.join() === 'show,move,use,contained',
+      'storage keeps its actions as the first argument choices',
+      String(storageActions),
+    );
+    const shownStorage: StorageShow = {
+      root: 'D:\\AgentSandbox',
+      exists: true,
+      holdsData: true,
+      measured: { bytes: 2048, files: 3, partial: false },
+      size: '2 KB',
+      defaultRoot: 'C:\\ProgramData\\AgentSandbox',
+      defaultInUse: false,
+      otherFoldersWithData: ['C:\\ProgramData\\AgentSandbox'],
+    };
+    const shapedStorage = showStorage.cli?.shapeJson?.(shownStorage) as Record<string, unknown>;
+    t.check(
+      Object.keys(shapedStorage).sort().join() === 'bytes,defaultRoot,exists,files,otherFoldersWithData,partial,root',
+      'storage show --json keeps its old shape',
+      Object.keys(shapedStorage).join(),
+    );
+    t.check(
+      showStorage.text?.(shownStorage).startsWith('Your saved data is in: D:\\AgentSandbox\n  2 KB\n') === true,
+      'storage show prints its lines as before',
+    );
+    if (insideSandbox())
+      await t.throws(
+        () =>
+          runDefinition(
+            'storage.move',
+            { storageRoot: 'D:\\x' } as unknown as AppContext,
+            { folder: 'D:\\x' },
+            fakeIO([]).io,
+          ),
+        'has nothing to control',
+        'storage refuses inside the sandbox',
+      );
+    else t.skip('storage refuses inside the sandbox (this PC is not a sandbox)');
+    const yesIO = cliIO(parseCli(['storage', 'contained', 'off', '--yes'])).io;
+    t.check(
+      (await yesIO.confirm({ title: 'Delete the image file now?', skipWithYes: true })) === false,
+      'with --yes the image file is kept (the question is skipped)',
+    );
+    const shownContained: ContainedStatus = {
+      setting: 'off',
+      maxGb: 60,
+      available: true,
+      reasons: [],
+      fixes: [],
+      image: 'D:\\AgentSandbox\\contained\\agent.vhdx',
+      imageExists: false,
+      imageBytes: null,
+      mountFolder: 'D:\\AgentSandbox\\mount',
+      recordedMounted: false,
+      holders: 0,
+      mountedNow: null,
+    };
+    const storagePageNow = storagePage(shownStorage, shownContained);
+    const folderPrimary = storagePageNow.sections[0]?.items?.[0]?.primary;
+    const containedActions = storagePageNow.sections[1]?.actions ?? [];
+    t.check(
+      folderPrimary?.kind === 'operation' &&
+        folderPrimary.op === 'storage.change' &&
+        containedActions.length === 1 &&
+        containedActions[0].kind === 'operation' &&
+        containedActions[0].op === 'storage.containedOn',
+      'the storage page: the data folder row changes it, and contained storage offers to turn it on while it is off',
+    );
+    t.check(
+      pageActions(storagePageNow).every(
+        (a) => a.kind !== 'operation' || storageView.operations.some((o) => o.id === a.op),
+      ),
+      'the storage page offers only operations its view declares',
     );
   },
 };
