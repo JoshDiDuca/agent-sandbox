@@ -8,13 +8,13 @@ import {
   defineQuery,
   defineView,
   FieldSchema,
-  link,
   valueText,
   type Item,
   type Page,
   type Section,
 } from '../../kernel/index.js';
 import { browseFolder } from '../files/files.def.js';
+import { changeDataFolder } from '../storage/storage.def.js';
 
 export const ScopeSchema = z
   .enum(['user', 'project'])
@@ -159,7 +159,7 @@ function settingItem(row: SettingRow, scope: Scope): Item {
   };
 }
 
-/** The Data folder row: where the saved data is; moving it has a flow of its own (menu; sandbox storage move). */
+/** The Data folder row: where the saved data is; changing it asks for the folder, then moves or switches (storage). */
 function dataFolderItem(folder: string): Item {
   return {
     id: '@data-folder',
@@ -167,8 +167,8 @@ function dataFolderItem(folder: string): Item {
     hint: folder,
     cells: { setting: 'storage.root', value: folder },
     description:
-      'Where your tools, logins, history and logs are kept between sandboxes. Move it with the menu (Settings > Data folder) or sandbox storage move <folder>.',
-    primary: link({ kind: 'command', argv: ['storage'] }, 'Data folder', { verb: 'change' }),
+      'Where your tools, logins, history and logs are kept between sandboxes. Move it with sandbox storage move <folder>.',
+    primary: action(changeDataFolder, {}, { label: 'Data folder', verb: 'change' }),
   };
 }
 
@@ -208,7 +208,7 @@ export const settingsView = defineView({
   title: 'Settings',
   summary: 'Every setting, for all projects or just this project, with its value, default and description.',
   queries: { settings: listSettings },
-  operations: [setSetting, resetSetting],
+  operations: [setSetting, resetSetting, changeDataFolder],
   pickers: [browseFolder],
   tabs: {
     param: 'scope',

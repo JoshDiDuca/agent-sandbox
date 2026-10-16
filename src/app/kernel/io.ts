@@ -25,6 +25,8 @@ export const ConfirmQuestionSchema = z.strictObject({
    * asks on a terminal, takes --yes, and fails without a terminal (with `noTerminal`, or "Add --yes").
    */
   implied: z.boolean().optional(),
+  /** On the command line --yes answers no without asking: an extra step a script did not ask for (delete the image). */
+  skipWithYes: z.boolean().optional(),
   noTerminal: z.strictObject({ message: z.string(), fix: z.string() }).optional(),
 });
 

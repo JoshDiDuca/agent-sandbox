@@ -7,6 +7,13 @@ import { readQuery } from '../../../app/registry.js';
 import { userDir } from '../../../core/config/index.js';
 import { errMsg } from '../../../core/util/index.js';
 import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
+import {
+  containedStatus,
+  showStorage,
+  storagePage,
+  type ContainedStatus,
+  type StorageShow,
+} from '../../../app/features/storage/index.js';
 import { CRASH, listLogs, logsPage, type LogFiles } from '../../../app/features/logs/index.js';
 import type { Context } from '../../commands/context.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
@@ -22,14 +29,13 @@ import {
   type ListResult,
 } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
-import { DataFolderFlow, dataFolderRow } from '../data-folder.js';
 import { MenuOperations } from '../io-menu.js';
 import { menuView, type MenuView } from '../render-view.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface MaintenanceModel {
-  /** The data folder row (where the sandbox keeps its data). */
-  readonly dataFolder: { label: string; hint: string; description: string };
+  /** The Data & storage category's storage rows: the data folder and contained storage (null until read). */
+  readonly storage: { readonly show: StorageShow; readonly contained: ContainedStatus } | null;
   /** Null until measured (measuring a big data folder takes a while). */
   readonly data: DataShow | null;
   /** The sandbox's logs (the logs view's query): the category's rows and its key. */
@@ -85,11 +91,18 @@ function dataMenuView(data: DataShow | null): MenuView | undefined {
   return data ? menuView(dataPage(data), { category: 'data', prefix: 'data:', refresh: false }) : undefined;
 }
 
+/** The storage view (the data folder, contained storage) as menu rows, drawn above the data rows. */
+function storageMenu(s: MaintenanceModel['storage']): MenuView | undefined {
+  return s
+    ? menuView(storagePage(s.show, s.contained), { category: 'data', prefix: 'storage:', refresh: false })
+    : undefined;
+}
+
 function dataItems(m: MaintenanceModel): ListItem<string>[] {
-  const folder: ListItem<string> = { value: 'data:folder', category: 'data', section: 'Data folder', ...m.dataFolder };
+  const storage = storageMenu(m.storage)?.items ?? [];
   if (!m.data)
     return [
-      folder,
+      ...storage,
       {
         value: 'data:measure',
         label: 'Measure what is stored',
@@ -98,7 +111,7 @@ function dataItems(m: MaintenanceModel): ListItem<string>[] {
         description: 'Adds up the size of every folder. A big data folder takes a minute or more.',
       },
     ];
-  return [folder, ...(dataMenuView(m.data)?.items ?? [])];
+  return [...storage, ...(dataMenuView(m.data)?.items ?? [])];
 }
 
 function updateItems(m: MaintenanceModel): ListItem<string>[] {
@@ -209,7 +222,9 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
     enterLabel: (category, id) =>
       category === 'health'
         ? health.enterLabel(category, id)
-        : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) || enterLabel(id ?? '', m),
+        : (category === 'data'
+            ? storageMenu(m.storage)?.enterLabel(category, id) || dataMenuView(m.data)?.enterLabel(category, id)
+            : undefined) || enterLabel(id ?? '', m),
   };
 }
 
@@ -220,7 +235,6 @@ function healthMenu(m: MaintenanceModel): MenuView {
 
 /** What Enter does on a row ("" = the row only shows information). */
 function enterLabel(id: string, m: MaintenanceModel): string {
-  if (id === 'data:folder') return 'change';
   if (id === 'data:measure') return 'measure';
   if (id === 'updates:latest') return m.latest ? 'install' : 'look';
   if (id === 'updates:auto') return 'switch';
@@ -235,7 +249,11 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
   return (category) => {
     switch (category) {
       case 'data':
-        return [{ key: 'm', label: 'measure again' }, ...(dataMenuView(m.data)?.actions ?? [])];
+        return [
+          { key: 'm', label: 'measure again' },
+          ...(storageMenu(m.storage)?.actions ?? []),
+          ...(dataMenuView(m.data)?.actions ?? []),
+        ];
       case 'logs':
         return logsMenu(m.logs).actions;
       case 'health':
@@ -274,6 +292,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
 export class MaintenancePage extends ListPage<string> {
   readonly label = 'Maintenance';
   private data: DataShow | null = null;
+  private storage: MaintenanceModel['storage'] = null;
   private logs: LogFiles = NO_LOGS;
   private last: HealthLast | null = null;
   private settings: MaintenanceModel['settings'] = { pending: [] };
@@ -298,7 +317,7 @@ export class MaintenancePage extends ListPage<string> {
 
   private model(): MaintenanceModel {
     return {
-      dataFolder: dataFolderRow(this.ctx),
+      storage: this.storage,
       data: this.data,
       logs: this.logs,
       health: { last: this.last },
@@ -313,6 +332,14 @@ export class MaintenancePage extends ListPage<string> {
   }
 
   protected async load(): Promise<void> {
+    try {
+      this.storage = {
+        show: await readQuery(showStorage, this.ctx, { measure: false }),
+        contained: await readQuery(containedStatus, this.ctx),
+      };
+    } catch {
+      this.storage = null;
+    }
     try {
       this.logs = await readQuery(listLogs, this.ctx);
     } catch {
@@ -406,14 +433,12 @@ export class MaintenancePage extends ListPage<string> {
     try {
       // The open category's rows and keys only (a key of one category must not fire in another).
       if (this.category === 'data') {
+        const stored = storageMenu(this.storage)?.resolve(result);
+        if (stored?.kind === 'action') return await this.dataAction(stored.action);
         const chosen = dataMenuView(this.data)?.resolve(result);
         if (chosen?.kind === 'action') return await this.dataAction(chosen.action);
       }
       if (key === 'm' || id === 'data:measure') return await this.measure();
-      if (id === 'data:folder' && result.kind === 'pick') {
-        const exit = await new DataFolderFlow(this.app, this.ctx).run();
-        return exit ? { exit } : { reload: true };
-      }
       // Only the open category's rows and keys: `f` and Enter mean something else in Health.
       if (this.category === 'logs') {
         const chosen = logsMenu(this.logs).resolve(result);
@@ -470,8 +495,9 @@ export class MaintenancePage extends ListPage<string> {
   }
 
   /**
-   * Delete one stored folder, or clean up: the operation asks and reports as on the command line. After it ran, the
-   * sizes shown are out of date, so the list goes back to "Measure what is stored" (a declined question keeps it).
+   * Delete one stored folder, clean up, or change the data folder: the operation asks and reports as on the command
+   * line. After it ran, the sizes shown are out of date, so the list goes back to "Measure what is stored" (a declined
+   * question keeps it).
    */
   private async dataAction(action: Action): Promise<Outcome<string>> {
     const outcome = await this.operations.perform(action, [this.label], (text) => this.busy(text));

@@ -10,6 +10,7 @@ import { logsView } from '../../app/features/logs/index.js';
 import { projectsView } from '../../app/features/projects/index.js';
 import { sandboxView } from '../../app/features/sandbox/index.js';
 import { sessionsView } from '../../app/features/sessions/index.js';
+import { storageView } from '../../app/features/storage/index.js';
 import { settingsView } from '../../app/features/settings/index.js';
 import type { AnyView } from '../../app/kernel/index.js';
 import type { SECTION_LABELS } from './shell.js';
@@ -29,5 +30,6 @@ export const MENU_VIEWS: readonly MenuViewPlace[] = [
   { view: projectsView, section: 'Sandbox' },
   { view: healthView, section: 'Maintenance' },
   { view: dataView, section: 'Maintenance' },
+  { view: storageView, section: 'Maintenance' },
   { view: logsView, section: 'Maintenance' },
 ];

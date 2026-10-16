@@ -13,6 +13,7 @@ import { lastHealth } from '../../app/features/health/index.js';
 import { CRASH, listLogs, tailLog } from '../../app/features/logs/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { showData } from '../../app/features/data/index.js';
+import { containedStatus, showStorage } from '../../app/features/storage/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
 import { runDefinition } from '../../app/registry.js';
@@ -198,6 +199,38 @@ function sampleSessions(running: boolean): unknown {
           canOpen: s.phase === 'running',
         }))
       : [],
+  });
+}
+
+/** Where the saved data is (the storage area's query), parsed with its own output schema. */
+function sampleStorage(): unknown {
+  return showStorage.output.parse({
+    root: 'F:\\AgentSandbox',
+    exists: true,
+    holdsData: true,
+    measured: { bytes: 8.9e9, files: 41250, partial: false },
+    size: '8.9 GB',
+    defaultRoot: 'C:\\ProgramData\\AgentSandbox',
+    defaultInUse: false,
+    otherFoldersWithData: ['C:\\ProgramData\\AgentSandbox'],
+  });
+}
+
+/** Contained storage (beta): off, and this PC can use it. */
+function sampleContained(): unknown {
+  return containedStatus.output.parse({
+    setting: 'off',
+    maxGb: 60,
+    available: true,
+    reasons: [],
+    fixes: [],
+    image: 'F:\\AgentSandbox\\contained\\agent.vhdx',
+    imageExists: false,
+    imageBytes: null,
+    mountFolder: 'F:\\AgentSandbox\\mount',
+    recordedMounted: false,
+    holders: 0,
+    mountedNow: null,
   });
 }
 
@@ -543,6 +576,44 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
       }
       case 'data.show':
         return sampleData();
+      case 'storage.show':
+        return sampleStorage();
+      case 'storage.containedStatus':
+        return sampleContained();
+      case 'storage.change': {
+        // The real flow asks for the folder (the browser), then move or switch; the preview asks the same questions.
+        const picked = await io.path({
+          title: 'Choose the folder for your saved data',
+          lines: ['Now: F:\\AgentSandbox (8.9 GB).'],
+          pathKind: 'dir',
+          initial: 'F:\\',
+        });
+        if (picked === undefined) cancelled();
+        const how = await io.choose({
+          title: 'Move your data to ' + picked + '?',
+          lines: ['From: F:\\AgentSandbox', 'Size: 8.9 GB', 'Time: a few seconds (same drive, nothing is copied)'],
+          choices: [
+            { value: 'move', label: 'Move data' },
+            { value: 'use', label: 'Switch without moving' },
+            { value: 'cancel', label: 'Cancel' },
+          ],
+        });
+        if (how === undefined || how === 'cancel') cancelled();
+        return { message: 'Done (preview: nothing was moved or switched).' };
+      }
+      case 'storage.move':
+        if (!(await io.confirm({ title: 'Move your data to F:\\Sandbox?', yes: 'Move' }))) cancelled();
+        return { message: 'Moved (preview: nothing was moved).' };
+      case 'storage.use':
+        if (!(await io.confirm({ title: 'Use F:\\Sandbox from now on, without moving your data?', yes: 'Use' })))
+          cancelled();
+        return { message: 'Your data is now looked for in F:\\Sandbox (preview: nothing was changed).' };
+      case 'storage.containedOn':
+        if (!(await io.confirm({ title: 'Turn contained storage on?', yes: 'Turn on' }))) cancelled();
+        return { message: 'Contained storage is on (preview: nothing was changed).' };
+      case 'storage.containedOff':
+        if (!(await io.confirm({ title: 'Turn contained storage off?', yes: 'Turn off', danger: true }))) cancelled();
+        return { message: 'Contained storage is off (preview: nothing was changed).' };
       case 'data.clean':
       case 'data.prune':
         if (!(await io.confirm({ title: 'Delete the chosen data?', yes: 'Delete', danger: true, implied: true })))
@@ -596,6 +667,13 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'health.repair': 'operation',
     'health.enableSandbox': 'operation',
     'data.show': 'query',
+    'storage.show': 'query',
+    'storage.containedStatus': 'query',
+    'storage.change': 'operation',
+    'storage.move': 'operation',
+    'storage.use': 'operation',
+    'storage.containedOn': 'operation',
+    'storage.containedOff': 'operation',
     'data.clean': 'operation',
     'data.prune': 'operation',
     'logs.list': 'query',
