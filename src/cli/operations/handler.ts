@@ -40,12 +40,13 @@ export function definitionHandler(def: AnyDefinition): Handler {
     try {
       const output = await runDefinition(def.id, ctx, input, io);
       close();
+      const code = def.cli?.exitCode?.(output) ?? 0;
       if (def.cli?.json && ctx.options.json) {
         printJson(ctx, def.cli.shapeJson ? def.cli.shapeJson(output) : output);
-        return 0;
+        return code;
       }
       printOutput(def, output, def.input.parse(input) as Record<string, unknown>);
-      return 0;
+      return code;
     } catch (e) {
       close();
       if (!(e instanceof Cancelled)) throw e;

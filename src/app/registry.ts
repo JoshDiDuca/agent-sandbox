@@ -62,6 +62,7 @@ import {
   setSettingRun,
 } from './features/settings/index.js';
 import { migrateSettingsRun, runUpdateRun, updatesStatusRun } from './features/updates/index.js';
+import { checkEngineRun, engineStatusRun } from './features/engine/index.js';
 
 export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>[] = [
   sandboxStatusRun,
@@ -119,6 +120,8 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   runUpdateRun,
   migrateSettingsRun,
   updatesStatusRun,
+  engineStatusRun,
+  checkEngineRun,
 ];
 
 export function implementationOf(id: string): Implementation<AnyDefinition, AppContext> | undefined {

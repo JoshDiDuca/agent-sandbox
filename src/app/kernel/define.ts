@@ -50,14 +50,17 @@ export interface CliHint {
   readonly json?: boolean;
   /** Shapes what --json prints (kept as the command printed it before the core); default: the output. */
   shapeJson?(output: unknown): unknown;
+  /** The command's exit code for this output (default 0). */
+  exitCode?(output: unknown): number;
   readonly examples?: readonly string[];
 }
 
 /** A CliHint as written in a definition: field names checked against the input, the output typed. */
-export interface TypedCliHint<I, O> extends Omit<CliHint, 'positional' | 'flags' | 'shapeJson'> {
+export interface TypedCliHint<I, O> extends Omit<CliHint, 'positional' | 'flags' | 'shapeJson' | 'exitCode'> {
   readonly positional?: readonly (keyof I & string)[];
   readonly flags?: { readonly [K in keyof I]?: CliFlag };
   shapeJson?(output: O): unknown;
+  exitCode?(output: O): number;
 }
 
 interface Definition<Id extends string, I extends z.ZodType, O extends z.ZodType> {
