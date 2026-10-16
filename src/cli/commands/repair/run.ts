@@ -1,23 +1,18 @@
-// `sandbox doctor` and `sandbox repair`: both run the same checks through the same engine, a line each as it ends.
-// doctor only looks (and offers to fix, or fixes with --fix); repair looks, lists what it would change, asks once, then
-// fixes and writes a log. --json prints the results instead and never asks.
+// `sandbox doctor` and `sandbox repair`: the command line's renderers of the health feature's run (healthWith): lines
+// as each check ends, the summary, the details, the log path. doctor only looks (and offers to fix, or fixes with
+// --fix); repair looks, lists what it would change, asks once, then fixes and writes a log. --json prints the results
+// instead and never asks.
 import path from 'node:path';
 import { confirm } from '@inquirer/prompts';
 import { DEFAULTS, userDir } from '../../../core/config/index.js';
-import { packageVersion } from '../../../core/package-info.js';
 import { expandPath, UserError } from '../../../core/util/index.js';
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import type { CliOptions } from '../../args.js';
 import { printJson, table } from '../../output/index.js';
 import { HealthService } from '../../services/index.js';
 import { createContext, requireOnPc, type Context } from '../context.js';
-import { ALL_CHECKS } from './checks/index.js';
-import { buildEnv } from './env.js';
-import { runHealth } from './health-run.js';
-import { logText, writeRepairLog } from './log.js';
+import { healthWith } from '../../../app/features/health/index.js';
 import { HealthPrinter } from './printer.js';
-
-export { runHealth } from './health-run.js';
 
 const interactive = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
@@ -31,27 +26,18 @@ function quote(n: number, what: string): string {
 
 /** `sandbox doctor` */
 export async function runDoctor(ctx: Context): Promise<number> {
-  const health = new HealthService(ctx);
   if (insideSandbox()) {
-    table(health.doctor());
+    table(new HealthService(ctx).doctor());
     return 0;
   }
   const json = ctx.options.json;
   const printer = json ? null : new HealthPrinter(stdout);
   printer?.title('Checking this PC, the install, your settings and the sandbox...');
-  const env = buildEnv(ctx);
-  const report = await runHealth(
-    env,
-    printer,
-    {
-      yes: ctx.options.fix,
-      ask: !json && interactive(),
-      question: (n) => quote(n, 'problem') + ' can be fixed. Fix ' + (n === 1 ? 'it' : 'them') + ' now?',
-    },
-    ALL_CHECKS,
-    askFix,
+  const { report, details } = await healthWith(
+    ctx,
+    { mode: 'doctor', yes: ctx.options.fix, harness: ctx.options.harness },
+    { events: printer, mayAsk: !json && interactive(), confirmFix: askFix },
   );
-  const details = health.doctor();
   if (printJson(ctx, { checks: report.final, summary: report.summary, details })) return 0;
   printer?.summary(report.final, report.summary);
   const left = report.final.filter((r) => r.fixable).length;
@@ -68,32 +54,12 @@ export async function runRepair(ctx: Context, configError: UserError | null = nu
   const json = ctx.options.json;
   const printer = json ? null : new HealthPrinter(stdout);
   printer?.title('Checking this PC, the install, your settings and the sandbox...');
-  const env = buildEnv(ctx, configError);
   const yes = ctx.options.yes;
   const ask = !json && interactive();
-  const report = await runHealth(
-    env,
-    printer,
-    {
-      yes,
-      ask,
-      question: (n) => 'Fix ' + (n === 1 ? 'this problem' : 'these ' + n + ' problems') + '?',
-    },
-    ALL_CHECKS,
-    askFix,
-  );
-  const when = new Date();
-  const log = writeRepairLog(
-    ctx.storageRoot,
-    logText({
-      when,
-      version: packageVersion(),
-      command: 'sandbox repair' + (yes ? ' --yes' : ''),
-      found: report.found,
-      final: report.final,
-      summary: report.summary,
-    }),
-    when,
+  const { report, log } = await healthWith(
+    ctx,
+    { mode: 'repair', yes, configError },
+    { events: printer, mayAsk: ask, confirmFix: askFix },
   );
   const stillFixable = report.final.filter((r) => r.fixable).length;
   if (printJson(ctx, { checks: report.final, summary: report.summary, changed: report.changed, log })) {
@@ -136,3 +102,5 @@ export function repairCommand(packageRoot: string, entry: string, options: CliOp
   }
   return runRepair(ctx);
 }
+
+export { runHealth } from './health-run.js';

@@ -211,15 +211,45 @@ export function renderScreens(dir: string): string {
       { name: 'guest-2026-10-14.log', path: 'x', bytes: 120000, modified: NOW - 60000 },
       { name: 'daemon-2026-10-14.log', path: 'y', bytes: 8000, modified: NOW - 600000 },
     ],
-    doctor: [
-      ['Windows Sandbox', 'available'],
-      ['Config file', 'C:\\Users\\me\\.agent-sandbox\\config.json'],
-    ],
-    repair: [
-      { name: 'Config file', status: 'ok', detail: 'valid' },
-      { name: 'Stale run folders', status: 'fixed', detail: 'removed 2' },
-      { name: 'Toolchain cache', status: 'needs-you', detail: 'close the sandbox first' },
-    ],
+    health: {
+      last: {
+        at: new Date(NOW - 180000).toISOString(),
+        mode: 'check',
+        checks: [
+          { id: 'config', group: 'Settings', name: 'Config file', status: 'ok', detail: 'valid', fixable: false },
+          {
+            id: 'stale',
+            group: 'Data folder',
+            name: 'Stale run folders',
+            status: 'fixed',
+            detail: 'removed 2',
+            fixable: false,
+          },
+          {
+            id: 'cache',
+            group: 'Sandbox',
+            name: 'Toolchain cache',
+            status: 'needs-you',
+            detail: 'close the sandbox first',
+            fixable: false,
+          },
+        ],
+        summary: { total: 3, ok: 1, fixed: 1, warn: 0, needsYou: 1, skipped: 0, fixable: 0 },
+        details: [
+          ['Windows Sandbox', 'available'],
+          ['Config file', 'C:\\Users\\me\\.agent-sandbox\\config.json'],
+        ],
+        setup: {
+          checks: [
+            { name: 'Windows edition', status: 'ok', detail: 'Pro' },
+            { name: 'Windows Sandbox feature', status: 'action', detail: 'turned off' },
+          ],
+          canEnable: true,
+          error: null,
+        },
+        log: null,
+      },
+    },
     settings: { pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'] },
     dataFolder: {
       label: 'Data folder',
@@ -238,14 +268,6 @@ export function renderScreens(dir: string): string {
       },
     },
     latest: '1.5.0',
-    setup: {
-      facts: {} as never,
-      canEnable: true,
-      checks: [
-        { name: 'Windows edition', status: 'ok', detail: 'Pro' },
-        { name: 'Windows Sandbox feature', status: 'action', detail: 'turned off' },
-      ],
-    },
     more: [
       { name: 'sync', summary: 'sync history now' },
       { name: 'audit', summary: 'show what the sandbox did' },

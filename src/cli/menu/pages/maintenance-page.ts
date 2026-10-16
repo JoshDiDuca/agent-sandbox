@@ -6,20 +6,19 @@ import type { DiskUsage } from '../../../core/disk.js';
 import { humanBytes } from '../../../core/disk.js';
 import { userDir } from '../../../core/config/index.js';
 import { errMsg, fail } from '../../../core/util/index.js';
+import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
+import { readQuery } from '../../../app/registry.js';
 import type { Context } from '../../commands/context.js';
 import { cleanTargetOf, type DataEntry } from '../../commands/data/collect.js';
-import type { RepairResult, RepairStatus } from '../../commands/repair/types.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
 import { ago } from '../../output/index.js';
 import {
   DataService,
-  HealthService,
   LogsService,
   MigrateService,
   NPM_UPDATE_COMMAND,
   UpdateService,
   type LogFile,
-  type SetupReport,
   type UpdateStatus,
 } from '../../services/index.js';
 import { describeResult } from '../../commands/maintenance/update.js';
@@ -34,6 +33,8 @@ import {
 } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
 import { DataFolderFlow, dataFolderRow } from '../data-folder.js';
+import { MenuOperations } from '../io-menu.js';
+import { menuView, type MenuView } from '../render-view.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface MaintenanceModel {
@@ -42,9 +43,8 @@ export interface MaintenanceModel {
   /** Null until measured (measuring a big data folder takes a while). */
   readonly data: { entries: DataEntry[]; disks: DiskUsage[]; total: number } | null;
   readonly logs: readonly LogFile[];
-  readonly doctor: readonly (readonly string[])[] | null;
-  readonly repair: readonly RepairResult[] | null;
-  readonly setup: SetupReport | { error: string } | null;
+  /** The Health category: the last check or repair saved (null: none yet). */
+  readonly health: { readonly last: HealthLast | null };
   /** The changes still to make to your saved settings (or why they cannot be read). */
   readonly settings: { readonly pending: readonly string[] } | { readonly error: string };
   /** The program's own updates: what is installed and what an update did. */
@@ -85,14 +85,6 @@ const MORE_LABELS: Readonly<Record<string, string>> = {
   generate: 'Preview a start',
   exec: 'Run a command in the sandbox',
   'agent-commands': 'Agent commands (Beta)',
-};
-
-const REPAIR_LABEL: Record<RepairStatus, [string, (t: string) => string]> = {
-  ok: ['OK', Theme.ok],
-  fixed: ['FIXED', Theme.accent],
-  'needs-you': ['NEEDS YOU', Theme.error],
-  warn: ['WARNING', Theme.warn],
-  skipped: ['SKIPPED', Theme.muted],
 };
 
 const AREA_LABEL: Record<DataEntry['area'], string> = {
@@ -212,68 +204,8 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
     hint: humanBytes(f.bytes) + '  ' + ago(f.modified),
     description: 'Enter shows the end of this log in the terminal.',
   }));
-  // The checks take seconds (programs are run), so they are not made while you move through the categories.
-  const check: ListItem<string>[] =
-    m.doctor === null && m.setup === null
-      ? [
-          {
-            value: 'health:check',
-            label: 'Check this PC',
-            category: 'health',
-            section: 'Doctor',
-            description:
-              'Looks at this PC: Windows features, the install, the folders and the sandbox. It takes a few seconds, so it only runs when you ask.',
-          },
-        ]
-      : [];
-  const doctor: ListItem<string>[] = (m.doctor ?? []).map(([name, detail], i) => ({
-    value: 'doctor:' + i,
-    label: name,
-    category: 'health',
-    section: 'Doctor',
-    hint: Text.truncate(detail, 50),
-    details: [detail],
-  }));
-  const repair: ListItem<string>[] = m.repair
-    ? m.repair.map((r, i) => {
-        const [text, paint] = REPAIR_LABEL[r.status];
-        return {
-          value: 'repair:' + i,
-          label: r.name,
-          category: 'health',
-          section: 'Repair',
-          hint: paint(text),
-          description: r.detail,
-        };
-      })
-    : [
-        {
-          value: 'repair:run',
-          label: 'Run the checks and fix what can be fixed',
-          category: 'health',
-          section: 'Repair',
-          description:
-            'Checks the install, data folder, settings and sandbox, lists what it would change, and asks before it fixes anything.',
-        },
-      ];
-  const setup: ListItem<string>[] =
-    m.setup === null
-      ? []
-      : 'error' in m.setup
-        ? [{ value: 'setup:error', label: m.setup.error, category: 'health', section: 'Set up this PC' }]
-        : m.setup.checks.map((c, i) => ({
-            value: 'setup:' + i,
-            label: c.name,
-            category: 'health',
-            section: 'Set up this PC',
-            hint:
-              c.status === 'ok'
-                ? Theme.ok('OK')
-                : c.status === 'warn'
-                  ? Theme.warn('WARNING')
-                  : Theme.error('ACTION NEEDED'),
-            description: c.detail,
-          }));
+  // The checks take seconds (programs are run), so they only run when you ask: the page shows the saved results.
+  const health = healthMenu(m);
   const settings: ListItem<string>[] =
     'error' in m.settings
       ? [{ value: 'settings:error', label: m.settings.error, category: 'updates', section: 'Saved settings' }]
@@ -307,11 +239,16 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...updates, ...settings, ...dataItems(m), ...check, ...doctor, ...repair, ...setup, ...logs, ...more],
+    items: [...updates, ...settings, ...dataItems(m), ...health.items, ...logs, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
-    enterLabel: (_category, id) => enterLabel(id ?? '', m),
+    enterLabel: (category, id) => (category === 'health' ? health.enterLabel(category, id) : enterLabel(id ?? '', m)),
   };
+}
+
+/** The Health category: the health view's rows and keys, drawn only while that category is open. */
+function healthMenu(m: MaintenanceModel): MenuView {
+  return menuView(healthPage({ last: m.health.last }), { category: 'health', refresh: false });
 }
 
 /** What Enter does on a row ("" = the row only shows information). */
@@ -319,8 +256,6 @@ function enterLabel(id: string, m: MaintenanceModel): string {
   if (id === 'data:folder') return 'change';
   if (id === 'data:measure') return 'measure';
   if (id === 'data:clean') return 'choose what';
-  if (id === 'repair:run') return 'check and fix';
-  if (id === 'health:check') return 'check';
   if (id === 'updates:latest') return m.latest ? 'install' : 'look';
   if (id === 'updates:auto') return 'switch';
   if (id === 'updates:previous') return 'go back';
@@ -342,14 +277,8 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
       }
       case 'logs':
         return [{ key: 'f', label: 'follow in the terminal' }];
-      case 'health': {
-        const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
-        return [
-          { key: 'f', label: 'check and fix' },
-          { key: 'l', label: m.doctor ? 'check again' : 'check' },
-          ...(canEnable ? [{ key: 'e', label: 'turn on Windows Sandbox' }] : []),
-        ];
-      }
+      case 'health':
+        return healthMenu(m).actions;
       case 'updates': {
         const managed = !('error' in m.updates) && m.updates.managed;
         const previous = !('error' in m.updates) && Boolean(m.updates.state.previous);
@@ -385,14 +314,12 @@ export class MaintenancePage extends ListPage<string> {
   readonly label = 'Maintenance';
   private data: MaintenanceModel['data'] = null;
   private logs: LogFile[] = [];
-  private doctorRows: string[][] | null = null;
-  private repairRows: RepairResult[] | null = null;
-  private setupReport: MaintenanceModel['setup'] = null;
+  private last: HealthLast | null = null;
   private settings: MaintenanceModel['settings'] = { pending: [] };
   private readonly migrate: MigrateService;
-  private readonly health: HealthService;
   private readonly dataService: DataService;
   private readonly updateService: UpdateService;
+  private readonly operations: MenuOperations;
   private latest: string | null = null;
 
   constructor(
@@ -401,7 +328,7 @@ export class MaintenancePage extends ListPage<string> {
   ) {
     super(app);
     this.updateService = UpdateService.forPackage(ctx.packageRoot, undefined, { userDir: userDir() });
-    this.health = new HealthService(ctx);
+    this.operations = new MenuOperations(app, ctx);
     this.migrate = new MigrateService({
       storageRoot: ctx.storageRoot,
       userDir: userDir(),
@@ -415,9 +342,7 @@ export class MaintenancePage extends ListPage<string> {
       dataFolder: dataFolderRow(this.ctx),
       data: this.data,
       logs: this.logs,
-      doctor: this.doctorRows,
-      repair: this.repairRows,
-      setup: this.setupReport,
+      health: { last: this.last },
       settings: this.settings,
       updates: this.updateStatus(),
       latest: this.latest,
@@ -428,14 +353,14 @@ export class MaintenancePage extends ListPage<string> {
     };
   }
 
-  protected load(): Promise<void> {
+  protected async load(): Promise<void> {
     try {
       this.logs = new LogsService(this.ctx).files();
     } catch {
       this.logs = [];
     }
     this.readSettings();
-    return Promise.resolve();
+    this.last = (await readQuery(lastHealth, this.ctx)).last;
   }
 
   protected options(): ListOptions<string> {
@@ -516,26 +441,6 @@ export class MaintenancePage extends ListPage<string> {
     };
   }
 
-  private async loadDoctor(): Promise<void> {
-    this.busy('Checking this PC…');
-    try {
-      this.doctorRows = this.health.doctor();
-    } catch (e) {
-      this.doctorRows = [['Doctor', errMsg(e)]];
-    }
-  }
-
-  private loadSetup(): Promise<void> {
-    this.busy('Looking at this PC…');
-    try {
-      this.health.assertWindows();
-      this.setupReport = this.health.setupReport();
-    } catch (e) {
-      this.setupReport = { error: errMsg(e) };
-    }
-    return Promise.resolve();
-  }
-
   protected async act(result: ListResult<string>): Promise<Outcome<string>> {
     const id = result.kind === 'pick' || result.kind === 'action' ? result.value : undefined;
     const key = result.kind === 'action' ? result.key : undefined;
@@ -558,14 +463,12 @@ export class MaintenancePage extends ListPage<string> {
       if ((result.kind === 'pick' && id?.startsWith('settings:')) || (key === 's' && this.category === 'updates'))
         return await this.updateSettings();
       if (this.category === 'updates') return await this.updates(key ?? this.updateKey(id));
+      // Only the open category's rows and keys: a key of one category must not fire in another.
       if (this.category === 'health') {
-        if (key === 'f' || id === 'repair:run') return this.repair();
-        if (key === 'l' || id === 'health:check') {
-          await this.loadDoctor();
-          await this.loadSetup();
-          return {};
-        }
-        if (key === 'e') return await this.enable();
+        const chosen = healthMenu(this.model()).resolve(result);
+        if (chosen?.kind === 'action')
+          return await this.operations.perform(chosen.action, [this.label], (text) => this.busy(text));
+        return {};
       }
       if (id?.startsWith('more:') && result.kind === 'pick') {
         const spec = commandSpec(id.slice(5)) as CommandSpec;
@@ -617,31 +520,5 @@ export class MaintenancePage extends ListPage<string> {
     const gone = this.data.entries.filter((e) => e !== entry);
     this.data = { ...this.data, entries: gone, total: _.sumBy(gone, 'bytes') };
     return { notice: Theme.ok(Theme.glyph.ok + ' Freed ' + humanBytes(outcome.freedBytes) + '.') };
-  }
-
-  /** Repair shows what it does as it goes and asks before it changes anything, so it runs on the normal screen. */
-  private repair(): Outcome<string> {
-    return { exit: { kind: 'run', argv: ['repair'] } };
-  }
-
-  private async enable(): Promise<Outcome<string>> {
-    const ok = await this.app.ask(
-      'Turn on Windows Sandbox?',
-      ['Windows asks for admin permission, then you restart Windows to finish.'],
-      'Turn on',
-    );
-    if (!ok) return {};
-    // The admin prompt and its output need the normal screen.
-    this.app.terminal.stop();
-    const worked = this.health.enableFeature();
-    this.app.terminal.start();
-    await this.loadSetup();
-    return {
-      notice: worked
-        ? Theme.ok(Theme.glyph.ok + ' Done. Restart Windows to finish.')
-        : Theme.error(
-            Theme.glyph.cross + ' Windows Sandbox could not be turned on (or the admin prompt was declined).',
-          ),
-    };
   }
 }

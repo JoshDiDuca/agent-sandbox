@@ -4,6 +4,7 @@
 import { agentsView } from '../../app/features/agents/index.js';
 import { accountsView } from '../../app/features/accounts/index.js';
 import { appsView } from '../../app/features/apps/index.js';
+import { healthView } from '../../app/features/health/index.js';
 import { projectsView } from '../../app/features/projects/index.js';
 import { sandboxView } from '../../app/features/sandbox/index.js';
 import { sessionsView } from '../../app/features/sessions/index.js';
@@ -24,4 +25,5 @@ export const MENU_VIEWS: readonly MenuViewPlace[] = [
   { view: accountsView, section: 'Accounts' },
   { view: appsView, section: 'Apps' },
   { view: projectsView, section: 'Sandbox' },
+  { view: healthView, section: 'Maintenance' },
 ];
