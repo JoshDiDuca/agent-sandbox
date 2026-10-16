@@ -276,7 +276,6 @@ export const webSuite: Suite = {
     await fake.start();
     const endpoint: Endpoint = { addresses: ['127.0.0.1'], port: fake.port, token: ATTACH_TOKEN };
     const listed: WebSession = webSession(session('abc123'), 0);
-    const created: unknown[] = [];
     const backend: WebBackend = {
       info: () =>
         Promise.resolve({
@@ -289,10 +288,6 @@ export const webSuite: Suite = {
         }),
       sessions: () => Promise.resolve([listed]),
       endpoint: (id) => (id === 'abc123' ? endpoint : null),
-      create: (request) => {
-        created.push(request);
-        return Promise.resolve(listed);
-      },
     };
     let stopped = false;
     const rpc = fakeRpc();
@@ -389,22 +384,9 @@ export const webSuite: Suite = {
       t.equal((await send(port, 'GET', '/api/info', { Cookie })).status, 200, 'and reads the info');
       t.equal(
         (await send(port, 'POST', '/api/sessions', { ...json, Cookie }, '{}')).status,
-        403,
-        'a new session needs CSRF and Origin',
+        404,
+        'starting an agent is an operation now: there is no POST /api/sessions',
       );
-      t.equal(
-        (await send(port, 'POST', '/api/sessions', { ...ajax, Cookie }, '{"harness":"../x","project":"p"}')).status,
-        400,
-        'odd names are refused',
-      );
-      const made = await send(
-        port,
-        'POST',
-        '/api/sessions',
-        { ...ajax, Cookie },
-        '{"harness":"claude","project":"app"}',
-      );
-      t.check(made.status === 201 && created.length === 1, 'a new session is requested');
 
       t.section('the terminal bridge');
       const url = 'ws://127.0.0.1:' + port + '/api/sessions/abc123/terminal?cols=100&rows=40';

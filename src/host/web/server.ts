@@ -9,14 +9,7 @@ import { WebSocketServer } from 'ws';
 import type { RpcHost } from '../../app/kernel/index.js';
 import { UserError, safeText } from '../../core/util/index.js';
 import type { Endpoint } from '../../shared/pty/index.js';
-import {
-  MAX_CLIENT_MESSAGE_BYTES,
-  MAX_COLS,
-  MAX_ROWS,
-  MIN_COLS,
-  MIN_ROWS,
-  type NewSessionRequest,
-} from '../../shared/web/index.js';
+import { MAX_CLIENT_MESSAGE_BYTES, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS } from '../../shared/web/index.js';
 import { cookieHeader, csrfOk, hostAllowed, originAllowed, WebAuth } from './auth.js';
 import type { WebBackend } from './backend.js';
 import { TerminalBridge } from './bridge.js';
@@ -171,12 +164,6 @@ export class WebServer {
     if (!this.auth.signedIn(req.headers.cookie)) throw new HttpFailure(401, 'Not signed in.');
     if (pathname === '/api/info' && method === 'GET') return this.json(res, 200, await backend.info());
     if (pathname === '/api/sessions' && method === 'GET') return this.json(res, 200, await backend.sessions());
-    if (pathname === '/api/sessions' && method === 'POST') {
-      this.requireSameSite(req);
-      const request = newSessionRequest(await this.body(req));
-      if (!request) throw new HttpFailure(400, 'Choose an agent and a project.');
-      return this.json(res, 201, await backend.create(request));
-    }
     if (pathname === '/api/stop' && method === 'POST') {
       this.requireSameSite(req);
       this.json(res, 200, { ok: true });
@@ -256,11 +243,4 @@ export class WebServer {
 function bounded(text: string | null, min: number, max: number, fallback: number): number {
   const n = Number(text);
   return text !== null && Number.isInteger(n) && n >= min && n <= max ? n : fallback;
-}
-
-function newSessionRequest(body: unknown): NewSessionRequest | null {
-  if (typeof body !== 'object' || body === null) return null;
-  const { harness, project } = body as Record<string, unknown>;
-  const ok = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(v);
-  return ok(harness) && ok(project) ? { harness, project } : null;
 }

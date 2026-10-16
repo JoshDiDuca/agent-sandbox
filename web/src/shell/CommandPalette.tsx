@@ -6,7 +6,6 @@ import { Spotlight, type SpotlightActionData, type SpotlightActionGroupData } fr
 import { IconAdjustments, IconMoon, IconPlus, IconSearch, IconTerminal2 } from '@tabler/icons-react';
 import { useMemo } from 'react';
 import { NAV, queryById, type SessionsList, type SettingsList } from '../../../src/app/features/defs';
-import { openNewSession } from '../pages/NewSessionModal';
 import { AREA_ICONS, ItemIcon } from '../render/icons';
 import { itemAnchor } from '../render/CategoryPage';
 import { navigate, viewPath } from '../router';
@@ -38,7 +37,7 @@ export function CommandPalette() {
         label: 'New session',
         description: 'Start an agent in a project of the sandbox',
         leftSection: <IconPlus size={18} />,
-        onClick: () => openNewSession(),
+        onClick: () => navigate(viewPath('agents')),
       },
       {
         id: 'scheme',
