@@ -99,7 +99,7 @@ export function useAct(): (action: Action) => Promise<Outcome | undefined> {
         const session = started.ok ? sessionOf(started.output) : undefined;
         if (session) navigate('/s/' + session);
         return started;
-      } else if (target.kind === 'view') navigate(viewPath(target.view));
+      } else if (target.kind === 'view') navigate(viewPath(target.view, target.params));
       return undefined;
     },
     [run],

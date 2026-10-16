@@ -9,6 +9,7 @@ import type { AppContext } from '../../app/context.js';
 import { listAgents } from '../../app/features/agents/index.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
+import { CRASH, listLogs, tailLog } from '../../app/features/logs/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
@@ -260,12 +261,69 @@ function sampleProjects(running: boolean): unknown {
   });
 }
 
+const LOG_DIR = 'C:\\AgentData\\logs';
+
+/** The sandbox's log files, newest first, and a crash report (what logs.list returns). */
+function sampleLogs(): unknown {
+  return listLogs.output.parse({
+    folder: LOG_DIR,
+    files: [
+      {
+        name: 'guest-2026-10-16.log',
+        path: LOG_DIR + '\\guest-2026-10-16.log',
+        bytes: 182400,
+        modified: Date.now() - MINUTE,
+      },
+      {
+        name: 'daemon-2026-10-16.log',
+        path: LOG_DIR + '\\daemon-2026-10-16.log',
+        bytes: 9216,
+        modified: Date.now() - 12 * MINUTE,
+      },
+      {
+        name: 'bootstrap-2026-10-14.log',
+        path: LOG_DIR + '\\bootstrap-2026-10-14.log',
+        bytes: 2048,
+        modified: Date.now() - 2 * 24 * 60 * MINUTE,
+      },
+    ],
+    crash: true,
+  });
+}
+
+/** The end of one log (what logs.tail returns): plausible sandbox lines, one of them very long. */
+function sampleLogTail(input: { readonly name?: string }): unknown {
+  const name = input.name ?? 'guest-2026-10-16.log';
+  if (name === CRASH)
+    return tailLog.output.parse({
+      name: CRASH,
+      file: LOG_DIR + '\\crashes\\crash-2026-10-14-0912.txt',
+      text: 'Crash report (preview)\nThis PC stopped responding at 09:02 and was restarted at 09:14.\n',
+      next: 0,
+    });
+  const lines = Array.from({ length: 40 }, (_, i) =>
+    i === 17
+      ? '16:02:11 [daemon] session claude-4f2 env ' + 'PATH=C:\\nvm;C:\\Program Files\\Git\\cmd;'.repeat(6)
+      : '16:' + String(i).padStart(2, '0') + ':11 [guest] ' + (i % 3 ? 'ok' : 'checked') + ' item ' + i,
+  );
+  return tailLog.output.parse({
+    name,
+    file: LOG_DIR + '\\' + name,
+    text: lines.join('\n') + '\n',
+    next: 0,
+  });
+}
+
 /** The real features where they only touch the temp folder, sample data for the rest. */
 function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
-  const sample = async (id: string, io: OperationIO): Promise<unknown> => {
+  const sample = async (id: string, input: unknown, io: OperationIO): Promise<unknown> => {
     switch (id) {
       case 'sandbox.status':
         return sampleStatus(state.running);
+      case 'logs.list':
+        return sampleLogs();
+      case 'logs.tail':
+        return sampleLogTail(input as { readonly name?: string });
       case 'sessions.list':
         return sampleSessions(state.running);
       case 'agents.list':
@@ -375,14 +433,16 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'projects.all': 'operation',
     'projects.roots': 'operation',
     'projects.choose': 'operation',
+    'logs.list': 'query',
+    'logs.tail': 'query',
   };
   return {
     kind: (id) => kinds[id],
-    liveMs: (id) => (id === 'sandbox.status' || id === 'sessions.list' ? 2500 : undefined),
+    liveMs: (id) => (id === 'sandbox.status' || id === 'sessions.list' ? 2500 : id === 'logs.tail' ? 1000 : undefined),
     run: async (id, input, io) =>
       id !== 'apps.request' && (id.startsWith('settings.') || id.startsWith('apps.') || id === 'files.browse')
         ? runDefinition(id, ctx, input, io)
-        : ((await sample(id, io)) ?? {}),
+        : ((await sample(id, input, io)) ?? {}),
   };
 }
 

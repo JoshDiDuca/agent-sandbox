@@ -207,10 +207,24 @@ export function renderScreens(dir: string): string {
       disks: [{ drive: 'C:\\', totalBytes: 40e9, freeBytes: 22e9, usedBytes: 18e9, holdsStorage: true }],
       total: 8.9e9,
     },
-    logs: [
-      { name: 'guest-2026-10-14.log', path: 'x', bytes: 120000, modified: NOW - 60000 },
-      { name: 'daemon-2026-10-14.log', path: 'y', bytes: 8000, modified: NOW - 600000 },
-    ],
+    logs: {
+      folder: 'C:\\AgentData\\logs',
+      files: [
+        {
+          name: 'guest-2026-10-14.log',
+          path: 'C:\\AgentData\\logs\\guest-2026-10-14.log',
+          bytes: 120000,
+          modified: NOW - 60000,
+        },
+        {
+          name: 'daemon-2026-10-14.log',
+          path: 'C:\\AgentData\\logs\\daemon-2026-10-14.log',
+          bytes: 8000,
+          modified: NOW - 600000,
+        },
+      ],
+      crash: true,
+    },
     doctor: [
       ['Windows Sandbox', 'available'],
       ['Config file', 'C:\\Users\\me\\.agent-sandbox\\config.json'],

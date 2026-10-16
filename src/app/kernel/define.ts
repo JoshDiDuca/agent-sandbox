@@ -125,6 +125,8 @@ export interface ViewDef<Q extends QueryMap = QueryMap, P = Record<string, never
   readonly pickers?: readonly QueryDef[];
   /** A parameter switched with tabs above the page (Settings: all projects or this project), first choice default. */
   readonly tabs?: ViewTabs<P>;
+  /** Parameters taken from the address as they are (the log shown), besides the tabs' one. */
+  readonly params?: readonly (keyof P & string)[];
   /** The input of each query for these view parameters (default: each query's defaults). */
   inputs?(params: P): ViewInputs<Q>;
   /** Pure: query results in, a Page out. */

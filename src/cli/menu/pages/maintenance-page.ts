@@ -5,20 +5,20 @@ import _ from 'lodash';
 import type { DiskUsage } from '../../../core/disk.js';
 import { humanBytes } from '../../../core/disk.js';
 import { userDir } from '../../../core/config/index.js';
+import { CRASH, listLogs, logsPage, type LogFiles } from '../../../app/features/logs/index.js';
+import type { Action } from '../../../app/kernel/index.js';
+import { readQuery } from '../../../app/registry.js';
 import { errMsg, fail } from '../../../core/util/index.js';
 import type { Context } from '../../commands/context.js';
 import { cleanTargetOf, type DataEntry } from '../../commands/data/collect.js';
 import type { RepairResult, RepairStatus } from '../../commands/repair/types.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
-import { ago } from '../../output/index.js';
 import {
   DataService,
   HealthService,
-  LogsService,
   MigrateService,
   NPM_UPDATE_COMMAND,
   UpdateService,
-  type LogFile,
   type SetupReport,
   type UpdateStatus,
 } from '../../services/index.js';
@@ -34,6 +34,7 @@ import {
 } from '../../tui/index.js';
 import { CommandForm } from '../command-form.js';
 import { DataFolderFlow, dataFolderRow } from '../data-folder.js';
+import { menuView, type MenuView } from '../render-view.js';
 import { ListPage, type Outcome } from './list-page.js';
 
 export interface MaintenanceModel {
@@ -41,7 +42,8 @@ export interface MaintenanceModel {
   readonly dataFolder: { label: string; hint: string; description: string };
   /** Null until measured (measuring a big data folder takes a while). */
   readonly data: { entries: DataEntry[]; disks: DiskUsage[]; total: number } | null;
-  readonly logs: readonly LogFile[];
+  /** The sandbox's logs (the logs view's query): the category's rows and its key. */
+  readonly logs: LogFiles;
   readonly doctor: readonly (readonly string[])[] | null;
   readonly repair: readonly RepairResult[] | null;
   readonly setup: SetupReport | { error: string } | null;
@@ -76,6 +78,8 @@ const CATEGORIES = [
 ];
 
 const MORE_COMMANDS = ['sync', 'audit', 'config', 'generate', 'exec', 'agent-commands'];
+
+const NO_LOGS: LogFiles = { folder: '', files: [], crash: false };
 
 /** Plain names for the commands under More commands. */
 const MORE_LABELS: Readonly<Record<string, string>> = {
@@ -203,15 +207,16 @@ function updateItems(m: MaintenanceModel): ListItem<string>[] {
   return rows;
 }
 
+/** No logs, or no crash report: the logs view's rows and keys for the Logs category (its own empty row is left out:
+ * the category shows the page's "Nothing here yet."). */
+function logsMenu(files: LogFiles): MenuView {
+  return menuView({ ...logsPage(files), empty: undefined }, { category: 'logs', refresh: false });
+}
+
 /** The list for the maintenance tab. Pure. */
 export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
-  const logs: ListItem<string>[] = m.logs.map((f) => ({
-    value: 'log:' + f.name,
-    label: f.name,
-    category: 'logs',
-    hint: humanBytes(f.bytes) + '  ' + ago(f.modified),
-    description: 'Enter shows the end of this log in the terminal.',
-  }));
+  // The logs rows have no section heading of their own: the category is their heading.
+  const logs: ListItem<string>[] = logsMenu(m.logs).items.map(({ section: _section, ...row }) => row);
   // The checks take seconds (programs are run), so they are not made while you move through the categories.
   const check: ListItem<string>[] =
     m.doctor === null && m.setup === null
@@ -341,7 +346,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         ];
       }
       case 'logs':
-        return [{ key: 'f', label: 'follow in the terminal' }];
+        return logsMenu(m.logs).actions;
       case 'health': {
         const canEnable = m.setup !== null && !('error' in m.setup) && m.setup.canEnable;
         return [
@@ -384,7 +389,7 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
 export class MaintenancePage extends ListPage<string> {
   readonly label = 'Maintenance';
   private data: MaintenanceModel['data'] = null;
-  private logs: LogFile[] = [];
+  private logs: LogFiles = NO_LOGS;
   private doctorRows: string[][] | null = null;
   private repairRows: RepairResult[] | null = null;
   private setupReport: MaintenanceModel['setup'] = null;
@@ -428,14 +433,13 @@ export class MaintenancePage extends ListPage<string> {
     };
   }
 
-  protected load(): Promise<void> {
+  protected async load(): Promise<void> {
     try {
-      this.logs = new LogsService(this.ctx).files();
+      this.logs = await readQuery(listLogs, this.ctx);
     } catch {
-      this.logs = [];
+      this.logs = NO_LOGS;
     }
     this.readSettings();
-    return Promise.resolve();
   }
 
   protected options(): ListOptions<string> {
@@ -550,10 +554,10 @@ export class MaintenancePage extends ListPage<string> {
         return argv ? { exit: { kind: 'run', argv } } : {};
       }
       if (key === 'x') return await this.remove(id);
-      if (key === 'f' && this.category === 'logs') return { exit: { kind: 'run', argv: ['logs', '--follow'] } };
-      if (id?.startsWith('log:') && result.kind === 'pick') {
-        const file = this.logs.find((l) => l.name === id.slice(4));
-        return file ? { exit: { kind: 'view', file: file.path } } : {};
+      // Only the open category's rows and keys: `f` and Enter mean something else in Health.
+      if (this.category === 'logs') {
+        const chosen = logsMenu(this.logs).resolve(result);
+        if (chosen?.kind === 'action') return this.showLog(chosen.action);
       }
       if ((result.kind === 'pick' && id?.startsWith('settings:')) || (key === 's' && this.category === 'updates'))
         return await this.updateSettings();
@@ -576,6 +580,19 @@ export class MaintenancePage extends ListPage<string> {
       return { notice: Theme.error(Theme.glyph.cross + ' ' + errMsg(e)) };
     }
     return {};
+  }
+
+  /** A Logs row or key: the crash report or the end of a log, on the normal screen (the menu's own view shows a log
+   * there). Only names from the listing are looked up, never a path of their own. */
+  private showLog(action: Action): Outcome<string> {
+    if (action.kind !== 'link') return {};
+    const target = action.target;
+    if (target.kind === 'command') return { exit: { kind: 'run', argv: [...target.argv] } };
+    if (target.kind !== 'view') return {};
+    const name = target.params?.name;
+    if (name === CRASH) return { exit: { kind: 'run', argv: ['logs', '--crash'] } };
+    const file = this.logs.files.find((f) => f.name === name);
+    return file ? { exit: { kind: 'view', file: file.path } } : {};
   }
 
   /** The key an Enter on an Updates row stands for. */

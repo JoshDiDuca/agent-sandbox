@@ -26,6 +26,7 @@ import {
   projectsView,
   removeProject,
 } from './projects/projects.def.js';
+import { listLogs, logsView, tailLog } from './logs/logs.def.js';
 import { listSessions, restartSessions, sessionsView } from './sessions/sessions.def.js';
 import { getSetting, listSettings, resetSetting, setSetting, settingsView } from './settings/settings.def.js';
 
@@ -33,6 +34,7 @@ export type { AgentRow, AgentsList } from './agents/agents.def.js';
 export type { AccountRow, AccountsList, AgentAccounts } from './accounts/accounts.def.js';
 export type { AppRow, AppsList, CustomAppRow } from './apps/apps.def.js';
 export type { FolderEntry, FolderListing } from './files/files.def.js';
+export type { LogFileRow, LogFiles, LogTail } from './logs/logs.def.js';
 export type { ProjectRow, ProjectsList } from './projects/projects.def.js';
 export type { SandboxStatus } from './sandbox/sandbox.def.js';
 export type { SessionRow, SessionsList } from './sessions/sessions.def.js';
@@ -75,6 +77,8 @@ export const QUERIES = [
   listAccounts,
   listApps,
   listProjects,
+  listLogs,
+  tailLog,
 ] as const;
 export const VIEWS = [
   sandboxView,
@@ -84,6 +88,7 @@ export const VIEWS = [
   accountsView,
   appsView,
   projectsView,
+  logsView,
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -148,5 +153,9 @@ export const NAV: readonly NavSection[] = [
   { label: 'Apps', view: 'apps' },
   { label: 'Settings', view: 'settings' },
   { label: 'Accounts', view: 'accounts' },
-  { label: 'Maintenance', elsewhere: 'Doctor, repair, data and updates are in the menu (sandbox > Maintenance).' },
+  {
+    label: 'Maintenance',
+    elsewhere: 'Doctor, repair, data and updates are in the menu (sandbox > Maintenance).',
+    children: [{ label: 'Logs', view: 'logs' }],
+  },
 ];
