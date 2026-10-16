@@ -451,43 +451,6 @@ const COMMAND_LIST = [
     json: true,
   },
   {
-    name: 'migrate',
-    summary: 'bring your saved settings up to date with this version',
-    group: 'Health',
-    args: [],
-    options: [
-      bool('--dry-run', 'only list what would change'),
-      text('--restore', 'backup', 'put back the files saved before an update (a folder under <storage>\\backups)', {
-        advanced: true,
-      }),
-      bool('--yes', '(--restore) do not ask first', { short: '-y', noMenu: true }),
-    ],
-  },
-  {
-    name: 'update',
-    summary: 'install the newest version, or check, go back, or switch automatic updates',
-    group: 'Health',
-    args: [],
-    options: [
-      bool('--check', 'only look whether a newer version exists'),
-      bool('--rollback', 'go back to the version before the last update'),
-      bool('--yes', '(--rollback) do not ask first', { short: '-y', noMenu: true }),
-      text(
-        '--auto',
-        'on|off',
-        'install new versions by themselves (for everyone on this PC: needs an admin terminal)',
-        {
-          choices: ['on', 'off'],
-        },
-      ),
-      bool('--unattended', 'used by automatic updates: no questions, short output', { noMenu: true, advanced: true }),
-      text('--feed', 'folder', 'take the release from this folder (a feed.json and the package) instead of GitHub', {
-        noMenu: true,
-        advanced: true,
-      }),
-    ],
-  },
-  {
     name: 'repair',
     summary: 'find and fix problems (install, data folder, settings, stale state, half-installed tools)',
     group: 'Health',

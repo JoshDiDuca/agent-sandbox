@@ -39,6 +39,7 @@ import {
   setSetting,
   settingsView,
 } from './settings/settings.def.js';
+import { migrateSettings, runUpdate, updatesStatus, updatesView } from './updates/updates.def.js';
 
 export type { AgentRow, AgentsList } from './agents/agents.def.js';
 export type { AccountRow, AccountsList, AgentAccounts } from './accounts/accounts.def.js';
@@ -83,6 +84,8 @@ export const OPERATIONS = [
   enableSandbox,
   cleanData,
   pruneStorage,
+  runUpdate,
+  migrateSettings,
 ] as const;
 export const QUERIES = [
   sandboxStatus,
@@ -98,6 +101,7 @@ export const QUERIES = [
   showData,
   listLogs,
   tailLog,
+  updatesStatus,
 ] as const;
 export const VIEWS = [
   sandboxView,
@@ -110,6 +114,7 @@ export const VIEWS = [
   healthView,
   dataView,
   logsView,
+  updatesView,
 ] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
@@ -177,12 +182,13 @@ export const NAV: readonly NavSection[] = [
   {
     label: 'Maintenance',
     children: [
+      { label: 'Updates', view: 'updates' },
       { label: 'Data', view: 'data' },
       { label: 'Health', view: 'health' },
       { label: 'Logs', view: 'logs' },
       {
         label: 'More',
-        elsewhere: 'Storage, updates and the less common commands are in the menu (sandbox > Maintenance).',
+        elsewhere: 'Storage and the less common commands are in the menu (sandbox > Maintenance).',
       },
     ],
   },

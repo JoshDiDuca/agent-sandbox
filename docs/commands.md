@@ -113,7 +113,7 @@ Changes to what is mapped apply from the next start.
 | `sandbox update --auto on\|off` | install new versions by themselves; for everyone on the PC this needs an admin terminal |
 | `sandbox migrate` | bring your saved settings up to date after an upgrade (a backup is kept); `--dry-run` lists changes, `--restore <backup>` puts one back (asks first; `-y` skips) |
 
-An npm install is updated with `npm install -g windows-development-sandbox`; `sandbox update` says so.
+An npm install is updated with `npm install -g windows-development-sandbox`; `sandbox update` says so. A failed update, or one that waits for a running sandbox, prints `Error: ...` on stderr and exits 1.
 
 With an all-users install, a sandbox another user started shows in `status` and `sessions` as "started by <name>". When
 they share it, `attach`, `exec`, `db` and `stop` work (stop asks you to type their name; `--yes` in scripts); otherwise

@@ -8,7 +8,7 @@ import { attach, db, exec } from './sessions/index.js';
 import { listAccounts } from '../../app/features/accounts/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { definitionHandler } from '../operations/index.js';
-import { audit, claudeHost, config, doctor, hostCommand, logs, migrate, sync, watcher } from './maintenance/index.js';
+import { audit, claudeHost, config, doctor, hostCommand, logs, sync, watcher } from './maintenance/index.js';
 import { engine } from './engine.js';
 import { resume } from './resume.js';
 import { agentCommandsCommand } from './agent-commands.js';
@@ -34,7 +34,6 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   audit: audit,
   config: config,
   doctor: doctor,
-  migrate: migrate,
   setup: setup,
   // `data`, `data info` and `data list` show; `data remove` is `data clean` (its actions are the operations' hints).
   data: (ctx) =>
