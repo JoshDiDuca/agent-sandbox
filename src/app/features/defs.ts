@@ -2,19 +2,41 @@
 // bundle imports this file (and through it only *.def.ts files); app/registry.ts adds the run functions on the Node
 // side. A new feature adds its definitions here and its implementations there.
 import type { AnyDefinition, AnyView, OperationDef, QueryDef } from '../kernel/index.js';
+import {
+  accountsView,
+  defaultAccount,
+  listAccounts,
+  removeAccount,
+  renameAccount,
+  saveAccount,
+  useAccount,
+} from './accounts/accounts.def.js';
 import { browseFolder } from './files/files.def.js';
 import { hideWindow, sandboxStatus, sandboxView, showWindow, stopSandbox } from './sandbox/sandbox.def.js';
 import { listSessions, restartSessions, sessionsView } from './sessions/sessions.def.js';
 import { getSetting, listSettings, resetSetting, setSetting, settingsView } from './settings/settings.def.js';
 
+export type { AccountRow, AccountsList, AgentAccounts } from './accounts/accounts.def.js';
 export type { FolderEntry, FolderListing } from './files/files.def.js';
 export type { SandboxStatus } from './sandbox/sandbox.def.js';
 export type { SessionRow, SessionsList } from './sessions/sessions.def.js';
 export type { SettingRow, SettingsList } from './settings/settings.def.js';
 
-export const OPERATIONS = [showWindow, hideWindow, stopSandbox, restartSessions, setSetting, resetSetting] as const;
-export const QUERIES = [sandboxStatus, listSessions, listSettings, getSetting, browseFolder] as const;
-export const VIEWS = [sandboxView, sessionsView, settingsView] as const;
+export const OPERATIONS = [
+  showWindow,
+  hideWindow,
+  stopSandbox,
+  restartSessions,
+  setSetting,
+  resetSetting,
+  saveAccount,
+  useAccount,
+  defaultAccount,
+  renameAccount,
+  removeAccount,
+] as const;
+export const QUERIES = [sandboxStatus, listSessions, listSettings, getSetting, browseFolder, listAccounts] as const;
+export const VIEWS = [sandboxView, sessionsView, settingsView, accountsView] as const;
 
 export type Operation = (typeof OPERATIONS)[number];
 export type Query = (typeof QUERIES)[number];
@@ -58,6 +80,6 @@ export const NAV: readonly NavSection[] = [
   { label: 'Sandbox', view: 'sandbox' },
   { label: 'Apps', elsewhere: 'Choose apps in the menu (sandbox > Apps).' },
   { label: 'Settings', view: 'settings' },
-  { label: 'Accounts', elsewhere: 'Manage logins in the menu (sandbox > Accounts) or with sandbox account.' },
+  { label: 'Accounts', view: 'accounts' },
   { label: 'Maintenance', elsewhere: 'Doctor, repair, data and updates are in the menu (sandbox > Maintenance).' },
 ];

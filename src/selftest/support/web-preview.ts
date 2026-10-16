@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AppContext } from '../../app/context.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
+import { listAccounts } from '../../app/features/accounts/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
 import { runDefinition } from '../../app/registry.js';
@@ -147,6 +148,37 @@ function sampleStatus(running: boolean): unknown {
   });
 }
 
+/** Sample logins (names and emails only, no credentials): Claude with two, codex with one, opencode keeps none. */
+function sampleAccounts(): unknown {
+  return listAccounts.output.parse({
+    agent: 'claude',
+    agents: [
+      {
+        name: 'claude',
+        kept: true,
+        canSavePc: true,
+        accounts: [
+          {
+            name: 'work',
+            email: 'dev@example.com',
+            isDefault: true,
+            isActive: true,
+            savedAt: iso(3 * 24 * 60 * MINUTE),
+          },
+          { name: 'personal', email: null, isDefault: false, isActive: false, savedAt: iso(9 * 24 * 60 * MINUTE) },
+        ],
+      },
+      {
+        name: 'codex',
+        kept: true,
+        canSavePc: false,
+        accounts: [{ name: 'main', email: null, isDefault: true, isActive: false, savedAt: iso(2 * 24 * 60 * MINUTE) }],
+      },
+      { name: 'opencode', kept: false, canSavePc: false, accounts: [] },
+    ],
+  });
+}
+
 function sampleSessions(running: boolean): unknown {
   return listSessions.output.parse({
     sandboxRunning: running,
@@ -172,6 +204,17 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         return sampleStatus(state.running);
       case 'sessions.list':
         return sampleSessions(state.running);
+      case 'accounts.list':
+        return sampleAccounts();
+      case 'accounts.remove':
+        if (!(await io.confirm({ title: 'Remove the saved account?', yes: 'Remove', danger: true }))) cancelled();
+        return { message: 'Removed account (preview: nothing was changed).' };
+      case 'accounts.use':
+        return { lines: ['Sandbox now uses "work" (dev@example.com) (preview: nothing was changed).'] };
+      case 'accounts.save':
+      case 'accounts.default':
+      case 'accounts.rename':
+        return { name: 'preview', message: 'Done (preview: nothing was changed).' };
       case 'sandbox.stop':
         if (!(await io.confirm({ title: 'Stop the sandbox?', yes: 'Stop', danger: true }))) cancelled();
         io.progress('Stopping the sandbox');
@@ -195,6 +238,12 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'sandbox.show': 'operation',
     'sandbox.hide': 'operation',
     'sessions.restart': 'operation',
+    'accounts.list': 'query',
+    'accounts.save': 'operation',
+    'accounts.use': 'operation',
+    'accounts.default': 'operation',
+    'accounts.rename': 'operation',
+    'accounts.remove': 'operation',
     'settings.set': 'operation',
     'settings.reset': 'operation',
     'files.browse': 'query',

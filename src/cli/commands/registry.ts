@@ -5,7 +5,8 @@ import { setup } from './setup/index.js';
 import { data } from './data/index.js';
 import { storage } from './storage/index.js';
 import { attach, db, exec } from './sessions/index.js';
-import { account } from './accounts.js';
+import { listAccounts } from '../../app/features/accounts/index.js';
+import { definitionHandler } from '../operations/index.js';
 import { projects } from './projects/index.js';
 import {
   audit,
@@ -35,7 +36,8 @@ export const HANDLERS: Readonly<Partial<Record<string, Handler>>> = {
   'agent-commands': agentCommandsCommand,
   db: db,
   resume: resume,
-  account: account,
+  // The bare command lists; its actions (save, use ...) are the operations' hints.
+  account: definitionHandler(listAccounts),
   projects: projects,
   sync: sync,
   logs: logs,
