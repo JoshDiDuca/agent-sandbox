@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { agentsPage, agentsView } from '../app/features/agents/index.js';
 import { DEFINITIONS, NAV, QUERIES, VIEWS, viewById } from '../app/features/defs.js';
 import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.js';
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
@@ -368,6 +369,53 @@ export const appSuite: Suite = {
           view.id + ': the page offers only operations its view declares',
         );
     }
+
+    t.section('agents');
+    const agentsSample = agentsPage({
+      folder: 'C:\\code\\api',
+      defaultAgent: 'claude',
+      agents: [
+        { name: 'codex', ready: false, isDefault: false, removable: true },
+        { name: 'claude', ready: true, isDefault: true, removable: false },
+      ],
+    });
+    const agentItems = agentsSample.sections[0].items ?? [];
+    const agentKeys = (id: string): string =>
+      (agentItems.find((i) => i.id === id)?.actions ?? [])
+        .flatMap((a) => (a.kind === 'operation' && a.key ? [a.key] : []))
+        .join();
+    t.check(
+      agentItems.map((i) => i.id).join() === 'agent:claude,agent:codex,add' &&
+        agentKeys('agent:claude') === '' &&
+        agentKeys('agent:codex') === 'd,x' &&
+        agentKeys('add') === '' &&
+        agentItems[0].primary?.kind === 'link' &&
+        ops(agentsSample).every((op) => agentsView.operations.some((o) => o.id === op)),
+      "agents: the default first, Add last, d/x only where they apply; the page offers only its view's operations",
+    );
+    const agentIO = fakeIO().io;
+    const noSandboxCtx = {} as unknown as AppContext;
+    await t.throws(
+      () => runDefinition('agents.start', noSandboxCtx, { agent: '../x' }, agentIO),
+      'That does not work for start an agent',
+      'agents.start refuses odd names',
+    );
+    await t.throws(
+      () => runDefinition('agents.start', noSandboxCtx, { agent: 'claude' }, agentIO),
+      'No Windows Sandbox is running.',
+      'agents.start without a running sandbox says how to start one',
+    );
+    const agentsConfig = t.at('app-agents', 'config.json');
+    t.write(agentsConfig, '{ "defaultHarness": "claude" }\n');
+    const agentsCtx = { loaded: { configPath: agentsConfig } } as unknown as AppContext;
+    await runDefinition('agents.add', agentsCtx, {}, fakeIO(['npm', 'mine', '@me/mine@latest', 'mine']).io);
+    const before = fs.readFileSync(agentsConfig, 'utf8');
+    await t.throws(
+      () => runDefinition('agents.remove', agentsCtx, { name: 'mine' }, fakeIO([false]).io),
+      'Nothing changed.',
+      'agents.remove asks, and a no changes nothing',
+    );
+    t.check(fs.readFileSync(agentsConfig, 'utf8') === before, 'the config file is unchanged after a no');
 
     t.section('the CLI and the menu draw the same page');
     const sessionLines = pageLines(sessionsPage({ ...list, wide: true }));

@@ -17,7 +17,7 @@ export interface Badge {
 export type Target =
   /** A running session's terminal: the menu attaches, the web opens its terminal page. */
   | { readonly kind: 'terminal'; readonly session: string }
-  /** Start an agent: the menu runs `launch`, the web opens its new-session dialog. */
+  /** Start an agent: the menu runs `launch`, the web runs agents.start and opens the session's terminal. */
   | { readonly kind: 'start-agent'; readonly agent: string }
   /** A command line of an area that is not a feature yet: the menu runs it, the web does not offer it. */
   | { readonly kind: 'command'; readonly argv: readonly string[] }

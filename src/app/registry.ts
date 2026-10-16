@@ -12,6 +12,13 @@ import {
   type QueryDef,
   type RpcHost,
 } from './kernel/index.js';
+import {
+  addAgentRun,
+  listAgentsRun,
+  makeDefaultAgentRun,
+  removeAgentRun,
+  startAgentRun,
+} from './features/agents/index.js';
 import { browseFolderRun } from './features/files/index.js';
 import { hideWindowRun, sandboxStatusRun, showWindowRun, stopSandboxRun } from './features/sandbox/index.js';
 import { listSessionsRun, restartSessionsRun } from './features/sessions/index.js';
@@ -24,6 +31,11 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   stopSandboxRun,
   listSessionsRun,
   restartSessionsRun,
+  startAgentRun,
+  addAgentRun,
+  makeDefaultAgentRun,
+  removeAgentRun,
+  listAgentsRun,
   listSettingsRun,
   getSettingRun,
   setSettingRun,

@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppContext } from '../../app/context.js';
+import { listAgents } from '../../app/features/agents/index.js';
 import { sandboxStatus } from '../../app/features/sandbox/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
@@ -164,6 +165,20 @@ function sampleSessions(running: boolean): unknown {
   });
 }
 
+/** The agents as settings and the sandbox say them: two built in (one ready), two added (one ready). */
+function sampleAgents(): unknown {
+  return listAgents.output.parse({
+    folder: 'F:\\AgentProjects\\windows-sandbox',
+    defaultAgent: 'claude',
+    agents: [
+      { name: 'claude', ready: true, isDefault: true, removable: false },
+      { name: 'codex', ready: true, isDefault: false, removable: false },
+      { name: 'gemini', ready: false, isDefault: false, removable: true },
+      { name: 'aider', ready: false, isDefault: false, removable: true },
+    ],
+  });
+}
+
 /** The real features where they only touch the temp folder, sample data for the rest. */
 function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
   const sample = async (id: string, io: OperationIO): Promise<unknown> => {
@@ -172,6 +187,17 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         return sampleStatus(state.running);
       case 'sessions.list':
         return sampleSessions(state.running);
+      case 'agents.list':
+        return sampleAgents();
+      case 'agents.start':
+        return { session: SESSIONS[0].id, message: 'Started claude in windows-sandbox (preview: nothing started).' };
+      case 'agents.makeDefault':
+        return { message: 'codex is the default agent (preview: nothing was changed).' };
+      case 'agents.remove':
+        if (!(await io.confirm({ title: 'Remove aider?', yes: 'Remove', danger: true, implied: true }))) cancelled();
+        return { message: 'Removed aider (preview: nothing was changed).' };
+      case 'agents.add':
+        return { name: 'preview', message: 'Added preview (preview: nothing was saved).' };
       case 'sandbox.stop':
         if (!(await io.confirm({ title: 'Stop the sandbox?', yes: 'Stop', danger: true }))) cancelled();
         io.progress('Stopping the sandbox');
@@ -195,6 +221,11 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'sandbox.show': 'operation',
     'sandbox.hide': 'operation',
     'sessions.restart': 'operation',
+    'agents.list': 'query',
+    'agents.start': 'operation',
+    'agents.makeDefault': 'operation',
+    'agents.remove': 'operation',
+    'agents.add': 'operation',
     'settings.set': 'operation',
     'settings.reset': 'operation',
     'files.browse': 'query',
@@ -244,7 +275,6 @@ async function main(): Promise<void> {
     sessions: () => Promise.resolve(state.running ? SESSIONS.map((s, i) => webSession(s, i)) : []),
     endpoint: (id) =>
       SESSIONS.some((s) => s.id === id) ? { addresses: ['127.0.0.1'], port: ptyPort, token: 'preview' } : null,
-    create: () => Promise.resolve(webSession(SESSIONS[0], 0)),
   };
   const server = new WebServer({
     port,

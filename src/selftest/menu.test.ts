@@ -5,14 +5,7 @@ import fs from 'node:fs';
 import { CATEGORIES, ConfigFile, SETTINGS_ELSEWHERE } from '../app/features/settings/index.js';
 import { Draft } from '../cli/menu/settings/draft.js';
 import { z } from 'zod';
-import {
-  AddAgent,
-  agentNameProblem,
-  commandFromPackage,
-  makeDefaultAgent,
-  newAgent,
-  removeAgent,
-} from '../cli/menu/add-agent.js';
+import { addedAgents, agentNameProblem, commandFromPackage, newAgent } from '../app/features/agents/index.js';
 import { APP_GROUPS, AppsModel, REQUEST_APP, requestAppUrl } from '../cli/menu/apps.js';
 import { readMenuView, saveMenuView } from '../cli/menu/memory.js';
 import path from 'node:path';
@@ -21,9 +14,8 @@ import { CommandForm } from '../cli/menu/command-form.js';
 import { COMMANDS, commandSpec } from '../cli/manifest.js';
 import { accountsOptions } from '../cli/menu/pages/accounts-page.js';
 import {
-  addedAgents,
-  agentActions,
   agentCategories,
+  agentsHaveStagedChanges,
   agentsOptions,
   hostAgentsToShow,
   startArgv,
@@ -32,7 +24,9 @@ import {
 import { ListPage, type Outcome } from '../cli/menu/pages/list-page.js';
 import { sandboxOptions } from '../cli/menu/pages/sandbox-page.js';
 import { sessionsOptions } from '../cli/menu/pages/sessions-page.js';
-import { pathKindOf, SchemaNode } from '../app/kernel/index.js';
+import { fakeIO, pathKindOf, SchemaNode, type OperationIO } from '../app/kernel/index.js';
+import type { AppContext } from '../app/context.js';
+import { runDefinition } from '../app/registry.js';
 import { numberProblem, ValueEditor } from '../cli/menu/settings/value-editor.js';
 import { APP_CATEGORIES } from '../shared/apps/index.js';
 import { settingsOf, settingsOptions } from '../cli/menu/pages/settings-page.js';
@@ -370,22 +364,17 @@ export const menuSuite: Suite = {
     );
     const agentFile = ConfigFile.user(t.at('agents', 'config.json'));
     t.write(agentFile.file, '{\n  // mine\n  "defaultHarness": "claude"\n}\n');
-    const typed = (...answers: string[]): App =>
-      ({
-        choose: () => Promise.resolve(answers.shift() === 'host' ? 'host' : 'npm'),
-        text: () => Promise.resolve(answers.shift()),
-        pickPath: () => Promise.resolve(answers.shift()),
-      }) as unknown as App;
-    const added = await new AddAgent(
-      typed('npm', 'my-agent', '@me/my-agent@latest', 'my-agent'),
-      agentFile,
-      new Draft(),
-      ['claude', 'codex'],
-    ).run();
+    const agentCtx = { loaded: { configPath: agentFile.file } } as unknown as AppContext;
+    const added = (await runDefinition(
+      'agents.add',
+      agentCtx,
+      {},
+      fakeIO(['npm', 'my-agent', '@me/my-agent@latest', 'my-agent']).io,
+    )) as { name: string; message: string };
     const saved = agentFile.userConfig().harnesses['my-agent'];
     t.check(
-      added?.name === 'my-agent' &&
-        added.saved &&
+      added.name === 'my-agent' &&
+        added.message === 'Added my-agent.' &&
         saved?.npmPackage === '@me/my-agent@latest' &&
         saved.npmBin === 'my-agent' &&
         agentFile.text().includes('// mine') &&
@@ -398,11 +387,9 @@ export const menuSuite: Suite = {
       ...(agentFile.valueInFile(['harnesses']) as object),
       other: newAgent('uv', 'tool', 'tool'),
     });
-    const joined = await new AddAgent(typed('host', 'third', 'third.exe'), agentFile, stagedAgents, ['claude']).run();
     t.check(
-      joined?.saved === false &&
-        Object.keys(stagedAgents.value(agentFile, ['harnesses']) as object).join() === 'my-agent,other,third',
-      'with unsaved changes to the agents, the new agent joins them instead of being written',
+      agentsHaveStagedChanges(agentFile, stagedAgents) && !agentsHaveStagedChanges(agentFile, new Draft()),
+      'with unsaved changes to the agents, the menu asks to save them first (the agent operations wait)',
     );
 
     t.section('list keys follow the highlighted entry');
@@ -753,10 +740,11 @@ export const menuSuite: Suite = {
       hostAgents: [],
       removable: addedAgents(['claude', 'codex', 'mine']),
     };
-    const startActions = agentActions(actionModel);
-    const keyFor = (key: string, id: string): boolean =>
-      startActions.find((a) => a.key === key)?.applies?.(id) ?? false;
     const actionList = agentsOptions(actionModel, 'C:\\code\\api');
+    const keyFor = (key: string, id: string): boolean =>
+      (typeof actionList.actions === 'function' ? actionList.actions('start') : [])
+        .find((a) => a.key === key)
+        ?.applies?.(id) ?? false;
     t.check(
       JSON.stringify(actionModel.removable) === '["mine"]' &&
         keyFor('d', 'agent:codex') &&
@@ -771,29 +759,23 @@ export const menuSuite: Suite = {
     );
     const agentsFile = ConfigFile.user(t.at('agents-actions', 'config.json'));
     t.write(agentsFile.file, '{\n  // mine\n  "defaultHarness": "claude"\n}\n');
-    const agentDraft = new Draft();
-    await new AddAgent(
-      {
-        choose: () => Promise.resolve('npm'),
-        text: (() => {
-          const answers = ['mine', '@me/mine@latest', 'mine'];
-          return () => Promise.resolve(answers.shift());
-        })(),
-      } as unknown as App,
-      agentsFile,
-      agentDraft,
-      ['claude'],
-    ).run();
-    makeDefaultAgent(agentsFile, agentDraft, 'mine');
+    const agentsCtx = { loaded: { configPath: agentsFile.file } } as unknown as AppContext;
+    const quiet = (answers: Parameters<typeof fakeIO>[0] = []): OperationIO => fakeIO(answers).io;
+    await runDefinition('agents.add', agentsCtx, {}, quiet(['npm', 'mine', '@me/mine@latest', 'mine']));
+    await runDefinition('agents.makeDefault', agentsCtx, { name: 'mine' }, quiet());
     const becameDefault = agentsFile.userConfig().defaultHarness;
     await t.throws(
-      () => removeAgent(agentsFile, agentDraft, 'mine'),
+      () => runDefinition('agents.remove', agentsCtx, { name: 'mine' }, quiet([true])),
       'default agent',
       'the default agent is not removed',
     );
-    makeDefaultAgent(agentsFile, agentDraft, 'codex');
-    removeAgent(agentsFile, agentDraft, 'mine');
-    await t.throws(() => removeAgent(agentsFile, agentDraft, 'claude'), 'built in', 'a built-in agent is not removed');
+    await runDefinition('agents.makeDefault', agentsCtx, { name: 'codex' }, quiet());
+    await runDefinition('agents.remove', agentsCtx, { name: 'mine' }, quiet([true]));
+    await t.throws(
+      () => runDefinition('agents.remove', agentsCtx, { name: 'claude' }, quiet([true])),
+      'built in',
+      'a built-in agent is not removed',
+    );
     t.check(
       becameDefault === 'mine' &&
         agentsFile.userConfig().defaultHarness === 'codex' &&
