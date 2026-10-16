@@ -29,6 +29,9 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   always resumed, who waits changing every 20 seconds) and the waiting ones are trimmed to the paging file. It also acts
   when commit would run out within seconds at the rate it grows. Builds get slower; nothing fails. It never touches the
   agents, also when they run as node.exe (Codex, Gemini ...).
+- When this PC is nearly out of memory (under 1.5 GB of RAM free, or commit within 4 % of its limit), its watchdog says
+  so at once and the sandbox's builds go straight to the governor's last step until it passes; when the PC is only low,
+  builds go to step 2 as before.
 - **The sandbox never gets more memory than this PC can keep in RAM for it**: the PC's RAM minus max(reserveHostMb,
   25 %), and 2 GB more with vGPU on. A fixed `sandbox.memoryMb` above that is lowered (the launch says so). More would
   be paged to this PC's disk while the sandbox pages to its own, the most likely cause of whole-PC freezes under heavy

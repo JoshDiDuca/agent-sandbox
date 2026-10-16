@@ -107,6 +107,8 @@ export const GuestRequestSchema = z.discriminatedUnion('kind', [
     id: IdSchema,
     reason: Text(300),
     seconds: z.number().int().min(10).max(300),
+    /** "severe": the PC is nearly out of memory; builds go to the governor's last step at once. */
+    level: z.enum(['slow', 'severe']).optional(),
     createdAt: TimeSchema,
   }),
 ]);

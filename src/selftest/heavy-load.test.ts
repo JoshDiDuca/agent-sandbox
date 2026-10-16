@@ -39,6 +39,7 @@ import {
   freezeLine,
   hostPressure,
   lowReason,
+  severeHost,
   pageFileRisk,
   parseHostMemory,
   crashReportText,
@@ -326,7 +327,7 @@ export const heavyLoadSuite: Suite = {
       uncapped.state.step === 1 && of(uncapped, 'cpu').some((a) => a.kind === 'cpu' && a.percent === 100),
       'the CPU cap is lifted when the dial goes below step 2',
     );
-    const hostAsked = decide({ ...INITIAL_STATE, hostUntil: 5000 }, sample(60, 40, procs), 1000, 'normal');
+    const hostAsked = decide({ ...INITIAL_STATE, hostUntil: 5000, hostStep: 2 }, sample(60, 40, procs), 1000, 'normal');
     t.check(hostAsked.state.step >= 2, 'the PC asking for it turns the dial to at least step 2 while it lasts');
     const turnA = of(decide(INITIAL_STATE, sample(5, 50, procs), 0, 'normal'), 'hold');
     const turnB = of(decide(INITIAL_STATE, sample(5, 50, procs), ROTATE_MS, 'normal'), 'hold');
@@ -422,6 +423,16 @@ export const heavyLoadSuite: Suite = {
       JSON.stringify(lastStatus),
     );
     core.hostPressure(60, 'test');
+    t.check(core.current.hostStep === 2, 'the PC being low asks for step 2');
+    core.hostPressure(60, 'test', 'severe');
+    t.check(core.current.hostStep === 4, 'the PC nearly out of memory asks for step 4 at once');
+    core.hostPressure(60, 'test');
+    t.check(core.current.hostStep === 4, 'a later "low" does not lower a severe request while it lasts');
+    t.check(
+      decide({ ...INITIAL_STATE, hostUntil: clock + 60000, hostStep: 4 }, sample(60, 40, procs), clock, 'normal').state
+        .step === 4,
+      'with plenty of memory in the sandbox, a severe PC still turns the dial to 4',
+    );
     t.check(core.current.hostUntil === clock + 60000, 'a host request is remembered for its seconds');
 
     t.section("the PC's watchdog");
@@ -439,6 +450,15 @@ export const heavyLoadSuite: Suite = {
       profile,
     });
     t.check(watchdogStep(WATCHDOG_START, input(pc(), 0)).state.low === false, 'plenty of memory: quiet');
+    t.check(
+      severeHost(pc({ availableMb: 1200 })) &&
+        severeHost(pc({ commitAvailableMb: 1500 })) &&
+        !severeHost(pc({ availableMb: 3000 })),
+      'nearly out of memory: under 1.5 GB of RAM free, or commit within max(2 GB, 4 %) of its limit',
+    );
+    const lowState = watchdogStep(WATCHDOG_START, input(pc({ availableMb: 3000 }), 100000)).state;
+    const severeNow = watchdogStep(lowState, input(pc({ availableMb: 1200 }), 105000));
+    t.check(severeNow.severe && severeNow.send, 'getting severe is sent at once (not after the usual 30 seconds)');
     t.check(lowReason(pc({ availableMb: 3000 }), 8192, HOST_THRESHOLDS.normal, 1) !== '', 'under 4 GB of RAM: low');
     t.check(
       lowReason(pc({ availableMb: 5000 }), 8192, HOST_THRESHOLDS.normal, 1) === '',

@@ -153,8 +153,10 @@ export interface GovernorState {
   /** Used commit (MB) and when, at the last sample: how fast it grows. */
   readonly lastCommitMb: number;
   readonly lastAt: number;
-  /** The PC asked for slowing down until this time (ms): the dial is at least at 2 until then. */
+  /** The PC asked for slowing down until this time (ms): the dial is at least at `hostStep` until then. */
   readonly hostUntil: number;
+  /** 2 when the PC is low, 4 when it is nearly out of memory. */
+  readonly hostStep: number;
 }
 
 export const INITIAL_STATE: GovernorState = {
@@ -168,6 +170,7 @@ export const INITIAL_STATE: GovernorState = {
   lastCommitMb: 0,
   lastAt: 0,
   hostUntil: 0,
+  hostStep: 0,
 };
 
 export type Action =
@@ -232,7 +235,7 @@ export function decide(
   const growth = prev.lastAt > 0 && seconds > 0 ? (usedMb - prev.lastCommitMb) / seconds : 0;
   const secondsToLimit = growth > 0 ? sample.commitAvailMb / growth : Number.POSITIVE_INFINITY;
   const pcLow = nowMs < prev.hostUntil;
-  const wanted = Math.max(stepFor(ramFree, commit, secondsToLimit, profile), pcLow ? 2 : 0);
+  const wanted = Math.max(stepFor(ramFree, commit, secondsToLimit, profile), pcLow ? prev.hostStep : 0);
 
   let step = prev.step;
   let calm = 0;
@@ -317,6 +320,7 @@ export function decide(
       lastCommitMb: usedMb,
       lastAt: nowMs,
       hostUntil: prev.hostUntil,
+      hostStep: prev.hostStep,
     },
     actions,
     level,

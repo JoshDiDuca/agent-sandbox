@@ -80,13 +80,21 @@ export class GovernorCore {
 
   constructor(private readonly deps: GovernorDeps) {}
 
-  hostPressure(seconds: number, reason: string): void {
-    const until = this.deps.now() + seconds * 1000;
-    if (until > this.state.hostUntil) {
-      if (this.state.hostUntil <= this.deps.now())
-        this.deps.logLine('governor: this PC is low (' + reason + '); slowing builds down');
-      this.state = { ...this.state, hostUntil: until };
-    }
+  hostPressure(seconds: number, reason: string, level: 'slow' | 'severe' = 'slow'): void {
+    const nowMs = this.deps.now();
+    const until = nowMs + seconds * 1000;
+    const active = this.state.hostUntil > nowMs;
+    const step = Math.max(level === 'severe' ? 4 : 2, active ? this.state.hostStep : 0);
+    if (!active || step > this.state.hostStep)
+      this.deps.logLine(
+        'governor: this PC is ' +
+          (level === 'severe' ? 'nearly out of memory' : 'low') +
+          ' (' +
+          reason +
+          '); builds to step ' +
+          step,
+      );
+    this.state = { ...this.state, hostUntil: Math.max(until, this.state.hostUntil), hostStep: step };
   }
 
   get current(): GovernorState {
@@ -295,9 +303,9 @@ export class Governor {
     proc.start();
   }
 
-  /** The host's watchdog: this PC is low for a while. */
-  hostPressure(seconds: number, reason: string): void {
-    this.core?.hostPressure(seconds, reason);
+  /** The host's watchdog: this PC is low (or nearly out of memory) for a while. */
+  hostPressure(seconds: number, reason: string, level: 'slow' | 'severe' = 'slow'): void {
+    this.core?.hostPressure(seconds, reason, level);
   }
 }
 
