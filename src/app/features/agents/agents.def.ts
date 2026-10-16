@@ -91,9 +91,14 @@ function agentDescription(a: AgentRow, where: string): string {
   const removing = a.removable
     ? a.isDefault
       ? ' You added it. Make another agent the default to remove it.'
-      : ' You added it: x removes it.'
+      : ' You added it.'
     : '';
   return 'Starts ' + a.name + ' in ' + where + '.' + (a.isDefault ? ' It is the default agent.' : '') + removing;
+}
+
+/** The menu's words for the remove key, on an agent you added that is not the default. */
+function agentKeys(a: AgentRow): string | undefined {
+  return a.removable && !a.isDefault ? 'x removes it.' : undefined;
 }
 
 function agentItem(a: AgentRow, where: string): Item {
@@ -105,6 +110,7 @@ function agentItem(a: AgentRow, where: string): Item {
     icon: a.name,
     badges: a.isDefault ? [{ text: 'default', tone: 'accent' }] : [],
     description: agentDescription(a, where),
+    keys: agentKeys(a),
     primary: link({ kind: 'start-agent', agent: a.name }, 'Start ' + a.name, { verb: 'start' }),
     actions: [
       ...(a.isDefault

@@ -85,7 +85,7 @@ export function menuView(page: Page, o: MenuViewOptions = {}): MenuView {
         value: id,
         label: safeText(item.label),
         hint: paint(item.hint, item.tone),
-        description: item.description,
+        description: [item.description, item.keys].filter(Boolean).join(' ') || undefined,
         details: item.details?.map(safeText),
         section: item.group ?? heading,
         keywords: item.keywords,

@@ -176,7 +176,9 @@ export function dataPage(o: DataShow): Page {
           id: 'entry:' + e.name,
           label: e.name,
           hint: e.size,
-          description: e.target ? 'x deletes it.' : 'Kept on this PC on purpose; it is not deleted here.',
+          ...(e.target
+            ? { keys: 'x deletes it.' }
+            : { description: 'Kept on this PC on purpose; it is not deleted here.' }),
           details: ['Folder  ' + e.path],
           cells: { name: '  ' + e.name, size: e.size, path: e.path },
           actions: e.target

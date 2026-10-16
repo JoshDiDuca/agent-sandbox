@@ -129,7 +129,7 @@ export const projectRoots = defineOperation({
 const rootField: Field = fieldsOf(projectRoots.input).find((f) => f.name === 'rootFolder')!;
 const projectField: Field = fieldsOf(addProject.input).find((f) => f.name === 'projectFolder')!;
 
-const ROOT_DESCRIPTION = 'Every project in this folder (also new ones) opens without a restart. f removes the root.';
+const ROOT_DESCRIPTION = 'Every project in this folder (also new ones) opens without a restart.';
 
 function atStart(p: ProjectRow): string {
   return p.root ? 'root' : p.excluded ? 'excluded' : p.mappedAtStart ? 'mapped' : '-';
@@ -161,6 +161,7 @@ function rootItem(r: string): Item {
     hint: 'root',
     icon: 'folder',
     description: ROOT_DESCRIPTION,
+    keys: 'f removes the root.',
     actions: [
       action(
         projectRoots,

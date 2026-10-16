@@ -21,6 +21,7 @@ special-case a view id in `web/`.
 | `Section.facts` | a status: label and value | tiles; a `tone` adds a coloured dot | label: value lines |
 | `Fact.meter` | how full something is (memory, disk) | a bar under the value | the value text |
 | `Item.icon` | an agent's name (`claude`), or `project`, `folder`, `database`, `session` | an avatar or icon | nothing |
+| `Item.keys` | words about the menu's keys ("x deletes it.", "Enter shows ...") | nothing (the web has buttons) | after the description |
 | `Item.code` | the name in files and commands (a setting's key) | small monospace under the label | nothing |
 | `Item.badges` | short states (`running`, `changed`, `beta`) | pills | the hint says it |
 | `Item.marked` | "the one this is about" (this folder's project) | a "this folder" badge | `*` |

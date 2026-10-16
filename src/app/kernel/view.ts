@@ -87,6 +87,8 @@ export interface Item {
   readonly tone?: Tone;
   readonly badges?: readonly Badge[];
   readonly description?: string;
+  /** Words about the menu's keys ("x deletes it."): the menu shows them after the description; the web does not. */
+  readonly keys?: string;
   /** Extra lines (the menu's details pane, the CLI's indented lines, the web's card body). */
   readonly details?: readonly string[];
   /** A heading inside the section ("This folder's project"). */
