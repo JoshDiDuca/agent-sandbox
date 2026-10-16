@@ -21,7 +21,14 @@ import {
   gentleCpuLimit,
   maxCompilers,
 } from '../shared/memory/index.js';
-import { decideMemory, memoryNote, resolveMemoryMb } from '../host/launch/index.js';
+import {
+  cappedMemoryMb,
+  decideMemory,
+  memoryNote,
+  residentCapMb,
+  residentNote,
+  resolveMemoryMb,
+} from '../host/launch/index.js';
 import { vgpuWarning, GENTLE_NOTE } from '../host/launch/risk-notes.js';
 import {
   bugcheckCode,
@@ -114,7 +121,35 @@ export const heavyLoadSuite: Suite = {
       refused = String(e instanceof Error ? e.message : e);
     }
     t.check(refused.includes('RAM plus paging file'), 'too little commit refuses with the real reason', refused);
-    t.check(resolveMemoryMb({ ...MB_SANDBOX, memoryMb: 5000 }, 1, 1, 1) === 5000, 'a fixed memoryMb is never changed');
+    t.check(
+      resolveMemoryMb({ ...MB_SANDBOX, memoryMb: 5000 }, 1, 1, 1) === 5000,
+      'a fixed memoryMb is taken as asked (the resident cap below is the only limit on it)',
+    );
+    t.check(
+      residentCapMb({ ...MB_SANDBOX, vGpu: false }, 32768) === 24576 &&
+        residentCapMb({ ...MB_SANDBOX, vGpu: true }, 32768) === 22528 &&
+        residentCapMb({ ...MB_SANDBOX, vGpu: false }, 65536) === 49152,
+      'what this PC can keep in RAM for the sandbox: its RAM minus max(reserve, 25 %), 2 GB more with vGPU',
+    );
+    t.check(
+      cappedMemoryMb(32768, { ...MB_SANDBOX, vGpu: true }, 32768) === 22528 &&
+        cappedMemoryMb(16384, { ...MB_SANDBOX, vGpu: true }, 32768) === 16384 &&
+        cappedMemoryMb(8192, MB_SANDBOX, 6144) === 8192,
+      'a fixed memoryMb above it is lowered to it (never on a PC too small to keep 4 GB)',
+    );
+    t.check(
+      residentNote(32768, 22528)?.includes('gets 22528 MB') === true && residentNote(16384, 16384) === null,
+      'and the launch says so',
+    );
+    t.check(
+      decideMemory(
+        { ...MB_SANDBOX, maxMemoryPercent: 100, maxMemoryMb: 65536, reserveHostMb: 1024 },
+        32000,
+        32768,
+        null,
+      ).limitedBy === 'resident',
+      '"auto" never goes above it either',
+    );
 
     t.section("the agents' job backstop");
     const gen = await f.launch({}, { args: ['--version'] });

@@ -29,6 +29,10 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   always resumed, who waits changing every 20 seconds) and the waiting ones are trimmed to the paging file. It also acts
   when commit would run out within seconds at the rate it grows. Builds get slower; nothing fails. It never touches the
   agents, also when they run as node.exe (Codex, Gemini ...).
+- **The sandbox never gets more memory than this PC can keep in RAM for it**: the PC's RAM minus max(reserveHostMb,
+  25 %), and 2 GB more with vGPU on. A fixed `sandbox.memoryMb` above that is lowered (the launch says so). More would
+  be paged to this PC's disk while the sandbox pages to its own, the most likely cause of whole-PC freezes under heavy
+  builds.
 - **Agents see what the sandbox can really give them.** With a CPU cap, the sandbox's programs run on that share of the
   processors, so cargo, .NET, ninja and `nproc` count right, and `NUMBER_OF_PROCESSORS` says the same. Each session
   gets cargo and CMake job counts from a build budget (one job per 3 GB after 6 GB, up to 8 per session), and
