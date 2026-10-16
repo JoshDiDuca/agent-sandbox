@@ -1,13 +1,14 @@
 // Sharing your settings: the part of them that differs from the defaults, as a .json a team can pass around, and the
 // reverse (read a file, show what it would change, apply the rest). Secrets (anything the schema marks), the data
-// folder and folders or files of this PC never go into a file and are never taken from one.
+// folder and folders or files of this PC never go into a file and are never taken from one. Node side (lodash,
+// core/schema): the settings run functions use these; the menu and the web only see the operations.
 import { parse, type ParseError } from 'jsonc-parser';
 import _ from 'lodash';
 import { DEFAULTS, mergeConfig } from '../../../core/config/index.js';
 import { ConfigSchema, describeIssues, secretPaths } from '../../../core/schema/index.js';
 import type { Config } from '../../../core/types.js';
-import type { SettingChange } from '../../../app/features/settings/index.js';
-import { pathKindOf } from '../../../app/kernel/index.js';
+import { pathKindOf } from '../../kernel/index.js';
+import type { SettingChange } from './settings-file.js';
 
 /** Settings that are about this PC and never travel (the data folder). */
 const MACHINE_ONLY: readonly string[] = ['storage.root'];

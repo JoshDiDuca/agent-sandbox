@@ -44,7 +44,14 @@ import { checkHealthRun, enableSandboxRun, lastHealthRun, repairHealthRun } from
 import { hideWindowRun, sandboxStatusRun, showWindowRun, stopSandboxRun } from './features/sandbox/index.js';
 import { listLogsRun, tailLogRun } from './features/logs/index.js';
 import { listSessionsRun, restartSessionsRun } from './features/sessions/index.js';
-import { getSettingRun, listSettingsRun, resetSettingRun, setSettingRun } from './features/settings/index.js';
+import {
+  exportConfigRun,
+  getSettingRun,
+  importConfigRun,
+  listSettingsRun,
+  resetSettingRun,
+  setSettingRun,
+} from './features/settings/index.js';
 
 export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>[] = [
   sandboxStatusRun,
@@ -62,6 +69,8 @@ export const IMPLEMENTATIONS: readonly Implementation<AnyDefinition, AppContext>
   getSettingRun,
   setSettingRun,
   resetSettingRun,
+  exportConfigRun,
+  importConfigRun,
   browseFolderRun,
   listAccountsRun,
   saveAccountRun,

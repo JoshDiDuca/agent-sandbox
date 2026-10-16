@@ -30,7 +30,15 @@ import {
 } from './projects/projects.def.js';
 import { listLogs, logsView, tailLog } from './logs/logs.def.js';
 import { listSessions, restartSessions, sessionsView } from './sessions/sessions.def.js';
-import { getSetting, listSettings, resetSetting, setSetting, settingsView } from './settings/settings.def.js';
+import {
+  exportConfig,
+  getSetting,
+  importConfig,
+  listSettings,
+  resetSetting,
+  setSetting,
+  settingsView,
+} from './settings/settings.def.js';
 
 export type { AgentRow, AgentsList } from './agents/agents.def.js';
 export type { AccountRow, AccountsList, AgentAccounts } from './accounts/accounts.def.js';
@@ -53,6 +61,8 @@ export const OPERATIONS = [
   removeAgent,
   setSetting,
   resetSetting,
+  exportConfig,
+  importConfig,
   saveAccount,
   useAccount,
   defaultAccount,
