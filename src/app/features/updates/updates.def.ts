@@ -115,6 +115,13 @@ export function updatesPage(s: UpdatesStatus, latest: string | null): Page {
   const program: Section = {
     id: 'program',
     title: 'This program',
+    notes: [
+      {
+        text: 'After an update this page still runs the version it started with; sandbox web open (or the next sandbox start) starts the new one.',
+        tone: 'muted',
+        only: 'web',
+      },
+    ],
     items: s.error
       ? [{ id: 'updates:error', label: s.error, tone: 'danger' }]
       : !s.managed
@@ -137,7 +144,7 @@ export function updatesPage(s: UpdatesStatus, latest: string | null): Page {
             row('latest', 'Newest version', {
               hint: latest ?? 'not looked yet',
               tone: latest ? 'warn' : 'muted',
-              description: latest ? 'Enter installs it.' : 'Enter looks on GitHub for a newer version.',
+              keys: latest ? 'Enter installs it.' : 'Enter looks on GitHub for a newer version.',
               primary: latest
                 ? action(runUpdate, {}, { label: 'Install ' + latest, verb: 'install' })
                 : action(runUpdate, { check: true }, { label: 'Check now', verb: 'look', danger: false }),
@@ -145,9 +152,10 @@ export function updatesPage(s: UpdatesStatus, latest: string | null): Page {
             row('auto', 'Automatic updates', {
               hint: s.autoUpdate ? 'on' : 'off',
               tone: s.autoUpdate ? 'ok' : 'muted',
-              description:
-                'Enter switches them. ' +
-                (machine ? 'For everyone: needs an admin terminal.' : 'A new version installs when no sandbox runs.'),
+              description: machine
+                ? 'For everyone: needs an admin terminal.'
+                : 'A new version installs when no sandbox runs.',
+              keys: 'Enter switches them.',
               primary: action(
                 runUpdate,
                 { auto: nextAuto },
@@ -184,7 +192,7 @@ export function updatesPage(s: UpdatesStatus, latest: string | null): Page {
               ? [
                   row('previous', 'Previous version', {
                     hint: s.previous,
-                    description: 'Enter goes back to it.',
+                    keys: 'Enter goes back to it.',
                     primary: rollback,
                     actions: [{ ...rollback, key: 'r', verb: 'roll back' }],
                   }),
@@ -211,7 +219,8 @@ export function updatesPage(s: UpdatesStatus, latest: string | null): Page {
           label: line.split(':')[0],
           hint: 'to update',
           tone: 'warn' as const,
-          description: 'Enter updates your saved settings (a backup is kept first).',
+          description: 'A backup is kept first.',
+          keys: 'Enter updates your saved settings.',
           details: [line],
           primary: action(migrateSettings, {}, { label: 'Update saved settings', verb: 'update' }),
           actions: [

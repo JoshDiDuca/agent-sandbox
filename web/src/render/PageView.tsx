@@ -218,6 +218,19 @@ function PrimaryControl({
   return <ActionButton action={action} size="xs" variant={light ? 'light' : 'default'} />;
 }
 
+/** Two actions that do the same thing (the same operation and input, or the same place). */
+function sameAction(a: Action, b: Action): boolean {
+  if (a.kind === 'operation' && b.kind === 'operation')
+    return a.op === b.op && JSON.stringify(a.input) === JSON.stringify(b.input);
+  if (a.kind === 'link' && b.kind === 'link') return JSON.stringify(a.target) === JSON.stringify(b.target);
+  return false;
+}
+
+/** An item's other actions, without the one its main button already does. */
+function othersThan(actions: readonly Action[] | undefined, primary: Action | undefined): Action[] {
+  return (actions ?? []).filter((a) => !primary || !sameAction(a, primary));
+}
+
 /** Secondary actions: one or two as icon buttons, more behind "…". */
 export function SecondaryActions({ actions }: { readonly actions: readonly Action[] }) {
   const shown = actions.filter(offered);
@@ -244,8 +257,8 @@ function ItemRow({ item }: { readonly item: Item }) {
       onKeyDown={clickable ? (e) => e.key === 'Enter' && void act(primary) : undefined}
       style={item.disabled ? { opacity: 0.65 } : undefined}
     >
-      <Group justify="space-between" wrap="nowrap" align="center" gap="md">
-        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+      <Group justify="space-between" wrap="wrap" align="center" gap="md">
+        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: '1 1 240px' }}>
           {item.icon && <ItemIcon name={item.icon} size={34} />}
           <Box style={{ minWidth: 0 }}>
             <Group gap={8} wrap="wrap">
@@ -278,7 +291,7 @@ function ItemRow({ item }: { readonly item: Item }) {
           </Box>
         </Group>
         <Group gap={6} wrap="nowrap" className="row-actions" style={{ flex: 'none' }}>
-          <SecondaryActions actions={item.actions ?? []} />
+          <SecondaryActions actions={othersThan(item.actions, primary)} />
           {primary && <PrimaryControl action={primary} hint={item.hint} light={clickable} />}
         </Group>
       </Group>
@@ -329,7 +342,7 @@ function ItemCard({ item }: { readonly item: Item }) {
         )}
         {(primary || item.actions?.length) && (
           <Group justify="flex-end" gap={6} mt="auto">
-            <SecondaryActions actions={item.actions ?? []} />
+            <SecondaryActions actions={othersThan(item.actions, primary)} />
             {primary && <PrimaryControl action={primary} hint={item.hint} light />}
           </Group>
         )}
