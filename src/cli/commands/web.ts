@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fail, sleep } from '../../core/util/index.js';
 import { spawnDetached } from '../../host/sandbox/index.js';
-import { openBrowser, WebControl, WebRunner, WebStore } from '../../host/web/index.js';
+import { packageVersion } from '../../core/package-info.js';
+import { IDLE_EXIT_MS, openBrowser, WebControl, WebRunner, WebStore, type WebState } from '../../host/web/index.js';
 import { printJson } from '../output/index.js';
 import { createRpcHost } from '../../app/registry.js';
 import { WebService } from '../services/index.js';
@@ -16,14 +17,29 @@ function controlOf(ctx: Context): WebControl {
   return new WebControl(new WebStore(ctx.storageRoot));
 }
 
-/** Starts the background server (when it is not running) and waits until it answers. */
-async function startServer(ctx: Context, control: WebControl): Promise<number> {
+/**
+ * The running server when it is this version's. A server of another version (one left running across an update) is
+ * stopped, so the page and the server always match; a state file without a server is removed.
+ */
+async function currentServer(control: WebControl): Promise<WebState | null> {
   const before = await control.status();
+  if (before.running && before.state && before.state.version === packageVersion()) return before.state;
   if (before.running && before.state) {
-    console.log('The web UI is already running on port ' + before.state.port + '.');
-    return before.state.port;
+    await control.stop(before.state);
+    for (const started = Date.now(); Date.now() - started < START_WAIT_MS; await sleep(300))
+      if (!(await control.status()).running) break;
   }
   if (before.state) control.clear();
+  return null;
+}
+
+/** Starts the background server (when it is not running) and waits until it answers. */
+async function startServer(ctx: Context, control: WebControl): Promise<number> {
+  const running = await currentServer(control);
+  if (running) {
+    console.log('The web UI is already running on port ' + running.port + '.');
+    return running.port;
+  }
   const { config } = ctx.loaded;
   if (!config.web.enabled)
     console.log(
@@ -54,10 +70,8 @@ export async function startWebOnLaunch(ctx: Context): Promise<void> {
   if (!settings.enabled) return;
   try {
     const control = controlOf(ctx);
-    const before = await control.status();
-    let state = before.running ? before.state : null;
+    let state = await currentServer(control);
     if (!state) {
-      if (before.state) control.clear();
       const configFile = ctx.options.config;
       spawnDetached(ctx.entry, ['_web', ...(configFile ? ['--config', path.resolve(configFile)] : [])]);
       for (const started = Date.now(); !state && Date.now() - started < START_WAIT_MS; await sleep(300)) {
@@ -135,6 +149,8 @@ export async function webServer(ctx: Context): Promise<void> {
     backend: new WebService(ctx),
     rpc: createRpcHost(ctx),
     staticRoot,
+    version: packageVersion(),
+    idleExitMs: IDLE_EXIT_MS,
   }).run();
   process.exit(0);
 }

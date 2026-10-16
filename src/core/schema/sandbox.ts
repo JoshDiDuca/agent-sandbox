@@ -61,7 +61,7 @@ export const SandboxSchema = z.strictObject({
   agentMemoryHeadroomMb: z
     .union([z.literal('auto'), z.literal('none'), z.number().int().min(0)])
     .describe(
-      'Memory kept out of the agents reach inside the sandbox, in MB: everything the agents start (their builds, tests, tools) together may use at most the sandbox memory minus this; a runaway parallel build then gets out-of-memory errors in its own session instead of freezing or crashing the whole sandbox. "auto" = the larger of 2048 MB and 10 % of the sandbox memory; "none" = no limit. Yours only: a project file cannot change it.',
+      'The last resort that keeps the sandbox up, in MB below its commit limit (RAM plus paging file): builds are slowed down long before (sandbox.pressureResponse); only if everything the agents start together would take the sandbox to the very edge of its memory, where Windows inside it would start failing, is a build refused memory instead of Windows. "auto" = the larger of 1536 MB and 3 % of the commit limit; "none" = no backstop. Yours only: a project file cannot change it.',
     ),
   pressureResponse: z
     .boolean()

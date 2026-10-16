@@ -1,7 +1,7 @@
 export { generateSandbox } from './generate.js';
 export { decideProjectToolchains } from './toolchains.js';
 export { hostToolsOf, logonEnv } from './session-file.js';
-export { agentMemoryLimitMb, decideMemory, GUEST, memoryNote, resolveMemoryMb } from './wsb-file.js';
+export { decideMemory, GUEST, memoryNote, resolveMemoryMb } from './wsb-file.js';
 export { GENTLE_NOTE, vgpuSource, vgpuWarning } from './risk-notes.js';
 export { buildLaunchPlan, buildWsb } from './launch-plan.js';
 export { MAX_BOOT_PROJECTS, planBootProjects, shownByRoot, type BootProjects } from './boot-projects.js';

@@ -63,12 +63,13 @@ const harnessFor = (req: SessionRequest): Harness => {
 };
 
 /**
- * What keeps heavy load from taking the sandbox down: the job object's memory limit for everything the agents start
- * (ptyhost reads PTYHOST_JOB_MB) and cargo's parallel jobs sized to the sandbox's memory and the sessions building.
+ * What keeps heavy load from taking the sandbox down: the agents' job with its last-resort backstop (ptyhost reads
+ * PTYHOST_BACKSTOP_MB and the commit limit) and cargo's parallel jobs sized to the sandbox's memory and the sessions
+ * building. Slowing builds down comes first (the governor); the backstop only ever picks a build over Windows.
  */
 export function memoryEnv(env: NodeJS.ProcessEnv, sessions: number): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
-  if (session.agentMemoryLimitMb) out.PTYHOST_JOB_MB = String(session.agentMemoryLimitMb);
+  out.PTYHOST_BACKSTOP_MB = String(session.agentBackstop ?? 'auto');
   if (!env.CARGO_BUILD_JOBS)
     out.CARGO_BUILD_JOBS = String(cargoJobs(os.cpus().length, os.totalmem() / 1024 ** 3, sessions));
   return out;

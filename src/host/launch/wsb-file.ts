@@ -56,20 +56,6 @@ export function decideMemory(
   return { mb: roundDown(lowest[1]), limitedBy: lowest[0], withoutCommitMb: withoutCommit, freeMb, commitAvailableMb };
 }
 
-/**
- * The most memory everything the agents start may use together (pure): the sandbox's memory minus the headroom
- * ("auto" =
- * the larger of 2048 MB and 10 %), at least half of it so a tiny sandbox still works; null = no limit ("none").
- */
-export function agentMemoryLimitMb(
-  memoryMb: number,
-  headroom: SandboxSettings['agentMemoryHeadroomMb'],
-): number | null {
-  if (headroom === 'none') return null;
-  const keep = headroom === 'auto' ? Math.max(2048, Math.floor(memoryMb / 10)) : headroom;
-  return Math.max(Math.floor(memoryMb / 2), memoryMb - keep);
-}
-
 /** A plain-words note when the commit made the sandbox's memory much smaller (2 GB or more) than free RAM allowed. */
 export function memoryNote(decision: MemoryDecision): string | null {
   if (decision.limitedBy !== 'commit' || decision.withoutCommitMb - decision.mb < 2048) return null;

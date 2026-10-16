@@ -48,8 +48,8 @@ const COMPILERS = new Set([
   'javac',
 ]);
 /** Build tools and workers: slowed down but never paused (a node process may be a dev server or an agent). */
+// Not node: agents such as Codex and Gemini run as node.exe, and the agents are never slowed down.
 const BUILD_TOOLS = new Set([
-  'node',
   'dotnet',
   'msbuild',
   'vbcscompiler',

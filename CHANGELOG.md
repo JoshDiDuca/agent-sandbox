@@ -17,6 +17,18 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   that are not in the web UI yet are no longer dead links. Everything still runs through the same shared code as the
   CLI and the menu.
 - The menu's Sessions page has a New session key (n).
+- **Builds no longer fail with "the paging file is too small" (os error 1455) or out-of-memory errors in a healthy
+  sandbox.** Every new session re-applied its own memory limit to the job shared by all agents, so a session that
+  joined later could shrink everyone's limit (to 6 GB on a 32 GB sandbox). The job's limit is now only a last-resort
+  backstop just below the sandbox's commit limit (RAM plus paging file), set once by whoever creates the job and never
+  changed by a session that joins; slowing builds down comes first. `sandbox.agentMemoryHeadroomMb` now means the
+  distance of that backstop below the commit limit.
+- The memory governor no longer slows agents that run as node.exe (Codex, Gemini ...).
+- Web UI: connections no longer pile up. The server pings every page and drops those gone without closing, a new page
+  always connects (the oldest connection makes room instead of the new one being refused), a hidden tab stops reading
+  live data and lets go of its connections, a closed one closes them at once, and a server of another version (left
+  running across an update) is replaced instead of reused. The server ends by itself after 30 minutes unused while no
+  sandbox runs.
 
 - The VPN is labelled alpha everywhere it shows (settings, `sandbox vpn`, the launch warnings, docs): it has not been tried on a real PC yet.
 - Terminals no longer show a second copy of the agent's screen at the bottom when another viewer (the web UI, a

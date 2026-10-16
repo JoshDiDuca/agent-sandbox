@@ -16,7 +16,7 @@ import {
   gentleCpuLimit,
   maxCompilers,
 } from '../shared/memory/index.js';
-import { agentMemoryLimitMb, decideMemory, memoryNote, resolveMemoryMb } from '../host/launch/index.js';
+import { decideMemory, memoryNote, resolveMemoryMb } from '../host/launch/index.js';
 import { vgpuWarning, GENTLE_NOTE } from '../host/launch/risk-notes.js';
 import {
   bugcheckCode,
@@ -109,22 +109,16 @@ export const heavyLoadSuite: Suite = {
     t.check(refused.includes('RAM plus paging file'), 'too little commit refuses with the real reason', refused);
     t.check(resolveMemoryMb({ ...MB_SANDBOX, memoryMb: 5000 }, 1, 1, 1) === 5000, 'a fixed memoryMb is never changed');
 
-    t.section("the agents' memory limit");
-    t.check(agentMemoryLimitMb(32768, 'auto') === 32768 - 3276, 'auto: sandbox memory minus 10 %');
-    t.check(agentMemoryLimitMb(8192, 'auto') === 8192 - 2048, 'auto: at least 2 GB of headroom');
-    t.check(agentMemoryLimitMb(4096, 'auto') === 2048, 'a small sandbox keeps at least half for agents');
-    t.check(
-      agentMemoryLimitMb(16384, 1000) === 15384 && agentMemoryLimitMb(16384, 'none') === null,
-      'a number, or none',
-    );
+    t.section("the agents' job backstop");
     const gen = await f.launch({}, { args: ['--version'] });
     const session = JSON.parse(fs.readFileSync(gen.sessionPath, 'utf8')) as Record<string, unknown>;
     t.check(
-      session.agentMemoryLimitMb === agentMemoryLimitMb(gen.memoryMb, 'auto') &&
+      session.agentBackstop === 'auto' &&
+        session.agentMemoryLimitMb === undefined &&
         session.pressureResponse === true &&
         session.loadProfile === 'normal',
-      'session.json carries the limit, the governor switch and the profile (all on by default)',
-      JSON.stringify(session.agentMemoryLimitMb),
+      'session.json carries the backstop setting (no limit from RAM any more), the governor switch and the profile',
+      JSON.stringify(session.agentBackstop),
     );
     const vgpuConfig = f.makeConfig();
     vgpuConfig.sandbox.vGpu = true;
@@ -156,7 +150,7 @@ export const heavyLoadSuite: Suite = {
       'compilers and linkers may be paused',
     );
     t.check(
-      !canPause('node.exe') && canLower('node.exe') && canLower('MSBuild.exe'),
+      !canPause('node.exe') && !canLower('node.exe') && canLower('MSBuild.exe'),
       'build tools are only slowed down',
     );
     t.check(

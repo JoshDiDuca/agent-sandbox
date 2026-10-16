@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { encodeFrame, FrameType } from '../shared/pty/index.js';
+import { SYSTEM } from '../shared/system.js';
 import { CSC, openViewer, tail, WAIT, type Viewer } from './support/live.js';
 import type { Suite } from './support/suite.js';
 
@@ -96,6 +97,47 @@ export const liveTerminalSuite: Suite = {
       compile(t.at('mouse-agent.cs'), agent);
     t.check(!errors, 'ptyhost and the stand-in agent compile', errors);
     if (errors) return;
+
+    t.section("the agents' job: a last-resort backstop, set once");
+    {
+      // A job of the test's own (PTYHOST_JOB_NAME), never the agents' real one.
+      const jobName = 'Local\\AgentSandboxAgentsJobTest' + process.pid + '-' + Date.now();
+      const ping = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'PING.EXE');
+      const holder = '"' + SYSTEM.cmd() + '" /c "' + ping + '" -n 6 127.0.0.1 >nul';
+      const startHost = async (backstop: string, log: string): Promise<ChildProcess> =>
+        spawn(ptyhost, [String(await freePort()), 'tok', '80', '24', t.at(log), holder], {
+          env: { ...process.env, PTYHOST_BIND: 'loopback', PTYHOST_BACKSTOP_MB: backstop, PTYHOST_JOB_NAME: jobName },
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+      const read = (log: string): string => (fs.existsSync(t.at(log)) ? fs.readFileSync(t.at(log), 'utf8') : '');
+      const first = await startHost('auto', 'job-first.log');
+      await t.waitFor(() => read('job-first.log').includes('agent job:'), WAIT.screen);
+      const second = await startHost('500000', 'job-second.log');
+      await t.waitFor(() => read('job-second.log').includes('agent job:'), WAIT.screen);
+      for (const c of [first, second]) {
+        try {
+          if (c.exitCode === null) c.kill();
+        } catch {
+          /* it ended between the check and the kill: nothing left to stop */
+        }
+      }
+      const set = /backstop at (\d+) MB committed \(the sandbox's commit limit is (\d+) MB\)/.exec(
+        read('job-first.log'),
+      );
+      const commit = Number(set?.[2] ?? 0);
+      t.check(
+        set !== null &&
+          Number(set[1]) === Math.max(Math.floor(commit / 2), commit - Math.max(1536, Math.floor((commit * 3) / 100))),
+        'the ptyhost that creates the job sets the backstop just below the commit limit (auto: 3 %, at least 1.5 GB)',
+        read('job-first.log'),
+      );
+      t.check(
+        read('job-second.log').includes('joined the existing one'),
+        'a ptyhost that joins the job never changes its backstop',
+        read('job-second.log'),
+      );
+    }
     const client = t.at('client.mjs');
     fs.writeFileSync(
       client,

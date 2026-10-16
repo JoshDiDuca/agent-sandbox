@@ -303,6 +303,7 @@ export const webSuite: Suite = {
       staticRoot: root,
       rpc: rpc.host,
       onStop: () => (stopped = true),
+      heartbeatMs: 200,
     });
     await server.start();
     const { port } = server;
@@ -550,6 +551,33 @@ export const webSuite: Suite = {
       leaver.socket.close();
       await t.waitFor(() => leaver.closeCode !== null, 5000);
       t.check(rpc.ran.length === runs + 1, 'a browser that leaves mid-question answers no (the call ends)');
+
+      t.section('connections never pile up');
+      const tabs: Tab[] = [];
+      for (let i = 0; i < 9; i++) {
+        const tab = new Tab(rpcUrl, { Origin: origin, Cookie });
+        tabs.push(tab);
+        await t.waitFor(() => tab.opened || tab.failed, 5000);
+      }
+      await t.waitFor(() => server.openSockets('rpc') <= 8, 5000);
+      t.check(
+        tabs.every((tab) => tab.opened) && server.openSockets('rpc') === 8,
+        'a new page always connects: at the limit the oldest connection makes room',
+        'open: ' + server.openSockets('rpc'),
+      );
+      t.check(
+        [browser, ...tabs].some((tab) => tab.closeCode === 4000),
+        'the oldest is closed with "replaced by a newer page"',
+      );
+      for (const tab of tabs) tab.socket.close();
+
+      const silent = new WebSocket(rpcUrl, { headers: { Origin: origin, Cookie }, autoPong: false });
+      let silentClosed = false;
+      silent.on('close', () => (silentClosed = true));
+      silent.on('error', () => undefined);
+      await t.waitFor(() => silent.readyState === WebSocket.OPEN, 5000);
+      await t.waitFor(() => silentClosed, 3000);
+      t.check(silentClosed, 'a page that stops answering pings (gone without closing) is dropped');
 
       t.section('stopping');
       t.equal(
