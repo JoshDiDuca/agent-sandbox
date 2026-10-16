@@ -309,24 +309,29 @@ export function renderScreens(dir: string): string {
         log: null,
       },
     },
-    settings: { pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'] },
     dataFolder: {
       label: 'Data folder',
       hint: 'C:\\ProgramData\\AgentSandbox\\users\\me',
       description: 'Where the sandbox keeps its tools, databases and agent state. Enter changes it.',
     },
     updates: {
-      managed: true,
-      version: '1.4.3',
-      scope: 'user',
-      autoUpdate: true,
-      autoOffText: null,
-      state: {
+      status: {
+        managed: true,
+        version: '1.4.3',
+        scope: 'user',
+        autoUpdate: true,
+        autoOffText: null,
         previous: '1.4.2',
-        failed: { version: '1.4.4', at: '2026-10-13T03:00:00Z', reason: 'it did not start' },
+        failed: { version: '1.4.4', reason: 'it did not start' },
+        npmCommand: 'npm install -g windows-development-sandbox',
+        error: null,
+        settings: {
+          pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'],
+          error: null,
+        },
       },
+      latest: '1.5.0',
     },
-    latest: '1.5.0',
     more: [
       { name: 'sync', summary: 'sync history now' },
       { name: 'audit', summary: 'show what the sandbox did' },

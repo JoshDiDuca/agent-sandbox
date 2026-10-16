@@ -17,6 +17,8 @@ import { sandboxPage, type SandboxStatus } from '../app/features/sandbox/index.j
 import { sessionsPage, type SessionRow, type SessionsList } from '../app/features/sessions/index.js';
 import { APP_GROUPS, appsPage, listApps, type AppsList } from '../app/features/apps/index.js';
 import { settingsPage } from '../app/features/settings/index.js';
+import { runUpdate, updatesPage, type UpdatesStatus } from '../app/features/updates/index.js';
+import { MenuOperations } from '../cli/menu/io-menu.js';
 import type { AppContext } from '../app/context.js';
 import {
   ago,
@@ -47,6 +49,7 @@ import {
 } from '../app/kernel/index.js';
 import { IMPLEMENTATIONS, readQuery, runDefinition } from '../app/registry.js';
 import { parseCli } from '../cli/args.js';
+import { contextOrDefaults } from '../cli/commands/index.js';
 import { COMMANDS, commandSpec } from '../cli/manifest.js';
 import { menuView } from '../cli/menu/render-view.js';
 import { MENU_VIEWS } from '../cli/menu/views.js';
@@ -57,6 +60,7 @@ import { UserError } from '../core/util/index.js';
 import type { Suite } from './support/suite.js';
 
 const NOW = Date.now();
+const NPM_COMMAND = 'npm install -g windows-development-sandbox';
 
 const running = (id: string, here: boolean): SessionRow => ({
   id,
@@ -1001,6 +1005,106 @@ export const appSuite: Suite = {
       bytesText(1536) === '1.5 KB' && bytesText(0) === '0 B' && bytesText(5 * 1024 ** 3) === '5.0 GB',
       'bytesText says sizes the way humanBytes does',
       [bytesText(1536), bytesText(0), bytesText(5 * 1024 ** 3)].join(' | '),
+    );
+
+    t.section('updates: flags, input, the page');
+    const flagsOf = (name: string): string =>
+      JSON.stringify(commandSpec(name)?.options.map((o) => [o.flag, o.short ?? '', o.description]));
+    t.check(
+      flagsOf('update') ===
+        JSON.stringify([
+          ['--check', '', 'only look whether a newer version exists'],
+          ['--rollback', '', 'go back to the version before the last update'],
+          ['--auto', '', 'install new versions by themselves (for everyone on this PC: needs an admin terminal)'],
+          ['--unattended', '', 'used by automatic updates: no questions, short output'],
+          ['--feed', '', 'take the release from this folder (a feed.json and the package) instead of GitHub'],
+          ['--yes', '-y', '(--rollback) do not ask first'],
+        ]) &&
+        flagsOf('migrate') ===
+          JSON.stringify([
+            ['--dry-run', '', 'only list what would change'],
+            ['--restore', '', 'put back the files saved before an update (a folder under <storage>\\backups)'],
+            ['--yes', '-y', '(--restore) do not ask first'],
+          ]),
+      'update and migrate keep their flags and help (--yes moved last)',
+    );
+    t.equal(
+      cliInput(definitionFor('update', [])!, parseCli(['update', '--auto', 'on'])),
+      { auto: 'on' },
+      'update --auto on reaches the input',
+    );
+    t.check(parseCli(['resume', '--auto']).auto === true, 'resume --auto is still a switch');
+    const brokenCfg = t.write(t.at('app-updates', 'config.json'), 'broken');
+    const updOptions = { ...parseCli(['update']), config: brokenCfg };
+    const updCtx = contextOrDefaults(t.dir('app-updates', 'package'), 'sandbox', updOptions);
+    t.check(
+      JSON.stringify(updCtx.loaded.config) === JSON.stringify(DEFAULTS),
+      'update runs with a broken settings file (the built-in defaults)',
+    );
+    await t.throws(
+      () =>
+        runDefinition(
+          'updates.update',
+          { ...updCtx, options: { ...updCtx.options, feed: undefined } } as unknown as AppContext,
+          { feed: 'C:\\x' },
+          fakeIO().io,
+        ),
+      'works only on the command line.',
+      '--feed from the web is refused before anything is installed',
+    );
+    const updPage = (status: UpdatesStatus, latest: string | null): Page => updatesPage(status, latest);
+    const managed: UpdatesStatus = {
+      managed: true,
+      version: '1.4.3',
+      scope: 'user',
+      autoUpdate: true,
+      autoOffText: null,
+      previous: '1.4.2',
+      failed: null,
+      npmCommand: NPM_COMMAND,
+      error: null,
+      settings: { pending: ['2026-10-x: change'], error: null },
+    };
+    const onPage = updPage(managed, '1.5.0');
+    const updIds = onPage.sections.flatMap((s) => (s.items ?? []).map((i) => i.id));
+    const keys = menuView(onPage, { category: 'updates', refresh: false }).actions.map((a) => a.key);
+    t.check(
+      ['updates:version', 'updates:latest', 'updates:auto', 'updates:previous'].every((id) => updIds.includes(id)) &&
+        keys.join() === 'c,u,a,r,s',
+      'the updates page has its rows, and the keys c u a r s (with a pending migration)',
+      keys.join(),
+    );
+    const npmPage = updPage(
+      { ...managed, managed: false, previous: null, settings: { pending: [], error: null } },
+      null,
+    );
+    t.check(
+      menuView(npmPage, { category: 'updates', refresh: false }).actions.length === 0 &&
+        npmPage.sections[0].items?.some((i) => i.id === 'updates:npm') === true,
+      'an npm install shows how to update and offers no keys',
+    );
+    // The menu hands what an operation returned to its page once (the page keeps what a check found). A folder with no
+    // install in it is not managed, so this checks nothing on this PC.
+    const npmCtx = {
+      packageRoot: t.dir('app-updates', 'npm-package'),
+      options: {},
+      loaded: { config: structuredClone(DEFAULTS), configPath: null, base: t.temp },
+      storageRoot: t.dir('app-updates', 'storage'),
+      dataPath: t.dir('app-updates', 'data'),
+    } as unknown as AppContext;
+    const handed: unknown[] = [];
+    const menuSaid = await new MenuOperations({} as never, npmCtx).run(
+      runUpdate,
+      { check: false, rollback: false, unattended: false },
+      [],
+      undefined,
+      (o) => handed.push(o),
+    );
+    t.check(
+      handed.length === 1 &&
+        (handed[0] as { latest: unknown }).latest === null &&
+        (menuSaid ?? '').includes('npm install -g windows-development-sandbox'),
+      'the menu hands an operation its output once, and shows its line',
     );
 
     t.section('logs, run against temp folders');

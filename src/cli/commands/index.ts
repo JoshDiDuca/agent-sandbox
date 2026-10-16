@@ -3,6 +3,7 @@ export { launch } from './launch/index.js';
 export { setup } from './setup/index.js';
 export { storage, storageBeforeCommand } from './storage/index.js';
 export { repairCommand } from './repair/index.js';
+export { contextOrDefaults } from './context.js';
 export { attach, db, exec } from './sessions/index.js';
 export { resume } from './resume.js';
 export {
@@ -12,12 +13,8 @@ export {
   doctor,
   hostCommand,
   logs,
-  migrate,
   migrateBeforeCommand,
-  runMigrate,
-  runUpdate,
   sync,
-  update,
   updatesBeforeCommand,
   watcher,
 } from './maintenance/index.js';

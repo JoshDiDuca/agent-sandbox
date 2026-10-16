@@ -4,14 +4,12 @@
 import { dataPage, showData, type DataShow } from '../../../app/features/data/index.js';
 import type { Action } from '../../../app/kernel/index.js';
 import { readQuery } from '../../../app/registry.js';
-import { userDir } from '../../../core/config/index.js';
 import { errMsg } from '../../../core/util/index.js';
 import { healthPage, lastHealth, type HealthLast } from '../../../app/features/health/index.js';
 import { CRASH, listLogs, logsPage, type LogFiles } from '../../../app/features/logs/index.js';
+import { updatesPage, updatesStatus, type UpdatesStatus } from '../../../app/features/updates/updates.def.js';
 import type { Context } from '../../commands/context.js';
 import { commandSpec, type CommandSpec } from '../../manifest.js';
-import { MigrateService, NPM_UPDATE_COMMAND, UpdateService, type UpdateStatus } from '../../services/index.js';
-import { describeResult } from '../../commands/maintenance/update.js';
 import {
   Text,
   Theme,
@@ -36,12 +34,8 @@ export interface MaintenanceModel {
   readonly logs: LogFiles;
   /** The Health category: the last check or repair saved (null: none yet). */
   readonly health: { readonly last: HealthLast | null };
-  /** The changes still to make to your saved settings (or why they cannot be read). */
-  readonly settings: { readonly pending: readonly string[] } | { readonly error: string };
-  /** The program's own updates: what is installed and what an update did. */
-  readonly updates: UpdateStatus | { readonly error: string };
-  /** A newer version found by "Check now" (null: not looked yet, or none). */
-  readonly latest: string | null;
+  /** The program's updates and saved settings (the status), and a newer version a check found (latest). */
+  readonly updates: { readonly status: UpdatesStatus; readonly latest: string | null };
   /** The commands listed under "More commands". */
   readonly more: readonly { name: string; summary: string }[];
 }
@@ -101,60 +95,24 @@ function dataItems(m: MaintenanceModel): ListItem<string>[] {
   return [folder, ...(dataMenuView(m.data)?.items ?? [])];
 }
 
-function updateItems(m: MaintenanceModel): ListItem<string>[] {
-  const row = (
-    id: string,
-    label: string,
-    hint: string,
-    description?: string,
-    details?: string[],
-  ): ListItem<string> => ({
-    value: 'updates:' + id,
-    label,
-    category: 'updates',
-    section: 'This program',
-    hint,
-    description,
-    details,
-  });
-  if ('error' in m.updates) return [row('error', m.updates.error, '')];
-  const u = m.updates;
-  if (!u.managed)
-    return [
-      row('version', 'Version', u.version, 'Installed with npm, so npm updates it: ' + NPM_UPDATE_COMMAND),
-      row('npm', 'Update', Theme.muted('with npm'), 'Run ' + NPM_UPDATE_COMMAND + ' in a terminal.'),
-    ];
-  const scope = u.scope === 'machine' ? 'for everyone on this PC' : 'for you';
-  const rows = [
-    row('version', 'Version', u.version, 'Installed ' + scope + '.'),
-    row(
-      'latest',
-      'Newest version',
-      m.latest ? Theme.warn(m.latest) : Theme.muted('not looked yet'),
-      m.latest ? 'Enter installs it.' : 'Enter looks on GitHub for a newer version.',
-    ),
-    row(
-      'auto',
-      'Automatic updates',
-      u.autoUpdate ? Theme.ok('on') : Theme.muted('off'),
-      'Enter switches them. ' +
-        (u.scope === 'machine'
-          ? 'For everyone: needs an admin terminal.'
-          : 'A new version installs when no sandbox runs.'),
-    ),
-  ];
-  if (u.autoOffText)
-    rows.push(row('autooff', 'Automatic updates turned off', Theme.warn('off'), u.autoOffText, [u.autoOffText]));
-  if (u.state.previous) rows.push(row('previous', 'Previous version', u.state.previous, 'Enter goes back to it.'));
-  if (u.state.failed)
-    rows.push(
-      row('failed', 'Last failed update', Theme.error(u.state.failed.version), u.state.failed.reason, [
-        u.state.failed.reason,
-        'It is not tried again until a newer version is released.',
-      ]),
-    );
-  return rows;
+/** The Updates view (src/app/features/updates) as the menu's rows, keys and Enter labels, for the Updates category. */
+function updatesMenu(m: MaintenanceModel): MenuView {
+  return menuView(updatesPage(m.updates.status, m.updates.latest), { category: 'updates', refresh: false });
 }
+
+/** A value the page shows before the first read (the status is read when the page loads). */
+const NO_UPDATES: UpdatesStatus = {
+  managed: false,
+  version: '',
+  scope: null,
+  autoUpdate: false,
+  autoOffText: null,
+  previous: null,
+  failed: null,
+  npmCommand: '',
+  error: null,
+  settings: { pending: [], error: null },
+};
 
 /**
  * The logs view's rows and keys for the Logs category (its own empty row is left out: the category shows the page's
@@ -170,30 +128,7 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   const logs: ListItem<string>[] = logsMenu(m.logs).items.map(({ section: _section, ...row }) => row);
   // The checks take seconds (programs are run), so they only run when you ask: the page shows the saved results.
   const health = healthMenu(m);
-  const settings: ListItem<string>[] =
-    'error' in m.settings
-      ? [{ value: 'settings:error', label: m.settings.error, category: 'updates', section: 'Saved settings' }]
-      : m.settings.pending.length
-        ? m.settings.pending.map((line, i) => ({
-            value: 'settings:' + i,
-            label: line.split(':')[0],
-            category: 'updates',
-            section: 'Saved settings',
-            hint: Theme.warn('to update'),
-            description: 'Enter updates your saved settings (a backup is kept first).',
-            details: [line],
-          }))
-        : [
-            {
-              value: 'settings:none',
-              label: 'Up to date',
-              category: 'updates',
-              section: 'Saved settings',
-              hint: Theme.ok('OK'),
-              description: 'Nothing to update.',
-            },
-          ];
-  const updates = updateItems(m);
+  const updates = updatesMenu(m);
   const more: ListItem<string>[] = m.more.map((c) => ({
     value: 'more:' + c.name,
     label: MORE_LABELS[c.name] ?? Text.humanize(c.name),
@@ -203,13 +138,15 @@ export function maintenanceOptions(m: MaintenanceModel): ListOptions<string> {
   return {
     path: [],
     categories: CATEGORIES,
-    items: [...updates, ...settings, ...dataItems(m), ...health.items, ...logs, ...more],
+    items: [...updates.items, ...dataItems(m), ...health.items, ...logs, ...more],
     empty: 'Nothing here yet.',
     actions: maintenanceActions(m),
     enterLabel: (category, id) =>
       category === 'health'
         ? health.enterLabel(category, id)
-        : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) || enterLabel(id ?? '', m),
+        : category === 'updates'
+          ? updates.enterLabel(category, id)
+          : (category === 'data' ? dataMenuView(m.data)?.enterLabel(category, id) : undefined) || enterLabel(id ?? ''),
   };
 }
 
@@ -219,13 +156,9 @@ function healthMenu(m: MaintenanceModel): MenuView {
 }
 
 /** What Enter does on a row ("" = the row only shows information). */
-function enterLabel(id: string, m: MaintenanceModel): string {
+function enterLabel(id: string): string {
   if (id === 'data:folder') return 'change';
   if (id === 'data:measure') return 'measure';
-  if (id === 'updates:latest') return m.latest ? 'install' : 'look';
-  if (id === 'updates:auto') return 'switch';
-  if (id === 'updates:previous') return 'go back';
-  if (id.startsWith('settings:') && id !== 'settings:none' && id !== 'settings:error') return 'update';
   if (id.startsWith('log:')) return 'show';
   if (id.startsWith('more:')) return 'open';
   return '';
@@ -240,31 +173,8 @@ function maintenanceActions(m: MaintenanceModel): (category: string | undefined)
         return logsMenu(m.logs).actions;
       case 'health':
         return healthMenu(m).actions;
-      case 'updates': {
-        const managed = !('error' in m.updates) && m.updates.managed;
-        const previous = !('error' in m.updates) && Boolean(m.updates.state.previous);
-        return [
-          ...(managed
-            ? [
-                { key: 'c', label: 'check now' },
-                { key: 'u', label: 'update now' },
-                { key: 'a', label: 'automatic on/off', applies: (id: string) => id === 'updates:auto' },
-                ...(previous
-                  ? [{ key: 'r', label: 'roll back', applies: (id: string) => id === 'updates:previous' }]
-                  : []),
-              ]
-            : []),
-          ...('pending' in m.settings && m.settings.pending.length
-            ? [
-                {
-                  key: 's',
-                  label: 'update saved settings',
-                  applies: (id: string) => id.startsWith('settings:') && id !== 'settings:none',
-                },
-              ]
-            : []),
-        ];
-      }
+      case 'updates':
+        return updatesMenu(m).actions;
       default:
         return [];
     }
@@ -276,10 +186,9 @@ export class MaintenancePage extends ListPage<string> {
   private data: DataShow | null = null;
   private logs: LogFiles = NO_LOGS;
   private last: HealthLast | null = null;
-  private settings: MaintenanceModel['settings'] = { pending: [] };
-  private readonly migrate: MigrateService;
-  private readonly updateService: UpdateService;
+  private updates: UpdatesStatus = NO_UPDATES;
   private readonly operations: MenuOperations;
+  /** The newer version the last check found (null: none, or not looked yet). */
   private latest: string | null = null;
 
   constructor(
@@ -287,13 +196,7 @@ export class MaintenancePage extends ListPage<string> {
     private readonly ctx: Context,
   ) {
     super(app);
-    this.updateService = UpdateService.forPackage(ctx.packageRoot, undefined, { userDir: userDir() });
     this.operations = new MenuOperations(app, ctx);
-    this.migrate = new MigrateService({
-      storageRoot: ctx.storageRoot,
-      userDir: userDir(),
-      configPath: ctx.loaded.configPath,
-    });
   }
 
   private model(): MaintenanceModel {
@@ -302,9 +205,7 @@ export class MaintenancePage extends ListPage<string> {
       data: this.data,
       logs: this.logs,
       health: { last: this.last },
-      settings: this.settings,
-      updates: this.updateStatus(),
-      latest: this.latest,
+      updates: { status: this.updates, latest: this.latest },
       more: MORE_COMMANDS.flatMap((name) => {
         const spec = commandSpec(name);
         return spec ? [{ name, summary: spec.summary }] : [];
@@ -318,86 +219,12 @@ export class MaintenancePage extends ListPage<string> {
     } catch {
       this.logs = NO_LOGS;
     }
-    this.readSettings();
     this.last = (await readQuery(lastHealth, this.ctx)).last;
+    this.updates = await readQuery(updatesStatus, this.ctx);
   }
 
   protected options(): ListOptions<string> {
     return maintenanceOptions(this.model());
-  }
-
-  private readSettings(): void {
-    try {
-      this.settings = { pending: this.migrate.plan() };
-    } catch (e) {
-      this.settings = { error: errMsg(e) };
-    }
-  }
-
-  private updateStatus(): MaintenanceModel['updates'] {
-    try {
-      return this.updateService.status();
-    } catch (e) {
-      return { error: errMsg(e) };
-    }
-  }
-
-  /** The Updates category: look, install, go back, switch automatic updates. */
-  private async updates(key: string | undefined): Promise<Outcome<string>> {
-    const service = this.updateService;
-    if (!service.managed)
-      return { notice: Theme.muted('Installed with npm: update it with ' + NPM_UPDATE_COMMAND + '.') };
-    if (key === 'a') {
-      const on = !service.status().autoUpdate;
-      this.busy(on ? 'Turning automatic updates on…' : 'Turning automatic updates off…');
-      service.setAuto(on);
-      return { notice: Theme.ok(Theme.glyph.ok + ' Automatic updates are ' + (on ? 'on.' : 'off.')) };
-    }
-    if (key === 'r') {
-      const target = service.status().state.previous;
-      if (!target) return { notice: Theme.muted('There is no earlier version to go back to.') };
-      if (
-        !(await this.app.ask(
-          'Go back to version ' + target + '?',
-          ['Takes effect the next time you start it.'],
-          'Go back',
-        ))
-      )
-        return {};
-      return { notice: Theme.ok(Theme.glyph.ok + ' Went back to version ' + service.rollback() + '.') };
-    }
-    if (key === 'c') {
-      this.busy('Looking for a newer version…');
-      const found = await service.check();
-      this.latest = found.available && found.latest ? found.latest.version : null;
-      return {
-        notice: this.latest
-          ? Theme.warn('Version ' + this.latest + ' is available.')
-          : Theme.ok(Theme.glyph.ok + ' You have the newest version.'),
-      };
-    }
-    if (key !== 'u') return {};
-    this.busy('Installing the newest version…');
-    const done = describeResult(await service.run(), false);
-    this.latest = null;
-    return {
-      notice:
-        done.code === 0 ? Theme.ok(Theme.glyph.ok + ' ' + done.line) : Theme.error(Theme.glyph.cross + ' ' + done.line),
-    };
-  }
-
-  private async updateSettings(): Promise<Outcome<string>> {
-    if (!('pending' in this.settings) || !this.settings.pending.length)
-      return { notice: Theme.muted('Your saved settings are up to date.') };
-    this.busy('Updating your saved settings…');
-    const notes: string[] = [];
-    const result = await this.migrate.run((line) => notes.push(line));
-    this.readSettings();
-    return {
-      notice: result.postponed.length
-        ? Theme.warn('Waiting until no sandbox runs: ' + result.postponed.join(', ') + '.')
-        : Theme.ok(Theme.glyph.ok + ' Saved settings updated.'),
-    };
   }
 
   protected async act(result: ListResult<string>): Promise<Outcome<string>> {
@@ -419,9 +246,11 @@ export class MaintenancePage extends ListPage<string> {
         const chosen = logsMenu(this.logs).resolve(result);
         if (chosen?.kind === 'action') return this.showLog(chosen.action);
       }
-      if ((result.kind === 'pick' && id?.startsWith('settings:')) || (key === 's' && this.category === 'updates'))
-        return await this.updateSettings();
-      if (this.category === 'updates') return await this.updates(key ?? this.updateKey(id));
+      if (this.category === 'updates') {
+        const chosen = updatesMenu(this.model()).resolve(result);
+        if (chosen?.kind === 'action') return await this.runUpdates(chosen.action);
+        return {};
+      }
       // Only the open category's rows and keys: a key of one category must not fire in another.
       if (this.category === 'health') {
         const chosen = healthMenu(this.model()).resolve(result);
@@ -455,12 +284,21 @@ export class MaintenancePage extends ListPage<string> {
     return file ? { exit: { kind: 'view', file: file.path } } : {};
   }
 
-  /** The key an Enter on an Updates row stands for. */
-  private updateKey(id: string | undefined): string | undefined {
-    if (id === 'updates:latest') return this.latest ? 'u' : 'c';
-    if (id === 'updates:auto') return 'a';
-    if (id === 'updates:previous') return 'r';
-    return undefined;
+  /**
+   * An Updates row or key: runs its operation as the command line does (the operation asks what it must). A check and
+   * an install tell the page the newer version they found (or that none is left), the rest leave it alone.
+   */
+  private runUpdates(action: Action): Promise<Outcome<string>> {
+    const input = action.kind === 'operation' ? action.input : {};
+    const checks = input.check === true;
+    const installs = !checks && input.rollback === undefined && input.auto === undefined;
+    const remember =
+      checks || installs
+        ? (output: unknown): void => {
+            this.latest = (output as { latest: string | null }).latest;
+          }
+        : undefined;
+    return this.operations.perform(action, [this.label], (text) => this.busy(text), remember);
   }
 
   private async measure(): Promise<Outcome<string>> {

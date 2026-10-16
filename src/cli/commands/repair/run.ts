@@ -2,15 +2,13 @@
 // as each check ends, the summary, the details, the log path. doctor only looks (and offers to fix, or fixes with
 // --fix); repair looks, lists what it would change, asks once, then fixes and writes a log. --json prints the results
 // instead and never asks.
-import path from 'node:path';
 import { confirm } from '@inquirer/prompts';
-import { DEFAULTS, userDir } from '../../../core/config/index.js';
-import { expandPath, UserError } from '../../../core/util/index.js';
+import { UserError } from '../../../core/util/index.js';
 import { insideSandbox } from '../../../host/sandbox/index.js';
 import type { CliOptions } from '../../args.js';
 import { printJson, table } from '../../output/index.js';
 import { HealthService } from '../../services/index.js';
-import { createContext, requireOnPc, type Context } from '../context.js';
+import { createContext, defaultsContext, requireOnPc, type Context } from '../context.js';
 import { healthWith } from '../../../app/features/health/index.js';
 import { HealthPrinter } from './printer.js';
 
@@ -86,19 +84,7 @@ export function repairCommand(packageRoot: string, entry: string, options: CliOp
     ctx = createContext(packageRoot, entry, options);
   } catch (e) {
     if (!(e instanceof UserError)) throw e;
-    const loaded = { config: structuredClone(DEFAULTS), configPath: null, base: userDir() };
-    const storageRoot = expandPath(loaded.config.storage.root, loaded.base);
-    return runRepair(
-      {
-        packageRoot,
-        entry,
-        options,
-        loaded,
-        storageRoot,
-        dataPath: path.join(storageRoot, 'data', loaded.config.storage.dataName),
-      },
-      e,
-    );
+    return runRepair(defaultsContext(packageRoot, entry, options), e);
   }
   return runRepair(ctx);
 }

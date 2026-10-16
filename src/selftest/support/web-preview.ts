@@ -13,6 +13,7 @@ import { lastHealth } from '../../app/features/health/index.js';
 import { CRASH, listLogs, tailLog } from '../../app/features/logs/index.js';
 import { listProjects } from '../../app/features/projects/index.js';
 import { showData } from '../../app/features/data/index.js';
+import { updatesStatus } from '../../app/features/updates/index.js';
 import { listSessions } from '../../app/features/sessions/index.js';
 import { cancelled, type OperationIO, type RpcHost } from '../../app/kernel/index.js';
 import { runDefinition } from '../../app/registry.js';
@@ -198,6 +199,25 @@ function sampleSessions(running: boolean): unknown {
           canOpen: s.phase === 'running',
         }))
       : [],
+  });
+}
+
+/** The program's updates: installed for you, one previous version, one failed update, one saved-settings change. */
+function sampleUpdates(): unknown {
+  return updatesStatus.output.parse({
+    managed: true,
+    version: '1.4.3',
+    scope: 'user',
+    autoUpdate: true,
+    autoOffText: null,
+    previous: '1.4.2',
+    failed: { version: '1.4.4', reason: 'it did not start' },
+    npmCommand: 'npm install -g windows-development-sandbox',
+    error: null,
+    settings: {
+      pending: ['2026-10-unpin-config-defaults: stop pinning old defaults in your config.json'],
+      error: null,
+    },
   });
 }
 
@@ -541,6 +561,33 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
         if (picked === undefined) cancelled();
         return { message: picked.length + ' project(s) mapped at every start (preview: nothing was changed).' };
       }
+      case 'updates.status':
+        return sampleUpdates();
+      // Fakes only: the preview never checks GitHub, installs, or switches anything on this PC.
+      case 'updates.update': {
+        const u = input as { check?: boolean; rollback?: boolean; auto?: 'on' | 'off' };
+        if (u.rollback) {
+          if (
+            !(await io.confirm({
+              title: 'Go back from version 1.4.3 to version 1.4.2?',
+              lines: ['Takes effect the next time you start it.'],
+              yes: 'Go back',
+              danger: true,
+            }))
+          )
+            cancelled();
+          return { line: 'Went back to version 1.4.2. (preview: nothing was changed)', latest: null };
+        }
+        if (u.auto)
+          return { line: 'Automatic updates are ' + u.auto + '. (preview: nothing was changed)', latest: null };
+        if (u.check)
+          return { line: 'Version 1.5.0 is available (you have 1.4.3). Run: sandbox update', latest: '1.5.0' };
+        if (!(await io.confirm({ title: 'Install the newest version if there is one?', yes: 'Install', danger: true })))
+          cancelled();
+        return { line: 'You have the newest version (1.4.3). (preview: nothing was installed)', latest: null };
+      }
+      case 'updates.migrate':
+        return { line: 'Updated: 2026-10-unpin-config-defaults. (preview: nothing was changed)' };
       case 'data.show':
         return sampleData();
       case 'data.clean':
@@ -596,6 +643,9 @@ function previewRpc(ctx: AppContext, state: { running: boolean }): RpcHost {
     'health.repair': 'operation',
     'health.enableSandbox': 'operation',
     'data.show': 'query',
+    'updates.status': 'query',
+    'updates.update': 'operation',
+    'updates.migrate': 'operation',
     'data.clean': 'operation',
     'data.prune': 'operation',
     'logs.list': 'query',
