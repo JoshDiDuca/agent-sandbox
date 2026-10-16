@@ -66,7 +66,7 @@ export const SandboxSchema = z.strictObject({
   pressureResponse: z
     .boolean()
     .describe(
-      'When the sandbox (or this PC) runs low on memory, slow the heaviest build programs down (lower priority) and, if that is not enough, pause the biggest compiler for a few seconds at a time, so heavy parallel builds slow down instead of closing the sandbox. Never touches the agents themselves. Yours only: a project file cannot change it.',
+      'When the sandbox (or this PC) runs low on memory, slow builds down in steps, like a PC that gets slower instead of failing: build programs get lower CPU and memory priority, then less CPU, then compilers take turns (the waiting ones briefly suspended and trimmed to the paging file). Nothing is stopped or killed, and the agents themselves are never touched. Yours only: a project file cannot change it.',
     ),
   vGpu: z
     .boolean()

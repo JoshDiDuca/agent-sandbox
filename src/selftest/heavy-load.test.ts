@@ -9,7 +9,9 @@ import { isWin } from '../core/util/index.js';
 import { SYSTEM } from '../shared/system.js';
 import { GuestRequestSchema, PressureStatusSchema } from '../shared/channel/index.js';
 import {
-  GUEST_THRESHOLDS,
+  compilersAllowed,
+  DIAL_CALM_SAMPLES,
+  DIAL_STEPS,
   HOST_THRESHOLDS,
   cargoJobs,
   effectiveCpuLimit,
@@ -41,6 +43,8 @@ import {
   decide,
   GovernorCore,
   INITIAL_STATE,
+  ROTATE_MS,
+  type Action,
   type GovernorPort,
   type MemSample,
   type ProcSample,
@@ -167,91 +171,134 @@ export const heavyLoadSuite: Suite = {
       'agents, shells, ptyhost, git and system programs are never touched',
     );
 
-    t.section('the governor: thresholds and hysteresis');
-    const normal = GUEST_THRESHOLDS.normal;
+    t.section('the governor: the dial turns up in steps, down slowly');
     const procs = [
       proc(1, 'rustc.exe', 2800),
       proc(2, 'rustc.exe', 2000),
       proc(3, 'claude.exe', 900),
       proc(4, 'link.exe', 500),
     ];
-    const calm = decide(INITIAL_STATE, sample(50, 50, procs), 1000, normal, 'normal');
-    t.check(calm.level === 'ok' && calm.actions.length === 0, '50 % free: nothing happens');
-    const edge = decide(INITIAL_STATE, sample(9, 91, procs), 1000, normal, 'normal');
-    t.check(edge.level === 'ok', '9 % free and 91 % commit are still fine (limits: 8 % and 92 %)');
-    const low = decide(INITIAL_STATE, sample(7, 50, procs), 1000, normal, 'normal');
+    const of = (d: { actions: readonly Action[] }, kind: Action['kind']): Action[] =>
+      d.actions.filter((a) => a.kind === kind);
+    const pids = (actions: readonly Action[]): string =>
+      actions
+        .map((a) => ('pid' in a ? a.pid : 0))
+        .sort()
+        .join();
+    const calm = decide(INITIAL_STATE, sample(50, 50, procs), 1000, 'normal');
+    t.check(calm.state.step === 0 && calm.level === 'ok' && calm.actions.length === 0, '50 % free: nothing happens');
     t.check(
-      low.level === 'throttled' &&
-        low.actions
-          .filter((a) => a.kind === 'priority')
-          .map((a) => a.kind === 'priority' && a.pid)
-          .join() === '1,2,4',
-      '7 % free: the compilers go below normal, the agent does not',
+      decide(INITIAL_STATE, sample(16, 79, procs), 1000, 'normal').state.step === 0,
+      '16 % free and 79 % commit are fine (step 1 starts at 15 % and 80 %)',
     );
-    const lowCommit = decide(INITIAL_STATE, sample(50, 93, procs), 1000, normal, 'normal');
-    t.check(lowCommit.level === 'throttled', 'commit above 92 % counts too');
-    let s2 = INITIAL_STATE;
-    const kinds: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      const d = decide(s2, sample(5, 50, procs), i * 2000, normal, 'normal');
-      s2 = d.state;
-      kinds.push(d.level);
-    }
-    t.check(kinds[0] === 'throttled' && kinds.includes('suspending'), 'throttled first, paused later: ' + kinds.join());
-    const oneStep = decide(INITIAL_STATE, sample(5, 50, procs), 0, normal, 'normal');
-    t.check(!oneStep.actions.some((a) => a.kind === 'pause'), 'never paused on the first sample');
-    // Hysteresis: 10 % free is above the 8 % entry but below the 12 % exit: still under pressure.
-    let h = decide(INITIAL_STATE, sample(5, 50, procs), 0, normal, 'normal').state;
-    h = decide(h, sample(10, 50, procs), 2000, normal, 'normal').state;
-    t.check(h.pressure, 'between the entry and exit limits it stays under pressure (no flapping)');
-    for (let i = 0; i < normal.calmSamples; i++)
-      h = decide(h, sample(30, 50, procs), 4000 + i * 2000, normal, 'normal').state;
-    t.check(!h.pressure, 'ends only after ' + normal.calmSamples + ' calm samples');
-    const back = decide(
-      { ...INITIAL_STATE, pressure: true, calm: normal.calmSamples - 1, lowered: { 1: 'below' } },
-      sample(30, 50, [proc(1, 'rustc.exe', 2800, 'below')]),
-      9000,
-      normal,
+    const one = decide(INITIAL_STATE, sample(14, 50, procs), 1000, 'normal');
+    t.check(
+      one.state.step === 1 &&
+        of(one, 'priority').every((a) => a.kind === 'priority' && a.to === 'below') &&
+        pids(of(one, 'priority')) === '1,2,4' &&
+        pids(of(one, 'memory')) === '1,2,4' &&
+        of(one, 'hold').length === 0 &&
+        of(one, 'cpu').length === 0,
+      'step 1: build programs get lower CPU and memory priority, nothing waits, the agent is untouched',
+    );
+    const two = decide(INITIAL_STATE, sample(9, 50, procs), 1000, 'normal');
+    t.check(
+      two.state.step === 2 &&
+        of(two, 'priority').every((a) => a.kind === 'priority' && a.to === 'idle') &&
+        pids(of(two, 'throttle')) === '1,2,4' &&
+        of(two, 'cpu').some((a) => a.kind === 'cpu' && a.percent === 60) &&
+        of(two, 'hold').length === 1,
+      'step 2: idle priority, compilers share 60 % of the CPU, 2 of 3 compilers go on',
+    );
+    const three = decide(INITIAL_STATE, sample(5, 50, procs), 1000, 'normal');
+    t.check(
+      three.state.step === 3 &&
+        three.level === 'suspending' &&
+        of(three, 'cpu').some((a) => a.kind === 'cpu' && a.percent === 35) &&
+        of(three, 'hold').length === 2 &&
+        pids(of(three, 'trim')) === pids(of(three, 'hold')),
+      'step 3: 35 % CPU, one compiler goes on, the waiting ones are trimmed to the paging file',
+    );
+    t.check(
+      decide(INITIAL_STATE, sample(50, 98, procs), 1000, 'normal').state.step === 4,
+      'commit above 97 % is step 4',
+    );
+    const growing = decide(
+      { ...INITIAL_STATE, lastCommitMb: 1000, lastAt: 1000 },
+      sample(50, 60, procs),
+      2000,
       'normal',
     );
     t.check(
-      back.level === 'ok' &&
-        back.actions.length === 1 &&
-        back.actions[0].kind === 'priority' &&
-        back.actions[0].to === 'normal',
-      'when it ends the compilers get their normal priority back',
+      growing.state.step === 4,
+      'commit that would reach its limit within seconds turns the dial up before it gets there',
+      'step ' + growing.state.step,
+    );
+    const everything = [one, two, three, growing].flatMap((d) => d.actions);
+    t.check(
+      everything.every((a) => !('pid' in a) || a.pid !== 3),
+      'the agent is never slowed, held or trimmed at any step',
+    );
+
+    // Hysteresis: step 2 holds while memory is between its entry (10 %) and its exit (15 %).
+    let h = decide(INITIAL_STATE, sample(9, 50, procs), 0, 'normal').state;
+    h = decide(h, sample(12, 50, procs), 2000, 'normal').state;
+    t.check(h.step === 2, 'between the entry and the exit of a step it stays (no flapping)');
+    const steps: number[] = [];
+    for (let i = 0; i < 2 * DIAL_CALM_SAMPLES; i++) {
+      h = decide(h, sample(40, 40, procs), 4000 + i * 2000, 'normal').state;
+      steps.push(h.step);
+    }
+    t.check(
+      steps.join() === '2,2,1,1,1,0',
+      'it turns down one step after ' + DIAL_CALM_SAMPLES + ' calm samples: ' + steps.join(),
+    );
+    const back = decide(
+      { ...INITIAL_STATE, step: 1, calm: DIAL_CALM_SAMPLES - 1, lowered: { 1: 'below' }, memLow: [1], cpuRate: 100 },
+      sample(40, 40, [proc(1, 'rustc.exe', 2800, 'below')]),
+      9000,
+      'normal',
     );
     t.check(
-      decide(INITIAL_STATE, sample(5, 50, [proc(1, 'rustc.exe', 100)]), 0, normal, 'normal').actions.length === 1 &&
-        !decide(
-          { ...INITIAL_STATE, samples: 10 },
-          sample(5, 50, [proc(1, 'rustc.exe', 100)]),
-          99999,
-          normal,
-          'normal',
-        ).actions.some((a) => a.kind === 'pause'),
-      'a small compiler (under 300 MB) is never worth pausing',
+      back.state.step === 0 &&
+        of(back, 'priority').some((a) => a.kind === 'priority' && a.to === 'normal') &&
+        of(back, 'memory').some((a) => a.kind === 'memory' && !a.low),
+      'at step 0 the compilers get their normal CPU and memory priority back',
     );
-    const hostAsked = decide({ ...INITIAL_STATE, hostUntil: 5000 }, sample(60, 40, procs), 1000, normal, 'normal');
-    t.check(hostAsked.level === 'throttled', 'the PC asking for it counts as pressure while the request lasts');
+    const uncapped = decide(
+      { ...INITIAL_STATE, step: 2, calm: DIAL_CALM_SAMPLES - 1, cpuRate: 60 },
+      sample(40, 40, procs),
+      9000,
+      'normal',
+    );
+    t.check(
+      uncapped.state.step === 1 && of(uncapped, 'cpu').some((a) => a.kind === 'cpu' && a.percent === 100),
+      'the CPU cap is lifted when the dial goes below step 2',
+    );
+    const hostAsked = decide({ ...INITIAL_STATE, hostUntil: 5000 }, sample(60, 40, procs), 1000, 'normal');
+    t.check(hostAsked.state.step >= 2, 'the PC asking for it turns the dial to at least step 2 while it lasts');
+    const turnA = of(decide(INITIAL_STATE, sample(5, 50, procs), 0, 'normal'), 'hold');
+    const turnB = of(decide(INITIAL_STATE, sample(5, 50, procs), ROTATE_MS, 'normal'), 'hold');
+    t.check(pids(turnA) !== pids(turnB), 'who waits changes over time, so no compiler waits for ever');
+    t.check(
+      compilersAllowed(2, 10) === 6 && compilersAllowed(3, 10) === 4 && compilersAllowed(4, 10) === 1,
+      'how many compilers go on at steps 2, 3 and 4',
+    );
 
     t.section('the gentle profile (vGPU on)');
-    const gentleT = GUEST_THRESHOLDS.gentle;
     t.check(
-      gentleT.enterAvailablePercent === 15 && normal.enterAvailablePercent === 8,
-      'it acts at 15 % free instead of 8 %',
+      DIAL_STEPS.gentle[0].availablePercent > DIAL_STEPS.normal[0].availablePercent &&
+        DIAL_STEPS.gentle[0].commitPercent < DIAL_STEPS.normal[0].commitPercent,
+      'every step starts earlier',
     );
-    const g = decide(INITIAL_STATE, sample(50, 50, procs), 0, gentleT, 'gentle');
+    const g = decide(INITIAL_STATE, sample(50, 50, procs), 0, 'gentle');
     t.check(
-      g.level === 'ok' &&
+      g.state.step === 0 &&
         g.actions.length === 3 &&
         g.actions.every((a) => a.kind === 'priority' && a.to === 'below' && a.pid !== 3),
-      'compilers start below normal even with plenty of memory (the agent does not)',
+      'compilers rest below normal even with plenty of memory (the agent does not)',
     );
-    t.check(
-      decide(INITIAL_STATE, sample(14, 50, procs), 0, gentleT, 'gentle').level === 'throttled',
-      '14 % free is pressure',
-    );
+    t.check(decide(INITIAL_STATE, sample(19, 50, procs), 0, 'gentle').state.step === 1, '19 % free is step 1');
 
     t.section('the compiler cap (vGPU on)');
     t.check(
@@ -266,22 +313,16 @@ export const heavyLoadSuite: Suite = {
       proc(3, 'claude.exe', 500),
       proc(14, 'node.exe', 400),
     ];
-    const capped = decide(INITIAL_STATE, sample(60, 40, many), 0, gentleT, 'gentle', 2);
-    const holds = capped.actions.filter((a) => a.kind === 'hold').map((a) => a.pid);
+    const capped = decide(INITIAL_STATE, sample(60, 40, many), 0, 'gentle', 2);
+    const holds = of(capped, 'hold').map((a) => ('pid' in a ? a.pid : 0));
+    t.check(holds.length === 2, 'beyond the cap, compilers wait their turn', holds.join(','));
+    t.check(!holds.includes(3) && !holds.includes(14), 'agents (claude, and codex or gemini as node) are never held');
     t.check(
-      holds.length === 2 && holds.includes(12) && holds.includes(13),
-      'the newest compilers beyond the cap wait; the oldest keep running',
-      holds.join(','),
-    );
-    t.check(!holds.includes(3) && !holds.includes(14), 'agents and build tools are never held');
-    t.check(
-      decide(INITIAL_STATE, sample(60, 40, many), 0, gentleT, 'gentle', null).actions.every((a) => a.kind !== 'hold'),
-      'no cap, no holds',
+      of(decide(INITIAL_STATE, sample(60, 40, many), 0, 'gentle', null), 'hold').length === 0,
+      'no cap, no pressure: nothing waits',
     );
     t.check(
-      decide(INITIAL_STATE, sample(60, 40, many.slice(0, 2)), 0, gentleT, 'gentle', 2).actions.every(
-        (a) => a.kind !== 'hold',
-      ),
+      of(decide(INITIAL_STATE, sample(60, 40, many.slice(0, 2)), 0, 'gentle', 2), 'hold').length === 0,
       'under the cap nothing waits',
     );
 
@@ -289,7 +330,11 @@ export const heavyLoadSuite: Suite = {
     const calls: string[] = [];
     const port: GovernorPort = {
       setPriority: (pid, to) => calls.push('prio ' + pid + ' ' + to),
-      pause: (pid, ms) => calls.push('pause ' + pid + ' ' + ms),
+      hold: (pid, ms) => calls.push('hold ' + pid + ' ' + ms),
+      setMemoryPriority: (pid, low) => calls.push('mem ' + pid + ' ' + (low ? 'low' : 'normal')),
+      throttle: (pid) => calls.push('throttle ' + pid),
+      setCpuRate: (percent) => calls.push('cpu ' + percent),
+      trim: (pid) => calls.push('trim ' + pid),
     };
     const logs: string[] = [];
     const statuses: unknown[] = [];
@@ -301,22 +346,29 @@ export const heavyLoadSuite: Suite = {
       logLine: (l) => logs.push(l),
       saveStatus: (s) => statuses.push(s),
     });
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
       clock = i * 2000;
-      core.onSample(sample(4, 60, procs));
+      core.onSample(sample(5, 60, procs));
     }
     t.check(
-      calls.includes('prio 1 below') && calls.includes('pause 1 5000') && !calls.some((c) => c.includes(' 3 ')),
-      'priority first, then a pause of the biggest; the agent untouched',
+      calls.includes('prio 1 idle') &&
+        calls.includes('mem 1 low') &&
+        calls.includes('cpu 35') &&
+        calls.some((c) => c.startsWith('hold ')) &&
+        calls.some((c) => c.startsWith('trim ')) &&
+        !calls.some((c) => / 3( |$)/.test(c)),
+      'priority, memory priority, CPU cap, turns and trimming go through the port; the agent untouched',
       calls.join('; '),
     );
     t.check(
-      logs.some((l) => l.includes('memory is low')) && logs.some((l) => l.includes('paused rustc')),
+      logs.some((l) => l.includes('step 3')) && logs.some((l) => l.includes('waits its turn')),
       'what it did goes to the memory log',
     );
+    const lastStatus = statuses[statuses.length - 1];
     t.check(
-      statuses.length > 0 && PressureStatusSchema.safeParse(statuses[statuses.length - 1]).success,
+      statuses.length > 0 && PressureStatusSchema.safeParse(lastStatus).success,
       'its status file matches the schema the host reads',
+      JSON.stringify(lastStatus),
     );
     core.hostPressure(60, 'test');
     t.check(core.current.hostUntil === clock + 60000, 'a host request is remembered for its seconds');

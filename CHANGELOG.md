@@ -23,7 +23,12 @@ environment variables `AGENT_SANDBOX_HOME`, `AGENT_SANDBOX_CONFIG`, `AGENT_SANDB
   backstop just below the sandbox's commit limit (RAM plus paging file), set once by whoever creates the job and never
   changed by a session that joins; slowing builds down comes first. `sandbox.agentMemoryHeadroomMb` now means the
   distance of that backstop below the commit limit.
-- The memory governor no longer slows agents that run as node.exe (Codex, Gemini ...).
+- **The memory governor slows builds down in steps, like a PC, instead of pausing one compiler.** As the sandbox's
+  memory fills, build programs get lower CPU and memory priority (Windows trims their pages before the agents'), then
+  less CPU together (60 %, 35 %, 15 %), then compilers take turns (the others wait, suspended a few seconds at a time and
+  always resumed, who waits changing every 20 seconds) and the waiting ones are trimmed to the paging file. It also acts
+  when commit would run out within seconds at the rate it grows. Builds get slower; nothing fails. It never touches the
+  agents, also when they run as node.exe (Codex, Gemini ...).
 - Web UI: connections no longer pile up. The server pings every page and drops those gone without closing, a new page
   always connects (the oldest connection makes room instead of the new one being refused), a hidden tab stops reading
   live data and lets go of its connections, a closed one closes them at once, and a server of another version (left
